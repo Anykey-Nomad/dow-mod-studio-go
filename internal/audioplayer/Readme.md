@@ -2,7 +2,7 @@
 
 The `audioplayer` package owns the application's single audio device context and manages the chunked PCM source that feeds it[cite: 22]. FDA playback, WAV previews, and the FX sound player all route their audio through this single pipeline[cite: 22].
 
-* Read this in other languages: [Русский](README.ru.md)
+* Read this in other languages: [Русский](README-ru.md)
 
 ## Device Initialization
 
