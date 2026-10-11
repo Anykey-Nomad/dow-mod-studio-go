@@ -2,7 +2,7 @@
 
 The `modtree` package parses `.module` descriptors and constructs a unified virtual file system (VFS) tree for *Dawn of War* mods. It merges disparate data from physical disk folders and `.sga` archives into a single hierarchy, strictly respecting mod dependencies and override priorities.
 
-* Read this in other languages: [Русский](README.ru.md)
+* Read this in other languages: [Русский](Readme_ru.md)
 
 ## Merging and Priorities (Virtual File Tree)
 
