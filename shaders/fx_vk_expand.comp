@@ -1,0 +1,103 @@
+// Compute pass that expands the compact sprite list produced by the CPU into the
+// vertex buffer the existing FX pipelines draw from. It replaces the CPU-side quad
+// build (appendSprite) on the GPU: the CPU writes one compact record per sprite and
+// the shader emits the six vertices of each billboard quad in the packed vertex
+// layout the graphics vertex shader already reads.
+//
+// The graphics vertex shader still applies the camera billboard (Right/Up) and the
+// view projection, so this compute pass only builds vertices in model space — the
+// same values appendSprite currently writes. Beams and the overlay stay on the CPU
+// for now.
+//
+// Build with:
+//
+//	glslangValidator -V fx_vk_expand.comp -o fx_vk_expand.comp.spv
+
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// One compact sprite record, as written by appendSpriteInput. The layout is
+// std430 and intentionally matches the CPU-side byte packing in fx_gpu_vulkan_windows.go.
+struct Sprite {
+    vec4 pos;         // model space position (xyz); w is unused
+    float radius;     // radius in model units
+    vec4 tint;        // colour and alpha; negative alpha marks self-lit
+    vec4 orientation; // angle, fixed horizontal-plane flag, self-lit flag, padding
+};
+
+layout(std430, binding = 0) buffer SpriteInput {
+    uint count;
+    Sprite sprites[];
+} spriteInput;
+
+layout(push_constant) uniform Dispatch {
+    uint inputBase;
+    uint outputBase;
+    uint spriteCount;
+    uint reserved;
+} dispatch;
+
+// The output buffer is the same one the graphics path binds as a vertex buffer.
+// It is written as raw floats in the packed vertex layout fxVkRenderer expects:
+//   bytes 0-11: pos (vec3)
+//   bytes 12-19: corner (vec2)
+//   bytes 20-23: size (float)
+//   bytes 24-39: tint (vec4)
+//   bytes 40-47: uv (vec2)
+//   bytes 48-63: orientation (vec4)
+//   bytes 64-79: surface normal (vec4; w reserved)
+// one vertex is 80 bytes (fxVertexStride), and one sprite is 6 vertices.
+layout(std430, binding = 1) buffer VertexOutput {
+    float data[];
+} verts;
+
+// The six corners of one quad. xy is the corner offset applied by the graphics
+// vertex shader, zw is the uv coordinate for that corner. This is exactly
+// fxQuadCorners in the Go code.
+const vec4 corners[6] = vec4[6](
+    vec4(-1.0, -1.0, 0.0, 1.0),
+    vec4( 1.0, -1.0, 1.0, 1.0),
+    vec4( 1.0,  1.0, 1.0, 0.0),
+
+    vec4(-1.0, -1.0, 0.0, 1.0),
+    vec4( 1.0,  1.0, 1.0, 0.0),
+    vec4(-1.0,  1.0, 0.0, 0.0)
+);
+
+void main() {
+    uint localIndex = gl_GlobalInvocationID.x;
+    uint inputIndex = dispatch.inputBase + localIndex;
+    if (localIndex >= dispatch.spriteCount || inputIndex >= spriteInput.count) {
+        return;
+    }
+    Sprite s = spriteInput.sprites[inputIndex];
+    uint outputSprite = dispatch.outputBase + localIndex;
+    // One invocation writes all six vertices of one sprite. Each vertex is 20
+    // floats (80 bytes), so vertex v of sprite i starts at float offset
+    // (i*6 + v)*20.
+    for (int v = 0; v < 6; v++) {
+        uint vi = (outputSprite*6u + uint(v)) * 20u;
+        vec4 cnr = corners[v];
+        verts.data[vi + 0] = s.pos.x;
+        verts.data[vi + 1] = s.pos.y;
+        verts.data[vi + 2] = s.pos.z;
+        verts.data[vi + 3] = cnr.x;
+        verts.data[vi + 4] = cnr.y;
+        verts.data[vi + 5] = s.radius;
+        verts.data[vi + 6] = s.tint.r;
+        verts.data[vi + 7] = s.tint.g;
+        verts.data[vi + 8] = s.tint.b;
+        verts.data[vi + 9] = s.tint.a;
+        verts.data[vi + 10] = cnr.z;
+        verts.data[vi + 11] = cnr.w;
+        verts.data[vi + 12] = s.orientation.x;
+        verts.data[vi + 13] = s.orientation.y;
+        verts.data[vi + 14] = s.orientation.z;
+        verts.data[vi + 15] = 0.0;
+        verts.data[vi + 16] = 0.0;
+        verts.data[vi + 17] = 0.0;
+        verts.data[vi + 18] = 1.0;
+        verts.data[vi + 19] = 0.0;
+    }
+}

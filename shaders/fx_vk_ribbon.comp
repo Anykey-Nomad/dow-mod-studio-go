@@ -1,0 +1,201 @@
+// Compute pass that expands the compact ribbon list produced by the CPU into
+// the vertex buffer the existing FX pipelines draw from. It is the beam half
+// of what fx_vk_expand.comp does for sprites: one invocation tessellates one
+// ribbon — a STYLE_BEAM, a STYLE_RING, or one skeleton line — and writes its
+// triangle list in the packed vertex layout the graphics vertex shader reads.
+//
+// The tessellation mirrors fxBeamQuads in the Go code, deliberately, because
+// the software overlay draws with that function and the two paths must not
+// drift apart:
+//
+//   - the cross-section is turned across the span towards the eye, unless the
+//     ribbon carries its own Across (a ring pinned to its marker's plane);
+//   - Arc bows the strip sideways: only the part of the arc across the span
+//     survives, and an arc that points exactly along the span still bows;
+//   - Noise nudges each step, as a function of position along the ribbon
+//     rather than of the clock, so it does not crawl between frames;
+//   - each segment writes the six vertices fxBeamTriangles emits, in the same
+//     order, with the billboard switched off (zero corner, size one) exactly
+//     as appendBeam writes them.
+//
+// The CPU decides which ribbons are drawable at all — an empty span or a
+// non-positive width is filtered before the record exists. The guards here
+// only keep a degenerate record from writing out of its own range: it emits
+// collapsed vertices at its origin instead.
+//
+// Build with:
+//
+//	glslangValidator -V fx_vk_ribbon.comp -o fx_vk_ribbon.comp.spv
+
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// One compact ribbon record, as written by appendRibbonInput. The layout is
+// std430 and intentionally matches the CPU-side byte packing in
+// fx_gpu_vulkan_windows.go.
+struct Ribbon {
+    vec4 from;    // model space start (xyz); w unused
+    vec4 to;      // model space end (xyz); w unused
+    vec4 arc;     // bow of the strip, already in the renderer's axes
+    vec4 across;  // xyz = fixed cross-section (rings), w = 1 when Fixed
+    vec4 tint;    // colour and alpha, clamped
+    vec4 geom;    // x = half width, y = noise, z = u0, w = u1
+    vec4 eye;     // the camera's position in model space, for the eye-facing
+                  // cross-section; carried per record so a scene assembled
+                  // from anywhere cannot disagree with a dispatch constant
+    uvec4 props;  // x = segments, y = flags (bit0 = flipV), z = vertex offset, w unused
+};
+
+layout(std430, binding = 0) buffer RibbonInput {
+    uint count;
+    Ribbon ribbons[];
+} ribbonInput;
+
+layout(push_constant) uniform Dispatch {
+    uint inputBase;
+    uint outputBase;
+    uint ribbonCount;
+    uint reserved;
+} dispatch;
+
+// The output buffer is the same one the graphics path binds as a vertex
+// buffer, shared with the sprite expand pass: sprites occupy the front of it
+// and ribbons follow, each at the offset the CPU worked out per group.
+// One vertex is 20 floats (fxVertexStride).
+layout(std430, binding = 1) buffer VertexOutput {
+    float data[];
+} verts;
+
+const float PI = 3.14159265358979323846;
+
+// emitVertex writes one vertex of the packed layout the graphics shader reads:
+//   pos, corner, size, tint, uv, orientation, surface normal.
+// The zero corner and unit size switch the billboard off, so the position
+// goes through as it stands — the same thing appendBeam does on the CPU.
+void emitVertex(uint vi, vec3 pos, vec4 tint, vec2 uv, vec3 normal, bool selfLit) {
+    uint o = vi * 20u;
+    verts.data[o + 0] = pos.x;
+    verts.data[o + 1] = pos.y;
+    verts.data[o + 2] = pos.z;
+    verts.data[o + 3] = 0.0;
+    verts.data[o + 4] = 0.0;
+    verts.data[o + 5] = 1.0;
+    verts.data[o + 6] = tint.r;
+    verts.data[o + 7] = tint.g;
+    verts.data[o + 8] = tint.b;
+    verts.data[o + 9] = tint.a;
+    verts.data[o + 10] = uv.x;
+    verts.data[o + 11] = uv.y;
+    verts.data[o + 12] = 0.0;
+    verts.data[o + 13] = 2.0; // pre-tessellated ribbon with explicit normal
+    verts.data[o + 14] = selfLit ? 1.0 : 0.0;
+    verts.data[o + 15] = 0.0;
+    verts.data[o + 16] = normal.x;
+    verts.data[o + 17] = normal.y;
+    verts.data[o + 18] = normal.z;
+    verts.data[o + 19] = 0.0;
+}
+
+// centreAt is one point along the ribbon: the straight line from the start,
+// plus the bow across it, plus the sideways wobble. Mirrors the centre
+// computed inside fxBeamQuads.
+vec3 centreAt(vec3 origin, vec3 axis, vec3 bow, vec3 across, float noise, float u0, float f) {
+    vec3 c = origin + axis * f + bow * sin(f * PI);
+    if (noise != 0.0) {
+        c += across * (noise * sin(f * PI * 3.0 + u0));
+    }
+    return c;
+}
+
+void main() {
+    uint localIndex = gl_GlobalInvocationID.x;
+    uint inputIndex = dispatch.inputBase + localIndex;
+    if (localIndex >= dispatch.ribbonCount || inputIndex >= ribbonInput.count) {
+        return;
+    }
+    Ribbon r = ribbonInput.ribbons[inputIndex];
+    uint segments = max(r.props.x, 1u);
+    uint outBase = dispatch.outputBase + r.props.z;
+    bool selfLit = (r.props.y & 2u) != 0u;
+    vec3 axis = r.to.xyz - r.from.xyz;
+    float len = length(axis);
+    if (len < 1e-9 || r.geom.x <= 0.0) {
+        // A record the CPU thought drawable but which measures nothing: keep
+        // the layout by collapsing every vertex onto its origin.
+        for (uint s = 0u; s < segments * 6u; s++) {
+            emitVertex(outBase + s, r.from.xyz, r.tint, vec2(r.geom.z, 0.0), vec3(0.0, 0.0, 1.0), selfLit);
+        }
+        return;
+    }
+    vec3 dir = axis / len;
+
+    // The cross-section: perpendicular to the span, turned towards the eye as
+    // much as the span allows. A ring supplies its own plane instead.
+    vec3 across;
+    if (r.across.w > 0.5) {
+        across = r.across.xyz;
+    } else {
+        across = cross(r.eye.xyz - r.from.xyz, dir);
+    }
+    float n = length(across);
+    if (n < 1e-6) {
+        across = cross(dir, vec3(0.0, 0.0, 1.0));
+        n = length(across);
+        if (n < 1e-6) {
+            across = cross(dir, vec3(1.0, 0.0, 0.0));
+            n = length(across);
+        }
+        if (n < 1e-6) {
+            for (uint s = 0u; s < segments * 6u; s++) {
+                emitVertex(outBase + s, r.from.xyz, r.tint, vec2(r.geom.z, 0.0), vec3(0.0, 0.0, 1.0), selfLit);
+            }
+            return;
+        }
+    }
+    across /= n;
+    // For camera-facing ribbons, dir x across points toward the eye; a
+    // fixed authored plane keeps its geometric winding instead.
+    vec3 normal = r.across.w > 0.5
+        ? normalize(cross(across, dir))
+        : normalize(cross(dir, across));
+
+    // The bow is the part of the arc across the span; an arc that points
+    // exactly along the span still bows, across the width it widens.
+    vec3 bow = r.arc.xyz - dir * dot(r.arc.xyz, dir);
+    if (length(bow) < 1e-6 && length(r.arc.xyz) >= 1e-6) {
+        bow = across;
+    }
+
+    float halfWidth = r.geom.x;
+    float noise = r.geom.y;
+    float u0 = r.geom.z;
+    float u1 = r.geom.w;
+    bool flipV = (r.props.y & 1u) != 0u;
+    float lo = flipV ? 1.0 : 0.0;
+    float hi = flipV ? 0.0 : 1.0;
+    float step = 1.0 / float(segments);
+
+    vec3 prevCentre = centreAt(r.from.xyz, axis, bow, across, noise, u0, 0.0);
+    float prevU = u0;
+    for (uint s = 0u; s < segments; s++) {
+        float f1 = float(s + 1u) * step;
+        vec3 currCentre = centreAt(r.from.xyz, axis, bow, across, noise, u0, f1);
+        float currU = u0 + (u1 - u0) * f1;
+        vec3 lo0 = prevCentre - across * halfWidth;
+        vec3 hi0 = prevCentre + across * halfWidth;
+        vec3 lo1 = currCentre - across * halfWidth;
+        vec3 hi1 = currCentre + across * halfWidth;
+        // The six vertices fxBeamTriangles emits for this quad, in order:
+        // lo_i, hi_i, hi_{i+1}, lo_i, hi_{i+1}, lo_{i+1}.
+        uint b = outBase + s * 6u;
+        emitVertex(b + 0u, lo0, r.tint, vec2(prevU, lo), normal, selfLit);
+        emitVertex(b + 1u, hi0, r.tint, vec2(prevU, hi), normal, selfLit);
+        emitVertex(b + 2u, hi1, r.tint, vec2(currU, hi), normal, selfLit);
+        emitVertex(b + 3u, lo0, r.tint, vec2(prevU, lo), normal, selfLit);
+        emitVertex(b + 4u, hi1, r.tint, vec2(currU, hi), normal, selfLit);
+        emitVertex(b + 5u, lo1, r.tint, vec2(currU, lo), normal, selfLit);
+        prevCentre = currCentre;
+        prevU = currU;
+    }
+}

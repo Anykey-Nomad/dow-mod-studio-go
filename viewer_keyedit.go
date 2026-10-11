@@ -1,0 +1,697 @@
+package main
+
+import "sort"
+
+// boneTrackSnapshot is one undo step: the picked bone's key track as it was
+// before an edit. It names the clip and bone it was taken from so a restore
+// writes into the track it came from rather than whatever is picked when the
+// undo is pressed. The two key lists are copied outright — a key is a time and
+// a fixed-size value, so the copy shares nothing with the live track.
+type boneTrackSnapshot struct {
+	anim      *WhmAnimation
+	boneIndex int
+	posKey    []WhmKey3
+	rotKey    []WhmKey4
+}
+
+// snapshotBoneTrack copies the picked bone's key track so an edit about to be
+// made can be undone. It reports false when there is no clip or bone to record,
+// which the callers use to skip pushing an undo entry that could restore
+// nothing.
+func (v *modelViewer) snapshotBoneTrack() (boneTrackSnapshot, bool) {
+	if v == nil || v.anim == nil || v.boneIndex < 0 {
+		return boneTrackSnapshot{}, false
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return boneTrackSnapshot{}, false
+	}
+	return boneTrackSnapshot{
+		anim:      v.anim,
+		boneIndex: v.boneIndex,
+		posKey:    append([]WhmKey3(nil), t.PosKey...),
+		rotKey:    append([]WhmKey4(nil), t.RotKey...),
+	}, true
+}
+
+// restoreBoneTrack writes a snapshot back into the clip and bone it was taken
+// from and leaves the pose cache cold, so the viewport redraws the restored
+// pose rather than the one the edit produced. It reports false when the track
+// the snapshot named is not in its clip any more.
+func (v *modelViewer) restoreBoneTrack(s boneTrackSnapshot) bool {
+	if s.anim == nil || s.boneIndex < 0 {
+		return false
+	}
+	var t *WhmTrack
+	for i := range s.anim.Bones {
+		if s.anim.Bones[i].Bone == s.boneIndex {
+			t = &s.anim.Bones[i]
+			break
+		}
+	}
+	if t == nil {
+		return false
+	}
+	t.PosKey = append([]WhmKey3(nil), s.posKey...)
+	t.RotKey = append([]WhmKey4(nil), s.rotKey...)
+	v.poseValid = false
+	v.invalidate()
+	return true
+}
+
+// This file is the timeline side of bone key editing: giving the picked bone a
+// key on the frame the playhead is on, taking the picked one away, and moving
+// it along the strip. The typed side — writing values into a picked key —
+// lives in viewer_bone_edit.go, and the strip these keys are shown on in
+// model3d_scrub.go.
+//
+// The clip stores keyframes only: position and rotation keys at their own
+// times, with everything between them interpolated by the renderer. A frame
+// with no key is not stored anywhere, so "adding a keyframe" here means adding
+// a key to the picked bone's track, and "the ordinary frames" are the strip's
+// own ticks rather than anything the file holds.
+
+// timeForFrame is frameAt read backwards: the normalized key time that frameAt
+// maps onto exactly this frame. frameAt rounds a time against the clip's frame
+// count, so the frame divided by that count is the one time that lands back on
+// it — a key written at any other time would draw its mark a frame away from
+// the frame it was dropped on, and the panel row under it would name a
+// different frame than the strip shows.
+func timeForFrame(frame, numFrames int) float32 {
+	if numFrames < 1 {
+		return 0
+	}
+	frame = minInt(maxInt(frame, 0), numFrames-1)
+	return float32(frame) / float32(numFrames)
+}
+
+// addBoneKeyAtFrame gives the picked bone a key of the given kind (0 position,
+// 1 rotation) on the given frame, taking its value from the pose on show — the
+// same write "Set ... from pose" makes, so a new key records what the viewport
+// is already showing and the clip keeps how it looks at that frame. The frame
+// must be the frame the playhead is on: that is where the pose comes from.
+//
+// A key of that kind already on the frame is picked instead of being joined by
+// a second one: two keys of one kind on a frame are the same frame twice, and
+// the key already there carries the value a new one would be given anyway.
+//
+// The bool says whether a key was created. Selection always ends up on the key
+// at the frame, created or found, which is what makes the panel's typed fields
+// show what the next edit would write.
+func (v *modelViewer) addBoneKeyAtFrame(frame, mode int) bool {
+	if v == nil || v.anim == nil || v.anim.NumFrames < 1 || mode < 0 || mode > 1 {
+		return false
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return false
+	}
+	frame = minInt(maxInt(frame, 0), v.anim.NumFrames-1)
+	// Already there? Pick it and say nothing was created.
+	if mode == 0 {
+		for i := range t.PosKey {
+			if frameAt(float64(t.PosKey[i].Time), v.anim.NumFrames) == frame {
+				v.boneKeyIndex, v.boneKeyMode = i, 0
+				v.invalidate()
+				return false
+			}
+		}
+	} else {
+		for i := range t.RotKey {
+			if frameAt(float64(t.RotKey[i].Time), v.anim.NumFrames) == frame {
+				v.boneKeyIndex, v.boneKeyMode = i, 1
+				v.invalidate()
+				return false
+			}
+		}
+	}
+	now := timeForFrame(frame, v.anim.NumFrames)
+	// The pose on show is read before the key exists: the moment the
+	// placeholder lands in the track it is part of the curve, and a cold
+	// pose cache would then evaluate the clip with the empty key it is
+	// about to fill — the new key would hold zero instead of the pose.
+	// With the cache warmed here, the write below reads the frame as it
+	// looked before the edit, which is the value the key should keep.
+	v.pose()
+	if mode == 0 {
+		at := 0
+		for at < len(t.PosKey) && t.PosKey[at].Time <= now {
+			at++
+		}
+		t.PosKey = append(t.PosKey, WhmKey3{})
+		copy(t.PosKey[at+1:], t.PosKey[at:])
+		t.PosKey[at] = WhmKey3{Time: now}
+		v.boneKeyIndex, v.boneKeyMode = at, 0
+	} else {
+		at := 0
+		for at < len(t.RotKey) && t.RotKey[at].Time <= now {
+			at++
+		}
+		t.RotKey = append(t.RotKey, WhmKey4{})
+		copy(t.RotKey[at+1:], t.RotKey[at:])
+		// Identity until the pose write below fills it in: a zero
+		// quaternion would be normalized to no turn, but the write
+		// replaces it either way.
+		t.RotKey[at] = WhmKey4{Time: now, V: [4]float32{0, 0, 0, 1}}
+		v.boneKeyIndex, v.boneKeyMode = at, 1
+	}
+	// The value comes from the pose on show, exactly as "Set ... from pose"
+	// writes it into an existing key.
+	if mode == 0 {
+		v.setBoneKeyPositionFromPose()
+	} else {
+		v.setBoneKeyRotationFromPose()
+	}
+	v.poseValid = false
+	v.invalidate()
+	LogInfo("bone: added %s key at frame %d of bone %q", boneGroupLog(mode), frame, t.Name)
+	return true
+}
+
+// boneKeyRef names one key of the picked bone's track by the kind of key it
+// is and the frame it sits on. The panel's keyframe list addresses its rows
+// this way rather than by index: taking a key out of the track shifts every
+// index after it, while the frames of the keys that stay where they are do
+// not move, so a selection of several rows would otherwise be pointing at
+// other people's keys after the first deletion.
+type boneKeyRef struct {
+	mode  int // 0 position, 1 rotation
+	frame int
+}
+
+// boneKeyRefs is every key of the picked bone's track in the order the panel
+// lists them: position keys first, rotation keys after, each kind in frame
+// order — which is the order the track itself keeps.
+func (v *modelViewer) boneKeyRefs() []boneKeyRef {
+	if v == nil || v.anim == nil {
+		return nil
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return nil
+	}
+	out := make([]boneKeyRef, 0, len(t.PosKey)+len(t.RotKey))
+	for i := range t.PosKey {
+		out = append(out, boneKeyRef{mode: 0, frame: frameAt(float64(t.PosKey[i].Time), v.anim.NumFrames)})
+	}
+	for i := range t.RotKey {
+		out = append(out, boneKeyRef{mode: 1, frame: frameAt(float64(t.RotKey[i].Time), v.anim.NumFrames)})
+	}
+	return out
+}
+
+// boneKeyIndexAtFrame is the index of the key of that kind sitting on that
+// frame, or -1 when there is none. A key whose time rounds onto the frame
+// counts as being on it, since that is what the list and the strip both call
+// the frame it is on.
+func (v *modelViewer) boneKeyIndexAtFrame(frame, mode int) int {
+	if v == nil || v.anim == nil {
+		return -1
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return -1
+	}
+	if mode == 0 {
+		for i := range t.PosKey {
+			if frameAt(float64(t.PosKey[i].Time), v.anim.NumFrames) == frame {
+				return i
+			}
+		}
+		return -1
+	}
+	if mode == 1 {
+		for i := range t.RotKey {
+			if frameAt(float64(t.RotKey[i].Time), v.anim.NumFrames) == frame {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// pickedBoneKeyRef is the picked key as the list addresses a row: its kind
+// and its frame, or no ref at all when nothing is picked. Unlike
+// boneKeyFrameAt it counts a key standing on frame zero, which is a real key
+// rather than the absence of one.
+func (v *modelViewer) pickedBoneKeyRef() (boneKeyRef, bool) {
+	if !v.pickedBoneKeyValid() {
+		return boneKeyRef{mode: -1}, false
+	}
+	t := v.boneTrack()
+	keyTime := float32(0)
+	if v.boneKeyMode == 0 {
+		keyTime = t.PosKey[v.boneKeyIndex].Time
+	} else {
+		keyTime = t.RotKey[v.boneKeyIndex].Time
+	}
+	return boneKeyRef{mode: v.boneKeyMode, frame: frameAt(float64(keyTime), v.anim.NumFrames)}, true
+}
+
+// freeBoneKeyFrame walks out from a frame in the given direction (−1 back,
+// +1 on) and returns the first frame of the clip that carries no key of that
+// kind, or −1 when the clip runs out first. That is where "+ before" and
+// "+ after" put the key they add: the neighbouring frame when it is free,
+// further out when a key already stands there.
+func (v *modelViewer) freeBoneKeyFrame(from, mode, dir int) int {
+	if v == nil || v.anim == nil || v.anim.NumFrames < 1 || (dir != -1 && dir != 1) {
+		return -1
+	}
+	for f := from + dir; f >= 0 && f < v.anim.NumFrames; f += dir {
+		if v.boneKeyIndexAtFrame(f, mode) < 0 {
+			return f
+		}
+	}
+	return -1
+}
+
+// insertBoneKeyCopy gives the picked bone a key of the given kind on the
+// given frame, holding what the key it is copied from holds. This is how a
+// key is added beside one on the list rather than on the frame the playhead
+// stands on: the clip's motion is extended rather than yanked towards the
+// pose the viewport happens to be showing, and the copy keeps the value the
+// reader is about to edit in the typed fields.
+//
+// The bool says whether a key was created. A key of that kind already on the
+// frame, a frame outside the clip, or a source that is not on the track all
+// leave it alone — two keys of one kind on a frame are the same frame twice.
+func (v *modelViewer) insertBoneKeyCopy(frame, mode, srcFrame int) bool {
+	if v == nil || v.anim == nil || v.anim.NumFrames < 1 || mode < 0 || mode > 1 {
+		return false
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return false
+	}
+	frame = minInt(maxInt(frame, 0), v.anim.NumFrames-1)
+	if v.boneKeyIndexAtFrame(frame, mode) >= 0 {
+		return false
+	}
+	now := timeForFrame(frame, v.anim.NumFrames)
+	if mode == 0 {
+		src := v.boneKeyIndexAtFrame(srcFrame, 0)
+		if src < 0 {
+			return false
+		}
+		val := t.PosKey[src].V
+		at := 0
+		for at < len(t.PosKey) && t.PosKey[at].Time <= now {
+			at++
+		}
+		t.PosKey = append(t.PosKey, WhmKey3{})
+		copy(t.PosKey[at+1:], t.PosKey[at:])
+		t.PosKey[at] = WhmKey3{Time: now, V: val}
+	} else {
+		src := v.boneKeyIndexAtFrame(srcFrame, 1)
+		if src < 0 {
+			return false
+		}
+		val := t.RotKey[src].V
+		at := 0
+		for at < len(t.RotKey) && t.RotKey[at].Time <= now {
+			at++
+		}
+		t.RotKey = append(t.RotKey, WhmKey4{})
+		copy(t.RotKey[at+1:], t.RotKey[at:])
+		t.RotKey[at] = WhmKey4{Time: now, V: val}
+	}
+	// The list grew at a known place: the new key is the one to aim the
+	// typed fields and the strip at, which is what the selection on show
+	// should be on anyway.
+	v.boneKeyIndex, v.boneKeyMode = v.boneKeyIndexAtFrame(frame, mode), mode
+	v.poseValid = false
+	v.invalidate()
+	LogInfo("bone: added %s key at frame %d of bone %q (copied from frame %d)",
+		boneGroupLog(mode), frame, t.Name, srcFrame)
+	return true
+}
+
+// deleteBoneKeyAt takes the key of that kind sitting on that frame out of the
+// picked bone's track. The key the list or the strip had picked keeps pointing
+// at itself when an earlier key leaves — its index slides down with the
+// removal — and is cleared when the key removed is the picked one, so a later
+// typed apply is never aimed at whatever slid into the gap.
+func (v *modelViewer) deleteBoneKeyAt(frame, mode int) bool {
+	if v == nil || v.anim == nil {
+		return false
+	}
+	idx := v.boneKeyIndexAtFrame(frame, mode)
+	if idx < 0 {
+		return false
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return false
+	}
+	// Where the picked key sits when it is of this kind. It is read as a
+	// frame rather than an index because the removal below moves every index
+	// after the one it takes out.
+	pickedFrame := -1
+	if v.boneKeyMode == mode && v.boneKeyIndex >= 0 {
+		if mode == 0 && v.boneKeyIndex < len(t.PosKey) {
+			pickedFrame = frameAt(float64(t.PosKey[v.boneKeyIndex].Time), v.anim.NumFrames)
+		} else if mode == 1 && v.boneKeyIndex < len(t.RotKey) {
+			pickedFrame = frameAt(float64(t.RotKey[v.boneKeyIndex].Time), v.anim.NumFrames)
+		}
+	}
+	switch mode {
+	case 0:
+		LogInfo("bone: removed position key %d at frame %d of bone %q", idx, frame, t.Name)
+		t.PosKey = append(t.PosKey[:idx], t.PosKey[idx+1:]...)
+	case 1:
+		LogInfo("bone: removed rotation key %d at frame %d of bone %q", idx, frame, t.Name)
+		t.RotKey = append(t.RotKey[:idx], t.RotKey[idx+1:]...)
+	default:
+		return false
+	}
+	if pickedFrame >= 0 {
+		if at := v.boneKeyIndexAtFrame(pickedFrame, mode); at >= 0 {
+			v.boneKeyIndex, v.boneKeyMode = at, mode
+		} else {
+			v.boneKeyIndex, v.boneKeyMode = -1, -1
+		}
+	}
+	v.poseValid = false
+	v.invalidate()
+	return true
+}
+
+// pickedBoneKeyValid says whether the picked key still exists. The lists
+// shrink under the selection when a key is deleted or a drag drops one onto
+// another, and a button that acts on the picked key has to be off then rather
+// than aimed at whatever key slid into its place.
+func (v *modelViewer) pickedBoneKeyValid() bool {
+	if v == nil || v.anim == nil || v.boneKeyIndex < 0 || v.boneKeyMode < 0 {
+		return false
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return false
+	}
+	if v.boneKeyMode == 0 {
+		return v.boneKeyIndex < len(t.PosKey)
+	}
+	return v.boneKeyIndex < len(t.RotKey)
+}
+
+// deletePickedBoneKey removes the picked key from the picked bone's track and
+// leaves nothing picked: the key it pointed at is gone, and promoting a
+// neighbour would silently aim the next typed apply at a key the reader never
+// chose. The list stays sorted because removal cannot unsort it.
+func (v *modelViewer) deletePickedBoneKey() bool {
+	if v == nil || v.anim == nil || v.boneKeyIndex < 0 || v.boneKeyMode < 0 {
+		return false
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return false
+	}
+	switch v.boneKeyMode {
+	case 0:
+		if v.boneKeyIndex >= len(t.PosKey) {
+			return false
+		}
+		LogInfo("bone: removed position key %d at frame %d of bone %q",
+			v.boneKeyIndex, frameAt(float64(t.PosKey[v.boneKeyIndex].Time), v.anim.NumFrames), t.Name)
+		t.PosKey = append(t.PosKey[:v.boneKeyIndex], t.PosKey[v.boneKeyIndex+1:]...)
+	case 1:
+		if v.boneKeyIndex >= len(t.RotKey) {
+			return false
+		}
+		LogInfo("bone: removed rotation key %d at frame %d of bone %q",
+			v.boneKeyIndex, frameAt(float64(t.RotKey[v.boneKeyIndex].Time), v.anim.NumFrames), t.Name)
+		t.RotKey = append(t.RotKey[:v.boneKeyIndex], t.RotKey[v.boneKeyIndex+1:]...)
+	default:
+		return false
+	}
+	v.boneKeyIndex, v.boneKeyMode = -1, -1
+	v.poseValid = false
+	v.invalidate()
+	return true
+}
+
+// movePickedBoneKeyToFrame puts the picked key on the given frame and keeps
+// its list sorted by time — sampleVec3 and sampleQuat walk their keys in
+// order, so a list sorted wrong would play the clip wrong. A key of the same
+// kind already on that frame is dropped rather than kept beside the moved one:
+// two keys of one kind on a frame are the same frame twice, and the key being
+// moved is the one the reader is dropping. The bool says whether anything
+// moved; a drop on the frame the key already sits on changes nothing.
+func (v *modelViewer) movePickedBoneKeyToFrame(frame int) bool {
+	if v == nil || v.anim == nil || v.anim.NumFrames < 1 || v.boneKeyIndex < 0 || v.boneKeyMode < 0 {
+		return false
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return false
+	}
+	frame = minInt(maxInt(frame, 0), v.anim.NumFrames-1)
+	now := timeForFrame(frame, v.anim.NumFrames)
+	if v.boneKeyMode == 0 {
+		if v.boneKeyIndex >= len(t.PosKey) {
+			return false
+		}
+		if frameAt(float64(t.PosKey[v.boneKeyIndex].Time), v.anim.NumFrames) == frame {
+			return false
+		}
+		moved := t.PosKey[v.boneKeyIndex]
+		rest := make([]WhmKey3, 0, len(t.PosKey)-1)
+		for i, k := range t.PosKey {
+			if i == v.boneKeyIndex {
+				continue
+			}
+			if frameAt(float64(k.Time), v.anim.NumFrames) == frame {
+				continue
+			}
+			rest = append(rest, k)
+		}
+		moved.Time = now
+		at := 0
+		for at < len(rest) && rest[at].Time <= moved.Time {
+			at++
+		}
+		rest = append(rest, WhmKey3{})
+		copy(rest[at+1:], rest[at:])
+		rest[at] = moved
+		t.PosKey = rest
+		v.boneKeyIndex = at
+	} else {
+		if v.boneKeyIndex >= len(t.RotKey) {
+			return false
+		}
+		if frameAt(float64(t.RotKey[v.boneKeyIndex].Time), v.anim.NumFrames) == frame {
+			return false
+		}
+		moved := t.RotKey[v.boneKeyIndex]
+		rest := make([]WhmKey4, 0, len(t.RotKey)-1)
+		for i, k := range t.RotKey {
+			if i == v.boneKeyIndex {
+				continue
+			}
+			if frameAt(float64(k.Time), v.anim.NumFrames) == frame {
+				continue
+			}
+			rest = append(rest, k)
+		}
+		moved.Time = now
+		at := 0
+		for at < len(rest) && rest[at].Time <= moved.Time {
+			at++
+		}
+		rest = append(rest, WhmKey4{})
+		copy(rest[at+1:], rest[at:])
+		rest[at] = moved
+		t.RotKey = rest
+		v.boneKeyIndex = at
+	}
+	v.poseValid = false
+	v.invalidate()
+	LogInfo("bone: moved %s key of bone %q to frame %d",
+		boneGroupLog(v.boneKeyMode), t.Name, frame)
+	return true
+}
+
+// shiftKeyFrames works out the frame each key of one kind ends on when a set
+// of them is shifted by delta frames. A key keeps the frame it is already on
+// when the frame it would move to is taken by a key that is not shifting, or
+// when a clamping shift has piled several keys onto the same end of the clip.
+// It returns the frame each key lands on, how many actually moved and how many
+// were held back. frames must be the keys' frames in ascending order.
+func shiftKeyFrames(frames []int, moving map[int]bool, delta, n int) (target map[int]int, moved, blocked int) {
+	static := map[int]bool{}
+	for _, f := range frames {
+		if !moving[f] {
+			static[f] = true
+		}
+	}
+	// The frame each shifting key wants, and the keys that cannot have it:
+	// the frame is off the end of the clip but where they already stand, or a
+	// key that is not shifting already holds it. Those stay put, and the frame
+	// they stay on is reserved so a later key does not land on top of them.
+	desired := map[int]int{}
+	stay := map[int]bool{}
+	for _, f := range frames {
+		if !moving[f] {
+			continue
+		}
+		d := f + delta
+		if d < 0 {
+			d = 0
+		}
+		if d > n-1 {
+			d = n - 1
+		}
+		desired[f] = d
+		if d == f || static[d] {
+			stay[f] = true
+		}
+	}
+	reserved := map[int]bool{}
+	for f := range static {
+		reserved[f] = true
+	}
+	for f := range stay {
+		reserved[f] = true
+	}
+	target = map[int]int{}
+	for _, f := range frames {
+		if !moving[f] {
+			target[f] = f
+			continue
+		}
+		if stay[f] {
+			target[f] = f
+			if desired[f] != f {
+				blocked++
+			}
+			continue
+		}
+		d := desired[f]
+		if !reserved[d] {
+			target[f] = d
+			reserved[d] = true
+			if d != f {
+				moved++
+			}
+		} else {
+			// The frame it wanted is held by a key that is staying put, so
+			// this one stays where it is rather than landing on top of it.
+			target[f] = f
+			reserved[f] = true
+			blocked++
+		}
+	}
+	return target, moved, blocked
+}
+
+// shiftBoneKeys moves the picked keys of the picked bone's track by delta
+// frames (negative back, positive forward) and keeps each list sorted by time,
+// which is the order the samplers walk. Keys of a kind that are not being
+// shifted hold their frame, and a shifted key whose new frame is already taken
+// by one of those stays put rather than landing on it. The selection the
+// caller holds is remapped onto the frames the keys ended on, so a run of
+// shifts can carry a whole block along the clip without reselecting.
+func (v *modelViewer) shiftBoneKeys(refs []boneKeyRef, delta int) (newRefs []boneKeyRef, moved, blocked int) {
+	if v == nil || v.anim == nil || v.anim.NumFrames < 1 || delta == 0 {
+		return nil, 0, 0
+	}
+	t := v.boneTrack()
+	if t == nil {
+		return nil, 0, 0
+	}
+	n := v.anim.NumFrames
+	moving := [2]map[int]bool{{}, {}}
+	for _, r := range refs {
+		if r.mode == 0 || r.mode == 1 {
+			moving[r.mode][r.frame] = true
+		}
+	}
+	tgt := [2]map[int]int{}
+	// Position keys: every key's frame and value are read before anything is
+	// rewritten, then the whole list is rebuilt in frame order.
+	if len(moving[0]) > 0 {
+		frames := make([]int, 0, len(t.PosKey))
+		orig := make(map[int]WhmKey3, len(t.PosKey))
+		for _, k := range t.PosKey {
+			f := frameAt(float64(k.Time), n)
+			frames = append(frames, f)
+			orig[f] = k
+		}
+		target, m, b := shiftKeyFrames(frames, moving[0], delta, n)
+		tgt[0] = target
+		moved += m
+		blocked += b
+		type item struct {
+			f    int
+			time float32
+			v    [3]float32
+		}
+		out := make([]item, 0, len(frames))
+		for _, f := range frames {
+			nf, ok := target[f]
+			if !ok {
+				continue
+			}
+			tm := orig[f].Time
+			if nf != f {
+				tm = timeForFrame(nf, n)
+			}
+			out = append(out, item{nf, tm, orig[f].V})
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].f < out[j].f })
+		t.PosKey = t.PosKey[:0]
+		for _, it := range out {
+			t.PosKey = append(t.PosKey, WhmKey3{Time: it.time, V: it.v})
+		}
+	}
+	// Rotation keys, the same way.
+	if len(moving[1]) > 0 {
+		frames := make([]int, 0, len(t.RotKey))
+		orig := make(map[int]WhmKey4, len(t.RotKey))
+		for _, k := range t.RotKey {
+			f := frameAt(float64(k.Time), n)
+			frames = append(frames, f)
+			orig[f] = k
+		}
+		target, m, b := shiftKeyFrames(frames, moving[1], delta, n)
+		tgt[1] = target
+		moved += m
+		blocked += b
+		type item struct {
+			f    int
+			time float32
+			v    [4]float32
+		}
+		out := make([]item, 0, len(frames))
+		for _, f := range frames {
+			nf, ok := target[f]
+			if !ok {
+				continue
+			}
+			tm := orig[f].Time
+			if nf != f {
+				tm = timeForFrame(nf, n)
+			}
+			out = append(out, item{nf, tm, orig[f].V})
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].f < out[j].f })
+		t.RotKey = t.RotKey[:0]
+		for _, it := range out {
+			t.RotKey = append(t.RotKey, WhmKey4{Time: it.time, V: it.v})
+		}
+	}
+	// The selection follows the keys to the frames they landed on.
+	for _, r := range refs {
+		if r.mode != 0 && r.mode != 1 {
+			continue
+		}
+		if nf, ok := tgt[r.mode][r.frame]; ok {
+			newRefs = append(newRefs, boneKeyRef{mode: r.mode, frame: nf})
+		}
+	}
+	if moved > 0 {
+		v.poseValid = false
+		v.invalidate()
+	}
+	return newRefs, moved, blocked
+}

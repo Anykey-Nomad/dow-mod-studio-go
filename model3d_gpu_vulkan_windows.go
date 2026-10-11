@@ -1,0 +1,1025 @@
+//go:build windows
+
+package main
+
+import (
+	_ "embed"
+	"encoding/binary"
+	"fmt"
+	"image"
+	"image/color"
+	"log"
+	"math"
+	"strings"
+	"time"
+
+	"gioui.org/f32"
+	"gioui.org/gpu"
+	"gioui.org/layout"
+	"gioui.org/op"
+	"gioui.org/op/paint"
+	"github.com/fogleman/fauxgl"
+)
+
+// Hardware rendering of a decoded .whm through Gio's Vulkan backend — the
+// same renderer model3d_gpu_windows.go drives on Direct3D 11, with the
+// pieces Vulkan wants in a different place:
+//
+//   - the per frame block (view projection, light, bones) is a uniform
+//     buffer read by both shader stages;
+//   - the per draw block (shade term, tint, texture mapping) is a push
+//     constant block, so changing a tint costs no upload;
+//   - the shaders are SPIR-V compiled from model3d_vk.vert and
+//     model3d_vk.frag, which are ports of the HLSL pair.
+//
+// The layout of the uniform block is std140 as the shader declares it:
+// mat4 ViewProj at byte 0, vec4 Light at 64, mat4 Bones[256] at 80. That is
+// a different order from the Direct3D constant buffer, which is why
+// writeFrame and writePush exist instead of the one writeConstants.
+
+//go:embed shaders/model3d_vk.vert.spv
+var modelVkVertSPIRV []byte
+
+//go:embed shaders/model3d_vk.frag.spv
+var modelVkFragSPIRV []byte
+
+// modelGpuVkFrameFloats is the size of the frame uniform block in floats:
+// 16 for ViewProj, 4 for Light, and 16 per bone.
+const modelGpuVkFrameFloats = 16 + 4 + modelGpuMaxBones*16
+
+// modelGpuVkPushFloats is the size of the push constant block in floats:
+// Shade, Tint and UV, one vec4 each.
+const modelGpuVkPushFloats = 12
+
+// modelGpuVkDraw is one sub mesh: the index buffer that holds its triangles
+// and how many of there are, with the material whose texture it samples. As
+// on Direct3D, each sub mesh owns its index buffer because a draw has no
+// index offset of its own.
+type modelGpuVkDraw struct {
+	indexes  *gpu.VulkanBuffer
+	count    int
+	material string
+	// name is the sub mesh this draw is, which is what a clip's visibility
+	// track is named after. The geometry never changes, so the name is
+	// carried here rather than looked up by index every frame.
+	name string
+	// centre is where the sub mesh sits, averaged over the vertices it
+	// indexes. It is what a fading mesh is sorted by, so that a model whose
+	// two translucent parts overlap shows the near one through the far one
+	// rather than whichever happened to come first in the file.
+	centre [3]float64
+}
+
+// modelGpuVkMesh is the GPU copy of a model's geometry. It never changes, so
+// it is built once per model and kept for as long as the tab is open.
+type modelGpuVkMesh struct {
+	vertices *gpu.VulkanBuffer
+	draws    []modelGpuVkDraw
+}
+
+// modelGpuVkResolvedDraw is one sub mesh with its material already settled:
+// the texture uploaded, the tint and the mapping chosen. Resolving happens
+// before the pass begins because an upload needs a command buffer of its own,
+// and while a pass is recording the only command buffer in flight is the
+// pass's — the Vulkan backend refuses an upload there rather than let it
+// end the pass early, which on a driver without validation is a crash on
+// the first textured frame.
+type modelGpuVkResolvedDraw struct {
+	draw    modelGpuVkDraw
+	tex     *gpu.VulkanTexture
+	tint    color.RGBA
+	mapping uvMapping
+	// alpha is how much of this sub mesh the clip lets through at this frame,
+	// and depth is how far its centre is from the camera. A draw below one
+	// goes through the blended pipeline, after every solid one.
+	alpha float32
+	depth float64
+}
+
+// modelGpuVkTarget is the offscreen colour and depth pair a frame is drawn
+// into. It is recreated when the panel changes size.
+type modelGpuVkTarget struct {
+	color *gpu.VulkanTexture
+	depth *gpu.VulkanTexture
+	size  image.Point
+}
+
+// modelGpuVkTexture is one material's diffuse map, still in the block
+// compressed form the .rsh file stores it in.
+type modelGpuVkTexture struct {
+	tex    *gpu.VulkanTexture
+	mips   []RshMip
+	format int32
+	data   []byte
+}
+
+// modelGpuVkRenderer holds the device resources shared by every 3D preview:
+// the pipeline, the uniform buffer, and the cache of uploaded models and
+// textures.
+type modelGpuVkRenderer struct {
+	vk       *gpu.VulkanPass
+	pipeline *gpu.VulkanPipeline
+	// blend is the same shader pair drawing the same way, with the colour
+	// target mixing rather than replacing and with depth left unwritten, so
+	// a mesh a clip is fading shows what is behind it instead of hiding it.
+	blend    *gpu.VulkanPipeline
+	uniforms *gpu.VulkanBuffer
+	white    *gpu.VulkanTexture
+	meshes   map[*WhmModel]*modelGpuVkMesh
+	// textures is keyed by material and holds both the texture and the
+	// file bytes its mip slices point into.
+	textures  map[string]*modelGpuVkTexture
+	offscreen *modelGpuVkTarget
+	// fx draws the particles of the model's effects, and is built the
+	// first time a frame carries any.
+	fx       *fxVkRenderer
+	fxGroups []fxVkGroup
+	frame    []float32
+	frameBuf []byte
+	push     []float32
+	pushBuf  []byte
+	// resolved is the frame's list of sub meshes with their textures
+	// settled, kept between frames so drawing a model does not make the
+	// collector a per-frame cost. order is the same list as the sequence the
+	// draws are issued in.
+	resolved []modelGpuVkResolvedDraw
+	order    []int
+}
+
+// newModelGpuVkRenderer compiles the pipeline and the buffers a frame needs.
+func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
+	// The two pipelines differ in nothing but how a fragment reaches the
+	// target. The shader pair is the same, and the fragment shader writes
+	// premultiplied colour, so a fully opaque draw blends to exactly what it
+	// would have replaced.
+	desc := gpu.VulkanPipelineDesc{
+		Vertex:   modelVkVertSPIRV,
+		Fragment: modelVkFragSPIRV,
+		Stride:   modelGpuVertexStride,
+		// Cull the faces Direct3D calls front, which is what keeps the
+		// outside of a model on screen there. The projection is
+		// mirrored into Vulkan's downward Y in writeFrame, which puts
+		// every triangle in the same place and the same winding
+		// Direct3D gave it, so the same choice stays correct here.
+		Cull:       gpu.CullFront,
+		DepthTest:  true,
+		DepthWrite: true,
+		PushSize:   modelGpuVkPushFloats * 4,
+		Inputs: []gpu.VulkanInput{
+			{Location: 0, Format: gpu.VulkanFormatFloat32x3, Offset: 0},
+			{Location: 1, Format: gpu.VulkanFormatFloat32x3, Offset: 12},
+			{Location: 2, Format: gpu.VulkanFormatFloat32x2, Offset: 24},
+			{Location: 3, Format: gpu.VulkanFormatFloat32x4, Offset: 32},
+			{Location: 4, Format: gpu.VulkanFormatFloat32x4, Offset: 48},
+		},
+	}
+	p, err := v.NewPipeline(desc)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline: %w", err)
+	}
+	// The blended pipeline leaves depth alone: a mesh that is only half
+	// there must not stop what is behind it from being drawn, and the draws
+	// behind it are the ones that have not happened yet.
+	desc.DepthWrite = false
+	desc.Blend = gpu.VulkanBlendPremultiplied
+	blend, err := v.NewPipeline(desc)
+	if err != nil {
+		p.Release()
+		return nil, fmt.Errorf("blended pipeline: %w", err)
+	}
+	uniforms, err := v.NewBuffer(gpu.ConstantBuffer, modelGpuVkFrameFloats*4, true)
+	if err != nil {
+		p.Release()
+		return nil, fmt.Errorf("uniform buffer: %w", err)
+	}
+	// A one by one white map stands in for a missing material, so
+	// untextured meshes need no second pipeline.
+	white, err := v.NewTexture(gpu.VulkanTextureDesc{
+		Width:     1,
+		Height:    1,
+		MipLevels: 1,
+		Format:    gpu.VulkanFormatR8G8B8A8SRGB,
+		Sampled:   true,
+	})
+	if err != nil {
+		uniforms.Release()
+		blend.Release()
+		p.Release()
+		return nil, fmt.Errorf("white texture: %w", err)
+	}
+	if err := white.UploadMip(0, []byte{0xff, 0xff, 0xff, 0xff}); err != nil {
+		white.Release()
+		uniforms.Release()
+		blend.Release()
+		p.Release()
+		return nil, fmt.Errorf("white texture upload: %w", err)
+	}
+	if err := white.UploadDone(); err != nil {
+		white.Release()
+		uniforms.Release()
+		blend.Release()
+		p.Release()
+		return nil, fmt.Errorf("white texture: %w", err)
+	}
+	return &modelGpuVkRenderer{
+		vk:       v,
+		pipeline: p,
+		blend:    blend,
+		uniforms: uniforms,
+		white:    white,
+		meshes:   map[*WhmModel]*modelGpuVkMesh{},
+		textures: map[string]*modelGpuVkTexture{},
+		frame:    make([]float32, modelGpuVkFrameFloats),
+		frameBuf: make([]byte, modelGpuVkFrameFloats*4),
+		push:     make([]float32, modelGpuVkPushFloats),
+		pushBuf:  make([]byte, modelGpuVkPushFloats*4),
+	}, nil
+}
+
+// forget drops the cached geometry of a model, which is what a closing tab
+// needs.
+func (r *modelGpuVkRenderer) forget(model *WhmModel) {
+	m, ok := r.meshes[model]
+	if !ok {
+		return
+	}
+	delete(r.meshes, model)
+	m.release()
+}
+
+// release frees every device resource the renderer owns.
+func (r *modelGpuVkRenderer) release() {
+	if r == nil {
+		return
+	}
+	for _, m := range r.meshes {
+		m.release()
+	}
+	for _, t := range r.textures {
+		if t.tex != nil {
+			t.tex.Release()
+		}
+	}
+	if r.offscreen != nil {
+		r.offscreen.color.Release()
+		r.offscreen.depth.Release()
+	}
+	r.white.Release()
+	r.fx.release()
+	r.uniforms.Release()
+	r.blend.Release()
+	r.pipeline.Release()
+	r.vk.Release()
+}
+
+// release frees the buffers of one mesh.
+func (m *modelGpuVkMesh) release() {
+	if m == nil {
+		return
+	}
+	m.vertices.Release()
+	for _, d := range m.draws {
+		d.indexes.Release()
+	}
+}
+
+// mesh returns the GPU copy of a model, building it on first use.
+func (r *modelGpuVkRenderer) mesh(model *WhmModel) (*modelGpuVkMesh, error) {
+	if m, ok := r.meshes[model]; ok {
+		return m, nil
+	}
+	start := time.Now()
+	m, err := r.buildMesh(model)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("3D preview: GPU mesh built in %v: %d verts, %d draws", time.Since(start), len(model.Vertices), len(m.draws))
+	r.meshes[model] = m
+	return m, nil
+}
+
+// buildMesh interleaves the vertices into the layout the vertex shader reads
+// and collects one draw range per sub mesh.
+func (r *modelGpuVkRenderer) buildMesh(model *WhmModel) (*modelGpuVkMesh, error) {
+	if len(model.Vertices) > 0xffff {
+		// The index buffer is 16 bit. A model this large has to go through
+		// the software path, whose indices are 32 bit.
+		return nil, fmt.Errorf("model has %d vertices, more than a 16 bit index buffer holds", len(model.Vertices))
+	}
+	verts := make([]byte, len(model.Vertices)*modelGpuVertexStride)
+	put32 := func(at int, v float32) {
+		binary.LittleEndian.PutUint32(verts[at:], math.Float32bits(v))
+	}
+	for i := range model.Vertices {
+		v := &model.Vertices[i]
+		at := i * modelGpuVertexStride
+		put32(at, v.Pos[0])
+		put32(at+4, v.Pos[1])
+		put32(at+8, v.Pos[2])
+		put32(at+12, v.Normal[0])
+		put32(at+16, v.Normal[1])
+		put32(at+20, v.Normal[2])
+		put32(at+24, v.UV[0])
+		put32(at+28, v.UV[1])
+		for k := range 4 {
+			bone, w := v.Bones[k], v.Weights[k]
+			if bone < 0 || bone >= int32(modelGpuMaxBones) {
+				w = 0
+			}
+			put32(at+32+4*k, float32(bone))
+			put32(at+48+4*k, w)
+		}
+	}
+	vbuf, err := r.vk.NewBuffer(gpu.VertexBuffer, len(verts), false)
+	if err != nil {
+		return nil, fmt.Errorf("vertex buffer: %w", err)
+	}
+	if err := vbuf.Upload(verts); err != nil {
+		vbuf.Release()
+		return nil, fmt.Errorf("vertex upload: %w", err)
+	}
+	draws := make([]modelGpuVkDraw, 0, len(model.Meshes))
+	cleanup := func() {
+		vbuf.Release()
+		for _, d := range draws {
+			d.indexes.Release()
+		}
+	}
+	for _, m := range model.Meshes {
+		if len(m.Indices) == 0 {
+			continue
+		}
+		idx := make([]byte, 0, len(m.Indices)*2)
+		for _, i := range m.Indices {
+			if i > 0xffff {
+				cleanup()
+				return nil, fmt.Errorf("mesh %q indexes vertex %d, out of range", m.Name, i)
+			}
+			idx = binary.LittleEndian.AppendUint16(idx, uint16(i))
+		}
+		ibuf, err := r.vk.NewBuffer(gpu.IndexBuffer, len(idx), false)
+		if err != nil {
+			cleanup()
+			return nil, fmt.Errorf("index buffer: %w", err)
+		}
+		if err := ibuf.Upload(idx); err != nil {
+			ibuf.Release()
+			cleanup()
+			return nil, fmt.Errorf("index upload: %w", err)
+		}
+		draws = append(draws, modelGpuVkDraw{
+			indexes:  ibuf,
+			count:    len(m.Indices),
+			material: m.Material,
+			name:     m.Name,
+			centre:   modelMeshCentre(model, m.Indices),
+		})
+	}
+	return &modelGpuVkMesh{vertices: vbuf, draws: draws}, nil
+}
+
+// modelMeshCentre is where a sub mesh sits, averaged over the vertices it
+// indexes. It is the rest pose's centre, which is what a fading mesh is sorted
+// by: a skinned part moves, but the pieces a clip fades are the rigid ones it
+// assembles from, and their order is decided by where they were built.
+//
+// An index past the end of the vertex array is ignored rather than clamped:
+// a draw that had been built already threw that mesh out, and this only ever
+// reads what survived.
+func modelMeshCentre(model *WhmModel, indices []uint32) [3]float64 {
+	var sum [3]float64
+	n := 0
+	for _, i := range indices {
+		if int(i) >= len(model.Vertices) {
+			continue
+		}
+		p := model.Vertices[i].Pos
+		sum[0] += float64(p[0])
+		sum[1] += float64(p[1])
+		sum[2] += float64(p[2])
+		n++
+	}
+	if n == 0 {
+		return sum
+	}
+	sum[0] /= float64(n)
+	sum[1] /= float64(n)
+	sum[2] /= float64(n)
+	return sum
+}
+
+// modelVkDepth is how far a point is from the camera in the units clip space
+// counts in: zero at the near plane, one at the far one. It is the dividing
+// that makes the number comparable across the frame, since a point twice as
+// far away is twice as deep in clip space but not twice as far in the world.
+func modelVkDepth(view fauxgl.Matrix, p [3]float64) float64 {
+	w := view.X30*p[0] + view.X31*p[1] + view.X32*p[2] + view.X33
+	if w == 0 {
+		return 0
+	}
+	z := (view.X20*p[0] + view.X21*p[1] + view.X22*p[2] + view.X23) / w
+	if z < 0 {
+		// Behind the eye, which happens to a mesh the camera has orbited
+		// inside. It is drawn early rather than not drawn at all.
+		return -z
+	}
+	return z
+}
+
+// modelVkDrawsAfter says whether one draw has to be issued after another.
+//
+// Solid geometry comes first, so that a fading mesh is measured against
+// everything the frame has already put behind it. Among the fading ones the
+// nearer comes last: what goes down first is what the one after it shows
+// through, so the piece in front is the piece that has to be mixed on top.
+//
+// Two solid draws are left in the order they went in. Which of them wins is
+// the depth test's business, not the sort's, and a frame whose clip hides
+// nothing is every frame of most animations — that one keeps issuing its
+// draws in the same sequence it always did.
+func modelVkDrawsAfter(a, b *modelGpuVkResolvedDraw) bool {
+	fa, fb := a.alpha < 1, b.alpha < 1
+	if fa != fb {
+		return fa
+	}
+	if !fa {
+		return false
+	}
+	// Equal depth means the order is left alone too: swapping two meshes
+	// that are the same distance away every frame is what makes a pair of
+	// them flicker.
+	return a.depth < b.depth
+}
+
+// modelVkOrder is the order the frame's draws are issued in: modelVkDrawsAfter
+// applied to every pair.
+//
+// It is an insertion sort on purpose. The list is a model's sub meshes, which
+// is a few dozen at the outside, and it runs on every frame of a playing
+// animation; sort.SliceStable would box the comparison into an interface and
+// give the collector something to do every frame to save a few hundred
+// comparisons. The slice is the renderer's, so this allocates nothing.
+func modelVkOrder(resolved []modelGpuVkResolvedDraw, order []int) []int {
+	if cap(order) < len(resolved) {
+		order = make([]int, len(resolved))
+	}
+	order = order[:len(resolved)]
+	for i := range order {
+		order[i] = i
+	}
+	for i := 1; i < len(order); i++ {
+		// Walk this one left for as long as the draw it is passing has to
+		// come after it. Two draws neither of which has to follow the
+		// other stop the walk, which is what leaves the order alone.
+		for j := i; j > 0 && modelVkDrawsAfter(&resolved[order[j-1]], &resolved[order[j]]); j-- {
+			order[j], order[j-1] = order[j-1], order[j]
+		}
+	}
+	return order
+}
+
+// rshVkFormat maps a .rsh surface format onto the sRGB variant of its block
+// compressed Vulkan format, so the shader can sample it directly.
+func rshVkFormat(format int32) (gpu.VulkanFormat, bool) {
+	switch format {
+	case 8:
+		return gpu.VulkanFormatBC1SRGB, true
+	case 10:
+		return gpu.VulkanFormatBC2SRGB, true
+	case 11:
+		return gpu.VulkanFormatBC3SRGB, true
+	}
+	return 0, false
+}
+
+// materialTexture returns the texture for a material, uploading the mip chain
+// of the .rsh file as it is stored the first time it is asked for. The file
+// bytes are kept by the returned entry, because the mip slices point into them.
+func (r *modelGpuVkRenderer) materialTexture(material string, data []byte) (*gpu.VulkanTexture, error) {
+	if material == "" || len(data) == 0 {
+		return r.white, nil
+	}
+	entry, ok := r.textures[material]
+	if !ok {
+		info, mips, err := RshRawImage(data, 0)
+		if err != nil {
+			// A material that cannot be read is not fatal: the mesh is drawn
+			// with the base colour instead.
+			log.Printf("3D preview: texture %q unreadable, using white: %v", material, err)
+			r.textures[material] = &modelGpuVkTexture{}
+			return r.white, nil
+		}
+		vkfmt, ok := rshVkFormat(info.Format)
+		if !ok || len(mips) == 0 {
+			log.Printf("3D preview: texture %q unsupported (format=%d mips=%d), using white", material, info.Format, len(mips))
+			r.textures[material] = &modelGpuVkTexture{}
+			return r.white, nil
+		}
+		// Uploaded as an sRGB texture, which is what a diffuse map is: the
+		// shader lights linear values and Gio's blit puts the result back
+		// through the same curve.
+		tex, err := r.vk.NewTexture(gpu.VulkanTextureDesc{
+			Width:     mips[0].Width,
+			Height:    mips[0].Height,
+			MipLevels: len(mips),
+			Format:    vkfmt,
+			Sampled:   true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("texture %q: %w", material, err)
+		}
+		for i, mip := range mips {
+			if err := tex.UploadMip(i, mip.Data); err != nil {
+				tex.Release()
+				return nil, fmt.Errorf("texture %q mip %d: %w", material, i, err)
+			}
+		}
+		if err := tex.UploadDone(); err != nil {
+			tex.Release()
+			return nil, fmt.Errorf("texture %q: %w", material, err)
+		}
+		entry = &modelGpuVkTexture{tex: tex, mips: mips, format: info.Format, data: data}
+		r.textures[material] = entry
+		// The first blocks of the top level say whether the bytes about to
+		// be sampled hold an image: two zero endpoints decode to solid
+		// black, which is what a frame full of black texture looks like.
+		head := ""
+		if d := mips[0].Data; len(d) >= 32 {
+			var sb strings.Builder
+			for i := 0; i < 4; i++ {
+				c0 := binary.LittleEndian.Uint16(d[i*8:])
+				c1 := binary.LittleEndian.Uint16(d[i*8+2:])
+				fmt.Fprintf(&sb, " %04x/%04x", c0, c1)
+			}
+			// Average brightness of the first endpoint of every block: a
+			// real map lands in the tens or hundreds, an all-zero chain
+			// lands on 0.
+			blocks, sum := len(d)/8, 0
+			for i := 0; i < blocks; i++ {
+				c := binary.LittleEndian.Uint16(d[i*8:])
+				r5 := (c >> 11) & 0x1f
+				g6 := (c >> 5) & 0x3f
+				b5 := c & 0x1f
+				sum += int(r5)*255/31 + int(g6)*255/63 + int(b5)*255/31
+			}
+			avg := 0
+			if blocks > 0 {
+				avg = sum / (blocks * 3)
+			}
+			fmt.Fprintf(&sb, " avgC0Luma=%d blocks=%d", avg, blocks)
+			head = ";" + sb.String()
+		}
+		log.Printf("3D preview: texture %q uploaded %dx%d format=%d mips=%d bytes=%d mips0=%d%s",
+			material, mips[0].Width, mips[0].Height, info.Format, len(mips), len(data), len(mips[0].Data), head)
+	}
+	if entry.tex == nil {
+		return r.white, nil
+	}
+	return entry.tex, nil
+}
+
+// renderTarget returns the offscreen render target, recreated when the size
+// changes.
+func (r *modelGpuVkRenderer) renderTarget(size image.Point) (*modelGpuVkTarget, error) {
+	size.X = maxInt(1, size.X)
+	size.Y = maxInt(1, size.Y)
+	if r.offscreen != nil && r.offscreen.size == size {
+		return r.offscreen, nil
+	}
+	if r.offscreen != nil {
+		// Gio may still be holding the texture the frame on screen was
+		// painted from, so a recreate during a drag resize is worth
+		// seeing in the log. The Vulkan texture stays alive until Gio
+		// lets go of its copy.
+		log.Printf("3D preview: render target %dx%d -> %dx%d", r.offscreen.size.X, r.offscreen.size.Y, size.X, size.Y)
+		r.offscreen.color.Release()
+		r.offscreen.depth.Release()
+	}
+	color, err := r.vk.NewTexture(gpu.VulkanTextureDesc{
+		Width:        size.X,
+		Height:       size.Y,
+		MipLevels:    1,
+		Format:       gpu.VulkanFormatR8G8B8A8SRGB,
+		RenderTarget: true,
+		Sampled:      true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("colour target: %w", err)
+	}
+	depth, err := r.vk.NewTexture(gpu.VulkanTextureDesc{
+		Width:     size.X,
+		Height:    size.Y,
+		MipLevels: 1,
+		Format:    gpu.VulkanFormatD32Float,
+		Depth:     true,
+	})
+	if err != nil {
+		color.Release()
+		return nil, fmt.Errorf("depth target: %w", err)
+	}
+	r.offscreen = &modelGpuVkTarget{color: color, depth: depth, size: size}
+	return r.offscreen, nil
+}
+
+// Render draws one frame and returns the texture Gio should paint. The caller
+// passes it to paint.NewImageOpFromTexture, which hands the same GPU memory
+// to Gio's blitter with nothing copied in between. rsh resolves a material
+// name to the raw bytes of its .rsh file; it may be nil, which leaves every
+// mesh untextured.
+//
+// The pass is recorded on Gio's queue and submitted before Render returns,
+// so the frame is finished on the GPU by the time Gio paints it: a fence
+// wait is what stands between this frame and the one Gio is about to draw.
+func (r *modelGpuVkRenderer) Render(
+	model *WhmModel,
+	pose WhmPose,
+	opts RenderOptions,
+	materials map[string]WhmMaterial,
+	rsh func(material string) ([]byte, bool),
+) (frame modelGpuFrame, err error) {
+	if model == nil {
+		return nil, fmt.Errorf("no model")
+	}
+	if opts.Width < 1 || opts.Height < 1 {
+		return nil, fmt.Errorf("frame is %d by %d", opts.Width, opts.Height)
+	}
+	mesh, err := r.mesh(model)
+	if err != nil {
+		return nil, err
+	}
+	target, err := r.renderTarget(image.Point{X: opts.Width, Y: opts.Height})
+	if err != nil {
+		return nil, err
+	}
+	view := buildViewMatrix(opts)
+
+	// Materials are resolved first, before anything is recorded: see
+	// modelGpuVkResolvedDraw for why an upload may not happen inside the
+	// pass below.
+	resolved := r.resolved[:0]
+	if cap(resolved) < len(mesh.draws) {
+		resolved = make([]modelGpuVkResolvedDraw, 0, len(mesh.draws))
+	}
+	for _, d := range mesh.draws {
+		// A clip that holds a mesh back does not draw it: the depth and
+		// colour behind it are already what the frame should show there.
+		alpha := meshAlphaFor(opts, d.name)
+		if alpha <= 0 {
+			continue
+		}
+		st := modelGpuVkResolvedDraw{
+			draw:    d,
+			tex:     r.white,
+			tint:    opts.BaseColor,
+			mapping: renderUVFor(opts, d.material),
+			alpha:   alpha,
+			depth:   modelVkDepth(view, d.centre),
+		}
+		if st.tint == (color.RGBA{}) {
+			st.tint = rgbaWhite
+		}
+		if mat, ok := materials[d.material]; ok {
+			if mat.Color != (color.RGBA{}) {
+				st.tint = mat.Color
+			}
+			if rsh != nil {
+				if data, ok := rsh(d.material); ok {
+					tex, terr := r.materialTexture(d.material, data)
+					if terr != nil {
+						return nil, terr
+					}
+					st.tex = tex
+				}
+			}
+		}
+		if alpha < 1 {
+			// The clip's alpha rides in the tint's alpha channel, which
+			// the fragment shader multiplies the colour by and writes
+			// out. It is not a fade towards the panel colour: the blended
+			// pipeline puts the mesh over whatever is actually behind it.
+			st.tint.A = meshAlphaByte(alpha)
+		} else {
+			// A whole mesh is written at full alpha whatever its
+			// material's own tint carries there: nothing in a .whm has
+			// ever meant a diffuse map by an empty alpha channel, and the
+			// shader was handed a one there before this.
+			st.tint.A = 255
+		}
+		resolved = append(resolved, st)
+	}
+	// The buffer is kept for the next frame rather than left to the
+	// collector: a frame draws every sub mesh of the model, and a model
+	// with thirty of them makes thirty of these a second.
+	r.resolved = resolved
+	// Solid geometry first, the fading ones from the back of the camera
+	// forward. The order is worked out here, before the pass is recorded,
+	// because it costs nothing next to the draw and it decides which
+	// pipeline each of them goes through.
+	order := modelVkOrder(resolved, r.order)
+	r.order = order
+
+	// The particles and the overlay are prepared before the pass begins,
+	// because a copy may not be recorded while one is: the driver refuses
+	// the upload rather than end the pass early, which on a driver without
+	// validation is a crash. What prepare writes is the vertex buffer and
+	// the camera; the draws themselves go into the pass below.
+	//
+	// The overlay is the skeleton and the picked marker's frame, taken
+	// from the same segment list the software renderer draws. It is prepared
+	// through the particle machinery because that is what already carries
+	// world space quads with a colour — the overlay is one more group of
+	// them, drawn through a pipeline without the depth test.
+	overlay := modelOverlayLines(model, pose, opts)
+	r.fxGroups = nil
+	if (opts.FX != nil && len(opts.FX.Groups) > 0) || len(overlay) > 0 {
+		if r.fx == nil {
+			fx, err := newFxVkRenderer(r.vk)
+			if err != nil {
+				return nil, err
+			}
+			r.fx = fx
+		}
+		groups, err := r.fx.prepare(r.vk, opts.FX, overlay, view, opts)
+		if err != nil {
+			return nil, err
+		}
+		r.fxGroups = groups
+	}
+
+	// The pass clears the colour target to the panel background: the clear
+	// value is linear and the sRGB target encodes it back to the bytes the
+	// background is, which is the same arithmetic the Direct3D path does
+	// with its explicit clear.
+	bg := panelBackground
+	clearColor := [4]float32{
+		srgbToLinear(bg.R), srgbToLinear(bg.G), srgbToLinear(bg.B), 1,
+	}
+	if err := r.vk.BeginPass(target.color, target.depth, image.Rectangle{Max: target.size}, true, clearColor); err != nil {
+		return nil, fmt.Errorf("begin pass: %w", err)
+	}
+	// EndPass submits and waits, and it has to run on every path out of
+	// here: a pass left active would refuse to start the next one.
+	defer func() {
+		if e := r.vk.EndPass(); e != nil && err == nil {
+			frame, err = nil, fmt.Errorf("end pass: %w", e)
+		}
+	}()
+	if err := r.vk.SetPipeline(r.pipeline); err != nil {
+		return nil, err
+	}
+	if err := r.vk.SetVertexBuffer(mesh.vertices, 0); err != nil {
+		return nil, err
+	}
+	r.writeFrame(view, pose, opts)
+	if err := r.uploadFrame(); err != nil {
+		return nil, err
+	}
+	if err := r.vk.SetUniforms(r.uniforms); err != nil {
+		return nil, err
+	}
+
+	// The camera and the skeleton are the same for every sub mesh, so the
+	// uniform block is written once. What changes between sub meshes is
+	// the tint and the mapping, and those live in the push constants: the
+	// values stay in effect until the next push, so a model with one map
+	// pushes once.
+	//
+	// The pipeline changes once, where the order crosses from solid to
+	// fading geometry, and not at all on a frame whose clip hides nothing.
+	blending := false
+	written := false
+	var writtenTint color.RGBA
+	var writtenUV uvMapping
+	for _, at := range order {
+		st := &resolved[at]
+		if (st.alpha < 1) != blending {
+			blending = st.alpha < 1
+			pipe := r.pipeline
+			if blending {
+				pipe = r.blend
+			}
+			if err := r.vk.SetPipeline(pipe); err != nil {
+				return nil, err
+			}
+		}
+		if !written || st.tint != writtenTint || st.mapping != writtenUV {
+			r.writePush(opts, st.tint, st.mapping)
+			if err := r.uploadPush(); err != nil {
+				return nil, err
+			}
+			if err := r.vk.SetDrawConstants(r.pushBuf); err != nil {
+				return nil, err
+			}
+			written, writtenTint, writtenUV = true, st.tint, st.mapping
+		}
+		if err := r.vk.SetTexture(0, st.tex); err != nil {
+			return nil, err
+		}
+		if err := r.vk.SetIndexBuffer(st.draw.indexes); err != nil {
+			return nil, err
+		}
+		if err := r.vk.DrawIndexed(st.draw.count); err != nil {
+			return nil, err
+		}
+	}
+	if err := r.drawFx(r.fxGroups); err != nil {
+		return nil, err
+	}
+	return &modelGpuVkFrame{tex: target.color, size: target.size}, nil
+}
+
+// drawFx draws the frame's particles and overlay, if the render request
+// carries any. They go through the same pass as the model, against the same
+// depth buffer, which is what lets geometry in front of a glow hide it. The
+// overlay is the exception: it is depth tested against nothing, so a bone
+// inside the mesh is still drawn.
+//
+// The vertex data was written before the pass began — a copy may not be
+// recorded while one is — so what is left here is the draws themselves.
+func (r *modelGpuVkRenderer) drawFx(groups []fxVkGroup) error {
+	if len(groups) == 0 || r.fx == nil {
+		return nil
+	}
+	if err := r.vk.SetUniforms(r.fx.frame); err != nil {
+		return err
+	}
+	if err := r.vk.SetDrawConstants(r.fx.pushBytes); err != nil {
+		return err
+	}
+	lastAdd, haveLast := false, false
+	lastOverlay := false
+	for _, g := range groups {
+		pipe := r.fx.cover
+		switch {
+		case g.overlay:
+			pipe = r.fx.overlay
+		case g.add:
+			pipe = r.fx.add
+		}
+		// One pipeline switch per blend mode rather than per group: the
+		// groups are already sorted, so the covering ones and the
+		// additive ones each need exactly one change. The overlay is
+		// last and only ever one group, so it costs one more.
+		if !haveLast || g.add != lastAdd || g.overlay != lastOverlay {
+			if err := r.vk.SetPipeline(pipe); err != nil {
+				return err
+			}
+			lastAdd, lastOverlay, haveLast = g.add, g.overlay, true
+		}
+		vertexBuffer := r.fx.verts
+		if g.compute {
+			vertexBuffer = r.fx.computeVerts
+		}
+		if err := r.vk.SetVertexBuffer(vertexBuffer, g.at*fxVertexStride); err != nil {
+			return err
+		}
+		if err := r.vk.SetTexture(0, g.tex); err != nil {
+			return err
+		}
+		if err := r.vk.SetDrawConstants(r.fx.pushBytes); err != nil {
+			return err
+		}
+		if err := r.vk.Draw(g.verts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeFrame fills the frame uniform block: the view projection, the light
+// and the bone matrices, in the std140 order model3d_vk.vert declares.
+func (r *modelGpuVkRenderer) writeFrame(view fauxgl.Matrix, pose WhmPose, opts RenderOptions) {
+	c := r.frame
+	hslslMatrix(c[0:16], view)
+	// Direct3D's clip space has Y running upward and Vulkan's downward,
+	// so the projection is mirrored vertically — without this the model
+	// would come out upside down. The mirror also reverses the apparent
+	// winding of every triangle, which is exactly what the pipeline's
+	// clockwise front faces and front face culling were chosen to
+	// compensate for, so together they put the same triangles on screen
+	// that the Direct3D path draws.
+	for i := 1; i <= 13; i += 4 {
+		c[i] = -c[i]
+	}
+	light := opts.Light
+	if light == (fauxgl.Vector{}) {
+		// The same key light the software renderer defaults to.
+		light = fauxgl.Vector{X: 0.35, Y: -0.5, Z: 0.78}
+	}
+	if n := light.Length(); n > 0 {
+		light = light.Normalize()
+	}
+	ambient := opts.Ambient
+	if opts.Ambient == 0 && opts.Diffuse == 0 {
+		ambient = 0.28
+	}
+	c[16], c[17], c[18], c[19] = float32(light.X), float32(light.Y), float32(light.Z), float32(ambient)
+	bones := c[20:]
+	clear(bones)
+	// A bone past the uniform block has its weights stripped when the
+	// vertices are built, so a zero matrix never collapses anything: it
+	// simply never gets the chance to.
+	for i := range pose.Bones {
+		if i >= modelGpuMaxBones {
+			break
+		}
+		hslslMatrix(bones[i*16:], pose.SkinMatrix(int32(i)))
+	}
+}
+
+// writePush fills the push constant block: the shade term, the tint and the
+// mapping of the material being drawn. The shade term carries the diffuse
+// strength in x and the texture rotation in quarter turns in y, the two
+// values the shaders read outside the uniform block.
+//
+// The tint's alpha is the fourth value, and it is what the fragment shader
+// premultiplies the colour by, so a mesh a clip is fading writes less of
+// itself over what is behind it rather than a darker version of itself.
+func (r *modelGpuVkRenderer) writePush(opts RenderOptions, tint color.RGBA, mapping uvMapping) {
+	p := r.push
+	diffuse := opts.Diffuse
+	if opts.Ambient == 0 && opts.Diffuse == 0 {
+		diffuse = 0.72
+	}
+	p[0], p[1], p[2], p[3] = float32(diffuse), float32(mapping.rotate), 0, 0
+	p[4], p[5], p[6], p[7] = float32(tint.R)/255, float32(tint.G)/255, float32(tint.B)/255, float32(tint.A)/255
+	// The mapping of the material being drawn: move, scale, mirror. A zero
+	// scale would collapse the map to a line, which is never what a reader
+	// means, so an unset one is the map as the file has it.
+	scale := mapping.scale
+	if scale <= 0 {
+		scale = 1
+	}
+	mirror := float32(0)
+	if mapping.mirror {
+		mirror = 1
+	}
+	p[8], p[9], p[10], p[11] = mapping.offset[0], mapping.offset[1], scale, mirror
+}
+
+// uploadFrame writes the uniform block into the buffer the shaders read.
+func (r *modelGpuVkRenderer) uploadFrame() error {
+	for i, v := range r.frame {
+		binary.LittleEndian.PutUint32(r.frameBuf[i*4:], math.Float32bits(v))
+	}
+	if err := r.uniforms.Upload(r.frameBuf); err != nil {
+		return fmt.Errorf("uniforms: %w", err)
+	}
+	return nil
+}
+
+// uploadPush writes the push block into the scratch bytes the draw pushes.
+func (r *modelGpuVkRenderer) uploadPush() error {
+	for i, v := range r.push {
+		binary.LittleEndian.PutUint32(r.pushBuf[i*4:], math.Float32bits(v))
+	}
+	return nil
+}
+
+// modelGpuVkFrame is one rendered frame, still in video memory. Painting it
+// hands the texture to Gio's blitter, which is the only copy in the chain.
+type modelGpuVkFrame struct {
+	tex  *gpu.VulkanTexture
+	size image.Point
+}
+
+// Paint scales the frame to fit rect, the same way the software path scales
+// its image, so switching renderers does not move anything on screen.
+func (f *modelGpuVkFrame) Paint(gtx layout.Context, rect image.Rectangle) {
+	if f == nil || f.tex == nil || rect.Dx() < 1 || rect.Dy() < 1 {
+		return
+	}
+	tr := f.overlayTransform(rect).Push(gtx.Ops)
+	paint.NewImageOpFromTexture(f.tex).Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+	tr.Pop()
+}
+
+// Overlay runs fn in the frame's own transform, which is what the software
+// path gets for free from the affine it pushes around its image.
+func (f *modelGpuVkFrame) Overlay(gtx layout.Context, rect image.Rectangle, fn func(layout.Context)) {
+	if f == nil || f.tex == nil || rect.Dx() < 1 || rect.Dy() < 1 || fn == nil {
+		return
+	}
+	tr := f.overlayTransform(rect).Push(gtx.Ops)
+	fn(gtx)
+	tr.Pop()
+}
+
+// overlayTransform is the scale and centring Paint lays the frame down with.
+// Paint and Overlay share it rather than each deriving it, because the marker
+// ring is only in the right place if both put the frame's pixels in the same
+// place on screen.
+func (f *modelGpuVkFrame) overlayTransform(rect image.Rectangle) op.TransformOp {
+	scale := float32(rect.Dx()) / float32(f.size.X)
+	if s := float32(rect.Dy()) / float32(f.size.Y); s < scale {
+		scale = s
+	}
+	dx := (float32(rect.Dx()) - float32(f.size.X)*scale) / 2
+	dy := (float32(rect.Dy()) - float32(f.size.Y)*scale) / 2
+	return op.Affine(f32.Affine2D{}.Scale(f32.Pt(dx, dy), f32.Pt(scale, scale)))
+}
+
+// Release does nothing: the texture belongs to the renderer, which recycles
+// it.
+func (f *modelGpuVkFrame) Release() {}
