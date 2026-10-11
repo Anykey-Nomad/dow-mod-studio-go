@@ -2,7 +2,7 @@
 
 The `.fda` files are used for compressed audio storage and are built on top of the Relic Chunky container format. The audio is encoded using a proprietary Discrete Cosine Transform (DCT) based codec.
 
-* Read this in other languages: [Русский](README.ru.md)
+* Read this in other languages: [Русский](Readme_ru.md)
 
 ## File Structure (Chunks)
 
