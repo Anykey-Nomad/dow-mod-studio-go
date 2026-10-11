@@ -1,10 +1,6 @@
 package main
 
-import (
-	"dow-mod-studio/internal/3d_engine"
-	"dow-mod-studio/internal/whm"
-	"github.com/fogleman/fauxgl"
-)
+import "dow-mod-studio/internal/3d_engine"
 
 type modelOverlayLine = engine.OverlayLine
 
@@ -16,8 +12,6 @@ var (
 	modelMarkerZColor   = engine.MarkerZColor
 	modelMarkerFwdColor = engine.MarkerForwardColor
 )
-
-const markerArrowWorldLength = engine.MarkerAxisWorldLength
 
 func pickedMarker(index int) *int {
 	if index < 0 {
@@ -61,4 +55,3 @@ func modelMarkerOverlayLines(model *WhmModel, pose WhmPose, opts RenderOptions) 
 	}, Marker: opts.Marker}
 	return engine.MarkerOverlayLines(&model.Model, pose, eo)
 }
-
