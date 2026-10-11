@@ -1,10 +1,10 @@
 package main
 
 import (
+	viewer "dow-mod-studio/internal/3d_viewer"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"errors"
-	"math"
 	"path/filepath"
 	"strings"
 	"time"
@@ -319,25 +319,7 @@ func (v *modelViewer) lookThroughCamera(cam WhmCamera) {
 	}
 	eye := boneRootFrame.MulPosition(vec3From(cam.Pos))
 	focus := boneRootFrame.MulPosition(vec3From(cam.FocusPoint))
-	dir := eye.Sub(focus)
-	distance := dir.Length()
-	if distance < 1e-6 {
-		// A camera at its own focus point has no direction to work out, so it
-		// keeps the distance that framed the model.
-		distance = v.fitDistance
-	} else {
-		dir = dir.DivScalar(distance)
-	}
-	v.center = focus
-	v.yaw = math.Atan2(dir.Y, dir.X)
-	v.pitch = clampFloat64(math.Asin(clampFloat64(dir.Z, -1, 1)), -1.45, 1.45)
-	v.distance = clampFloat64(distance, v.fitDistance*0.15, v.fitDistance*6)
-	// A stored field of view can be zero or a full 180, either of which makes
-	// the projection useless, so it only stands once it is in a sane range.
-	if cam.Fov > 1 && cam.Fov < 170 {
-		v.fov = float64(cam.Fov)
-	}
-	v.activeCamera = cam.Name
+	v.CameraState = viewer.LookThroughCamera(v.CameraState, eye, focus, cam.Fov, cam.Name)
 	v.invalidate()
 }
 
@@ -347,10 +329,7 @@ func (v *modelViewer) resetCamera() {
 	if v == nil {
 		return
 	}
-	v.yaw, v.pitch = 0.7, 0.2
-	v.distance = v.fitDistance
-	v.center, _ = v.model.ModelCenter()
-	v.fov = modelDefaultFov
-	v.activeCamera = ""
+	camera := viewer.ResetCamera(v.CameraState)
+	v.CameraState = camera
 	v.invalidate()
 }

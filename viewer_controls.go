@@ -1,6 +1,7 @@
 package main
 
 import (
+	viewer "dow-mod-studio/internal/3d_viewer"
 	"fmt"
 	"log"
 	"math"
@@ -155,8 +156,8 @@ func (ui *uiState) modelInfoTable(gtx layout.Context, t *fileTab) layout.Dimensi
 	}
 	// The camera only gets a row when one of the model's own is in use, since
 	// an orbit camera has no name to report.
-	if v.activeCamera != "" {
-		rows = append(rows, [2]string{"Camera", v.activeCamera})
+	if v.ActiveCamera != "" {
+		rows = append(rows, [2]string{"Camera", v.ActiveCamera})
 	}
 	children := make([]layout.FlexChild, 0, len(rows))
 	for i, row := range rows {
@@ -391,8 +392,7 @@ func (v *modelViewer) zoomBy(factor float64) {
 	if v == nil || factor <= 0 || factor == 1 {
 		return
 	}
-	v.distance *= factor
-	v.distance = clampFloat64(v.distance, v.fitDistance*0.15, v.fitDistance*6)
+	v.CameraState = viewer.ZoomBy(v.CameraState, factor)
 	v.invalidate()
 }
 

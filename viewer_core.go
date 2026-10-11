@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	engine "dow-mod-studio/internal/3d_engine"
+	viewer "dow-mod-studio/internal/3d_viewer"
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/whe"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"gioui.org/io/event"
 	"gioui.org/layout"
 	"gioui.org/widget"
-	"github.com/fogleman/fauxgl"
 )
 
 // modelFrame is the result of one background render.
@@ -54,16 +54,7 @@ type modelViewer struct {
 	// it.
 	sideControls bool
 
-	yaw, pitch  float64
-	distance    float64
-	center      fauxgl.Vector
-	fitDistance float64
-	// fov is the vertical field of view in degrees. A .whm camera of the
-	// model's own can set it, which is why it is not a constant.
-	fov float64
-	// activeCamera names the model's camera the view was last put on, empty
-	// when the orbit camera is free.
-	activeCamera string
+	viewer.CameraState
 	// uv is the mapping every material is drawn with, and uvMaterials holds a
 	// mapping of its own for the ones that need a different one. It is a
 	// reading of the model rather than a setting of the app: a map can be
@@ -234,18 +225,13 @@ type modelViewer struct {
 // model was read from, which the texture loader uses to find the maps that sit
 // beside it.
 func newModelViewer(model *WhmModel, modelFile string) *modelViewer {
-	center, dist := model.ModelCenter()
+	camera := NewCameraState(model, 0.7, 0.2, modelDefaultFov)
 	return &modelViewer{
 		model:       model,
 		modelFile:   modelFile,
 		materials:   map[string]WhmMaterial{},
 		rshData:     map[string][]byte{},
-		center:      center,
-		distance:    dist,
-		fitDistance: dist,
-		yaw:         0.7,
-		pitch:       0.2,
-		fov:         modelDefaultFov,
+		CameraState: camera,
 		// The map as the file has it, and the sliders showing that: no
 		// offset, no turn, no mirror, and a scale of one. A reader moves
 		// them away from that and back to it.
@@ -357,11 +343,11 @@ func (v *modelViewer) options(width, height, quality int) RenderOptions {
 		RenderOptions: engine.RenderOptions{
 			Width:    width,
 			Height:   height,
-			Yaw:      v.yaw,
-			Pitch:    v.pitch,
-			Distance: v.distance,
-			Target:   v.center,
-			Fov:      v.fov,
+			Yaw:      v.Yaw,
+			Pitch:    v.Pitch,
+			Distance: v.Distance,
+			Target:   v.Center,
+			Fov:      v.FOV,
 			// Both terms are fractions of full brightness, and the preview is
 			// deliberately drawn flat: past a whole one the shader's
 			// ambient + diffuse * lambert is clamped to 1, so the model shows

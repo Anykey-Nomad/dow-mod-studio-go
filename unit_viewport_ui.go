@@ -350,7 +350,7 @@ func (ui *uiState) unitCameraList(gtx layout.Context, v *modelViewer) layout.Dim
 			v.lookThroughCamera(cam)
 		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitViewportRow(gtx, c, v.activeCamera == cam.Name, cam.Name,
+			return ui.unitViewportRow(gtx, c, v.ActiveCamera == cam.Name, cam.Name,
 				fmt.Sprintf("field of view %.0f°", cam.Fov))
 		}))
 	}

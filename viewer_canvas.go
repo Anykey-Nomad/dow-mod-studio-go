@@ -189,8 +189,8 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			dx := float64(e.Position.X - v.lastX)
 			dy := float64(e.Position.Y - v.lastY)
 			v.lastX, v.lastY = e.Position.X, e.Position.Y
-			v.yaw -= dx * 0.01
-			v.pitch = clampFloat64(v.pitch+dy*0.01, -1.45, 1.45)
+			v.Yaw -= dx * 0.01
+			v.Pitch = clampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
 			v.redraw = true
 		case pointer.Scroll:
 			v.zoomBy(modelZoomByDelta(e.Scroll.Y))

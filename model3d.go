@@ -233,5 +233,19 @@ func (m *WhmModel) ModelCenter() (fauxgl.Vector, float64) {
 	return engine.ModelCenter(&m.Model)
 }
 
+// NewCameraState creates the initial orbit-camera frame for a model without
+// exposing any application UI state to the viewer package.
+func NewCameraState(m *WhmModel, yaw, pitch, fov float64) viewer.CameraState {
+	var modelData *whm.Model
+	if m != nil {
+		modelData = &m.Model
+	}
+	center, distance := engine.ModelCenter(modelData)
+	return viewer.CameraState{
+		Center: center, Distance: distance, FitDistance: distance,
+		Yaw: yaw, Pitch: pitch, FOV: fov,
+	}
+}
+
 // rgbaWhite is the default tint for a textured material.
 var rgbaWhite = color.RGBA{R: 255, G: 255, B: 255, A: 255}
