@@ -2,6 +2,8 @@
 
 The `.whe` files are used in the Relic engine to store visual effects (FX), sounds, and link them to unit animations. The format is based on the hierarchical Relic Chunky file structure.
 
+* Read this in other languages: [Русский](Readme_ru.md)
+
 ## How it Works
 A unit's effects are wired up in three steps:
 1. **Blueprint:** Entity blueprints (`attrib/ebps/**.lua`) map gameplay triggers onto named events.
