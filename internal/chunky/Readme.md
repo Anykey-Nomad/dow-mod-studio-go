@@ -2,7 +2,7 @@
 
 `Relic Chunky` is a universal hierarchical container format shared across multiple Relic engine files, including 3D models (`.whm`, `.sgm`), event files (`.whe`), textures (`.rsh`), and FX files[cite: 21].
 
-* Read this in other languages: [Русский](README_ru.md)
+* Read this in other languages: [Русский](Readme_ru.md)
 
 ## Container Structure
 
