@@ -45,13 +45,6 @@ func overlayOptions(opts RenderOptions) OverlayOptions {
 	return OverlayOptions{Camera: Camera{Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch, Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov}, Skeleton: opts.Skeleton, Marker: opts.Marker, PickedBone: opts.PickedBone}
 }
 
-func meshAlphaFor(opts RenderOptions, name string) float32 {
-	if a, ok := opts.MeshAlpha[name]; ok {
-		return a
-	}
-	return 1
-}
-
 func maxInt(a, b int) int {
 	if a > b {
 		return a
@@ -201,7 +194,7 @@ func Render(model *whm.Model, pose whm.Pose, opts RenderOptions) *image.RGBA {
 		// The colour is set for every mesh, not only the fading ones: the
 		// shader is shared, so a mesh drawn solid after a fading one would
 		// otherwise be drawn with whatever that one left behind.
-		alpha := meshAlphaFor(opts, mesh.Name)
+		alpha := MeshAlpha(opts.MeshAlpha, mesh.Name)
 		if alpha <= 0 {
 			continue
 		}

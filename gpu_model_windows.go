@@ -988,20 +988,20 @@ func (r *modelGPURenderer) writeConstants(view fauxgl.Matrix, pose WhmPose, opts
 		ambient, diffuse = 0.28, 0.72
 	}
 	c[16], c[17], c[18], c[19] = float32(light.X), float32(light.Y), float32(light.Z), float32(ambient)
-	c[20], c[21], c[22], c[23] = float32(diffuse), float32(mapping.rotate), 0, 0
+	c[20], c[21], c[22], c[23] = float32(diffuse), float32(mapping.Rotate), 0, 0
 	c[24], c[25], c[26], c[27] = float32(tint.R)/255, float32(tint.G)/255, float32(tint.B)/255, 1
 	// The mapping of the material being drawn: move, scale, mirror. A zero
 	// scale would collapse the map to a line, which is never what a reader
 	// means, so an unset one is the map as the file has it.
-	scale := mapping.scale
+	scale := mapping.Scale
 	if scale <= 0 {
 		scale = 1
 	}
 	mirror := float32(0)
-	if mapping.mirror {
+	if mapping.Mirror {
 		mirror = 1
 	}
-	c[28], c[29], c[30], c[31] = mapping.offset[0], mapping.offset[1], scale, mirror
+	c[28], c[29], c[30], c[31] = mapping.Offset[0], mapping.Offset[1], scale, mirror
 	bones := c[32:]
 	clear(bones)
 	// A bone past the constant buffer keeps the identity, so it leaves its

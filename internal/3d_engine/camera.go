@@ -25,11 +25,7 @@ func ViewMatrix(opts Camera) fauxgl.Matrix {
 	if pitch < -1.5 {
 		pitch = -1.5
 	}
-	dir := fauxgl.Vector{
-		X: math.Cos(opts.Yaw) * math.Cos(pitch),
-		Y: math.Sin(opts.Yaw) * math.Cos(pitch),
-		Z: math.Sin(pitch),
-	}
+	dir := OrbitDirection(opts)
 	distance := opts.Distance
 	if distance <= 0 {
 		distance = 1
@@ -41,8 +37,8 @@ func ViewMatrix(opts Camera) fauxgl.Matrix {
 	return fauxgl.Perspective(opts.Fov, float64(opts.Width)/float64(opts.Height), near, far).Mul(view)
 }
 
-// EyePosition returns the camera's location in model space.
-func EyePosition(opts Camera) fauxgl.Vector {
+// OrbitDirection returns the unit vector from the target to the camera.
+func OrbitDirection(opts Camera) fauxgl.Vector {
 	pitch := opts.Pitch
 	if pitch > 1.5 {
 		pitch = 1.5
@@ -50,15 +46,49 @@ func EyePosition(opts Camera) fauxgl.Vector {
 	if pitch < -1.5 {
 		pitch = -1.5
 	}
+	return fauxgl.Vector{
+		X: math.Cos(opts.Yaw) * math.Cos(pitch),
+		Y: math.Sin(opts.Yaw) * math.Cos(pitch),
+		Z: math.Sin(pitch),
+	}
+}
+
+// ViewDirection returns the direction the camera looks in model space.
+func ViewDirection(opts Camera) fauxgl.Vector {
+	dir := OrbitDirection(opts)
+	if n := dir.Length(); n > 1e-9 {
+		dir = dir.MulScalar(1 / n)
+	}
+	return dir.MulScalar(-1)
+}
+
+// AxisAngles returns camera-to-axis angles in degrees, in X/Y/Z order.
+func AxisAngles(opts Camera) [3]float64 {
+	view := ViewDirection(opts)
+	angle := func(axis fauxgl.Vector) float64 {
+		dot := view.Dot(axis)
+		if dot > 1 {
+			dot = 1
+		}
+		if dot < -1 {
+			dot = -1
+		}
+		return math.Acos(dot) * 180 / math.Pi
+	}
+	return [3]float64{
+		angle(fauxgl.Vector{X: 1}),
+		angle(fauxgl.Vector{Y: 1}),
+		angle(fauxgl.Vector{Z: 1}),
+	}
+}
+
+// EyePosition returns the camera's location in model space.
+func EyePosition(opts Camera) fauxgl.Vector {
 	distance := opts.Distance
 	if distance <= 0 {
 		distance = 1
 	}
-	return fauxgl.Vector{
-		X: opts.Target.X + math.Cos(opts.Yaw)*math.Cos(pitch)*distance,
-		Y: opts.Target.Y + math.Sin(opts.Yaw)*math.Cos(pitch)*distance,
-		Z: opts.Target.Z + math.Sin(pitch)*distance,
-	}
+	return opts.Target.Add(OrbitDirection(opts).MulScalar(distance))
 }
 
 // Project maps a model-space point to pixels, or nil when it lies behind or

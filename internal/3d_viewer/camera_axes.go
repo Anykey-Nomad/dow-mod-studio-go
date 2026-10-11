@@ -1,10 +1,12 @@
-package main
+package viewer
 
 import (
 	"fmt"
 	"image"
 	"image/color"
 	"math"
+
+	engine "dow-mod-studio/internal/3d_engine"
 
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -37,71 +39,15 @@ const (
 	gizmoBarThick = 2.0
 )
 
-// cameraAxisColor is each axis in the colour it is drawn in everywhere else in
-// the overlays: X red, Y green, Z blue, so an axis keeps its colour between the
-// marker's frame, the model overlay and this.
-var cameraAxisColor = [3][4]float64{
-	modelMarkerXColor, modelMarkerYColor, modelMarkerZColor,
-}
-
-// cameraOrbitDirection is the unit vector from the target out towards the eye.
-// This is the same expression buildViewMatrix and fxCameraBasis use, kept in
-// one place so the gizmo and the picture agree by construction rather than by
-// two copies staying equal.
-func cameraOrbitDirection(opts RenderOptions) fauxgl.Vector {
-	pitch := clampFloat64(opts.Pitch, -1.5, 1.5)
-	return fauxgl.Vector{
-		X: math.Cos(opts.Yaw) * math.Cos(pitch),
-		Y: math.Sin(opts.Yaw) * math.Cos(pitch),
-		Z: math.Sin(pitch),
-	}
-}
-
-// cameraViewDirection is where the camera looks, in model space: the orbit
-// direction points from the target out to the eye, and the camera looks the
-// other way.
-func cameraViewDirection(opts RenderOptions) fauxgl.Vector {
-	dir := cameraOrbitDirection(opts)
-	if n := dir.Length(); n > 1e-9 {
-		dir = dir.MulScalar(1 / n)
-	}
-	return fauxgl.Vector{X: -dir.X, Y: -dir.Y, Z: -dir.Z}
-}
-
-// cameraAxisAngle is the angle in degrees between where the camera looks and
-// one world axis. Zero means looking straight down that axis and ninety means
-// it lies across the view, which is what says how a screenshot was taken.
-func cameraAxisAngle(opts RenderOptions, axis fauxgl.Vector) float64 {
-	fwd := cameraViewDirection(opts)
-	dot := fwd.X*axis.X + fwd.Y*axis.Y + fwd.Z*axis.Z
-	if dot > 1 {
-		dot = 1
-	}
-	if dot < -1 {
-		dot = -1
-	}
-	return math.Acos(dot) * 180 / math.Pi
-}
-
-// cameraAxesAngles returns the three angles, X first, for the readout.
-func cameraAxesAngles(opts RenderOptions) [3]float64 {
-	return [3]float64{
-		cameraAxisAngle(opts, fauxgl.Vector{X: 1}),
-		cameraAxisAngle(opts, fauxgl.Vector{Y: 1}),
-		cameraAxisAngle(opts, fauxgl.Vector{Z: 1}),
-	}
-}
-
-// cameraAxesLayout is the gizmo separated from the viewer so it can be laid
-// out and tested without one.
-func cameraAxesLayout(th *material.Theme, opts RenderOptions, draw bool) layout.Widget {
+// CameraAxesLayout lays out the orientation gizmo independently of the viewer.
+func CameraAxesLayout(th *material.Theme, camera engine.Camera, axisColors [3][4]float64, forwardColor [4]float64, draw bool) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = image.Point{}
 		gtx.Constraints.Max = image.Point{X: int(gizmoBox), Y: int(gizmoBox) + 46}
 
-		view := buildViewMatrix(opts)
-		centre := opts.Target
-		angles := cameraAxesAngles(opts)
+		view := engine.ViewMatrix(camera)
+		centre := camera.Target
+		angles := engine.AxisAngles(camera)
 
 		// Where each axis points on screen, from the difference of two
 		// projections: a direction has no length to project to, and an axis
@@ -110,8 +56,8 @@ func cameraAxesLayout(th *material.Theme, opts RenderOptions, draw bool) layout.
 		live := [3]bool{}
 		axes := [3]fauxgl.Vector{{X: 1}, {Y: 1}, {Z: 1}}
 		for i, a := range axes {
-			from := fxProject(view, centre, opts.Width, opts.Height)
-			to := fxProject(view, centre.Add(a.MulScalar(1)), opts.Width, opts.Height)
+			from := engine.Project(view, centre, camera.Width, camera.Height)
+			to := engine.Project(view, centre.Add(a.MulScalar(1)), camera.Width, camera.Height)
 			if from == nil || to == nil {
 				continue
 			}
@@ -124,22 +70,22 @@ func cameraAxesLayout(th *material.Theme, opts RenderOptions, draw bool) layout.
 			tips[i] = fauxgl.Vector{X: gizmoCentre + d.X*gizmoArrowLen, Y: gizmoCentre - d.Y*gizmoArrowLen}
 			live[i] = true
 			if draw {
-				paintGizmoBar(gtx, gizmoCentre, gizmoCentre, tips[i].X, tips[i].Y, cameraAxisColor[i])
+				paintGizmoBar(gtx, gizmoCentre, gizmoCentre, tips[i].X, tips[i].Y, axisColors[i])
 			}
 		}
 		// The origin the three axes meet at, which is what the whole triad is
 		// read against and what Blender and 3ds Max both draw.
 		if draw {
-			paintGizmoDot(gtx, gizmoCentre, gizmoCentre, modelMarkerFwdColor)
+			paintGizmoDot(gtx, gizmoCentre, gizmoCentre, forwardColor)
 		}
 
 		// The camera's own line of sight, in the forward colour, so the three
 		// numbers underneath have something they are measured against.
-		fwd := cameraViewDirection(opts)
+		fwd := engine.ViewDirection(camera)
 		if draw {
 			paintGizmoBar(gtx, gizmoCentre, gizmoCentre,
 				gizmoCentre+fwd.X*gizmoArrowLen, gizmoCentre-fwd.Y*gizmoArrowLen,
-				modelMarkerFwdColor)
+				forwardColor)
 		}
 
 		// The letter at each tip, nudged back towards the middle so it sits
@@ -161,7 +107,7 @@ func cameraAxesLayout(th *material.Theme, opts RenderOptions, draw bool) layout.
 			}
 			items = append(items, placedLabel{
 				dx: lx, dy: ly,
-				label: gizmoLabel(th, letters[i], 13, cameraAxisColor[i]),
+				label: gizmoLabel(th, letters[i], 13, axisColors[i]),
 			})
 		}
 
@@ -174,7 +120,7 @@ func cameraAxesLayout(th *material.Theme, opts RenderOptions, draw bool) layout.
 				dy: gizmoBox + float64(i)*15,
 				label: gizmoLabel(th,
 					fmt.Sprintf("%s %6.1f°", letters[i], angles[i]),
-					11, cameraAxisColor[i]),
+					11, axisColors[i]),
 			})
 		}
 		if draw {

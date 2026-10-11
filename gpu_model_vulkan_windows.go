@@ -941,20 +941,20 @@ func (r *modelGpuVkRenderer) writePush(opts RenderOptions, tint color.RGBA, mapp
 	if opts.Ambient == 0 && opts.Diffuse == 0 {
 		diffuse = 0.72
 	}
-	p[0], p[1], p[2], p[3] = float32(diffuse), float32(mapping.rotate), 0, 0
+	p[0], p[1], p[2], p[3] = float32(diffuse), float32(mapping.Rotate), 0, 0
 	p[4], p[5], p[6], p[7] = float32(tint.R)/255, float32(tint.G)/255, float32(tint.B)/255, float32(tint.A)/255
 	// The mapping of the material being drawn: move, scale, mirror. A zero
 	// scale would collapse the map to a line, which is never what a reader
 	// means, so an unset one is the map as the file has it.
-	scale := mapping.scale
+	scale := mapping.Scale
 	if scale <= 0 {
 		scale = 1
 	}
 	mirror := float32(0)
-	if mapping.mirror {
+	if mapping.Mirror {
 		mirror = 1
 	}
-	p[8], p[9], p[10], p[11] = mapping.offset[0], mapping.offset[1], scale, mirror
+	p[8], p[9], p[10], p[11] = mapping.Offset[0], mapping.Offset[1], scale, mirror
 }
 
 // uploadFrame writes the uniform block into the buffer the shaders read.

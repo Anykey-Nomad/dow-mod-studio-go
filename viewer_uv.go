@@ -104,12 +104,12 @@ func (v *modelViewer) uvPush() {
 		return
 	}
 	v.uvSelectionDirty = false
-	scale := m.scale
+	scale := m.Scale
 	if scale <= 0 {
 		scale = 1
 	}
-	v.uvU.Value = float32(clampFloat64(float64((m.offset[0]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
-	v.uvV.Value = float32(clampFloat64(float64((m.offset[1]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
+	v.uvU.Value = float32(clampFloat64(float64((m.Offset[0]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
+	v.uvV.Value = float32(clampFloat64(float64((m.Offset[1]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
 	v.uvScale.Value = float32(clampFloat64(float64((scale-modelUVMinScale)/(modelUVMaxScale-modelUVMinScale)), 0, 1))
 }
 
@@ -120,8 +120,8 @@ func (v *modelViewer) uvPull() {
 	if m == nil {
 		return
 	}
-	m.offset = v.uvOffset()
-	m.scale = v.uvScaleValue()
+	m.Offset = v.uvOffset()
+	m.Scale = v.uvScaleValue()
 }
 
 // resetUVMapping puts the selected texture's map back where the file has it. It
@@ -170,7 +170,7 @@ func (v *modelViewer) net() uvNet {
 	if cur := v.uvCurrent(); cur != nil {
 		m = *cur
 	}
-	return uvMappingNet(m.mirror, m.rotate, m.scale, m.offset)
+	return uvMappingNet(m.Mirror, m.Rotate, m.Scale, m.Offset)
 }
 
 // uvMappingSummary writes the mapping as the two expressions it works out to,
@@ -214,18 +214,18 @@ func (v *modelViewer) uvMappingSequence() string {
 		m = *cur
 	}
 	var parts []string
-	if m.mirror {
+	if m.Mirror {
 		parts = append(parts, "mirror U")
 	}
-	scale := m.scale
+	scale := m.Scale
 	if scale <= 0 {
 		scale = 1
 	}
 	parts = append(parts, "×"+modelUVFixed(scale, 3))
-	if turns := ((m.rotate % 4) + 4) % 4; turns != 0 {
+	if turns := ((m.Rotate % 4) + 4) % 4; turns != 0 {
 		parts = append(parts, "turn "+itoaPlain(turns*90)+"°")
 	}
-	off := m.offset
+	off := m.Offset
 	if off[0] != 0 || off[1] != 0 {
 		parts = append(parts, "shift "+modelUVFixed(off[0], 3)+", "+modelUVFixed(off[1], 3))
 	}
@@ -240,7 +240,7 @@ func (v *modelViewer) uvMappingSequence() string {
 func (v *modelViewer) uvMappingNote() string {
 	off := [2]float32{}
 	if cur := v.uvCurrent(); cur != nil {
-		off = cur.offset
+		off = cur.Offset
 	}
 	if uvWholeTiles(off[0]) && uvWholeTiles(off[1]) {
 		return "A whole number of tiles either way: the same as no offset."

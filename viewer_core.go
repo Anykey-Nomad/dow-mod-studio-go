@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/whe"
 	"fmt"
@@ -353,35 +354,36 @@ func (v *modelViewer) options(width, height, quality int) RenderOptions {
 		mats = v.materials
 	}
 	return RenderOptions{
-		Width:    width,
-		Height:   height,
-		Yaw:      v.yaw,
-		Pitch:    v.pitch,
-		Distance: v.distance,
-		Target:   v.center,
-		Fov:      v.fov,
-		// Both terms are fractions of full brightness, and the preview is
-		// deliberately drawn flat: past a whole one the shader's
-		// ambient + diffuse * lambert is clamped to 1, so the model shows
-		// its texture at its own brightness with no shading over it, which
-		// is what reading a model's colours in a preview wants. The
-		// particles take the same light (see fxSceneLight), so the effects
-		// are drawn under exactly this setting too rather than under one
-		// of their own.
-		Ambient:   10,
-		Diffuse:   10,
-		BaseColor: rgbaWhite,
-		Quality:   quality,
-		Skeleton:  v.showSkeleton,
-		// nil rather than v.markerIndex: the viewer's -1 is its own
-		// "nothing picked", and the render request says the same thing
-		// by carrying no marker at all.
-		Marker:            pickedMarker(v.markerIndex),
-		PickedBone:        pickedBone(v.boneIndex),
-		UVDefault:         v.uv,
-		UVPerMaterial:     v.uvMaterials,
+		RenderOptions: engine.RenderOptions{
+			Width:    width,
+			Height:   height,
+			Yaw:      v.yaw,
+			Pitch:    v.pitch,
+			Distance: v.distance,
+			Target:   v.center,
+			Fov:      v.fov,
+			// Both terms are fractions of full brightness, and the preview is
+			// deliberately drawn flat: past a whole one the shader's
+			// ambient + diffuse * lambert is clamped to 1, so the model shows
+			// its texture at its own brightness with no shading over it, which
+			// is what reading a model's colours in a preview wants. The
+			// particles take the same light (see fxSceneLight), so the effects
+			// are drawn under exactly this setting too rather than under one
+			// of their own.
+			Ambient:   10,
+			Diffuse:   10,
+			BaseColor: rgbaWhite,
+			Quality:   quality,
+			Skeleton:  v.showSkeleton,
+			// nil rather than v.markerIndex: the viewer's -1 is its own
+			// "nothing picked", and the render request says the same thing
+			// by carrying no marker at all.
+			Marker:        pickedMarker(v.markerIndex),
+			PickedBone:    pickedBone(v.boneIndex),
+			UVDefault:     v.uv,
+			UVPerMaterial: v.uvMaterials, MeshAlpha: v.meshAlphas(),
+		},
 		MaterialOverrides: mats,
-		MeshAlpha:         v.meshAlphas(),
 		FX:                v.fxScene,
 	}
 }
