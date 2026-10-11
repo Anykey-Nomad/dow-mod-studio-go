@@ -2,7 +2,7 @@
 
 The `.sga` format is used by the Relic engine to pack folders of game assets loaded by the game and mod tools[cite: 11]. This parser supports archives from Dawn of War (format version 2) and Company of Heroes (format version 4)[cite: 11].
 
-* Read this in other languages: [Русский](README.ru.md)
+* Read this in other languages: [Русский](Readme_ru.md)
 
 ## Archive Structure
 
