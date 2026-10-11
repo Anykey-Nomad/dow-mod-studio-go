@@ -210,16 +210,16 @@ func TestTheViewportListsTheModelsCameras(t *testing.T) {
 	if len(ui.unitCamClicks) != len(cams) {
 		t.Fatalf("%d camera rows were laid out for %d cameras", len(ui.unitCamClicks), len(cams))
 	}
-	before := v.center
+	before := v.Center
 	at, _, ok := unitViewportFindRow(t, f, 1200, 760, len(ui.unitCamClicks), func(i int) bool { return ui.unitCamClicks[i].Hovered() })
 	if !ok {
 		t.Skip("no camera row is on screen at this size")
 	}
 	clickAt(f, at)
-	if v.activeCamera == "" {
+	if v.ActiveCamera == "" {
 		t.Fatal("the camera row was clicked and no camera of the model is in use")
 	}
-	if v.center == before {
+	if v.Center == before {
 		t.Error("the view did not move onto the camera it was pointed at")
 	}
 }
@@ -373,23 +373,23 @@ func TestTheWheelOverTheCanvasZoomsInAndOut(t *testing.T) {
 	// Away from the model, and then close in: the wheel is a camera move, so
 	// the clamp is the only thing that stops it. The amounts are whole
 	// notches, which is what a wheel actually sends.
-	start := v.distance
+	start := v.Distance
 	f.send(pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: at, Scroll: f32.Pt(0, wheelNotchDelta)})
 	unitViewportFrames(f, 2)
-	if v.distance >= start {
-		t.Errorf("the wheel away from the model left the distance at %v, want less than %v", v.distance, start)
+	if v.Distance >= start {
+		t.Errorf("the wheel away from the model left the distance at %v, want less than %v", v.Distance, start)
 	}
-	closer := v.distance
+	closer := v.Distance
 	f.send(pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: at, Scroll: f32.Pt(0, -wheelNotchDelta)})
 	unitViewportFrames(f, 2)
-	if v.distance <= closer {
-		t.Errorf("the wheel towards the model left the distance at %v, want more than %v", v.distance, closer)
+	if v.Distance <= closer {
+		t.Errorf("the wheel towards the model left the distance at %v, want more than %v", v.Distance, closer)
 	}
 	// And not so far that the model leaves the frame entirely.
 	f.send(pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: at, Scroll: f32.Pt(0, 20000)})
 	unitViewportFrames(f, 2)
-	if limit := v.fitDistance * 0.15; v.distance < limit-1e-9 {
-		t.Errorf("the camera went to %v, inside the model rather than stopping at %v", v.distance, limit)
+	if limit := v.FitDistance * 0.15; v.Distance < limit-1e-9 {
+		t.Errorf("the camera went to %v, inside the model rather than stopping at %v", v.Distance, limit)
 	}
 }
 
@@ -511,33 +511,33 @@ func TestTheZoomButtonsStepTheCameraAndResetBringsItBack(t *testing.T) {
 	// step, and two steps in is nowhere near the factor of ten the wheel used
 	// to ask for.
 	v.resetCamera()
-	fit := v.distance
+	fit := v.Distance
 	near := unitViewportSideButton(t, f, row, &tab.modelZoomIn, "toggles")
 	far := unitViewportSideButton(t, f, row, &tab.modelZoomOut, "toggles")
 	reset := unitViewportSideButton(t, f, row, &tab.modelReset, "toggles")
 
 	clickAt(f, near)
 	unitViewportFrames(f, 2)
-	if want := fit * modelZoomStep; abs64(v.distance-want) > 1e-6 {
-		t.Fatalf("the near zoom button left the distance at %v, want the %v that is one step in", v.distance, want)
+	if want := fit * modelZoomStep; abs64(v.Distance-want) > 1e-6 {
+		t.Fatalf("the near zoom button left the distance at %v, want the %v that is one step in", v.Distance, want)
 	}
 	clickAt(f, near)
 	unitViewportFrames(f, 2)
-	if want := fit * modelZoomStep * modelZoomStep; abs64(v.distance-want) > 1e-6 {
-		t.Errorf("two presses left the distance at %v, want the %v that is two steps in", v.distance, want)
+	if want := fit * modelZoomStep * modelZoomStep; abs64(v.Distance-want) > 1e-6 {
+		t.Errorf("two presses left the distance at %v, want the %v that is two steps in", v.Distance, want)
 	}
 	// Back out one step, which is where it started after the first press.
 	clickAt(f, far)
 	unitViewportFrames(f, 2)
-	if want := fit * modelZoomStep; abs64(v.distance-want) > 1e-6 {
-		t.Errorf("the far zoom button left the distance at %v, want the %v that is one step back out", v.distance, want)
+	if want := fit * modelZoomStep; abs64(v.Distance-want) > 1e-6 {
+		t.Errorf("the far zoom button left the distance at %v, want the %v that is one step back out", v.Distance, want)
 	}
 
 	// And back to the framing a new viewer starts with.
 	clickAt(f, reset)
 	unitViewportFrames(f, 2)
-	if abs64(v.distance-fit) > 1e-6 {
-		t.Errorf("Reset view left the distance at %v, want the %v the model was framed at", v.distance, fit)
+	if abs64(v.Distance-fit) > 1e-6 {
+		t.Errorf("Reset view left the distance at %v, want the %v the model was framed at", v.Distance, fit)
 	}
 }
 

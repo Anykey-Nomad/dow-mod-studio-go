@@ -20,7 +20,7 @@ type persistedState struct {
 	Version   int  `json:"version"`
 	DarkTheme bool `json:"darkTheme"`
 	// Renderer selects the graphics backend: "vulkan", "d3d11" or
-	// "software". Empty means Direct3D, the historical default.
+	// "software". Empty means Vulkan, the default.
 	Renderer string `json:"renderer,omitempty"`
 	// TextFormats is the list of file formats the built-in text editor
 	// opens, as the reader typed it: ".lua, .txt, .mydsl". An empty value

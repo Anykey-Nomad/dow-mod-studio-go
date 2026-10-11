@@ -18,9 +18,9 @@ import (
 // since that is how the game's models are authored.
 func fauxglDir(v *modelViewer) fauxgl.Vector {
 	return fauxgl.Vector{
-		X: math.Cos(v.yaw) * math.Cos(v.pitch),
-		Y: math.Sin(v.yaw) * math.Cos(v.pitch),
-		Z: math.Sin(v.pitch),
+		X: math.Cos(v.Yaw) * math.Cos(v.Pitch),
+		Y: math.Sin(v.Yaw) * math.Cos(v.Pitch),
+		Z: math.Sin(v.Pitch),
 	}
 }
 
@@ -259,17 +259,17 @@ func TestLookThroughCameraAimsAtTheFocusPoint(t *testing.T) {
 
 	eye := boneRootFrame.MulPosition(vec3From(cam.Pos))
 	focus := boneRootFrame.MulPosition(vec3From(cam.FocusPoint))
-	if got := (v.center.Sub(focus)).Length(); got > 1e-6 {
+	if got := (v.Center.Sub(focus)).Length(); got > 1e-6 {
 		t.Fatalf("the view is centred %v away from the camera's focus point", got)
 	}
-	if got, want := v.distance, eye.Sub(focus).Length(); math.Abs(got-want) > 1e-6 {
+	if got, want := v.Distance, eye.Sub(focus).Length(); math.Abs(got-want) > 1e-6 {
 		t.Fatalf("the view sits %v from the model, want %v", got, want)
 	}
-	if v.fov != 30 {
-		t.Errorf("the field of view is %v, want the camera's 30", v.fov)
+	if v.FOV != 30 {
+		t.Errorf("the field of view is %v, want the camera's 30", v.FOV)
 	}
-	if v.activeCamera != "port_hud" {
-		t.Errorf("the active camera is %q, want the one that was picked", v.activeCamera)
+	if v.ActiveCamera != "port_hud" {
+		t.Errorf("the active camera is %q, want the one that was picked", v.ActiveCamera)
 	}
 	// The orbit parameters have to describe the same direction, or the model
 	// is seen from somewhere the camera is not.
@@ -285,8 +285,8 @@ func TestLookThroughCameraKeepsAnUnusableFieldOfView(t *testing.T) {
 	v := newModelViewer(&WhmModel{Model: whm.Model{Vertices: []WhmVertex{{}}, BoundMax: [3]float32{1, 1, 1}}}, "")
 	for _, fov := range []float32{0, -20, 180} {
 		v.lookThroughCamera(WhmCamera{Name: "c", Pos: [3]float32{0, 0, 5}, Fov: fov})
-		if v.fov != modelDefaultFov {
-			t.Errorf("a field of view of %v was taken, leaving the view at %v", fov, v.fov)
+		if v.FOV != modelDefaultFov {
+			t.Errorf("a field of view of %v was taken, leaving the view at %v", fov, v.FOV)
 		}
 	}
 }
@@ -303,17 +303,17 @@ func TestResetCameraForgetsTheModelsCamera(t *testing.T) {
 	_, fit := model.ModelCenter()
 	v.lookThroughCamera(WhmCamera{Name: "shot", Pos: [3]float32{9, 9, 9}, Fov: 60})
 	v.resetCamera()
-	if v.activeCamera != "" {
-		t.Errorf("the active camera survived a reset: %q", v.activeCamera)
+	if v.ActiveCamera != "" {
+		t.Errorf("the active camera survived a reset: %q", v.ActiveCamera)
 	}
-	if v.fov != modelDefaultFov {
-		t.Errorf("the field of view is %v after a reset, want %v", v.fov, modelDefaultFov)
+	if v.FOV != modelDefaultFov {
+		t.Errorf("the field of view is %v after a reset, want %v", v.FOV, modelDefaultFov)
 	}
-	if v.distance != fit {
-		t.Errorf("the distance is %v after a reset, want the framing distance %v", v.distance, fit)
+	if v.Distance != fit {
+		t.Errorf("the distance is %v after a reset, want the framing distance %v", v.Distance, fit)
 	}
-	if center, _ := model.ModelCenter(); v.center.Sub(center).Length() > 1e-6 {
-		t.Errorf("the view is centred on %v, want the middle of the model %v", v.center, center)
+	if center, _ := model.ModelCenter(); v.Center.Sub(center).Length() > 1e-6 {
+		t.Errorf("the view is centred on %v, want the middle of the model %v", v.Center, center)
 	}
 }
 
@@ -328,10 +328,10 @@ func TestLookThroughCameraOnItsFocusPoint(t *testing.T) {
 	v := newModelViewer(model, "")
 	_, fit := model.ModelCenter()
 	v.lookThroughCamera(WhmCamera{Name: "degenerate", Pos: [3]float32{2, 2, 2}, FocusPoint: [3]float32{2, 2, 2}})
-	if math.IsNaN(v.distance) || math.IsInf(v.distance, 0) {
-		t.Fatalf("the distance became %v", v.distance)
+	if math.IsNaN(v.Distance) || math.IsInf(v.Distance, 0) {
+		t.Fatalf("the distance became %v", v.Distance)
 	}
-	if v.distance != fit {
-		t.Errorf("the distance is %v, want the framing distance %v", v.distance, fit)
+	if v.Distance != fit {
+		t.Errorf("the distance is %v, want the framing distance %v", v.Distance, fit)
 	}
 }

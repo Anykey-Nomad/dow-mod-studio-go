@@ -94,7 +94,7 @@ func TestOneNotchOfZoomIsAStepAndTheButtonsMatchIt(t *testing.T) {
 		t.Errorf("one notch multiplies the distance by %g, want a small step of its own", notch)
 	}
 	// A notch has to be one of several moves across the range, not all of it.
-	lo, hi := v.fitDistance*0.15, v.fitDistance*6
+	lo, hi := v.FitDistance*0.15, v.FitDistance*6
 	steps := math.Log(hi/lo) / math.Abs(math.Log(notch))
 	if steps < 6 || steps > 40 {
 		t.Errorf("the viewer's whole zoom range is %g notches, want a handful rather than one jump or a hundred", steps)
@@ -107,18 +107,18 @@ func TestOneNotchOfZoomIsAStepAndTheButtonsMatchIt(t *testing.T) {
 
 	// The wheel and the buttons take the same path, so a press moves the
 	// camera by exactly as much as a click of the wheel.
-	v.distance = v.fitDistance
+	v.Distance = v.FitDistance
 	v.zoomBy(modelZoomByDelta(-wheelNotchDelta))
-	byWheel := v.distance
-	v.distance = v.fitDistance
+	byWheel := v.Distance
+	v.Distance = v.FitDistance
 	v.zoomBy(modelZoomStep) // the near button, in the modelControlClicks path
-	if abs64(v.distance-byWheel) > 1e-9 {
-		t.Errorf("a press moved the distance to %v and a notch to %v: the two are not the same step", v.distance, byWheel)
+	if abs64(v.Distance-byWheel) > 1e-9 {
+		t.Errorf("a press moved the distance to %v and a notch to %v: the two are not the same step", v.Distance, byWheel)
 	}
 	// And the far button is the same step the other way.
 	v.zoomBy(1 / modelZoomStep)
-	if abs64(v.distance-v.fitDistance) > 1e-9 {
-		t.Errorf("pressing the two zoom buttons returned the distance to %v, want the %v it started at", v.distance, v.fitDistance)
+	if abs64(v.Distance-v.FitDistance) > 1e-9 {
+		t.Errorf("pressing the two zoom buttons returned the distance to %v, want the %v it started at", v.Distance, v.FitDistance)
 	}
 }
 
@@ -126,18 +126,18 @@ func TestOneNotchOfZoomIsAStepAndTheButtonsMatchIt(t *testing.T) {
 // wheel is turned, or the model ends up inside the camera.
 func TestZoomStepsAreClampedToWhatTheViewerAllows(t *testing.T) {
 	v := newModelViewer(renderTestModel(t), "")
-	lo, hi := v.fitDistance*0.15, v.fitDistance*6
+	lo, hi := v.FitDistance*0.15, v.FitDistance*6
 	for i := 0; i < 200; i++ {
 		v.zoomBy(modelZoomStep)
 	}
-	if v.distance > hi+1e-9 {
-		t.Errorf("zooming in stopped at %v, want no closer than %v", v.distance, hi)
+	if v.Distance > hi+1e-9 {
+		t.Errorf("zooming in stopped at %v, want no closer than %v", v.Distance, hi)
 	}
 	for i := 0; i < 400; i++ {
 		v.zoomBy(1 / modelZoomStep)
 	}
-	if v.distance < lo-1e-9 {
-		t.Errorf("zooming out stopped at %v, want no further than %v", v.distance, lo)
+	if v.Distance < lo-1e-9 {
+		t.Errorf("zooming out stopped at %v, want no further than %v", v.Distance, lo)
 	}
 }
 

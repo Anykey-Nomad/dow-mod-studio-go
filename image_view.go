@@ -332,7 +332,7 @@ func (ui *uiState) layoutImageViewer(gtx layout.Context, t *fileTab) layout.Dime
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, &t.imageMipNext, "▶") }),
 						)
 					}),
-					layout.Flexed(1, flexGap()),
+					layout.Flexed(1, rowGap()), // takes the leftover width and none of the height, or the row would eat the canvas below it
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						b := t.imageData.Bounds()
 						l := material.Label(ui.th, unit.Sp(10), fmt.Sprintf("%s  %d × %d", t.imageFormat, b.Dx(), b.Dy()))

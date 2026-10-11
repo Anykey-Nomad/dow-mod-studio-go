@@ -1327,14 +1327,14 @@ func run(w *app.Window) error {
 	}
 }
 
-// rendererChoice returns the selected renderer, defaulting to Direct3D for
-// sessions that predate the setting.
+// rendererChoice returns the selected renderer, defaulting to Vulkan for
+// fresh sessions and for those that predate the setting.
 func (ui *uiState) rendererChoice() string {
 	switch ui.rendererPref {
-	case "vulkan", "software":
+	case "d3d11", "software":
 		return ui.rendererPref
 	}
-	return "d3d11"
+	return "vulkan"
 }
 
 func (ui *uiState) syncWindowTitle() {
