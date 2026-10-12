@@ -3,6 +3,7 @@ package main
 import (
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/raster"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,16 +13,7 @@ import (
 // loadModelMaterials resolves every mesh material of a model to its .rsh
 // diffuse map. A .whm names its maps by a full path, by a bare file name, or
 // with a folder the game does not keep them in, and the texture is often in a
-// different mod than the model — game art is shared between factions. The order
-// is the one an author would expect: the mod being worked on first, then the
-// data folders the model itself sits in, and the parent mod last. Anything
-// still missing simply keeps the flat colour.
-//
-// Both forms of the file are kept: the bytes as they are, which is what the
-// hardware renderer uploads, and the decoded picture, which is what the
-// software renderer samples. Both are needed at once — showing the skeleton
-// falls back to the software renderer on a window that has a device — and
-// decoding a .rsh is a fraction of the cost of the model it belongs to.
+// different mod than the model — game art is shared between factions.
 func (ui *uiState) loadModelMaterials(v *modelViewer, result chan<- modelMaterialResult) {
 	if v == nil || v.model == nil || ui.modTree == nil {
 		return
@@ -40,18 +32,15 @@ func (ui *uiState) loadModelMaterials(v *modelViewer, result chan<- modelMateria
 	tree := ui.modTree
 	model := v.modelFile
 	roots := materialSearchRoots(tree)
-	// The hardware renderer wants the file as it is, so whether the bytes are
-	// kept is asked for here, on the UI goroutine, because it reads the UI.
-	raw := ui.modelGpuRenderer() != nil
+	// Vulkan uploads the block-compressed mip chain directly, preserving alpha.
+	raw := true
 	go func() {
 		result <- decodeModelMaterials(resolveModelMaterials(tree, roots, model, names), raw)
 	}()
 }
 
-// resolveModelMaterials finds the .rsh of every material a model names. The
-// names nothing else answered are looked for in a single walk of the data
-// folders, which is what makes the last resort affordable: a walk each left
-// the loader crawling the game folder once per texture.
+// resolveModelMaterials first checks authored paths, then searches the merged
+// virtual tree (including parent-mod and game SGA archives), and finally disk.
 func resolveModelMaterials(tree *modtree.ModTree, roots []string, modelFile string, names []string) map[string][]byte {
 	files := map[string][]byte{}
 	var missing []string
@@ -63,7 +52,15 @@ func resolveModelMaterials(tree *modtree.ModTree, roots []string, modelFile stri
 		}
 		files[name] = data
 	}
+	for name, file := range findMaterialsInTree(tree, missing) {
+		if data, err := tree.ReadTreeFile(file); err == nil {
+			files[name] = data
+		}
+	}
 	for name, path := range findMaterialsOnDisk(roots, missing) {
+		if _, alreadyFound := files[name]; alreadyFound {
+			continue
+		}
 		if data, err := os.ReadFile(path); err == nil {
 			files[name] = data
 		}
@@ -71,32 +68,114 @@ func resolveModelMaterials(tree *modtree.ModTree, roots []string, modelFile stri
 	return files
 }
 
-// decodeModelMaterials turns resolved .rsh files into the two forms a renderer
-// wants: the bytes as they are for the hardware path, which uploads the block
-// compressed mip chain itself, and the picture for the software path. A file
-// that decodes to nothing is counted as missing, since that is what it is.
+// decodeModelMaterials retains compressed bytes for Vulkan and decoded images
+// for the software renderer used by diagnostic/fallback paths.
 func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult {
 	res := modelMaterialResult{
 		materials: map[string]WhmMaterial{},
 		rsh:       map[string][]byte{},
 	}
 	for name, data := range files {
+		if raw {
+			if _, _, err := raster.RshRawImage(data, 0); err != nil {
+				continue
+			}
+			res.rsh[name] = data
+		}
 		img, _, err := decodeRshImage(data, 0)
 		if err != nil {
 			continue
 		}
 		res.materials[name] = WhmMaterial{Texture: newModelTexture(img), Color: rgbaWhite}
-		if raw {
-			res.rsh[name] = data
-		}
 	}
-	res.missing = len(files) - len(res.materials)
+	if raw {
+		// A Vulkan texture result also keeps a decoded view for the inspector.
+		res.missing = len(files) - len(res.rsh)
+	} else {
+		res.missing = len(files) - len(res.materials)
+	}
 	return res
 }
 
-// materialSearchRoots lists the on disk data folders that can hold a material,
-// most specific first.
+// findMaterialsInTree returns the best merged-tree file for each requested
+// material base name. Current-mod files win within texture_share; texture_share
+// files win over same-named files elsewhere.
+func findMaterialsInTree(tree *modtree.ModTree, names []string) map[string]*modtree.TreeFile {
+	if tree == nil || tree.Root == nil || len(names) == 0 {
+		return nil
+	}
+	want := make(map[string]bool, len(names))
+	for _, name := range names {
+		base := strings.ToLower(fx.MaterialBaseName(name) + ".rsh")
+		if base != ".rsh" {
+			want[base] = true
+		}
+	}
+	found := findMaterialFilesInTree(tree, want)
+	out := make(map[string]*modtree.TreeFile, len(found))
+	for _, name := range names {
+		if file := found[strings.ToLower(fx.MaterialBaseName(name)+".rsh")]; file != nil {
+			out[name] = file
+		}
+	}
+	return out
+}
+
+func findMaterialInTree(tree *modtree.ModTree, fileName string) *modtree.TreeFile {
+	if tree == nil || tree.Root == nil || fileName == "" {
+		return nil
+	}
+	return findMaterialFilesInTree(tree, map[string]bool{strings.ToLower(fileName): true})[strings.ToLower(fileName)]
+}
+
+func findMaterialFilesInTree(tree *modtree.ModTree, want map[string]bool) map[string]*modtree.TreeFile {
+	found := make(map[string]*modtree.TreeFile, len(want))
+	var walk func(*modtree.TreeFolder, bool)
+	walk = func(folder *modtree.TreeFolder, textureShare bool) {
+		textureShare = textureShare || strings.EqualFold(folder.Name, "texture_share")
+		for _, file := range folder.Files {
+			key := strings.ToLower(file.Name)
+			if !want[key] || file.Source == nil {
+				continue
+			}
+			old, exists := found[key]
+			oldTexture := exists && treePathInFolder(old.FullPath, "texture_share")
+			if !exists || (textureShare && !oldTexture) || (textureShare == oldTexture && sourceMoreSpecific(file, old)) {
+				found[key] = file
+			}
+		}
+		for _, child := range folder.Children {
+			walk(child, textureShare)
+		}
+	}
+	walk(tree.Root, false)
+	return found
+}
+
+func sourceMoreSpecific(candidate, current *modtree.TreeFile) bool {
+	if candidate == nil || candidate.Source == nil {
+		return false
+	}
+	if current == nil || current.Source == nil {
+		return true
+	}
+	return candidate.Source.Priority < current.Source.Priority
+}
+
+func treePathInFolder(path, folder string) bool {
+	for _, part := range strings.Split(strings.ToLower(strings.ReplaceAll(path, "/", "\\")), `\`) {
+		if part == folder {
+			return true
+		}
+	}
+	return false
+}
+
+// materialSearchRoots lists on-disk data folders, most specific first.
 func materialSearchRoots(tree *modtree.ModTree) []string {
+	if tree == nil {
+		return nil
+	}
 	var roots []string
 	seen := map[string]bool{}
 	add := func(p string) {
@@ -121,18 +200,12 @@ func materialSearchRoots(tree *modtree.ModTree) []string {
 	return roots
 }
 
-// readModelMaterial resolves one material reference to its raw bytes.
-//
-// Most references are a full path such as
-// "art/ebps/races/necrons/texture_share/necron_lord01", but plenty of models
-// name the map with no folder at all. A bare name is looked for beside the
-// model that wants it first — the game keeps a model's maps in its own folder
-// more often than not — and in the mod's own folder before the loaded data
-// folders after it. A name that is still missing is left to the caller, which
-// searches every root in one pass rather than one pass per texture.
+// readModelMaterial resolves one .whm material reference to raw RSH bytes.
 func readModelMaterial(tree *modtree.ModTree, roots []string, modelFile, name string) ([]byte, bool) {
-	if data, err := tree.ReadFile(name + ".rsh"); err == nil {
-		return data, true
+	if tree != nil {
+		if data, err := tree.ReadFile(name + ".rsh"); err == nil {
+			return data, true
+		}
 	}
 	rel := filepath.FromSlash(name)
 	for _, root := range roots {
@@ -144,10 +217,11 @@ func readModelMaterial(tree *modtree.ModTree, roots []string, modelFile, name st
 	if base == "" {
 		return nil, false
 	}
-	// Beside the model itself, in the mod folder and in the tree alike.
 	if dir := filepath.Dir(modelFile); dir != "" && dir != "." {
-		if data, err := tree.ReadFile(filepath.Join(dir, base+".rsh")); err == nil {
-			return data, true
+		if tree != nil {
+			if data, err := tree.ReadFile(filepath.Join(dir, base+".rsh")); err == nil {
+				return data, true
+			}
 		}
 		for _, root := range roots {
 			if data, err := os.ReadFile(filepath.Join(root, dir, base+".rsh")); err == nil {
@@ -155,20 +229,22 @@ func readModelMaterial(tree *modtree.ModTree, roots []string, modelFile, name st
 			}
 		}
 	}
-	// The folder the reference names is not the one the game keeps it in: look
-	// the file up by name alone.
-	if f := tree.FindByName(base + ".rsh"); f != nil && f.Source != nil {
-		if data, err := tree.ReadTreeFile(f); err == nil {
-			return data, true
+	if tree != nil {
+		if file := tree.FindMaterialByName(base + ".rsh"); file != nil {
+			if data, err := tree.ReadTreeFile(file); err == nil {
+				return data, true
+			}
+		}
+		if file := findMaterialInTree(tree, base+".rsh"); file != nil {
+			if data, err := tree.ReadTreeFile(file); err == nil {
+				return data, true
+			}
 		}
 	}
 	return nil, false
 }
 
-// findMaterialsOnDisk is the last resort for the references nothing else
-// resolved: one walk of every data folder answers all of them at once. The
-// roots are already in order, so the first root that has a file wins, and a
-// name is only looked for until it is found.
+// findMaterialsOnDisk answers remaining references with one walk per root.
 func findMaterialsOnDisk(roots []string, names []string) map[string]string {
 	if len(names) == 0 {
 		return nil
@@ -187,7 +263,7 @@ func findMaterialsOnDisk(roots []string, names []string) map[string]string {
 		}
 		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil || len(want) == 0 {
-				return nil //nolint:nilerr // an unreadable folder just means no match
+				return nil //nolint:nilerr // unreadable folders contain no result
 			}
 			if d.IsDir() {
 				return nil

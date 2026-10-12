@@ -101,6 +101,39 @@ func TestDecodeImageDataPNGAndBMP(t *testing.T) {
 	}
 }
 
+func TestDecodeTGAAlphaAttributeBits(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		bpp       byte
+		attribute byte
+		pixel     []byte
+		want      color.NRGBA
+	}{
+		{"32-bit without alpha attributes", 32, 0, []byte{0x10, 0x20, 0x30, 0x00}, color.NRGBA{R: 0x30, G: 0x20, B: 0x10, A: 255}},
+		{"32-bit with alpha attributes", 32, 8, []byte{0x10, 0x20, 0x30, 0x40}, color.NRGBA{R: 0x30, G: 0x20, B: 0x10, A: 0x40}},
+		{"32-bit with zero alpha attributes", 32, 1, []byte{0x10, 0x20, 0x30, 0x40}, color.NRGBA{R: 0x30, G: 0x20, B: 0x10, A: 255}},
+		{"16-bit without alpha attributes", 16, 0, []byte{0x00, 0x00}, color.NRGBA{A: 255}},
+		{"16-bit with alpha attributes clear", 16, 1, []byte{0x00, 0x00}, color.NRGBA{A: 0}},
+		{"16-bit with alpha attributes set", 16, 1, []byte{0x00, 0x80}, color.NRGBA{A: 255}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := make([]byte, 18+len(tc.pixel))
+			data[2] = 2
+			binary.LittleEndian.PutUint16(data[12:14], 1)
+			binary.LittleEndian.PutUint16(data[14:16], 1)
+			data[16], data[17] = tc.bpp, tc.attribute
+			copy(data[18:], tc.pixel)
+			img, err := DecodeTGA(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := color.NRGBAModel.Convert(img.At(0, 0)).(color.NRGBA); got != tc.want {
+				t.Errorf("pixel = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDecodeColorMappedTGA(t *testing.T) {
 	data := make([]byte, 18+3+1)
 	data[1] = 1

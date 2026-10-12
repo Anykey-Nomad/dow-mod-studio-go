@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"strconv"
-	"strings"
 
 	"gioui.org/layout"
 	"gioui.org/unit"
-	"gioui.org/widget"
 	"gioui.org/widget/material"
 )
 
@@ -65,25 +62,15 @@ func (ui *uiState) modelControls(gtx layout.Context, t *fileTab) layout.Dimensio
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return ui.smallButtonDisabled(gtx, &t.modelSkeleton, "Skeleton", len(v.model.Bones) == 0)
-						}), layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						}),						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return ui.smallButton(gtx, &t.modelFX, modelFXLabel(v))
 						}),
-						// Uniform FX geometry scale; one is model-space size.
+						// The ground plane toggle, the same switch the Object
+						// Viewport's side panel carries: disabled when the
+						// mod carries no ground texture to show.
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &t.modelFXScaleOut, "FX v")
+							return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v.groundImage == nil)
 						}),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), modelFXScaleLabel(v))
-							l.Color = cTextDim
-							return l.Layout(gtx)
-						}),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &t.modelFXScaleIn, "FX ^")
-						}),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &t.modelFXScaleRst, "FX 1")
-						}),
-
 						// The zoom the wheel does, as two steps of it, so the
 						// distance can be moved by a known amount without a
 						// wheel to hand.
@@ -95,11 +82,6 @@ func (ui *uiState) modelControls(gtx layout.Context, t *fileTab) layout.Dimensio
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, &t.modelReset, "Reset view") }),
 					)
-				}),
-				// The headings the effects point along, dialled in
-				// against the picture. See fxAngleRow.
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.fxAngleRow(gtx, t)
 				}),
 			)
 		})
@@ -230,162 +212,6 @@ func modelGroundLabel(v *modelViewer) string {
 
 // modelSFXLabel is what the sound button reads: whether the model has sounds
 // at all, and whether they are playing.
-func modelSFXLabel(v *modelViewer) string {
-	if v == nil || v.fxSound == nil {
-		return "no sound"
-	}
-	n := len(v.fxSound.SoundNames())
-	if v.fxSoundOn {
-		return fmt.Sprintf("SFX %d", n)
-	}
-	return "SFX muted"
-}
-
-// fxAngleEditors is the three dial-in fields in the order the rest of this
-// file names them — pitch, yaw, roll — so the sync below can walk all three
-// without saying it three times.
-func fxAngleEditors(t *fileTab) [3]*widget.Editor {
-	return [3]*widget.Editor{&t.modelFXAngleX, &t.modelFXAngleY, &t.modelFXAngleZ}
-}
-
-// fxAnglesPrepare gives the three editors their starting text once. A widget
-// editor has no text until it is given some, and setting it every frame would
-// move the caret to the end of whatever was being typed.
-func fxAnglesPrepare(t *fileTab) {
-	if t == nil || t.fxAnglesReady {
-		return
-	}
-	t.fxAnglesReady = true
-	for _, ed := range fxAngleEditors(t) {
-		ed.SingleLine = true
-		ed.Submit = true
-		ed.SetText("0")
-	}
-}
-
-// fxAnglesRead pulls whatever has been typed into the three fields into the
-// viewer, in degrees. A field holding something that is not a number is left
-// alone rather than read as zero, so a heading that was just dialled in does
-// not jump back to the model's own the instant the value is selected for
-// editing, or while a "-" is halfway through being typed.
-func (ui *uiState) fxAnglesRead(gtx layout.Context, t *fileTab, v *modelViewer) {
-	fxAnglesPrepare(t)
-	if t == nil || v == nil {
-		return
-	}
-	eds := fxAngleEditors(t)
-	for _, ed := range eds {
-		for {
-			if _, ok := ed.Update(gtx); !ok {
-				break
-			}
-		}
-	}
-	// The viewer's own values are the starting point, so a field that
-	// cannot be read leaves its angle where it was. Starting from zero
-	// instead would throw a heading away the moment the field is selected
-	// for editing, or while a single "-" is halfway through being typed.
-	got := [3]float64{v.fxRotX, v.fxRotY, v.fxRotZ}
-	for i, ed := range eds {
-		n, err := strconv.ParseFloat(strings.TrimSpace(ed.Text()), 64)
-		if err != nil {
-			continue
-		}
-		got[i] = n
-	}
-	if got[0] == v.fxRotX && got[1] == v.fxRotY && got[2] == v.fxRotZ {
-		return
-	}
-	v.fxRotX, v.fxRotY, v.fxRotZ = got[0], got[1], got[2]
-	v.invalidate()
-	log.Printf("3D preview: FX rotation X %.1f, Y %.1f, Z %.1f", v.fxRotX, v.fxRotY, v.fxRotZ)
-}
-
-// fxAnglesReset puts every angle back to zero, in the viewer and in the text of
-// all three fields. Only the viewer half would do: a field still reading the
-// value it was reset away from would write it straight back on the next frame.
-func (ui *uiState) fxAnglesReset(t *fileTab, v *modelViewer) {
-	if t == nil || v == nil {
-		return
-	}
-	v.fxRotX, v.fxRotY, v.fxRotZ = 0, 0, 0
-	for _, ed := range fxAngleEditors(t) {
-		ed.SetText("0")
-	}
-	v.invalidate()
-	log.Printf("3D preview: FX rotation reset to zero")
-}
-
-// fxAngleRow is the strip of three fields the effects' headings are dialled in
-// with, plus the way back to zero. It is a row of its own rather than more
-// controls on the FX row: three editors with a name beside each would not fit
-// across the unit panel beside the toggles already there.
-func (ui *uiState) fxAngleRow(gtx layout.Context, t *fileTab) layout.Dimensions {
-	fxAnglesPrepare(t)
-	gtx = modelRowHeight(gtx)
-	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), "FX rot")
-			l.Color = cTextDim
-			return l.Layout(gtx)
-		}),
-		ui.fxAngleField("X", &t.modelFXAngleX),
-		ui.fxAngleField("Y", &t.modelFXAngleY),
-		ui.fxAngleField("Z", &t.modelFXAngleZ),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Left: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButton(gtx, &t.modelFXAngleRst, "0°")
-			})
-		}),
-		// The model's own sound, which the clip plays at the moments its
-		// timeline names.
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			v := t.model
-			disabled := v == nil || v.fxSound == nil
-			return ui.smallButtonDisabled(gtx, &t.modelSFX, modelSFXLabel(v), disabled)
-		}),
-		layout.Flexed(1, rowGap()),
-	)
-}
-
-// fxAngleField is a name and the editor that takes the number beside it. The
-// box is a fixed width rather than the width of whatever is in it: an editor
-// sized by its own text is both too small a target to click into when it holds
-// one digit and a control that shifts sideways under the pointer the moment a
-// second digit is typed.
-func (ui *uiState) fxAngleField(name string, ed *widget.Editor) layout.FlexChild {
-	return layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), name)
-				l.Color = cTextDim
-				l.MaxLines = 1
-				return layout.Inset{Right: unit.Dp(3)}.Layout(gtx, l.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				// A heading is dialled in and then left alone for a
-				// while, so the box has to say where to click: bare
-				// editor text on the panel background reads as a
-				// label, not something to click.
-				g := gtx
-				w := gtx.Dp(unit.Dp(46))
-				if gtx.Constraints.Max.X > 0 && w > gtx.Constraints.Max.X {
-					w = gtx.Constraints.Max.X
-				}
-				g.Constraints.Min.X = w
-				g.Constraints.Max.X = w
-				return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1), Left: unit.Dp(3), Right: unit.Dp(3)}.Layout(g,
-					func(gtx layout.Context) layout.Dimensions {
-						e := material.Editor(ui.th, ed, "")
-						e.TextSize = unit.Sp(10)
-						e.HintColor = cTextDim
-						return e.Layout(gtx)
-					})
-			}),
-		)
-	})
-}
-
 // modelZoomStep is what one step of the zoom changes the camera distance by:
 // a notch of the wheel, or a press of one of the two zoom buttons.
 //

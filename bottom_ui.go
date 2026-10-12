@@ -22,11 +22,6 @@ func (ui *uiState) layoutRightPanel(gtx layout.Context) layout.Dimensions {
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Object") }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitInfoTable(gtx) }),
 			}
-			// The preview's own facts — the model file, the state, the clip
-			// on show, the triangles and the frame the playhead stands on —
-			// report here once a model is loaded. They used to sit in the
-			// Viewport column, where three hundred pixels of controls left
-			// them no room; this panel had the room and was mostly empty.
 			if v := ui.unitModelViewer(); v != nil && v.model != nil {
 				children = append(children,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
@@ -37,7 +32,6 @@ func (ui *uiState) layoutRightPanel(gtx layout.Context) layout.Dimensions {
 						l.MaxLines = 2
 						return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(2)}.Layout(gtx, l.Layout)
 					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelInfoTable(gtx, ui.unitModel) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelFrameLabel(gtx, v) }),
 				)
 			}

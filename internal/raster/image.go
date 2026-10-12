@@ -134,6 +134,7 @@ func DecodeTGA(data []byte) (image.Image, error) {
 		return nil, err
 	}
 	bpp := int(data[16])
+	descriptor := data[17]
 	imageType := data[2]
 	colorMapped := imageType == 1 || imageType == 9
 	if imageType != 1 && imageType != 2 && imageType != 3 && imageType != 9 && imageType != 10 && imageType != 11 {
@@ -162,7 +163,7 @@ func DecodeTGA(data []byte) (image.Image, error) {
 		}
 		palette = make([]color.NRGBA, first+length)
 		for i := 0; i < length; i++ {
-			c, err := tgaPixel(data[p+i*entryBytes:p+(i+1)*entryBytes], entryBits)
+			c, err := tgaPixel(data[p+i*entryBytes:p+(i+1)*entryBytes], entryBits, descriptor&0x0f)
 			if err != nil {
 				return nil, err
 			}
@@ -187,10 +188,9 @@ func DecodeTGA(data []byte) (image.Image, error) {
 			}
 			return palette[index], nil
 		}
-		return tgaPixel(raw, bpp)
+		return tgaPixel(raw, bpp, descriptor&0x0f)
 	}
 	img := image.NewNRGBA(image.Rect(0, 0, w, h))
-	descriptor := data[17]
 	topDown := descriptor&0x20 != 0
 	rle := imageType == 9 || imageType == 10 || imageType == 11
 	for row := 0; row < h; row++ {
@@ -235,7 +235,7 @@ func DecodeTGA(data []byte) (image.Image, error) {
 	return img, nil
 }
 
-func tgaPixel(data []byte, bpp int) (color.NRGBA, error) {
+func tgaPixel(data []byte, bpp int, attributeBits uint8) (color.NRGBA, error) {
 	if len(data) < (bpp+7)/8 {
 		return color.NRGBA{}, fmt.Errorf("truncated TGA pixel")
 	}
@@ -248,14 +248,18 @@ func tgaPixel(data []byte, bpp int) (color.NRGBA, error) {
 		g := uint8((v >> 5) & 0x3f)
 		b := uint8(v & 0x1f)
 		a := uint8(255)
-		if bpp == 16 && v&0x8000 != 0 {
-			a = 255
+		if bpp == 16 && attributeBits > 0 && v&0x8000 == 0 {
+			a = 0
 		}
 		return color.NRGBA{R: expand5(uint8(r)), G: expand6(uint8(g)), B: expand5(uint8(b)), A: a}, nil
 	case 24:
 		return color.NRGBA{R: data[2], G: data[1], B: data[0], A: 255}, nil
 	default:
-		return color.NRGBA{R: data[2], G: data[1], B: data[0], A: data[3]}, nil
+		alpha := uint8(255)
+		if bpp == 32 && attributeBits >= 8 {
+			alpha = data[3]
+		}
+		return color.NRGBA{R: data[2], G: data[1], B: data[0], A: alpha}, nil
 	}
 }
 
@@ -672,8 +676,10 @@ func expand6(v uint8) uint8 { return uint8(v<<2 | v>>4) }
 func decodeDXT5Alpha(data []byte) []uint8 {
 	a0, a1 := data[0], data[1]
 	alphas := make([]uint8, 16)
-	for i := 0; i < 8; i++ {
-		index := (uint16(data[2+i/3]) >> uint((i%3)*3)) & 7
+	indices := uint64(data[2]) | uint64(data[3])<<8 | uint64(data[4])<<16 |
+		uint64(data[5])<<24 | uint64(data[6])<<32 | uint64(data[7])<<40
+	for i := range alphas {
+		index := (indices >> uint(i*3)) & 7
 		var a uint8
 		if a0 > a1 {
 			a = uint8((int(a0)*(7-int(index)) + int(a1)*int(index)) / 7)
@@ -681,11 +687,14 @@ func decodeDXT5Alpha(data []byte) []uint8 {
 			a = a0
 		} else if index == 1 {
 			a = a1
+		} else if index == 6 {
+			a = 0
+		} else if index == 7 {
+			a = 255
 		} else {
-			a = uint8((int(a0)*(8-int(index)) + int(a1)*(int(index)-1)) / 7)
+			a = uint8((int(a0)*(6-int(index)) + int(a1)*(int(index)-1)) / 5)
 		}
 		alphas[i] = a
-		alphas[i+8] = a
 	}
 	return alphas
 }

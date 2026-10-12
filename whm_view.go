@@ -109,9 +109,14 @@ func loadWhmGroundImage(tree *modtree.ModTree) image.Image {
 	}
 	data, err := tree.ReadFile(whmGroundTexture)
 	if err != nil {
+		if file := tree.FindMaterialByName(filepath.Base(whmGroundTexture)); file != nil {
+			data, err = tree.ReadTreeFile(file)
+		}
+	}
+	if err != nil {
 		return nil
 	}
-	img, _, err := raster.DecodeImageData(data, filepath.Ext(whmGroundTexture))
+	img, _, err := raster.DecodeImageData(data, strings.TrimPrefix(filepath.Ext(whmGroundTexture), "."))
 	if err != nil {
 		return nil
 	}
@@ -242,7 +247,6 @@ func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimens
 					l.Color = rgb(0xB06000)
 					return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8)}.Layout(gtx, l.Layout)
 				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelInfoTable(gtx, t) }),
 				layout.Flexed(1, whmViewerLayout(ui, t)),
 			)
 		}
@@ -280,7 +284,6 @@ func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimens
 		// both entry points on one playback, camera and rendering implementation.
 		body = append(body,
 			layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelInfoTable(gtx, t) }),
 			layout.Flexed(1, whmViewerLayout(ui, t)),
 		)
 	} else {

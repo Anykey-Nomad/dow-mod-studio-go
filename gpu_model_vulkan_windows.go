@@ -104,7 +104,9 @@ type modelGpuVkResolvedDraw struct {
 	mapping uvMapping
 	// alpha is how much of this sub mesh the clip lets through at this frame,
 	// and depth is how far its centre is from the camera. A draw below one
-	// goes through the blended pipeline, after every solid one.
+	// goes through the blended pipeline, after every solid one. Texture
+	// transparency is not routed here: the fragment shader alpha-tests it
+	// in the solid pipeline, so geometry keeps its depth writes.
 	alpha float32
 	depth float64
 }
@@ -142,6 +144,9 @@ type modelGpuVkRenderer struct {
 	// blend is the same shader pair drawing the same way, with the colour
 	// target mixing rather than replacing and with depth left unwritten, so
 	// a mesh a clip is fading shows what is behind it instead of hiding it.
+	// Texture cutouts do not come here: the fragment shader discards them
+	// against Shade.z, which keeps even a cutout mesh on the solid pipeline
+	// with its depth writes intact.
 	blend    *gpu.VulkanPipeline
 	uniforms *gpu.VulkanBuffer
 	white    *gpu.VulkanTexture
@@ -755,19 +760,11 @@ func (r *modelGpuVkRenderer) Render(
 				}
 			}
 		}
-		if alpha < 1 {
-			// The clip's alpha rides in the tint's alpha channel, which
-			// the fragment shader multiplies the colour by and writes
-			// out. It is not a fade towards the panel colour: the blended
-			// pipeline puts the mesh over whatever is actually behind it.
-			st.tint.A = meshAlphaByte(alpha)
-		} else {
-			// A whole mesh is written at full alpha whatever its
-			// material's own tint carries there: nothing in a .whm has
-			// ever meant a diffuse map by an empty alpha channel, and the
-			// shader was handed a one there before this.
-			st.tint.A = 255
-		}
+		// The tint's alpha is the clip fade, which the fragment shader
+		// premultiplies the colour by. Texture transparency is handled by
+		// the shader's alpha test instead, so a mesh a clip holds whole is
+		// drawn solid on the opaque pipeline.
+		st.tint.A = meshAlphaByte(alpha)
 		resolved = append(resolved, st)
 	}
 	// The buffer is kept for the next frame rather than left to the
@@ -866,6 +863,8 @@ func (r *modelGpuVkRenderer) Render(
 	//
 	// The pipeline changes once, where the order crosses from solid to
 	// fading geometry, and not at all on a frame whose clip hides nothing.
+	// Cutout textures need no switch: the shader discards their transparent
+	// texels against Shade.z before either pipeline's blend state matters.
 	blending := false
 	written := false
 	var writtenTint color.RGBA
@@ -883,7 +882,7 @@ func (r *modelGpuVkRenderer) Render(
 			}
 		}
 		if !written || st.tint != writtenTint || st.mapping != writtenUV {
-			r.writePush(opts, st.tint, st.mapping)
+			r.writePush(opts, st.tint, st.mapping, modelVkAlphaRef)
 			if err := r.uploadPush(); err != nil {
 				return nil, err
 			}
@@ -997,7 +996,7 @@ func (r *modelGpuVkRenderer) drawGround(opts RenderOptions) error {
 	if err := r.vk.SetTexture(0, r.groundTexture); err != nil {
 		return err
 	}
-	r.writePush(opts, rgbaWhite, uvMapping{Scale: 1})
+	r.writePush(opts, rgbaWhite, uvMapping{Scale: 1}, 0)
 	if err := r.uploadPush(); err != nil {
 		return err
 	}
@@ -1109,21 +1108,30 @@ func (r *modelGpuVkRenderer) writeFrame(view fauxgl.Matrix, pose WhmPose, opts R
 	}
 }
 
+// modelVkAlphaRef is the fragment shader's alpha test reference for model
+// draws: a texel below it is discarded before anything is written, which is
+// what cuts barbed wire and foliage out of their transparent texels while
+// every opaque map — whose alpha is a full 255 — draws exactly as before.
+// The ground passes zero, which never discards: its texture's alpha carries
+// no cutout and is not to be trusted with one.
+const modelVkAlphaRef = 0.5
+
 // writePush fills the push constant block: the shade term, the tint and the
 // mapping of the material being drawn. The shade term carries the diffuse
 // strength in x and the texture rotation in quarter turns in y, the two
-// values the shaders read outside the uniform block.
+// values the shaders read outside the uniform block, and the alpha test
+// reference in z, which the fragment shader discards texels below.
 //
 // The tint's alpha is the fourth value, and it is what the fragment shader
 // premultiplies the colour by, so a mesh a clip is fading writes less of
 // itself over what is behind it rather than a darker version of itself.
-func (r *modelGpuVkRenderer) writePush(opts RenderOptions, tint color.RGBA, mapping uvMapping) {
+func (r *modelGpuVkRenderer) writePush(opts RenderOptions, tint color.RGBA, mapping uvMapping, alphaRef float32) {
 	p := r.push
 	diffuse := opts.Diffuse
 	if opts.Ambient == 0 && opts.Diffuse == 0 {
 		diffuse = 0.72
 	}
-	p[0], p[1], p[2], p[3] = float32(diffuse), float32(mapping.Rotate), 0, 0
+	p[0], p[1], p[2], p[3] = float32(diffuse), float32(mapping.Rotate), alphaRef, 0
 	p[4], p[5], p[6], p[7] = float32(tint.R)/255, float32(tint.G)/255, float32(tint.B)/255, float32(tint.A)/255
 	// The mapping of the material being drawn: move, scale, mirror. A zero
 	// scale would collapse the map to a line, which is never what a reader

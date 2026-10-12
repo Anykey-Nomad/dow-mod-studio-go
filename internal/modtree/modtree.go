@@ -97,6 +97,10 @@ type ModTree struct {
 	// even though the archive holds the texture. Built on first use.
 	byName    map[string]*TreeFile
 	preferred map[string]*TreeFile
+	// materialCache remembers whether any loaded source holds the named game
+	// terrain map, independently of its virtual folder. Ground lookup may use
+	// this while source priorities are still represented by the merged tree.
+	materialCache map[string]*TreeFile
 }
 
 // FindByName resolves a file from its base name alone. Several folders can hold
@@ -156,6 +160,36 @@ func (t *ModTree) FindByName(fileName string) *TreeFile {
 		}
 	}
 	return t.byName[strings.ToLower(fileName)]
+}
+
+// FindMaterialByName finds a file by base name, preferring texture_share files
+// and then the source with the highest module priority. It is useful for game
+// assets whose virtual paths vary between modules but whose filenames are stable.
+func (t *ModTree) FindMaterialByName(fileName string) *TreeFile {
+	if t == nil || t.Root == nil || fileName == "" {
+		return nil
+	}
+	want := strings.ToLower(fileName)
+	var best *TreeFile
+	bestTexture := false
+	var walk func(*TreeFolder, bool)
+	walk = func(folder *TreeFolder, inTextures bool) {
+		inTextures = inTextures || strings.EqualFold(folder.Name, "texture_share")
+		for _, file := range folder.Files {
+			if !strings.EqualFold(file.Name, want) || file.Source == nil {
+				continue
+			}
+			if best == nil || (inTextures && !bestTexture) ||
+				(inTextures == bestTexture && file.Source.Priority < best.Source.Priority) {
+				best, bestTexture = file, inTextures
+			}
+		}
+		for _, child := range folder.Children {
+			walk(child, inTextures)
+		}
+	}
+	walk(t.Root, false)
+	return best
 }
 
 func (t *ModTree) Close() {

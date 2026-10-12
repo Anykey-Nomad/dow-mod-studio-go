@@ -322,10 +322,6 @@ func (ui *uiState) unitModelFXRow(gtx layout.Context, t *fileTab) layout.Dimensi
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &t.modelSFX, modelSFXLabel(v), v == nil || v.fxSound == nil)
-		}),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v == nil || v.groundImage == nil)
 		}),
 		layout.Flexed(1, rowGap()),

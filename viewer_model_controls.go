@@ -99,25 +99,6 @@ func (ui *uiState) modelControlClicks(gtx layout.Context, t *fileTab) {
 	if t.modelFX.Clicked(gtx) {
 		v.toggleFX()
 	}
-	if t.modelFXScaleOut.Clicked(gtx) {
-		v.scaleFX(1 / modelFXScaleStep)
-	}
-	if t.modelFXScaleIn.Clicked(gtx) {
-		v.scaleFX(modelFXScaleStep)
-	}
-	if t.modelFXScaleRst.Clicked(gtx) {
-		v.fxScale = 1
-		v.invalidate()
-		log.Printf("3D preview: FX scale 1.00")
-	}
-
-	if t.modelFXAngleRst.Clicked(gtx) {
-		ui.fxAnglesReset(t, v)
-	}
-	ui.fxAnglesRead(gtx, t, v)
-	if t.modelSFX.Clicked(gtx) {
-		v.toggleSound()
-	}
 	if t.modelGround.Clicked(gtx) {
 		v.showGround = !v.showGround
 		log.Printf("3D preview: ground %s", onOff(v.showGround))

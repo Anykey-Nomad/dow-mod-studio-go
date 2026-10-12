@@ -513,7 +513,7 @@ func (ui *uiState) pollViewerJobs(t *fileTab) {
 			v.loading = false
 			v.materialsLoaded = true
 			v.materials = res.materials
-			log.Printf("3D preview: textures ready: %d materials resolved, %d missing", len(res.materials), res.missing)
+			log.Printf("3D preview: textures ready: %d materials resolved, %d missing", len(res.materials)+len(res.rsh), res.missing)
 			if len(res.rsh) > 0 {
 				v.rshData = res.rsh
 			}

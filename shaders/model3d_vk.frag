@@ -21,11 +21,18 @@
 // down, which is the convention the coordinate was authored against, and the
 // software path samples the top level and nothing else.
 //
+// Cutout transparency is an alpha test rather than a blend: maps such as
+// barbed wire carry fully transparent texels, and discarding them in the
+// opaque pipeline keeps depth writes on — a model stays solid instead of
+// showing its own interior, and the holes show what is genuinely behind
+// them. Shade.z is the test reference; zero, which is what the ground
+// passes, never discards.
+//
 // The colour leaves premultiplied by the tint's alpha, which is what the
 // blended pipeline reads: its factors are one for the source and one minus
-// the source alpha for the destination, so a fragment meets what is behind it
-// as src + dst * (1 - src.a). At a full alpha that reduces to the colour on
-// its own, so the opaque pipeline drawing this same shader is unchanged.
+// the source alpha for the destination, so a fragment meets what is behind
+// it as src + dst * (1 - src.a). At a full alpha that reduces to the colour
+// on its own, so the opaque pipeline drawing this same shader is unchanged.
 layout(set = 0, binding = 0, std140) uniform Frame {
     mat4 ViewProj;
     vec4 Light;  // xyz points towards the light, w is the ambient term
@@ -33,7 +40,7 @@ layout(set = 0, binding = 0, std140) uniform Frame {
 } c;
 
 layout(push_constant) uniform Draw {
-    vec4 Shade;  // x is the diffuse term, y the texture rotation in quarter turns
+    vec4 Shade;  // x is the diffuse term, y the texture rotation in quarter turns, z the alpha test reference
     vec4 Tint;
     vec4 UV;
 } d;
@@ -48,6 +55,9 @@ void main() {
     vec3 n = normalize(vNrm);
     float lambert = max(dot(n, c.Light.xyz), 0.0);
     float f = min(c.Light.w + d.Shade.x * lambert, 1.0);
-    vec3 col = textureLod(tex, fract(vUV), 0.0).rgb * d.Tint.rgb * f;
-    fragColor = vec4(col * d.Tint.a, d.Tint.a);
+    vec4 sampleColor = textureLod(tex, fract(vUV), 0.0);
+    if (sampleColor.a < d.Shade.z) discard;
+    float alpha = d.Tint.a;
+    vec3 col = sampleColor.rgb * d.Tint.rgb * f;
+    fragColor = vec4(col * alpha, alpha);
 }

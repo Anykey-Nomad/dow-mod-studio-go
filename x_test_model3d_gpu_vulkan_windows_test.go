@@ -442,6 +442,32 @@ func verticalFlipImage(src image.Image) *image.NRGBA {
 // sRGB texture and the hardware mixes in linear, so the mean is taken on the
 // decoded values and encoded back: a blend done on the bytes instead would land
 // about thirty of a shade brighter, which is what this would catch.
+func TestVulkanRSHAlphaLeavesBackgroundVisible(t *testing.T) {
+	model := singleQuad(t, true)
+	model.Meshes[0].Material = "wire"
+	const w, h = 120, 120
+	_, r, readback, release := requireVulkanRenderer(t)
+	defer release()
+	opts := gpuTestOptions(model, w, h)
+	opts.Distance = 3
+	opts.Yaw = 0
+	opts.Pitch = 0
+	texture := makeRSHWithFormat(11, solidDXT5AlphaBlock())
+	materials := map[string]WhmMaterial{"wire": {Color: rgbaWhite}}
+	if _, err := r.Render(model, model.RestPose(), opts, materials, func(string) ([]byte, bool) {
+		return texture, true
+	}); err != nil {
+		t.Fatalf("Render textured mesh: %v", err)
+	}
+	px := readback()
+	at := (h/2)*w*4 + (w/2)*4
+	got := [3]byte{px[at], px[at+1], px[at+2]}
+	want := [3]byte{bgR, bgG, bgB}
+	if got != want {
+		t.Fatalf("transparent RSH texel rendered as %v, want panel background %v", got, want)
+	}
+}
+
 func TestVulkanFadesAMeshOverWhatIsBehindIt(t *testing.T) {
 	model := singleQuad(t, true)
 	const w, h = 120, 120

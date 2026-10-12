@@ -874,28 +874,12 @@ type fileTab struct {
 	modelReset        widget.Clickable
 	modelSkeleton     widget.Clickable
 	modelFX           widget.Clickable
-	modelFXScaleOut   widget.Clickable
-	modelFXScaleIn    widget.Clickable
-	modelFXScaleRst   widget.Clickable
-
-	modelFXAngleRst widget.Clickable
 	// modelSFX turns the model's own sound on and off. It is a button rather
 	// than nothing at all because a preview that starts making noise the
 	// moment a model opens is a preview nobody can look at, and one that
 	// cannot be stopped is worse than that.
 	modelSFX    widget.Clickable
 	modelGround widget.Clickable
-	// The three dial-in fields for the effects' headings, in degrees around the
-	// model's own X, Y and Z. They are editors rather than buttons because a
-	// heading is a number someone reads off the picture and types in, and
-	// stepping it one notch at a time to find a value like "Z 137" is not a
-	// thing anyone would sit through.
-	modelFXAngleX widget.Editor
-	modelFXAngleY widget.Editor
-	modelFXAngleZ widget.Editor
-	// fxAnglesReady records that the three editors have been given their
-	// starting text, which has to happen once and not on every frame.
-	fxAnglesReady bool
 	modelTexture  widget.Clickable
 	modelZoomIn   widget.Clickable
 	modelZoomOut  widget.Clickable
