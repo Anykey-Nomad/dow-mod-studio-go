@@ -291,7 +291,10 @@ func (m *Model) MarkerAxis(i int, pose Pose, boneLocal bool) (fauxgl.Vector, boo
 		if n := local.Length(); n < 1e-6 {
 			return fauxgl.Vector{}, false
 		}
-		return local.Normalize(), true
+		// No bone to turn the axis, but the stored frame is still in the
+		// game's y-up space: RootFrame lifts it the same way it lifts a
+		// root bone, as MarkerWorld does with the position.
+		return RootFrame.MulPosition(local).Normalize(), true
 	}
 	// Turned by the bone, minus its own translation so only the rotation is
 	// left — the same reading MarkerWorld makes of the position.
@@ -335,6 +338,11 @@ func (m *Model) MarkerFrameAxes(i int, pose Pose, boneLocal bool) (x, y, z fauxg
 				mat = mat.Mul(pose.BindInv[b])
 			}
 			v = mat.MulPosition(v).Sub(mat.MulPosition(fauxgl.Vector{}))
+		} else {
+			// No parent bone: the frame is stored in the game's y-up
+			// space, so RootFrame lifts it into model space exactly as
+			// it lifts a root bone; see MarkerWorld.
+			v = RootFrame.MulPosition(v)
 		}
 		if v.Length() < 1e-6 {
 			return fauxgl.Vector{}
@@ -379,7 +387,9 @@ func (m *Model) MarkerBasis(i int, pose Pose, boneLocal bool) (right, up fauxgl.
 	b := m.markerParentIndex(*mk)
 	turn := func(v fauxgl.Vector) fauxgl.Vector {
 		if b < 0 || b >= len(pose.Bones) {
-			return v
+			// Stored in the game's y-up space; lift it like a root
+			// bone, matching MarkerWorld's treatment of the position.
+			return RootFrame.MulPosition(v)
 		}
 		skel := pose.Bones[b].Mul(pose.BindInv[b])
 		if !boneLocal && b < len(pose.BindInv) {
@@ -403,8 +413,15 @@ func (m *Model) MarkerBasis(i int, pose Pose, boneLocal bool) (right, up fauxgl.
 
 // MarkerWorld returns the position of marker i in model space under pose.
 // boneLocal selects how the stored position is read; see the package comment
-// above. A marker with no parent bone does not follow the skeleton and comes
-// back as stored.
+// above.
+//
+// A marker with no parent bone does not follow the skeleton, but its stored
+// position is still in the same frame a root bone's local transform is read
+// in — the game's y-up space. RootFrame lifts it into the renderer's z-up
+// model space, the same lift the bone chain gives a root bone. Returning it
+// raw leaves the marker's height on the depth axis: the necron gauss
+// conduit's markers sit at heights 2.9, 4.2 and 5.5 and read back at z ≈ -0.6,
+// which put its beams on the ground instead of through the three guides.
 func (m *Model) MarkerWorld(i int, pose Pose, boneLocal bool) (fauxgl.Vector, bool) {
 	if i < 0 || i >= len(m.Markers) {
 		return fauxgl.Vector{}, false
@@ -413,13 +430,13 @@ func (m *Model) MarkerWorld(i int, pose Pose, boneLocal bool) (fauxgl.Vector, bo
 	pos := fauxgl.Vector{X: float64(mk.Pos[0]), Y: float64(mk.Pos[1]), Z: float64(mk.Pos[2])}
 	b := m.markerParentIndex(*mk)
 	if b < 0 || b >= len(pose.Bones) {
-		return pos, true
+		return RootFrame.MulPosition(pos), true
 	}
 	if boneLocal {
 		return pose.Bones[b].MulPosition(pos), true
 	}
 	if b >= len(pose.BindInv) {
-		return pos, true
+		return pose.Bones[b].MulPosition(pos), true
 	}
 	return pose.Bones[b].Mul(pose.BindInv[b]).MulPosition(pos), true
 }
