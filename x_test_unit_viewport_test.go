@@ -4,6 +4,7 @@ import (
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/whm"
+	"gioui.org/layout"
 	"math"
 	"path/filepath"
 	"strings"
@@ -129,6 +130,15 @@ func TestUnitAnimatorNameReadsTheBlueprintField(t *testing.T) {
 	want := "Races/Necrons/Troops/Necron_Wraith"
 	if got != want {
 		t.Fatalf("animator is %q, want %q", got, want)
+	}
+}
+
+func TestModelInfoTableHandlesMissingTabAndViewer(t *testing.T) {
+	ui := &uiState{}
+	for _, tab := range []*fileTab{nil, {}} {
+		if got := ui.modelInfoTable(layout.Context{}, tab); got != (layout.Dimensions{}) {
+			t.Errorf("model info for tab %v = %+v, want empty dimensions", tab, got)
+		}
 	}
 }
 

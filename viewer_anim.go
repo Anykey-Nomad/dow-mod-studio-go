@@ -315,7 +315,10 @@ func (v *modelViewer) currentFrame() (int, int) {
 
 // selectAnim switches the playing clip, wrapping around the list.
 func (v *modelViewer) selectAnim(index int) {
-	if len(v.model.Animations) == 0 {
+	if v == nil {
+		return
+	}
+	if v.model == nil || len(v.model.Animations) == 0 {
 		v.anim = nil
 		v.animIndex = 0
 		v.invalidate()

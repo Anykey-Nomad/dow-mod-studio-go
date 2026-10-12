@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"gioui.org/layout"
 )
 
 // rshNecronsDir is where the real game textures these tests read live; the
@@ -159,6 +161,133 @@ func abs32(v float32) float32 {
 // freshly opened tab must ask for a render by itself. An earlier version gated
 // the canvas behind "a frame already exists", so the first render was never
 // requested and the tab stayed blank forever.
+func TestObjectModelViewerUsesViewportDefaults(t *testing.T) {
+	model := &WhmModel{
+		Animations: []WhmAnimation{
+			{Name: "die_1", NumFrames: 8},
+			{Name: "idle_1", NumFrames: 10},
+			{Name: "move", NumFrames: 12},
+		},
+	}
+	ground := image.NewRGBA(image.Rect(3, 4, 9, 10))
+	v := newObjectModelViewer(model, "Data/art/ebps/test/model.whm", ground)
+
+	if v.modelFile != "Data/art/ebps/test/model.whm" {
+		t.Errorf("model path = %q", v.modelFile)
+	}
+	if v.anim == nil || v.anim.Name != "move" || v.animIndex != 2 {
+		t.Errorf("initial animation = %v at index %d, want move at 2", v.anim, v.animIndex)
+	}
+	if !v.playing {
+		t.Error("viewer with clips should start playing")
+	}
+	var groundBounds image.Rectangle
+	if v.groundImage != nil {
+		groundBounds = v.groundImage.Bounds()
+	}
+	if !v.showGround || v.groundImage == nil || groundBounds != image.Rect(0, 0, 6, 6) {
+		t.Errorf("ground = enabled:%v bounds:%v, want enabled 6x6 copy", v.showGround, groundBounds)
+	}
+	if got := v.options(80, 60, modelQualityFinal); !got.Ground || got.GroundImage == nil {
+		t.Error("render options did not carry the ground image and enabled state")
+	}
+}
+
+func TestObjectModelViewerWithoutGroundOrAnimation(t *testing.T) {
+	v := newObjectModelViewer(&WhmModel{}, "", nil)
+	if v.anim != nil || v.playing {
+		t.Errorf("viewer without clips has animation %v and playing %v", v.anim, v.playing)
+	}
+	if v.showGround || v.groundImage != nil {
+		t.Error("viewer without a ground image should not enable the ground")
+	}
+	v.selectAnim(0) // empty models are safe for the shared playback controls
+	if v.anim != nil || v.playing {
+		t.Error("selecting a clip on an empty model changed playback state")
+	}
+}
+
+// TestModelViewerProducesFirstFrame guards the wiring the GUI depends on: a
+func TestWhmViewerConstrainsScrollMeasurementHeight(t *testing.T) {
+	ui := &uiState{}
+	tab := &fileTab{model: newModelViewer(&WhmModel{}, "")}
+	for _, maxHeight := range []int{panelScrollMeasureHeight, panelScrollMeasureHeight - 210, 510} {
+		if got := whmMeasurePass(maxHeight); got != (maxHeight >= panelScrollMeasureHeight/2) {
+			t.Errorf("whmMeasurePass(%d) = %v", maxHeight, got)
+		}
+	}
+	gtx := layout.Context{Constraints: layout.Constraints{Min: image.Pt(0, 1<<20), Max: image.Pt(800, 1<<20)}}
+	got := whmViewerLayout(ui, tab)(gtx)
+	if got.Size.Y != 0 {
+		t.Fatalf("WHM viewer measurement height = %d px, want zero during synthetic measurement", got.Size.Y)
+	}
+}
+
+func TestViewerMarksEmptyMaterialLoadComplete(t *testing.T) {
+	v := &modelViewer{
+		loading:   true,
+		materials: map[string]WhmMaterial{},
+		redraw:    false,
+	}
+	tab := &fileTab{model: v, modelMaterialCh: make(chan modelMaterialResult, 1)}
+	tab.modelMaterialCh <- modelMaterialResult{materials: map[string]WhmMaterial{}}
+	ui := &uiState{}
+	ui.pollViewerJobs(tab)
+
+	if v.loading {
+		t.Fatal("material load remained in progress after its result was received")
+	}
+	if !v.materialsLoaded {
+		t.Fatal("empty material result was not remembered as a completed load")
+	}
+	if len(v.materials) != 0 {
+		t.Fatalf("loaded material map has %d entries, want empty", len(v.materials))
+	}
+
+	// The viewer's scheduling condition must not issue another worker just
+	// because the completed material set is empty.
+	if modelMaterialsNeedLoad(tab) {
+		t.Fatal("completed empty material load can be mistaken for an unstarted load")
+	}
+}
+
+func TestRightDragPansCameraParallelToViewPlane(t *testing.T) {
+	model := &WhmModel{
+		Vertices: []WhmVertex{{Pos: [3]float32{-1, -1, -1}}, {Pos: [3]float32{1, 1, 1}}},
+		BoundMin: [3]float32{-1, -1, -1},
+		BoundMax: [3]float32{1, 1, 1},
+	}
+	v := newModelViewer(model, "")
+	v.Yaw, v.Pitch = 0, 0
+	v.Distance = 10
+	v.FOV = modelDefaultFov
+	start := v.Center
+	v.panCamera(20, 10, 100)
+
+	if v.Center == start {
+		t.Fatal("right drag did not move the camera target")
+	}
+	if v.Center.Z == start.Z {
+		t.Fatal("vertical drag did not pan along the camera's screen up axis")
+	}
+	if v.ActiveCamera != "" {
+		t.Errorf("panning left named camera %q active", v.ActiveCamera)
+	}
+	if !v.redraw {
+		t.Error("panning did not request a new frame")
+	}
+
+	// At zero yaw and pitch, a horizontal pan has no depth component.
+	v.Center = start
+	v.panCamera(20, 0, 100)
+	if v.Center.Z != start.Z || v.Center.X != start.X {
+		t.Errorf("horizontal pan moved out of screen plane: center changed from %+v to %+v", start, v.Center)
+	}
+	if v.Center.Y == start.Y {
+		t.Error("horizontal drag did not move the target sideways")
+	}
+}
+
 func TestModelViewerProducesFirstFrame(t *testing.T) {
 	model := renderTestModel(t)
 	v := newModelViewer(model, "")

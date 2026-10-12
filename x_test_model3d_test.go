@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fogleman/fauxgl"
 )
 
 // TestModelTextureReadsRowsAsStored pins the one convention the software path
@@ -51,6 +53,37 @@ func renderTestModel(t *testing.T) *WhmModel {
 		t.Fatalf("model has no geometry: %d verts, %d meshes", len(model.Vertices), len(model.Meshes))
 	}
 	return model
+}
+
+func TestRenderWhmModelGroundPlaneUsesTexture(t *testing.T) {
+	texture := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	texture.SetRGBA(0, 0, color.RGBA{R: 255, A: 255})
+	texture.SetRGBA(1, 0, color.RGBA{G: 255, A: 255})
+	texture.SetRGBA(0, 1, color.RGBA{B: 255, A: 255})
+	texture.SetRGBA(1, 1, color.RGBA{R: 255, G: 255, A: 255})
+	model := &WhmModel{}
+	opts := RenderOptions{
+		Width: 100, Height: 100, Pitch: 0.65, Distance: 8,
+		Target: fauxgl.Vector{Z: 3}, Quality: modelQualityFinal,
+		Texture: newModelTexture(texture), Ground: true,
+	}
+	withGround := RenderWhmModel(model, model.RestPose(), opts)
+	opts.Ground = false
+	withoutGround := RenderWhmModel(model, model.RestPose(), opts)
+	if imagesEqual(withGround, withoutGround) {
+		t.Fatal("ground plane did not contribute any pixels to the rendered frame")
+	}
+	changed := 0
+	for y := 0; y < withGround.Bounds().Dy(); y++ {
+		for x := 0; x < withGround.Bounds().Dx(); x++ {
+			if withGround.RGBAAt(x, y) != withoutGround.RGBAAt(x, y) {
+				changed++
+			}
+		}
+	}
+	if changed < 20 {
+		t.Errorf("ground plane covered only %d changed pixels", changed)
+	}
 }
 
 func TestRenderWhmModelProducesGeometry(t *testing.T) {

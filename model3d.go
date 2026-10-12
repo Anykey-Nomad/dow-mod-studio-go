@@ -130,6 +130,8 @@ func quatMatrix(q [4]float32) fauxgl.Matrix { return whm.QuatMatrix(q) }
 type RenderOptions struct {
 	engine.RenderOptions
 	FX                *fxGpuScene
+	GroundImage       *image.RGBA
+	Ground            bool
 	MaterialOverrides map[string]WhmMaterial
 	viewOverride      *fauxgl.Matrix
 }
@@ -219,6 +221,10 @@ func RenderWhmModel(model *WhmModel, pose WhmPose, opts RenderOptions) *image.RG
 		modelData = &model.Model
 	}
 	engineOpts := opts.RenderOptions
+	if opts.Ground && opts.GroundImage != nil {
+		engineOpts.Texture = newModelTexture(opts.GroundImage)
+		engineOpts.Ground = true
+	}
 	engineOpts.MaterialOverrides = opts.MaterialOverrides
 	engineOpts.ViewOverride = opts.viewOverride
 	return engine.Render(modelData, pose, engineOpts)

@@ -858,26 +858,33 @@ type fileTab struct {
 	whmConvertClick widget.Clickable
 
 	// 3D preview state (when kind=="whm" and a model was decoded)
-	model           *modelViewer
-	modelMaterialCh chan modelMaterialResult
-	modelPlay       widget.Clickable
-	modelPrevAnim   widget.Clickable
-	modelNextAnim   widget.Clickable
-	modelStepBack   widget.Clickable
-	modelStepFwd    widget.Clickable
-	modelReset      widget.Clickable
-	modelSkeleton   widget.Clickable
-	modelFX         widget.Clickable
-	modelFXScaleOut widget.Clickable
-	modelFXScaleIn  widget.Clickable
-	modelFXScaleRst widget.Clickable
+	model             *modelViewer
+	modelMaterialCh   chan modelMaterialResult
+	modelListMode     int
+	modelListClicks   [3]widget.Clickable
+	modelListScroll   panelScrollState
+	modelAnimClicks   []widget.Clickable
+	modelMarkerClicks []widget.Clickable
+	modelBoneClicks   []widget.Clickable
+	modelPlay         widget.Clickable
+	modelPrevAnim     widget.Clickable
+	modelNextAnim     widget.Clickable
+	modelStepBack     widget.Clickable
+	modelStepFwd      widget.Clickable
+	modelReset        widget.Clickable
+	modelSkeleton     widget.Clickable
+	modelFX           widget.Clickable
+	modelFXScaleOut   widget.Clickable
+	modelFXScaleIn    widget.Clickable
+	modelFXScaleRst   widget.Clickable
 
 	modelFXAngleRst widget.Clickable
 	// modelSFX turns the model's own sound on and off. It is a button rather
 	// than nothing at all because a preview that starts making noise the
 	// moment a model opens is a preview nobody can look at, and one that
 	// cannot be stopped is worse than that.
-	modelSFX widget.Clickable
+	modelSFX    widget.Clickable
+	modelGround widget.Clickable
 	// The three dial-in fields for the effects' headings, in degrees around the
 	// model's own X, Y and Z. They are editors rather than buttons because a
 	// heading is a number someone reads off the picture and types in, and

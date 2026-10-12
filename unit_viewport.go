@@ -5,9 +5,12 @@ import (
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"errors"
+	"image"
+	"math"
 	"path/filepath"
 	"strings"
-	"time"
+
+	"github.com/fogleman/fauxgl"
 )
 
 // The object window's Viewport section: the selected unit's own 3D model, with
@@ -32,6 +35,9 @@ const unitSectionViewport = "Viewport"
 // unitModelArtRoot is the folder animator paths are relative to.
 const unitModelArtRoot = "art/ebps"
 
+// unitGroundTexture is the default terrain texture shown beneath unit models.
+const unitGroundTexture = "Data/art/scenarios/textures/detail/jungle_ground_02.tga"
+
 // errNoUnitModel is what a unit whose model cannot be found anywhere reports,
 // as distinct from a model that was found and would not decode.
 var errNoUnitModel = errors.New("no model file for this unit")
@@ -40,10 +46,11 @@ var errNoUnitModel = errors.New("no model file for this unit")
 // was read for travels with it, since a load started for one unit can finish
 // after the reader has moved on to another.
 type unitModelResult struct {
-	unit  string
-	path  string
-	model *WhmModel
-	err   error
+	unit        string
+	path        string
+	model       *WhmModel
+	groundImage image.Image
+	err         error
 }
 
 // unitModelSource is everything about a unit that the loader needs, copied off
@@ -195,6 +202,7 @@ func (ui *uiState) startUnitModel(src unitModelSource) {
 			return
 		}
 		res.model = model
+		res.groundImage = loadWhmGroundImage(tree)
 		ch <- res
 	}()
 }
@@ -218,6 +226,7 @@ func (ui *uiState) resetUnitModel() {
 	ui.unitModelErr = ""
 	ui.unitAnimClicks = nil
 	ui.unitCamClicks = nil
+
 	ui.unitMarkerClicks = nil
 	ui.unitBoneClicks = nil
 	ui.unitViewportScroll = panelScrollState{}
@@ -248,16 +257,10 @@ func (ui *uiState) pollUnitModel() {
 			return
 		}
 		tab := &fileTab{path: res.path, kind: "whm"}
-		tab.model = newModelViewer(res.model, res.path)
+		tab.model = newObjectModelViewer(res.model, res.path, res.groundImage)
 		// The canvas is a third of the window wide here, so the playback strip
 		// is drawn in the panel beside it rather than under it.
 		tab.model.sideControls = true
-		// A unit's clips are named after what they do, and the one that shows
-		// the model doing something is worth starting on: locomotion first,
-		// then whatever idles, then the first clip there is.
-		tab.model.selectAnim(unitDefaultAnim(res.model))
-		tab.model.playing = len(res.model.Animations) > 0
-		tab.model.lastFrame = time.Time{}
 		ui.unitModel = tab
 		ui.unitModelPath = res.path
 		// A freshly read model starts clean, and its keys rebind the typed
@@ -331,5 +334,34 @@ func (v *modelViewer) resetCamera() {
 	}
 	camera := viewer.ResetCamera(v.CameraState)
 	v.CameraState = camera
+	v.invalidate()
+}
+
+// panCamera shifts the orbit target in the camera's screen plane. Pixel motion
+// is scaled by the world-space width visible at the camera distance, so the
+// drag has consistent sensitivity across zoom levels and viewport sizes.
+func (v *modelViewer) panCamera(dx, dy float64, height int) {
+	if v == nil || height <= 0 || v.Distance <= 0 {
+		return
+	}
+	forward := fauxgl.Vector{
+		X: -math.Cos(v.Yaw) * math.Cos(v.Pitch),
+		Y: -math.Sin(v.Yaw) * math.Cos(v.Pitch),
+		Z: -math.Sin(v.Pitch),
+	}
+	worldUp := fauxgl.Vector{Z: 1}
+	right := forward.Cross(worldUp)
+	if length := right.Length(); length > 1e-9 {
+		right = right.MulScalar(1 / length)
+	} else {
+		right = fauxgl.Vector{X: 1}
+	}
+	up := right.Cross(forward)
+	if length := up.Length(); length > 1e-9 {
+		up = up.MulScalar(1 / length)
+	}
+	worldPerPixel := 2 * v.Distance * math.Tan(v.FOV*math.Pi/360) / float64(height)
+	v.Center = v.Center.Sub(right.MulScalar(dx * worldPerPixel)).Add(up.MulScalar(dy * worldPerPixel))
+	v.ActiveCamera = ""
 	v.invalidate()
 }

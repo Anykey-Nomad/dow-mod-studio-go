@@ -517,6 +517,9 @@ func (v *modelViewer) fxOrigins() {
 			e.TurnAxes = [3]fauxgl.Vector{x, y, z}
 			e.Frame = [3]fauxgl.Vector{x, y, z}
 		}
+		if e.Ground {
+			e.Origin = fxGroundOrigin(e.Origin, float64(v.model.BoundMin[2]))
+		}
 		// Origin and the marker frame stay untouched: each generated FX
 		// displacement is turned around Origin when geometry is built.
 	}
@@ -829,6 +832,11 @@ type fxOverlayEffect struct {
 	// marker on a moving bone moves with it.
 	Marker int
 	Origin fauxgl.Vector
+	// Ground marks an effect whose event, effect path or attachment point
+	// explicitly identifies it as a ground/dust effect. Its marker still
+	// supplies the horizontal position, while its height is anchored to the
+	// model's lowest bound so animated or orphaned effects do not float.
+	Ground bool
 	// OtherMarker is the far end of a beam, -1 when the effect named no
 	// second marker. Far is that marker under the pose on screen, refreshed
 	// for the same reason Origin is. Spans reports whether the beam should
@@ -1610,6 +1618,7 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 			Label:       b.Event.Name,
 			FxName:      fxPath,
 			Marker:      marker,
+			Ground:      fxIsGroundEffect(b.Event, fxPath),
 			HasOther:    other >= 0,
 			OtherMarker: other,
 			Spans:       fxEventSpansDistance(b.Event),
@@ -2003,6 +2012,51 @@ func fxEventMarker(model *WhmModel, ev whe.FxEvent, eventIndex int) int {
 		}
 	}
 	return -1
+}
+
+// fxIsGroundEffect identifies effects whose event metadata says their origin
+// belongs on the ground. Do not infer this from STYLE_SPRAY or particle gravity:
+// many smoke, exhaust and impact effects are meant to rise or fall in mid-air.
+// Ground/dust names and explicit ground marker names are the reliable signals.
+func fxIsGroundEffect(ev whe.FxEvent, fxPath string) bool {
+	hasHint := func(s string) bool {
+		s = strings.ToLower(strings.ReplaceAll(s, `\`, "/"))
+		return strings.Contains(s, "ground") || strings.Contains(s, "dust")
+	}
+	groundMarker := false
+	for _, key := range []string{"marker", "marker_0", "marker_surface_00", "marker_surface_0", "random_marker_0"} {
+		if marker, ok := ev.First(key); ok && hasHint(marker) {
+			groundMarker = true
+			break
+		}
+	}
+	if !hasHint(ev.Name) && !hasHint(fxPath) && !groundMarker {
+		return false
+	}
+	// A ground-named lightning/beam is usually a strike that should travel
+	// between markers or rise from its authored origin, not an emitter to pin
+	// to the model's feet. Likewise, a named remote endpoint is already the
+	// ground contact and must not pull the beam's source down.
+	lowerName := strings.ToLower(ev.Name)
+	lowerPath := strings.ToLower(fxPath)
+	if strings.Contains(lowerName, "lightning") || strings.Contains(lowerName, "beam") ||
+		strings.Contains(lowerPath, "lightning") || strings.Contains(lowerPath, "beam") {
+		return false
+	}
+	if other, ok := ev.First("fx_other_marker"); ok && other != "" {
+		return false
+	}
+	if other, ok := ev.First("fx_other"); ok && other != "" && !strings.EqualFold(other, "self") {
+		return false
+	}
+	return true
+}
+
+// fxGroundOrigin preserves an effect's horizontal attachment while anchoring
+// its origin to the model's lowest surface point.
+func fxGroundOrigin(origin fauxgl.Vector, groundZ float64) fauxgl.Vector {
+	origin.Z = groundZ
+	return origin
 }
 
 // fxLuaPath is the file an event's "fx" entry names. The game writes it as a

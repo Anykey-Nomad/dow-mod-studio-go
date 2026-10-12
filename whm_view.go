@@ -1,8 +1,11 @@
 package main
 
 import (
+	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/raster"
 	"dow-mod-studio/internal/whm"
 	"fmt"
+	"image"
 	"log"
 	"path/filepath"
 	"strings"
@@ -12,6 +15,108 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 )
+
+const whmGroundTexture = unitGroundTexture
+
+// whmMeasurePass identifies the scroll panel's synthetic measurement height.
+// Flex consumes the fixed rows before giving the viewport to this child, so the
+// incoming maximum is slightly below panelScrollMeasureHeight rather than equal.
+func whmMeasurePass(maxHeight int) bool {
+	return maxHeight >= panelScrollMeasureHeight/2
+}
+
+// whmViewerLayout keeps scroll-panel measurement from starting a renderer with
+// the panel's synthetic 1<<20px height. During the actual layout pass the panel
+// gives the viewer its real viewport height and rendering starts normally.
+func whmViewerLayout(ui *uiState, t *fileTab) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		if whmMeasurePass(gtx.Constraints.Max.Y) {
+			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
+		}
+		gtx.Constraints.Min.Y = 0
+		return ui.layoutWhmModelViewport(gtx, t)
+	}
+}
+
+// layoutWhmModelViewport keeps the control strip below the canvas while the
+// lists of animations, markers and bones sit beside it.
+func (ui *uiState) layoutWhmModelViewport(gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t == nil || t.model == nil || t.model.model == nil {
+		return ui.layoutModelViewer(gtx, t)
+	}
+	v := t.model
+	v.sideControls = true
+	listWidth := minInt(gtx.Dp(unit.Dp(220)), maxInt(gtx.Dp(unit.Dp(160)), gtx.Constraints.Max.X/3))
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return ui.layoutModelViewer(gtx, t)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+				layout.Rigid(ui.fixedPanel(listWidth, func(gtx layout.Context) layout.Dimensions {
+					return ui.layoutWhmModelList(gtx, t)
+				})),
+			)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.modelControlsWithUV(gtx, t)
+		}),
+	)
+}
+
+func (ui *uiState) layoutWhmModelList(gtx layout.Context, t *fileTab) layout.Dimensions {
+	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.whmModelListControls(gtx, t) }),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return ui.panelScrollView(gtx, &t.modelListScroll, func(gtx layout.Context) layout.Dimensions {
+					return ui.whmModelList(gtx, t)
+				})
+			}),
+		)
+	})
+}
+
+// whmModelListControls switches the list beside the canvas.
+func (ui *uiState) whmModelListControls(gtx layout.Context, t *fileTab) layout.Dimensions {
+	labels := [3]string{"Animations", "Markers", "Bones"}
+	if t.modelListMode < 0 || t.modelListMode >= len(labels) {
+		t.modelListMode = 0
+	}
+	children := make([]layout.FlexChild, 0, len(labels))
+	for i, label := range labels {
+		i, label := i, label
+		click := &t.modelListClicks[i]
+		if click.Clicked(gtx) {
+			t.modelListMode = i
+			t.modelListScroll = panelScrollState{}
+		}
+		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButton(gtx, click, label)
+		}))
+	}
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
+}
+
+func (ui *uiState) whmModelList(gtx layout.Context, t *fileTab) layout.Dimensions {
+	return ui.unitModelListContent(gtx, t, t.modelListMode)
+}
+
+func loadWhmGroundImage(tree *modtree.ModTree) image.Image {
+	if tree == nil {
+		return nil
+	}
+	data, err := tree.ReadFile(whmGroundTexture)
+	if err != nil {
+		return nil
+	}
+	img, _, err := raster.DecodeImageData(data, filepath.Ext(whmGroundTexture))
+	if err != nil {
+		return nil
+	}
+	return img
+}
 
 // .whm viewer. Dawn of War ships models as .whm; the Object Editor consumes the
 // same geometry in an .sgm container. whm.ConvertToSgm does that rewrite in
@@ -46,7 +151,9 @@ func (ui *uiState) openWhm(virtualPath string) {
 		if perr != nil {
 			log.Printf("3D preview: parse %s failed after %v: %v", filepath.Base(virtualPath), time.Since(parseStart), perr)
 		} else {
-			t.model = newModelViewer(model, virtualPath)
+			ground := loadWhmGroundImage(ui.modTree)
+			t.model = newObjectModelViewer(model, virtualPath, ground)
+			t.model.sideControls = true
 			log.Printf("3D preview: parsed %s in %v: %d verts, %d meshes, %d bones, %d anims",
 				filepath.Base(virtualPath), time.Since(parseStart),
 				len(model.Vertices), len(model.Meshes), len(model.Bones), len(model.Animations))
@@ -135,7 +242,8 @@ func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimens
 					l.Color = rgb(0xB06000)
 					return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8)}.Layout(gtx, l.Layout)
 				}),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.layoutModelViewer(gtx, t) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelInfoTable(gtx, t) }),
+				layout.Flexed(1, whmViewerLayout(ui, t)),
 			)
 		}
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -168,11 +276,12 @@ func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimens
 		}),
 	}
 	if t.model != nil {
-		// The canvas takes the free space; the statistics go to the side panel
-		// when it is available, so they are omitted here to avoid duplication.
+		// Reuse the Object Viewport's viewer strip and model facts. This keeps
+		// both entry points on one playback, camera and rendering implementation.
 		body = append(body,
 			layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.layoutModelViewer(gtx, t) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelInfoTable(gtx, t) }),
+			layout.Flexed(1, whmViewerLayout(ui, t)),
 		)
 	} else {
 		body = append(body,

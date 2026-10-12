@@ -118,6 +118,11 @@ func (ui *uiState) modelControlClicks(gtx layout.Context, t *fileTab) {
 	if t.modelSFX.Clicked(gtx) {
 		v.toggleSound()
 	}
+	if t.modelGround.Clicked(gtx) {
+		v.showGround = !v.showGround
+		log.Printf("3D preview: ground %s", onOff(v.showGround))
+		v.invalidate()
+	}
 	if t.modelTexture.Clicked(gtx) {
 		v.textured = !v.textured
 		log.Printf("3D preview: textures %s", onOff(v.textured))
@@ -198,13 +203,20 @@ func uvWholeTiles(v float32) bool {
 	return math.Abs(n-math.Round(n)) < 0.0005
 }
 
+// modelMaterialsNeedLoad reports whether this viewer has never completed its
+// texture lookup and has no worker in progress.
+func modelMaterialsNeedLoad(t *fileTab) bool {
+	return t != nil && t.model != nil && t.model.model != nil &&
+		t.modelMaterialCh == nil && !t.model.loading && !t.model.materialsLoaded
+}
+
 // layoutModelViewer draws the canvas plus the playback controls.
 func (ui *uiState) layoutModelViewer(gtx layout.Context, t *fileTab) layout.Dimensions {
 	v := t.model
 	if v == nil || v.model == nil {
 		return centeredPanelLabel(gtx, ui.th, "No model", unit.Sp(10), cTextDim)
 	}
-	if t.modelMaterialCh == nil && !v.loading && len(v.materials) == 0 {
+	if modelMaterialsNeedLoad(t) {
 		t.modelMaterialCh = make(chan modelMaterialResult, 1)
 		ui.loadModelMaterials(v, t.modelMaterialCh)
 	}

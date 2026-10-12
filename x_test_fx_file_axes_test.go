@@ -2,6 +2,7 @@ package main
 
 import (
 	"dow-mod-studio/internal/fx"
+	"dow-mod-studio/internal/whe"
 	"math"
 	"testing"
 
@@ -94,6 +95,41 @@ func TestShippedDustVolumeZeroLandsOnTheUpAxis(t *testing.T) {
 
 // fx.FileVec is a swap of the second and third components: the FX files keep
 // their vertical on the second one and the renderer keeps its own on the third.
+func TestFxGroundClassificationUsesEventAndPathHints(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   whe.FxEvent
+		path string
+		want bool
+	}{
+		{name: "dust event", ev: whe.FxEvent{Name: "land_dust"}, want: true},
+		{name: "ground beam path stays anchored by its own markers", ev: whe.FxEvent{Entries: []whe.FxEventEntry{{Key: "marker", Value: "marker_ground_01"}, {Key: "fx_other_marker", Value: "marker_chest_front"}}}, path: `necron\ground_lightning_01`, want: false},
+		{name: "ground effect path", path: `necron\structures\ground_impact`, want: true},
+		{name: "ground marker path is normalized", ev: whe.FxEvent{Entries: []whe.FxEventEntry{{Key: "marker", Value: "marker_surface_01_ground"}}}, want: true},
+		{name: "ground attachment marker", ev: whe.FxEvent{Entries: []whe.FxEventEntry{{Key: "marker", Value: "marker_ground_01"}}}, want: true},
+		{name: "ordinary muzzle effect", ev: whe.FxEvent{Name: "muzzle_flash"}, path: `weapon\muzzle_flash`, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := fxIsGroundEffect(tc.ev, tc.path); got != tc.want {
+				t.Errorf("fxIsGroundEffect(%q, %q) = %v, want %v", tc.ev.Name, tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGroundFXOriginKeepsHorizontalAttachment(t *testing.T) {
+	origin := fauxgl.Vector{X: 3, Y: -4, Z: 12}
+	got := fxGroundOrigin(origin, -2)
+	want := fauxgl.Vector{X: 3, Y: -4, Z: -2}
+	if got != want {
+		t.Errorf("grounded origin = %+v, want %+v", got, want)
+	}
+	if origin.Z != 12 {
+		t.Errorf("grounding mutated its input: %+v", origin)
+	}
+}
+
 func TestFxFileVecMovesTheSecondComponentOntoUp(t *testing.T) {
 	got := fx.FileVec(fauxgl.Vector{X: 1, Y: 2, Z: 3})
 	want := fauxgl.Vector{X: 1, Y: 3, Z: 2}

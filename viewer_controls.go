@@ -108,10 +108,10 @@ func (ui *uiState) modelControls(gtx layout.Context, t *fileTab) layout.Dimensio
 // modelInfoTable reports what the 3D preview is showing, which makes it obvious
 // whether a blank canvas is a missing texture or a parse problem.
 func (ui *uiState) modelInfoTable(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
-	if v == nil || v.model == nil {
+	if t == nil || t.model == nil || t.model.model == nil {
 		return layout.Dimensions{}
 	}
+	v := t.model
 	tris := 0
 	for _, mesh := range v.model.Meshes {
 		tris += len(mesh.Indices) / 3
@@ -215,6 +215,17 @@ func (v *modelViewer) toggleSound() {
 	}
 	v.fxSoundOn = true
 	log.Printf("3D preview: sound on")
+}
+
+// modelGroundLabel reports whether the unit viewport's ground plane is shown.
+func modelGroundLabel(v *modelViewer) string {
+	if v == nil || v.groundImage == nil {
+		return "no ground"
+	}
+	if v.showGround {
+		return "Ground on"
+	}
+	return "Ground off"
 }
 
 // modelSFXLabel is what the sound button reads: whether the model has sounds

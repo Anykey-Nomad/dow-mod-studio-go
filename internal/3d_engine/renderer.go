@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 
 	"dow-mod-studio/internal/whm"
 	"github.com/fogleman/fauxgl"
@@ -17,6 +18,7 @@ type RenderOptions struct {
 	Fov, Ambient, Diffuse float64
 	Light                 fauxgl.Vector
 	Texture               fauxgl.Texture
+	Ground                bool
 	BaseColor             color.RGBA
 	Quality               int
 	Skeleton              bool
@@ -222,6 +224,10 @@ func Render(model *whm.Model, pose whm.Pose, opts RenderOptions) *image.RGBA {
 		}
 	}
 
+	if opts.Ground && opts.Texture != nil {
+		drawGround(ctx, shader, opts)
+	}
+
 	drawSoftwareOverlay(ctx, model, pose, opts, view)
 
 	// fauxgl hands back an *image.NRGBA, so convert rather than assert.
@@ -232,6 +238,24 @@ func Render(model *whm.Model, pose whm.Pose, opts RenderOptions) *image.RGBA {
 	out := image.NewRGBA(image.Rect(0, 0, opts.Width, opts.Height))
 	draw.Draw(out, out.Bounds(), src, src.Bounds().Min, draw.Src)
 	return out
+}
+
+// drawGround rasterizes a Z=0 plane into the model's depth buffer. Texture
+// coordinates repeat at a ten-world-unit scale, keeping the ground useful at
+// the range of model sizes found in the game.
+func drawGround(ctx *fauxgl.Context, shader *modelShader, opts RenderOptions) {
+	half := math.Max(100, opts.Distance*4)
+	uvHalf := half / 10
+	verts := [4]fauxgl.Vertex{
+		{Position: fauxgl.Vector{X: opts.Target.X - half, Y: opts.Target.Y - half}, Normal: fauxgl.Vector{Z: 1}, Texture: fauxgl.Vector{X: -uvHalf, Y: -uvHalf}},
+		{Position: fauxgl.Vector{X: opts.Target.X + half, Y: opts.Target.Y - half}, Normal: fauxgl.Vector{Z: 1}, Texture: fauxgl.Vector{X: uvHalf, Y: -uvHalf}},
+		{Position: fauxgl.Vector{X: opts.Target.X + half, Y: opts.Target.Y + half}, Normal: fauxgl.Vector{Z: 1}, Texture: fauxgl.Vector{X: uvHalf, Y: uvHalf}},
+		{Position: fauxgl.Vector{X: opts.Target.X - half, Y: opts.Target.Y + half}, Normal: fauxgl.Vector{Z: 1}, Texture: fauxgl.Vector{X: -uvHalf, Y: uvHalf}},
+	}
+	shader.texture = opts.Texture
+	shader.base = rgbaToColor(opts.BaseColor)
+	ctx.DrawTriangle(&fauxgl.Triangle{V1: verts[0], V2: verts[1], V3: verts[2]})
+	ctx.DrawTriangle(&fauxgl.Triangle{V1: verts[0], V2: verts[2], V3: verts[3]})
 }
 
 // drawModelOverlay draws the frame's debug overlay — the skeleton and the

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"log"
 	"math"
 	"strings"
@@ -42,6 +43,18 @@ var modelVkVertSPIRV []byte
 
 //go:embed shaders/model3d_vk.frag.spv
 var modelVkFragSPIRV []byte
+
+//go:embed shaders/model3d_vk_ground.vert.spv
+var modelVkGroundVertSPIRV []byte
+
+const modelGpuVkGroundVertexStride = 32
+
+// Model coordinates use Z as the vertical axis; the ground plane is Z=0.
+type modelGpuVkGroundVertex struct {
+	position [3]float32
+	normal   [3]float32
+	uv       [2]float32
+}
 
 // modelGpuVkFrameFloats is the size of the frame uniform block in floats:
 // 16 for ViewProj, 4 for Light, and 16 per bone.
@@ -117,8 +130,15 @@ type modelGpuVkTexture struct {
 // the pipeline, the uniform buffer, and the cache of uploaded models and
 // textures.
 type modelGpuVkRenderer struct {
-	vk       *gpu.VulkanPass
-	pipeline *gpu.VulkanPipeline
+	vk             *gpu.VulkanPass
+	pipeline       *gpu.VulkanPipeline
+	groundPipeline *gpu.VulkanPipeline
+	groundVertices *gpu.VulkanBuffer
+	groundTexture  *gpu.VulkanTexture
+	groundSource   *image.RGBA
+	groundWidth    int
+	groundHeight   int
+	groundCenter   [2]float64
 	// blend is the same shader pair drawing the same way, with the colour
 	// target mixing rather than replacing and with depth left unwritten, so
 	// a mesh a clip is fading shows what is behind it instead of hiding it.
@@ -187,8 +207,30 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 		p.Release()
 		return nil, fmt.Errorf("blended pipeline: %w", err)
 	}
+	groundDesc := gpu.VulkanPipelineDesc{
+		Vertex:   modelVkGroundVertSPIRV,
+		Fragment: modelVkFragSPIRV,
+		Stride:   modelGpuVkGroundVertexStride,
+		Inputs: []gpu.VulkanInput{
+			{Location: 0, Format: gpu.VulkanFormatFloat32x3, Offset: 0},
+			{Location: 1, Format: gpu.VulkanFormatFloat32x3, Offset: 12},
+			{Location: 2, Format: gpu.VulkanFormatFloat32x2, Offset: 24},
+		},
+		Cull:       gpu.CullNone,
+		DepthTest:  true,
+		DepthWrite: true,
+		PushSize:   modelGpuVkPushFloats * 4,
+	}
+	groundPipeline, err := v.NewPipeline(groundDesc)
+	if err != nil {
+		blend.Release()
+		p.Release()
+		return nil, fmt.Errorf("ground pipeline: %w", err)
+	}
 	uniforms, err := v.NewBuffer(gpu.ConstantBuffer, modelGpuVkFrameFloats*4, true)
 	if err != nil {
+		groundPipeline.Release()
+		blend.Release()
 		p.Release()
 		return nil, fmt.Errorf("uniform buffer: %w", err)
 	}
@@ -203,6 +245,7 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 	})
 	if err != nil {
 		uniforms.Release()
+		groundPipeline.Release()
 		blend.Release()
 		p.Release()
 		return nil, fmt.Errorf("white texture: %w", err)
@@ -210,6 +253,7 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 	if err := white.UploadMip(0, []byte{0xff, 0xff, 0xff, 0xff}); err != nil {
 		white.Release()
 		uniforms.Release()
+		groundPipeline.Release()
 		blend.Release()
 		p.Release()
 		return nil, fmt.Errorf("white texture upload: %w", err)
@@ -217,22 +261,24 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 	if err := white.UploadDone(); err != nil {
 		white.Release()
 		uniforms.Release()
+		groundPipeline.Release()
 		blend.Release()
 		p.Release()
 		return nil, fmt.Errorf("white texture: %w", err)
 	}
 	return &modelGpuVkRenderer{
-		vk:       v,
-		pipeline: p,
-		blend:    blend,
-		uniforms: uniforms,
-		white:    white,
-		meshes:   map[*WhmModel]*modelGpuVkMesh{},
-		textures: map[string]*modelGpuVkTexture{},
-		frame:    make([]float32, modelGpuVkFrameFloats),
-		frameBuf: make([]byte, modelGpuVkFrameFloats*4),
-		push:     make([]float32, modelGpuVkPushFloats),
-		pushBuf:  make([]byte, modelGpuVkPushFloats*4),
+		vk:             v,
+		pipeline:       p,
+		groundPipeline: groundPipeline,
+		blend:          blend,
+		uniforms:       uniforms,
+		white:          white,
+		meshes:         map[*WhmModel]*modelGpuVkMesh{},
+		textures:       map[string]*modelGpuVkTexture{},
+		frame:          make([]float32, modelGpuVkFrameFloats),
+		frameBuf:       make([]byte, modelGpuVkFrameFloats*4),
+		push:           make([]float32, modelGpuVkPushFloats),
+		pushBuf:        make([]byte, modelGpuVkPushFloats*4),
 	}, nil
 }
 
@@ -265,6 +311,15 @@ func (r *modelGpuVkRenderer) release() {
 		r.offscreen.depth.Release()
 	}
 	r.white.Release()
+	if r.groundPipeline != nil {
+		r.groundPipeline.Release()
+	}
+	if r.groundTexture != nil {
+		r.groundTexture.Release()
+	}
+	if r.groundVertices != nil {
+		r.groundVertices.Release()
+	}
 	r.fx.release()
 	r.uniforms.Release()
 	r.blend.Release()
@@ -652,6 +707,14 @@ func (r *modelGpuVkRenderer) Render(
 		return nil, err
 	}
 	view := buildViewMatrix(opts)
+	if opts.Ground && opts.GroundImage != nil {
+		if err := r.uploadGroundTexture(opts.GroundImage); err != nil {
+			return nil, err
+		}
+		if err := r.prepareGroundVertices(opts); err != nil {
+			return nil, err
+		}
+	}
 
 	// Materials are resolved first, before anything is recorded: see
 	// modelGpuVkResolvedDraw for why an upload may not happen inside the
@@ -777,6 +840,23 @@ func (r *modelGpuVkRenderer) Render(
 	if err := r.vk.SetUniforms(r.uniforms); err != nil {
 		return nil, err
 	}
+	if opts.Ground && r.groundTexture != nil {
+		if err := r.drawGround(opts); err != nil {
+			return nil, err
+		}
+		if err := r.vk.SetPipeline(r.pipeline); err != nil {
+			return nil, err
+		}
+		if err := r.vk.SetVertexBuffer(mesh.vertices, 0); err != nil {
+			return nil, err
+		}
+		if err := r.vk.SetUniforms(r.uniforms); err != nil {
+			return nil, err
+		}
+		if err := r.vk.SetTexture(0, r.white); err != nil {
+			return nil, err
+		}
+	}
 
 	// The camera and the skeleton are the same for every sub mesh, so the
 	// uniform block is written once. What changes between sub meshes is
@@ -826,6 +906,108 @@ func (r *modelGpuVkRenderer) Render(
 		return nil, err
 	}
 	return &modelGpuVkFrame{tex: target.color, size: target.size}, nil
+}
+
+// uploadGroundTexture prepares the decoded mod image as an sRGB Vulkan texture.
+// Uploads happen before BeginPass, because Vulkan cannot upload during a render pass.
+func (r *modelGpuVkRenderer) uploadGroundTexture(img *image.RGBA) error {
+	if img == nil {
+		return nil
+	}
+	bounds := img.Bounds()
+	if bounds.Empty() {
+		return fmt.Errorf("ground texture has empty bounds")
+	}
+	if r.groundTexture != nil && r.groundSource == img && r.groundWidth == bounds.Dx() && r.groundHeight == bounds.Dy() {
+		return nil
+	}
+	pixels := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	draw.Draw(pixels, pixels.Bounds(), img, bounds.Min, draw.Src)
+	tex, err := r.vk.NewTexture(gpu.VulkanTextureDesc{
+		Width: bounds.Dx(), Height: bounds.Dy(), MipLevels: 1,
+		Format: gpu.VulkanFormatR8G8B8A8SRGB, Sampled: true,
+	})
+	if err != nil {
+		return fmt.Errorf("ground texture: %w", err)
+	}
+	if err := tex.UploadMip(0, pixels.Pix); err != nil {
+		tex.Release()
+		return fmt.Errorf("ground texture upload: %w", err)
+	}
+	if err := tex.UploadDone(); err != nil {
+		tex.Release()
+		return fmt.Errorf("ground texture: %w", err)
+	}
+	if r.groundTexture != nil {
+		r.groundTexture.Release()
+	}
+	r.groundTexture = tex
+	r.groundSource = img
+	r.groundWidth, r.groundHeight = bounds.Dx(), bounds.Dy()
+	return nil
+}
+
+// prepareGroundVertices uploads the XY plane before the render pass begins.
+func (r *modelGpuVkRenderer) prepareGroundVertices(opts RenderOptions) error {
+	center := [2]float64{opts.Target.X, opts.Target.Y}
+	if r.groundVertices != nil && r.groundCenter == center {
+		return nil
+	}
+	const halfExtent = float32(10000)
+	const tileWorldSize = float32(10)
+	cx, cy := float32(opts.Target.X), float32(opts.Target.Y)
+	verts := []modelGpuVkGroundVertex{
+		{position: [3]float32{cx - halfExtent, cy - halfExtent, 0}, normal: [3]float32{0, 0, 1}, uv: [2]float32{0, 0}},
+		{position: [3]float32{cx + halfExtent, cy - halfExtent, 0}, normal: [3]float32{0, 0, 1}, uv: [2]float32{halfExtent / tileWorldSize, 0}},
+		{position: [3]float32{cx + halfExtent, cy + halfExtent, 0}, normal: [3]float32{0, 0, 1}, uv: [2]float32{halfExtent / tileWorldSize, halfExtent / tileWorldSize}},
+		{position: [3]float32{cx - halfExtent, cy + halfExtent, 0}, normal: [3]float32{0, 0, 1}, uv: [2]float32{0, halfExtent / tileWorldSize}},
+	}
+	vertices := make([]byte, 6*modelGpuVkGroundVertexStride)
+	corners := [...]int{0, 1, 2, 0, 2, 3}
+	for i, corner := range corners {
+		v := verts[corner]
+		at := i * modelGpuVkGroundVertexStride
+		values := [...]float32{v.position[0], v.position[1], v.position[2], v.normal[0], v.normal[1], v.normal[2], v.uv[0], v.uv[1]}
+		for j, value := range values {
+			binary.LittleEndian.PutUint32(vertices[at+j*4:], math.Float32bits(value))
+		}
+	}
+	if r.groundVertices == nil {
+		buffer, err := r.vk.NewBuffer(gpu.VertexBuffer, len(vertices), true)
+		if err != nil {
+			return fmt.Errorf("ground vertex buffer: %w", err)
+		}
+		r.groundVertices = buffer
+	}
+	if err := r.groundVertices.Upload(vertices); err != nil {
+		return fmt.Errorf("ground vertex upload: %w", err)
+	}
+	r.groundCenter = center
+	return nil
+}
+
+// drawGround renders the ground quad into the current color and depth target.
+func (r *modelGpuVkRenderer) drawGround(opts RenderOptions) error {
+	if err := r.vk.SetPipeline(r.groundPipeline); err != nil {
+		return err
+	}
+	if err := r.vk.SetVertexBuffer(r.groundVertices, 0); err != nil {
+		return err
+	}
+	if err := r.vk.SetTexture(0, r.groundTexture); err != nil {
+		return err
+	}
+	r.writePush(opts, rgbaWhite, uvMapping{Scale: 1})
+	if err := r.uploadPush(); err != nil {
+		return err
+	}
+	if err := r.vk.SetDrawConstants(r.pushBuf); err != nil {
+		return err
+	}
+	if err := r.vk.Draw(6); err != nil {
+		return err
+	}
+	return nil
 }
 
 // drawFx draws the frame's particles and overlay, if the render request

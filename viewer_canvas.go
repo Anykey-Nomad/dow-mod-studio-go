@@ -140,6 +140,15 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 		}
 		switch e.Kind {
 		case pointer.Press:
+			if e.Buttons.Contain(pointer.ButtonSecondary) {
+				v.panning = true
+				v.dragging = false
+				v.seeking = false
+				v.keyDrag = false
+				v.keyDragMoved = false
+				v.lastX, v.lastY = e.Position.X, e.Position.Y
+				continue
+			}
 			if !e.Buttons.Contain(pointer.ButtonPrimary) {
 				continue
 			}
@@ -165,6 +174,13 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			v.dragging = true
 			v.lastX, v.lastY = e.Position.X, e.Position.Y
 		case pointer.Drag:
+			if v.panning {
+				dx := float64(e.Position.X - v.lastX)
+				dy := float64(e.Position.Y - v.lastY)
+				v.lastX, v.lastY = e.Position.X, e.Position.Y
+				v.panCamera(dx, dy, h)
+				continue
+			}
 			// Dragging along the strip scrubs: the pointer can be anywhere
 			// between the bar and the numbers, and every position is a frame.
 			if v.seeking {
@@ -205,12 +221,13 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			v.keyDrag = false
 			v.keyDragMoved = false
 			v.dragging = false
+			v.panning = false
 			v.seeking = false
 		}
 	}
 
 	if v.gpuFrame != nil {
-		if v.dragging || (v.playing && v.anim != nil) {
+		if v.dragging || v.panning || (v.playing && v.anim != nil) {
 			// Keep the frame refreshing while something is moving.
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		}
@@ -265,7 +282,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			}),
 		)
 	}
-	if v.dragging || (v.playing && v.anim != nil) {
+	if v.dragging || v.panning || (v.playing && v.anim != nil) {
 		// Keep the frame refreshing while something is moving.
 		gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 	}

@@ -207,6 +207,12 @@ func (ui *uiState) unitModelSideBody(gtx layout.Context) layout.Dimensions {
 // because this one has three hundred pixels to work in.
 func (ui *uiState) unitModelTransport(gtx layout.Context, t *fileTab) layout.Dimensions {
 	ui.modelControlClicks(gtx, t)
+	return ui.unitModelTransportButtons(gtx, t)
+}
+
+// unitModelTransportButtons draws the viewport's shared playback row after its
+// caller has handled modelControlClicks for this frame.
+func (ui *uiState) unitModelTransportButtons(gtx layout.Context, t *fileTab) layout.Dimensions {
 	v := t.model
 	none := len(v.model.Animations) == 0
 	gtx = modelRowHeight(gtx)
@@ -272,28 +278,35 @@ func (ui *uiState) unitModelToggles(gtx layout.Context, t *fileTab) layout.Dimen
 			v.redraw = true
 		}
 	}
-	// The FX and sound switches get a row of their own under these: each row
-	// is clamped to one row's height, so they sit beside the view controls
-	// without the strip being squeezed.
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.unitModelViewButtons(gtx, t, true)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.unitModelFXRow(gtx, t)
+		}),
+	)
+}
+
+// unitModelViewButtons is the viewport's reset/list row. WHM tabs reuse its
+// reset button without showing the unit-only list switch.
+func (ui *uiState) unitModelViewButtons(gtx layout.Context, t *fileTab, showListToggle bool) layout.Dimensions {
+	gtx = modelRowHeight(gtx)
 	return layout.Inset{Top: unit.Dp(2), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					gtx = modelRowHeight(gtx)
-					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &t.modelReset, "Reset view")
-						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &ui.unitMarkerListToggle, ui.unitListToggleLabel())
-						}),
-						layout.Flexed(1, rowGap()),
-					)
+					return ui.smallButton(gtx, &t.modelReset, "Reset view")
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.unitModelFXRow(gtx, t)
+					if !showListToggle {
+						return layout.Dimensions{}
+					}
+					return layout.Inset{Left: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return ui.smallButton(gtx, &ui.unitMarkerListToggle, ui.unitListToggleLabel())
+					})
 				}),
+				layout.Flexed(1, rowGap()),
 			)
 		})
 }
@@ -310,6 +323,10 @@ func (ui *uiState) unitModelFXRow(gtx layout.Context, t *fileTab) layout.Dimensi
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.smallButtonDisabled(gtx, &t.modelSFX, modelSFXLabel(v), v == nil || v.fxSound == nil)
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v == nil || v.groundImage == nil)
 		}),
 		layout.Flexed(1, rowGap()),
 	)
@@ -360,8 +377,14 @@ func (ui *uiState) unitCameraList(gtx layout.Context, v *modelViewer) layout.Dim
 // unitAnimList is every clip the model carries, the one being played marked, so
 // the list is also the answer to "what can this thing do".
 func (ui *uiState) unitAnimList(gtx layout.Context, v *modelViewer) layout.Dimensions {
+	return ui.unitAnimListWithClicks(gtx, v, &ui.unitAnimClicks)
+}
+
+func (ui *uiState) unitAnimListWithClicks(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
 	anims := v.model.Animations
-	ui.ensureUnitAnimClicks(len(anims))
+	if len(*clicks) != len(anims) {
+		*clicks = make([]widget.Clickable, len(anims))
+	}
 	if len(anims) == 0 {
 		l := material.Label(ui.th, unit.Sp(9), "This model carries no animations.")
 		l.Color = cTextDim
@@ -371,7 +394,7 @@ func (ui *uiState) unitAnimList(gtx layout.Context, v *modelViewer) layout.Dimen
 	for i := range anims {
 		i := i
 		a := anims[i]
-		c := &ui.unitAnimClicks[i]
+		c := &(*clicks)[i]
 		if c.Clicked(gtx) {
 			v.selectAnim(i)
 			v.playing = true
@@ -394,23 +417,29 @@ func (ui *uiState) unitAnimList(gtx layout.Context, v *modelViewer) layout.Dimen
 // The header says which list is on show; the button that swaps it lives in
 // the Playback strip above, which never scrolls away.
 func (ui *uiState) unitClipOrMarkerSection(gtx layout.Context, v *modelViewer) layout.Dimensions {
+	return ui.unitModelListSection(gtx, v, ui.unitListMode, &ui.unitAnimClicks, &ui.unitMarkerClicks, &ui.unitBoneClicks)
+}
+
+func (ui *uiState) unitModelListContent(gtx layout.Context, t *fileTab, mode int) layout.Dimensions {
+	ui.unitListTrackModifiers(gtx)
+	return ui.unitModelListSection(gtx, t.model, mode, &t.modelAnimClicks, &t.modelMarkerClicks, &t.modelBoneClicks)
+}
+
+func (ui *uiState) unitModelListSection(gtx layout.Context, v *modelViewer, mode int, animClicks, markerClicks, boneClicks *[]widget.Clickable) layout.Dimensions {
 	labels := [3]string{"Animations", "Markers", "Bones"}
-	mode := ui.unitListMode
 	if mode < 0 || mode >= len(labels) {
 		mode = 0
 	}
-	list := ui.unitAnimList
+	list := func(gtx layout.Context) layout.Dimensions { return ui.unitAnimListWithClicks(gtx, v, animClicks) }
 	switch mode {
 	case 1:
-		list = ui.unitMarkerList
+		list = func(gtx layout.Context) layout.Dimensions { return ui.unitMarkerListWithClicks(gtx, v, markerClicks) }
 	case 2:
-		list = ui.unitBoneList
+		list = func(gtx layout.Context) layout.Dimensions { return ui.unitBoneListWithClicks(gtx, v, boneClicks) }
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return sectionHeader(gtx, ui.th, labels[mode])
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return list(gtx, v) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, labels[mode]) }),
+		layout.Rigid(list),
 	)
 }
 
@@ -419,8 +448,14 @@ func (ui *uiState) unitClipOrMarkerSection(gtx layout.Context, v *modelViewer) l
 // which is the only way to tell a dozen identically named muzzle points apart
 // on a mesh that shows none of them.
 func (ui *uiState) unitMarkerList(gtx layout.Context, v *modelViewer) layout.Dimensions {
+	return ui.unitMarkerListWithClicks(gtx, v, &ui.unitMarkerClicks)
+}
+
+func (ui *uiState) unitMarkerListWithClicks(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
 	markers := v.model.Markers
-	ui.ensureUnitMarkerClicks(len(markers))
+	if len(*clicks) != len(markers) {
+		*clicks = make([]widget.Clickable, len(markers))
+	}
 	if len(markers) == 0 {
 		l := material.Label(ui.th, unit.Sp(9), "This model carries no markers.")
 		l.Color = cTextDim
@@ -430,7 +465,7 @@ func (ui *uiState) unitMarkerList(gtx layout.Context, v *modelViewer) layout.Dim
 	for i := range markers {
 		i := i
 		mk := markers[i]
-		c := &ui.unitMarkerClicks[i]
+		c := &(*clicks)[i]
 		if c.Clicked(gtx) {
 			if v.markerIndex == i {
 				v.markerIndex = -1
@@ -459,8 +494,14 @@ func (ui *uiState) unitMarkerList(gtx layout.Context, v *modelViewer) layout.Dim
 // question a picture of a skeleton answers badly, since every bone looks like
 // every other bone once the mesh is skinned over it.
 func (ui *uiState) unitBoneList(gtx layout.Context, v *modelViewer) layout.Dimensions {
+	return ui.unitBoneListWithClicks(gtx, v, &ui.unitBoneClicks)
+}
+
+func (ui *uiState) unitBoneListWithClicks(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
 	bones := v.model.Bones
-	ui.ensureUnitBoneClicks(len(bones))
+	if len(*clicks) != len(bones) {
+		*clicks = make([]widget.Clickable, len(bones))
+	}
 	if len(bones) == 0 {
 		l := material.Label(ui.th, unit.Sp(9), "This model carries no skeleton.")
 		l.Color = cTextDim
@@ -470,7 +511,7 @@ func (ui *uiState) unitBoneList(gtx layout.Context, v *modelViewer) layout.Dimen
 	for i := range bones {
 		i := i
 		bone := bones[i]
-		c := &ui.unitBoneClicks[i]
+		c := &(*clicks)[i]
 		if c.Clicked(gtx) {
 			if v.boneIndex == i {
 				v.boneIndex = -1

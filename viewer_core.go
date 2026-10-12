@@ -8,6 +8,7 @@ import (
 	"dow-mod-studio/internal/whe"
 	"fmt"
 	"image"
+	"image/draw"
 	"log"
 	"time"
 
@@ -98,16 +99,17 @@ type modelViewer struct {
 	gpuBroken bool
 
 	// async state
-	frameCh   chan modelFrame
-	frame     *image.RGBA
-	rendering bool
-	pending   bool
-	serial    uint64
-	painted   uint64
-	loading   bool
-	missing   int
-	renderW   int
-	renderH   int
+	frameCh         chan modelFrame
+	frame           *image.RGBA
+	rendering       bool
+	pending         bool
+	serial          uint64
+	painted         uint64
+	loading         bool
+	materialsLoaded bool
+	missing         int
+	renderW         int
+	renderH         int
 	// gpuProbeW/H mark the frame size the content probe last ran at, and
 	// gpuProbedTextured whether a frame with real textures bound was probed.
 	gpuProbeW         int
@@ -120,9 +122,11 @@ type modelViewer struct {
 	// bones, so they are resolved the first time the button is pressed and
 	// simulated from then on, which is what keeps the canvas repainting
 	// while the toggle is on.
-	showFX     bool
-	fxEffects  []fxOverlayEffect
-	fxTextures map[string]*image.RGBA
+	showFX      bool
+	showGround  bool
+	groundImage *image.RGBA
+	fxEffects   []fxOverlayEffect
+	fxTextures  map[string]*image.RGBA
 	// fxScale uniformly adjusts model-local FX geometry while leaving marker
 	// origins fixed. One is the authored model-space size; the viewport exposes
 	// the factor to inspect effects whose sizes need manual calibration.
@@ -205,6 +209,7 @@ type modelViewer struct {
 
 	tag      event.Tag
 	dragging bool
+	panning  bool
 	// seeking says a press landed on the frame strip rather than on the model,
 	// so the drag that follows is a scrub and not a camera turn.
 	seeking bool
@@ -260,6 +265,35 @@ func newModelViewer(model *WhmModel, modelFile string) *modelViewer {
 		boneKeyIndex: -1,
 		boneKeyMode:  -1,
 	}
+}
+
+// newObjectModelViewer creates a WHM preview with the same defaults used by
+// the Object window's Viewport: its terrain plane, a useful initial locomotion
+// or idle clip, and playback started. Both entry points still share the same
+// modelViewer renderer and controls.
+func newObjectModelViewer(model *WhmModel, modelFile string, ground image.Image) *modelViewer {
+	v := newModelViewer(model, modelFile)
+	if ground != nil {
+		b := ground.Bounds()
+		v.groundImage = image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+		draw.Draw(v.groundImage, v.groundImage.Bounds(), ground, b.Min, draw.Src)
+	}
+	v.showGround = v.groundImage != nil
+	v.selectAnim(unitDefaultAnim(model))
+	v.playing = model != nil && len(model.Animations) > 0
+	v.lastFrame = time.Time{}
+	return v
+}
+
+// modelClose drops this viewer's cached GPU data before stopping its async jobs.
+func (ui *uiState) modelClose(v *modelViewer) {
+	if v == nil {
+		return
+	}
+	if ui.modelGpu != nil && v.model != nil {
+		ui.modelGpu.forget(v.model)
+	}
+	v.close()
 }
 
 // close stops any running render so the goroutine does not outlive the tab.
@@ -370,6 +404,8 @@ func (v *modelViewer) options(width, height, quality int) RenderOptions {
 			UVPerMaterial: v.uvMaterials, MeshAlpha: v.meshAlphas(),
 		},
 		MaterialOverrides: mats,
+		GroundImage:       v.groundImage,
+		Ground:            v.showGround && v.groundImage != nil,
 		FX:                v.fxScene,
 	}
 }
@@ -475,6 +511,7 @@ func (ui *uiState) pollViewerJobs(t *fileTab) {
 		case res := <-t.modelMaterialCh:
 			t.modelMaterialCh = nil
 			v.loading = false
+			v.materialsLoaded = true
 			v.materials = res.materials
 			log.Printf("3D preview: textures ready: %d materials resolved, %d missing", len(res.materials), res.missing)
 			if len(res.rsh) > 0 {
