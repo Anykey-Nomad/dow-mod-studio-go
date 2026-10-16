@@ -5,11 +5,8 @@ import (
 	"image/color"
 	"testing"
 
-	"gioui.org/font/gofont"
 	"gioui.org/gpu/headless"
 	"gioui.org/op"
-	"gioui.org/text"
-	"gioui.org/widget/material"
 )
 
 // TestUnitTabRendersWithRealMod lays the object tab out headlessly with a real
@@ -86,14 +83,6 @@ func TestContentAreaRestoresWhenTabIsNotActive(t *testing.T) {
 	if isUnitTab(ui.activeTab()) {
 		t.Error("the object tab should not be the active tab on the Module tab")
 	}
-}
-
-// unitTestTheme builds a material theme with a real font collection, without
-// which every label in the tab would panic on a nil shaper.
-func unitTestTheme() *material.Theme {
-	th := material.NewTheme()
-	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
-	return th
 }
 
 // allUnitSectionIndexes is every section of the object tab, so a layout test can

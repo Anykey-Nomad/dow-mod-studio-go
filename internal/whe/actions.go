@@ -1,7 +1,10 @@
 package whe
 
 import (
+	"bytes"
 	"dow-mod-studio/internal/chunky"
+	"encoding/binary"
+	"fmt"
 	"strings"
 )
 
@@ -32,21 +35,28 @@ type FxActionLink struct {
 
 // The CompareType values of DATAACTS, as object_tool defines them.
 const (
-	fxCompareIf     = 0
-	fxCompareElseIf = 1
-	fxCompareElse   = 2
-	fxCompareNone   = 3
+	FxCompareIf     = 0
+	FxCompareElseIf = 1
+	FxCompareElse   = 2
+	FxCompareNone   = 3
 )
+
+// HasCondition reports whether the link's compare type carries a condition
+// name in the file: if and else if do, else and always do not — which is also
+// where the writer of the section puts the next link's name.
+func (l FxActionLink) HasCondition() bool {
+	return l.Compare != FxCompareElse && l.Compare != FxCompareNone
+}
 
 // Guard is how the link's condition reads in the panel: "if cond",
 // "else if cond", "else", or "always" for a link no condition guards.
 func (l FxActionLink) Guard() string {
 	switch l.Compare {
-	case fxCompareIf:
+	case FxCompareIf:
 		return "if " + l.Condition
-	case fxCompareElseIf:
+	case FxCompareElseIf:
 		return "else if " + l.Condition
-	case fxCompareElse:
+	case FxCompareElse:
 		return "else"
 	default:
 		return "always"
@@ -83,7 +93,7 @@ func parseActs(p []byte) ([]FxAction, error) {
 				Name:    strings.TrimRight(r.Str(), "\x00"),
 				Compare: r.I32(),
 			}
-			if ln.Compare != fxCompareElse && ln.Compare != fxCompareNone {
+			if ln.HasCondition() {
 				ln.Condition = strings.TrimRight(r.Str(), "\x00")
 			}
 			links = append(links, ln)
@@ -104,4 +114,76 @@ func parseActs(p []byte) ([]FxAction, error) {
 		return nil, r.Err
 	}
 	return out, nil
+}
+
+// MarshalActs writes actions back into a DATAACTS payload: an action count,
+// then each action's name, motion list and sub-action list in turn — the
+// exact shape parseActs reads, strings length prefixed the way the rest of
+// the file stores them, and a condition written only for the link types
+// that carry one.
+func MarshalActs(acts []FxAction) []byte {
+	var b bytes.Buffer
+	putI32 := func(v int) {
+		var t [4]byte
+		binary.LittleEndian.PutUint32(t[:], uint32(v))
+		b.Write(t[:])
+	}
+	putStr := func(s string) {
+		putI32(len(s))
+		b.WriteString(s)
+	}
+	putLinks := func(links []FxActionLink) {
+		putI32(len(links))
+		for _, ln := range links {
+			putStr(ln.Name)
+			putI32(int(ln.Compare))
+			if ln.HasCondition() {
+				putStr(ln.Condition)
+			}
+		}
+	}
+	putI32(len(acts))
+	for _, a := range acts {
+		putStr(a.Name)
+		putLinks(a.Motions)
+		putLinks(a.Subactions)
+	}
+	return b.Bytes()
+}
+
+// SetAction writes one action back into the DATAACTS chunk it was read from,
+// rebuilding that chunk's payload the way SetEventEntry rebuilds a
+// definition. Actions are numbered across every DATAACTS chunk of the file,
+// in the order Actions() reports them.
+func (d *Document) SetAction(action int, a FxAction) error {
+	if d == nil {
+		return fmt.Errorf("no .whe document is loaded")
+	}
+	at := 0
+	found := false
+	var failure error
+	d.walk(func(c *chunky.Chunk) {
+		if c.TypeID != "DATAACTS" || found {
+			return
+		}
+		acts, err := parseActs(c.Payload)
+		if err != nil {
+			failure = err
+			return
+		}
+		if action < at || action >= at+len(acts) {
+			at += len(acts)
+			return
+		}
+		acts[action-at] = a
+		c.Payload = MarshalActs(acts)
+		found = true
+	})
+	if !found {
+		if failure != nil {
+			return failure
+		}
+		return fmt.Errorf("action %d is no longer in this .whe", action+1)
+	}
+	return nil
 }

@@ -15,7 +15,7 @@ func TestUnitSectionsAreInOrder(t *testing.T) {
 	// The order is the reading order: what the object is, then what it uses,
 	// then what it belongs to, then its relationships both ways, then what has
 	// been moved out of the mod, and only then the mod as a whole.
-	want := []string{"Unit info", "Weapons", "Abilities", "Squads", "Links", "Frozen", "Problems", "Events", "Viewport"}
+	want := []string{"Unit info", "Weapons", "Abilities", "Squads", "Links", "Frozen", "Problems", "Events", "Viewport", "Classic OE"}
 	if len(unitSections) != len(want) {
 		t.Fatalf("got %d sections, want %d: %v", len(unitSections), len(want), unitSectionLabels())
 	}

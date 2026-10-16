@@ -229,6 +229,7 @@ func (ui *uiState) resetUnitModel() {
 
 	ui.unitMarkerClicks = nil
 	ui.unitBoneClicks = nil
+	ui.unitFXListMode = false
 	ui.unitViewportScroll = panelScrollState{}
 	// The typed bone key fields belong to the model that has gone with it:
 	// their bound key and any pending note are dropped so a later model

@@ -188,7 +188,7 @@ func TestObjectModelViewerUsesViewportDefaults(t *testing.T) {
 	if !v.showGround || v.groundImage == nil || groundBounds != image.Rect(0, 0, 6, 6) {
 		t.Errorf("ground = enabled:%v bounds:%v, want enabled 6x6 copy", v.showGround, groundBounds)
 	}
-	if got := v.options(80, 60, modelQualityFinal); !got.Ground || got.GroundImage == nil {
+	if got := v.options(80, 60); !got.Ground || got.GroundImage == nil {
 		t.Error("render options did not carry the ground image and enabled state")
 	}
 }

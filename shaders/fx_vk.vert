@@ -40,7 +40,16 @@ void main() {
         right = vec3(cs, sn, 0.0);
         up = vec3(-sn, cs, 0.0);
         normal = vec3(0.0, 0.0, 1.0);
-    } else if (orientation.y >= 1.5) {
+    } else if (orientation.y > 1.5 && orientation.y < 2.5) {
+        normal = normalize(surfaceNormal.xyz);
+        vec3 helper = abs(normal.z) > 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
+        vec3 baseRight = normalize(cross(helper, normal));
+        vec3 baseUp = normalize(cross(normal, baseRight));
+        float cs = cos(orientation.x);
+        float sn = sin(orientation.x);
+        right = baseRight * cs + baseUp * sn;
+        up = baseUp * cs - baseRight * sn;
+    } else if (orientation.y >= 2.5) {
         // Pre-tessellated ribbons already carry their model-space normal.
         normal = surfaceNormal.xyz;
     }

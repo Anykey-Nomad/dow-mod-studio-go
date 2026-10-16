@@ -61,7 +61,7 @@ func TestMarkerArrowPointsAlongTheMarkerAxis(t *testing.T) {
 	// The screen direction from the marker to the tip has to agree with the
 	// marker's own forward axis once that axis is projected, which is what
 	// makes the arrow an arrow and not just a line.
-	view := buildViewMatrix(v.options(w, h, 0))
+	view := buildViewMatrix(v.options(w, h))
 	projected := fxProject(view, world.Add(axis.MulScalar(markerArrowWorldLength)), w, h)
 	if projected == nil {
 		t.Skip("the axis end is off screen, so there is nothing to compare against")

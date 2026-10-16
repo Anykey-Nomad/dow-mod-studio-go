@@ -62,9 +62,11 @@ func (ui *uiState) modelControls(gtx layout.Context, t *fileTab) layout.Dimensio
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return ui.smallButtonDisabled(gtx, &t.modelSkeleton, "Skeleton", len(v.model.Bones) == 0)
-						}),						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return ui.smallButton(gtx, &t.modelFX, modelFXLabel(v))
 						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAxesButton(gtx, v) }),
 						// The ground plane toggle, the same switch the Object
 						// Viewport's side panel carries: disabled when the
 						// mod carries no ground texture to show.

@@ -256,7 +256,6 @@ func (ui *uiState) deleteSelectedTreeFile() {
 // back to it.
 func (ui *uiState) openSettingsDialog() {
 	ui.settingsThemeOriginal = ui.darkTheme
-	ui.settingsRendererOrig = ui.rendererChoice()
 	ui.settingsGameOriginal = ui.gamePath
 	ui.settingsGameEditor.SetText(ui.gamePath)
 	ui.settingsFormatOriginal = formatTextFormats(ui.textEditorFormats)
@@ -690,21 +689,6 @@ func (ui *uiState) handleInput(gtx layout.Context) {
 			applyMaterialTheme(ui.th, ui.darkTheme)
 			ui.markStateDirty()
 		}
-		if ui.settingsVkClick.Clicked(gtx) {
-			ui.rendererPref = "vulkan"
-			ui.forceSoftRenderer = false
-			ui.markStateDirty()
-		}
-		if ui.settingsD3DClick.Clicked(gtx) {
-			ui.rendererPref = "d3d11"
-			ui.forceSoftRenderer = false
-			ui.markStateDirty()
-		}
-		if ui.settingsSoftClick.Clicked(gtx) {
-			ui.rendererPref = "software"
-			ui.forceSoftRenderer = true
-			ui.markStateDirty()
-		}
 		if ui.settingsOk.Clicked(gtx) {
 			ui.gamePath = strings.TrimSpace(ui.settingsGameEditor.Text())
 			// The format list is read here rather than as it is typed,
@@ -718,8 +702,6 @@ func (ui *uiState) handleInput(gtx layout.Context) {
 		}
 		if ui.settingsCancel.Clicked(gtx) {
 			ui.darkTheme = ui.settingsThemeOriginal
-			ui.rendererPref = ui.settingsRendererOrig
-			ui.forceSoftRenderer = ui.rendererPref == "software"
 			ui.gamePath = ui.settingsGameOriginal
 			ui.textEditorFormats = parseTextFormats(ui.settingsFormatOriginal)
 			applyMaterialTheme(ui.th, ui.darkTheme)

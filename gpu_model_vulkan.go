@@ -1,10 +1,11 @@
-//go:build windows
+//go:build windows || linux
 
 package main
 
 import (
 	_ "embed"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"gioui.org/app"
 	"gioui.org/f32"
 	"gioui.org/gpu"
 	"gioui.org/layout"
@@ -23,20 +25,20 @@ import (
 )
 
 // Hardware rendering of a decoded .whm through Gio's Vulkan backend — the
-// same renderer model3d_gpu_windows.go drives on Direct3D 11, with the
-// pieces Vulkan wants in a different place:
+// designed specifically for Vulkan, with its frame and draw data laid out for
+// Vulkan uniform buffers and push constants:
 //
 //   - the per frame block (view projection, light, bones) is a uniform
 //     buffer read by both shader stages;
 //   - the per draw block (shade term, tint, texture mapping) is a push
 //     constant block, so changing a tint costs no upload;
 //   - the shaders are SPIR-V compiled from model3d_vk.vert and
-//     model3d_vk.frag, which are ports of the HLSL pair.
+//     model3d_vk.frag.
 //
 // The layout of the uniform block is std140 as the shader declares it:
-// mat4 ViewProj at byte 0, vec4 Light at 64, mat4 Bones[256] at 80. That is
-// a different order from the Direct3D constant buffer, which is why
-// writeFrame and writePush exist instead of the one writeConstants.
+// mat4 ViewProj at byte 0, vec4 Light at 64, mat4 Bones[256] at 80. The
+// frame and push data are kept apart, which is why writeFrame and writePush
+// exist instead of one writeConstants.
 
 //go:embed shaders/model3d_vk.vert.spv
 var modelVkVertSPIRV []byte
@@ -65,8 +67,8 @@ const modelGpuVkFrameFloats = 16 + 4 + modelGpuMaxBones*16
 const modelGpuVkPushFloats = 12
 
 // modelGpuVkDraw is one sub mesh: the index buffer that holds its triangles
-// and how many of there are, with the material whose texture it samples. As
-// on Direct3D, each sub mesh owns its index buffer because a draw has no
+// and how many of there are, with the material whose texture it samples. Each sub mesh
+// owns its index buffer because a draw has no
 // index offset of its own.
 type modelGpuVkDraw struct {
 	indexes  *gpu.VulkanBuffer
@@ -147,22 +149,25 @@ type modelGpuVkRenderer struct {
 	// Texture cutouts do not come here: the fragment shader discards them
 	// against Shade.z, which keeps even a cutout mesh on the solid pipeline
 	// with its depth writes intact.
-	blend    *gpu.VulkanPipeline
-	uniforms *gpu.VulkanBuffer
-	white    *gpu.VulkanTexture
-	meshes   map[*WhmModel]*modelGpuVkMesh
+	blend        *gpu.VulkanPipeline
+	uniforms     *gpu.VulkanBuffer
+	uniformsNext *gpu.VulkanBuffer
+	white        *gpu.VulkanTexture
+
+	meshes map[*WhmModel]*modelGpuVkMesh
 	// textures is keyed by material and holds both the texture and the
 	// file bytes its mip slices point into.
 	textures  map[string]*modelGpuVkTexture
 	offscreen *modelGpuVkTarget
 	// fx draws the particles of the model's effects, and is built the
 	// first time a frame carries any.
-	fx       *fxVkRenderer
-	fxGroups []fxVkGroup
-	frame    []float32
-	frameBuf []byte
-	push     []float32
-	pushBuf  []byte
+	fx           *fxVkRenderer
+	fxGroups     []fxVkGroup
+	frame        []float32
+	frameBuf     []byte
+	uniformFrame int
+	push         []float32
+	pushBuf      []byte
 	// resolved is the frame's list of sub meshes with their textures
 	// settled, kept between frames so drawing a model does not make the
 	// collector a per-frame cost. order is the same list as the sequence the
@@ -181,12 +186,9 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 		Vertex:   modelVkVertSPIRV,
 		Fragment: modelVkFragSPIRV,
 		Stride:   modelGpuVertexStride,
-		// Cull the faces Direct3D calls front, which is what keeps the
-		// outside of a model on screen there. The projection is
-		// mirrored into Vulkan's downward Y in writeFrame, which puts
-		// every triangle in the same place and the same winding
-		// Direct3D gave it, so the same choice stays correct here.
-		Cull:       gpu.CullFront,
+		// Mirror the projection into Vulkan's downward Y in writeFrame;
+		// this winding keeps the outside of models visible.
+		Cull:       gpu.VulkanCullFront,
 		DepthTest:  true,
 		DepthWrite: true,
 		PushSize:   modelGpuVkPushFloats * 4,
@@ -221,7 +223,7 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 			{Location: 1, Format: gpu.VulkanFormatFloat32x3, Offset: 12},
 			{Location: 2, Format: gpu.VulkanFormatFloat32x2, Offset: 24},
 		},
-		Cull:       gpu.CullNone,
+		Cull:       gpu.VulkanCullNone,
 		DepthTest:  true,
 		DepthWrite: true,
 		PushSize:   modelGpuVkPushFloats * 4,
@@ -232,12 +234,20 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 		p.Release()
 		return nil, fmt.Errorf("ground pipeline: %w", err)
 	}
-	uniforms, err := v.NewBuffer(gpu.ConstantBuffer, modelGpuVkFrameFloats*4, true)
+	uniforms, err := v.NewBuffer(gpu.VulkanConstantBuffer, modelGpuVkFrameFloats*4, true)
 	if err != nil {
 		groundPipeline.Release()
 		blend.Release()
 		p.Release()
 		return nil, fmt.Errorf("uniform buffer: %w", err)
+	}
+	uniformsNext, err := v.NewBuffer(gpu.VulkanConstantBuffer, modelGpuVkFrameFloats*4, true)
+	if err != nil {
+		uniforms.Release()
+		groundPipeline.Release()
+		blend.Release()
+		p.Release()
+		return nil, fmt.Errorf("second uniform buffer: %w", err)
 	}
 	// A one by one white map stands in for a missing material, so
 	// untextured meshes need no second pipeline.
@@ -249,6 +259,7 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 		Sampled:   true,
 	})
 	if err != nil {
+		uniformsNext.Release()
 		uniforms.Release()
 		groundPipeline.Release()
 		blend.Release()
@@ -277,6 +288,7 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 		groundPipeline: groundPipeline,
 		blend:          blend,
 		uniforms:       uniforms,
+		uniformsNext:   uniformsNext,
 		white:          white,
 		meshes:         map[*WhmModel]*modelGpuVkMesh{},
 		textures:       map[string]*modelGpuVkTexture{},
@@ -325,8 +337,11 @@ func (r *modelGpuVkRenderer) release() {
 	if r.groundVertices != nil {
 		r.groundVertices.Release()
 	}
-	r.fx.release()
+	if r.fx != nil {
+		r.fx.release()
+	}
 	r.uniforms.Release()
+	r.uniformsNext.Release()
 	r.blend.Release()
 	r.pipeline.Release()
 	r.vk.Release()
@@ -390,7 +405,7 @@ func (r *modelGpuVkRenderer) buildMesh(model *WhmModel) (*modelGpuVkMesh, error)
 			put32(at+48+4*k, w)
 		}
 	}
-	vbuf, err := r.vk.NewBuffer(gpu.VertexBuffer, len(verts), false)
+	vbuf, err := r.vk.NewBuffer(gpu.VulkanVertexBuffer, len(verts), false)
 	if err != nil {
 		return nil, fmt.Errorf("vertex buffer: %w", err)
 	}
@@ -417,7 +432,7 @@ func (r *modelGpuVkRenderer) buildMesh(model *WhmModel) (*modelGpuVkMesh, error)
 			}
 			idx = binary.LittleEndian.AppendUint16(idx, uint16(i))
 		}
-		ibuf, err := r.vk.NewBuffer(gpu.IndexBuffer, len(idx), false)
+		ibuf, err := r.vk.NewBuffer(gpu.VulkanIndexBuffer, len(idx), false)
 		if err != nil {
 			cleanup()
 			return nil, fmt.Errorf("index buffer: %w", err)
@@ -687,9 +702,9 @@ func (r *modelGpuVkRenderer) renderTarget(size image.Point) (*modelGpuVkTarget, 
 // name to the raw bytes of its .rsh file; it may be nil, which leaves every
 // mesh untextured.
 //
-// The pass is recorded on Gio's queue and submitted before Render returns,
-// so the frame is finished on the GPU by the time Gio paints it: a fence
-// wait is what stands between this frame and the one Gio is about to draw.
+// The pass is recorded on Gio's queue and left for Gio's immediately following
+// window frame to submit. Queue ordering makes the blit sample the completed
+// image without a CPU-side fence wait.
 func (r *modelGpuVkRenderer) Render(
 	model *WhmModel,
 	pose WhmPose,
@@ -808,8 +823,7 @@ func (r *modelGpuVkRenderer) Render(
 
 	// The pass clears the colour target to the panel background: the clear
 	// value is linear and the sRGB target encodes it back to the bytes the
-	// background is, which is the same arithmetic the Direct3D path does
-	// with its explicit clear.
+	// background is, which is the same arithmetic an explicit clear does.
 	bg := panelBackground
 	clearColor := [4]float32{
 		srgbToLinear(bg.R), srgbToLinear(bg.G), srgbToLinear(bg.B), 1,
@@ -817,11 +831,19 @@ func (r *modelGpuVkRenderer) Render(
 	if err := r.vk.BeginPass(target.color, target.depth, image.Rectangle{Max: target.size}, true, clearColor); err != nil {
 		return nil, fmt.Errorf("begin pass: %w", err)
 	}
-	// EndPass submits and waits, and it has to run on every path out of
-	// here: a pass left active would refuse to start the next one.
+	// Always close the custom pass. The success path leaves its work queued
+	// for Gio's immediately following frame submission; draw errors submit
+	// synchronously to restore a clean command state.
+	passQueued := false
 	defer func() {
-		if e := r.vk.EndPass(); e != nil && err == nil {
-			frame, err = nil, fmt.Errorf("end pass: %w", e)
+		var endErr error
+		if passQueued && err == nil {
+			endErr = r.vk.EndPassQueued()
+		} else {
+			endErr = r.vk.EndPass()
+		}
+		if endErr != nil && err == nil {
+			frame, err = nil, fmt.Errorf("end pass: %w", endErr)
 		}
 	}()
 	if err := r.vk.SetPipeline(r.pipeline); err != nil {
@@ -829,6 +851,14 @@ func (r *modelGpuVkRenderer) Render(
 	}
 	if err := r.vk.SetVertexBuffer(mesh.vertices, 0); err != nil {
 		return nil, err
+	}
+	// Each uniform buffer is used once per two frames. The upload below waits
+	// only for the submission that last read this slot, and returns at once
+	// when it has finished, so preparing the next frame does not stall behind
+	// the one the GPU is still drawing.
+	r.uniformFrame++
+	if r.uniformFrame%2 == 0 {
+		r.uniforms, r.uniformsNext = r.uniformsNext, r.uniforms
 	}
 	r.writeFrame(view, pose, opts)
 	if err := r.uploadFrame(); err != nil {
@@ -904,6 +934,7 @@ func (r *modelGpuVkRenderer) Render(
 	if err := r.drawFx(r.fxGroups); err != nil {
 		return nil, err
 	}
+	passQueued = true
 	return &modelGpuVkFrame{tex: target.color, size: target.size}, nil
 }
 
@@ -972,7 +1003,7 @@ func (r *modelGpuVkRenderer) prepareGroundVertices(opts RenderOptions) error {
 		}
 	}
 	if r.groundVertices == nil {
-		buffer, err := r.vk.NewBuffer(gpu.VertexBuffer, len(vertices), true)
+		buffer, err := r.vk.NewBuffer(gpu.VulkanVertexBuffer, len(vertices), true)
 		if err != nil {
 			return fmt.Errorf("ground vertex buffer: %w", err)
 		}
@@ -1072,13 +1103,13 @@ func (r *modelGpuVkRenderer) drawFx(groups []fxVkGroup) error {
 func (r *modelGpuVkRenderer) writeFrame(view fauxgl.Matrix, pose WhmPose, opts RenderOptions) {
 	c := r.frame
 	hslslMatrix(c[0:16], view)
-	// Direct3D's clip space has Y running upward and Vulkan's downward,
+	// Vulkan's clip space has Y running downward,
 	// so the projection is mirrored vertically — without this the model
 	// would come out upside down. The mirror also reverses the apparent
 	// winding of every triangle, which is exactly what the pipeline's
 	// clockwise front faces and front face culling were chosen to
 	// compensate for, so together they put the same triangles on screen
-	// that the Direct3D path draws.
+	// that the original front-face convention draws.
 	for i := 1; i <= 13; i += 4 {
 		c[i] = -c[i]
 	}
@@ -1152,7 +1183,7 @@ func (r *modelGpuVkRenderer) uploadFrame() error {
 	for i, v := range r.frame {
 		binary.LittleEndian.PutUint32(r.frameBuf[i*4:], math.Float32bits(v))
 	}
-	if err := r.uniforms.Upload(r.frameBuf); err != nil {
+	if err := r.uniforms.UploadNoWait(r.frameBuf); err != nil {
 		return fmt.Errorf("uniforms: %w", err)
 	}
 	return nil
@@ -1213,3 +1244,28 @@ func (f *modelGpuVkFrame) overlayTransform(rect image.Rectangle) op.TransformOp 
 // Release does nothing: the texture belongs to the renderer, which recycles
 // it.
 func (f *modelGpuVkFrame) Release() {}
+
+var modelGpuTooEarly bool
+
+func newModelGpuForWindow(w *app.Window) modelGpuHandle {
+	if w == nil {
+		return nil
+	}
+	vkDev, err := w.Vulkan()
+	if err != nil {
+		if errors.Is(err, app.ErrNoGPUYet) {
+			modelGpuTooEarly = true
+			return nil
+		}
+		log.Printf("3D preview: Vulkan GPU unavailable: %v", err)
+		return nil
+	}
+	modelGpuTooEarly = false
+	r, err := newModelGpuVkRenderer(vkDev)
+	if err != nil {
+		log.Printf("3D preview: Vulkan renderer unavailable: %v", err)
+		return nil
+	}
+	log.Printf("3D preview: Vulkan renderer ready")
+	return r
+}

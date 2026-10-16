@@ -7,7 +7,7 @@ The 3D model and FX rendering in this project relies on Vulkan GLSL shaders comp
 ## Fragment Shaders (Materials and Particles)
 
 * **Compilation:** Shaders are built using `glslangValidator`. For the model fragment shader (`model3d_vk.frag`), it is critical to use exactly version **16.6.0**; other versions regenerate internal IDs, causing massive binary diffs even when the logic is unchanged[cite: 17].
-* **Lambert Shading:** The model shader implements a Lambert lighting term ported directly from HLSL, ensuring the GPU output perfectly matches the software rendering path[cite: 17].
+* **Lambert Shading:** The model shader implements a Lambert lighting term ported directly from the reference shader, ensuring the GPU output perfectly matches the software rendering path[cite: 17].
 * **UV Wrapping:** Texture coordinates are wrapped using `fract(vUV)` before sampling. Model UVs often extend past the [0, 1] bounds, and since the sampler clamps by default, failing to wrap would smear the edge pixels across the overhang[cite: 17].
 * **Texture Sampling:** Shaders sample strictly from mip level 0 (`textureLod(tex, uv, 0.0)`) because `.rsh` textures are stored top-down[cite: 17, 18].
 * **Premultiplied Alpha:** Both the model and particle shaders output colors with premultiplied alpha (`t.rgb * a`)[cite: 17, 18]. This fulfills the blending pipeline's requirements, allowing the same pipeline to correctly handle opaque, covering, and additive blending[cite: 17, 18].

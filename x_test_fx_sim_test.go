@@ -170,7 +170,7 @@ func TestFxHorizontalSprayRingUsesItsVerticalSpinAxis(t *testing.T) {
 			"Billboard":    {Type: "VARTYPE_BOOL", Num: 0},
 			"SpinY":        {Type: "VARTYPE_ARRAY_TIMEFLOAT", Curve: []fx.FxKey{{T: 0, V: 5}, {T: 1, V: 5}}},
 			"SpinZ":        {Type: "VARTYPE_ARRAY_TIMEFLOAT", Curve: []fx.FxKey{{T: 0, V: 0}, {T: 1, V: 0}}},
-			"SpinEpsilonZ": {Type: "VARTYPE_FLOAT", Num: 1},
+			"SpinEpsilonZ": {Type: "VARTYPE_ARRAY_TIMEFLOAT", Curve: []fx.FxKey{{T: 0, V: 1}, {T: 1, V: 1}}},
 			"SpinRandom":   {Type: "VARTYPE_BOOL", Num: 0},
 		},
 	}

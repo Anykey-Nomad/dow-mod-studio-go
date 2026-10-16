@@ -38,12 +38,15 @@ type Visual struct {
 	Scale      []FxKey
 	SpeedCurve []FxKey
 	// A non-billboard STYLE_RING particle keeps a fixed plane instead of
-	// turning to the camera. The monolith's vortex rings are authored this
-	// way; in the Z-up preview they lie in XY and use their spin curves for
-	// a stable per-particle turn within that horizontal plane.
+	// turning to the camera. PlaneNormal is its local spray axis before the
+	// event marker frame maps it into model space.
 	Horizontal   bool
+	PlaneNormal  [3]float64
+	SpinX        []FxKey
 	SpinY        []FxKey // effect-file Y is the vertical axis, so this is the horizontal-plane heading
 	SpinZ        []FxKey // retained for other ring orientations and legacy files
+	SpinEpsilonX []FxKey
+	SpinEpsilonY []FxKey
 	SpinEpsilonZ []FxKey
 	SpinRandom   bool
 }
@@ -110,7 +113,13 @@ type Particle struct {
 // FxSim plays one effect file forever. Positions are in model units,
 // relative to the effect's origin (a marker, or the model centre).
 type FxSim struct {
-	Emitters  []Emitter
+	Emitters []Emitter
+	// NoRotate is the root FX node's No_Rotate flag. When set, the effect
+	// keeps the FX file's own frame instead of inheriting its model marker's
+	// orientation.
+	NoRotate bool
+	// Axis is the authored emission direction in renderer-local space.
+	Axis      fauxgl.Vector
 	Anchored  []Visual // leaf effects that hang at the origin on their own
 	BeamNodes []Beam   // STYLE_BEAM nodes, drawn between the event's markers
 	RingNodes []Ring   // STYLE_RING nodes: a flat quad in the marker's frame
@@ -143,6 +152,12 @@ func NewFxSim(f *FxFile) *FxSim {
 	root := f.Root()
 	if root == nil {
 		return s
+	}
+	s.NoRotate = root.Bool("No_Rotate", false)
+	// The root emitter's authored direction is the spray's local axis;
+	// default to +Z only when a file does not declare it.
+	if p, ok := root.Prop("Emitter_Direction"); ok && p.Tuple.Length() > 1e-6 {
+		s.Axis = FileVec(p.Tuple).Normalize()
 	}
 	// add reads one node into the simulation, recursing through the combos
 	// that hold others.
@@ -328,8 +343,11 @@ func VisualFromNode(n *FxNode) (Visual, bool) {
 		Speed:        n.Float("Particle_Speed", 2),
 		SelfLit:      n.Bool("SelfIlluminated", false),
 		Horizontal:   n.Style == "STYLE_RING" && !n.Bool("Billboard", false),
+		SpinX:        spinCurve(n, "SpinX"),
 		SpinY:        spinCurve(n, "SpinY"),
 		SpinZ:        spinCurve(n, "SpinZ"),
+		SpinEpsilonX: spinCurve(n, "SpinEpsilonX"),
+		SpinEpsilonY: spinCurve(n, "SpinEpsilonY"),
 		SpinEpsilonZ: spinCurve(n, "SpinEpsilonZ"),
 		SpinRandom:   n.Bool("SpinRandom", false),
 	}
@@ -503,10 +521,7 @@ func FileVec(v fauxgl.Vector) fauxgl.Vector {
 	return fauxgl.Vector{X: v.X, Y: v.Z, Z: v.Y}
 }
 
-// spawn births one particle of an emitter, moving out of the emitter's
-// origin inside a cone. The game's direction enum picks an axis of the world
-// (Y up); these models are authored Z up, so up is +Z — close enough for a
-// preview of what an effect looks like.
+// spawn births one particle inside the emitter's authored direction cone.
 func (s *FxSim) Spawn(e *Emitter) {
 	spriteID := e.SpawnIndex
 	e.SpawnIndex++
@@ -522,6 +537,18 @@ func (s *FxSim) Spawn(e *Emitter) {
 	dirX := math.Sin(tilt) * math.Cos(ang)
 	dirY := math.Sin(tilt) * math.Sin(ang)
 	dirZ := math.Cos(tilt)
+	axis := s.Axis
+	if axis.Length() < 1e-6 {
+		axis = fauxgl.Vector{Z: 1}
+	}
+	axis = axis.Normalize()
+	help := fauxgl.Vector{Z: 1}
+	if math.Abs(axis.Z) > 0.95 {
+		help = fauxgl.Vector{Y: 1}
+	}
+	right := help.Cross(axis).Normalize()
+	up := axis.Cross(right).Normalize()
+	direction := right.MulScalar(dirX).Add(up.MulScalar(dirY)).Add(axis.MulScalar(dirZ))
 	// A particle is born inside the emitter's box, not at its centre: a
 	// ground cloud spread over Emitter_Volume is the whole difference
 	// between a puff and a volume of dust.
@@ -552,13 +579,13 @@ func (s *FxSim) Spawn(e *Emitter) {
 		speed = SampleCurve(v.SpeedCurve, 0)
 	}
 	s.Particles = append(s.Particles, Particle{
-		V:        v,
-		Drag:     e.Drag,
-		grav:     e.Gravity,
-		Pos:      [3]float64{px, py, pz},
-		Vel:      [3]float64{dirX * speed, dirY * speed, dirZ * speed},
+		V:    v,
+		Drag: e.Drag,
+		grav: e.Gravity,
+		Pos:  [3]float64{px, py, pz}, Vel: [3]float64{direction.X * speed, direction.Y * speed, direction.Z * speed},
 		SpriteID: spriteID,
 	})
+
 }
 
 // Sprite is one thing to draw this frame: a billboarded disc at a model
@@ -573,10 +600,12 @@ type Sprite struct {
 	// SelfLit is the leaf's own SelfIlluminated, carried to the renderer so
 	// it knows whether this particle answers to the scene's light.
 	SelfLit bool
-	// Horizontal keeps the quad in the world XY plane (normal +Z) instead
-	// of facing the camera. Rotation is its in-plane angle in radians.
-	Horizontal bool
-	Rotation   float64
+	// Horizontal keeps the quad in a fixed plane instead of facing the
+	// camera. PlaneNormal is its model-space normal (zero means world +Z);
+	// Rotation is the in-plane angle in radians.
+	Horizontal  bool
+	PlaneNormal [3]float64
+	Rotation    float64
 }
 
 // Sprites returns the current frame of the effect: every live particle plus
@@ -592,6 +621,7 @@ func (s *FxSim) Sprites() []Sprite {
 		sp := spriteFor(p.V, u, p.Pos)
 		sp.Horizontal = p.V.Horizontal
 		if sp.Horizontal {
+			sp.PlaneNormal = p.V.PlaneNormal
 			sp.Rotation = SpriteSpin(p.V, u, p.SpriteID)
 		}
 		out = append(out, sp)
@@ -601,6 +631,7 @@ func (s *FxSim) Sprites() []Sprite {
 		sp := spriteFor(v, u, [3]float64{})
 		sp.Horizontal = v.Horizontal
 		if sp.Horizontal {
+			sp.PlaneNormal = v.PlaneNormal
 			sp.Rotation = SpriteSpin(v, u, i)
 		}
 		out = append(out, sp)
@@ -618,18 +649,12 @@ func (s *FxSim) Sprites() []Sprite {
 // is shared across particles in order or with the file's deterministic random
 // spread.
 func SpriteSpin(v Visual, age float64, index int) float64 {
-	spin := v.SpinZ
-	if v.Horizontal && len(v.SpinY) > 0 {
-		spin = v.SpinY
+	turns := SampleCurve(v.SpinX, age) + SampleCurve(v.SpinY, age) + SampleCurve(v.SpinZ, age)
+	share := float64(index%RingSpreadBuckets) / float64(RingSpreadBuckets-1)
+	if v.SpinRandom {
+		share = fxRingRandomShare(index)
 	}
-	turns := SampleCurve(spin, age)
-	if len(v.SpinEpsilonZ) > 0 {
-		share := float64(index%RingSpreadBuckets) / float64(RingSpreadBuckets-1)
-		if v.SpinRandom {
-			share = fxRingRandomShare(index)
-		}
-		turns += SampleCurve(v.SpinEpsilonZ, age) * share
-	}
+	turns += (SampleCurve(v.SpinEpsilonX, age) + SampleCurve(v.SpinEpsilonY, age) + SampleCurve(v.SpinEpsilonZ, age)) * share
 	return turns * 2 * math.Pi
 }
 

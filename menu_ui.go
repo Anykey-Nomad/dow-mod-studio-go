@@ -304,41 +304,6 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 										)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
-									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(11), "Renderer")
-												l.Color = cText
-												return l.Layout(gtx)
-											}),
-											layout.Flexed(1, rowGap()),
-											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												choice := ui.rendererChoice()
-												return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-													layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-														onBg := cMenuOpen
-														return ui.toggleButton(gtx, &ui.settingsVkClick, "Vulkan", choice == "vulkan", onBg)
-													}),
-													layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-													layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-														onBg := cMenuOpen
-														return ui.toggleButton(gtx, &ui.settingsD3DClick, "Direct3D", choice == "d3d11", onBg)
-													}),
-													layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-													layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-														onBg := cMenuOpen
-														return ui.toggleButton(gtx, &ui.settingsSoftClick, "Software", choice == "software", onBg)
-													}),
-												)
-											}),
-										)
-									}),
-									layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
-									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(10), "Vulkan takes effect after a restart")
-										l.Color = cTextDim
-										return l.Layout(gtx)
-									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,

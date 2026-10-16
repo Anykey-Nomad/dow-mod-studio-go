@@ -599,6 +599,11 @@ func (ui *uiState) layoutUnitMiddleColumnBody(gtx layout.Context) layout.Dimensi
 	switch sec.label {
 	case unitSectionViewport:
 		return ui.layoutUnitViewportArea(gtx)
+	case unitSectionClassicOE:
+		// Rendered here as well as in layoutUnitBody, the same way Viewport
+		// is: laying this column out on its own still has to show the
+		// editor's panels rather than fall through to a hint.
+		return ui.layoutClassicOEArea(gtx)
 	case unitSectionEvents:
 		return ui.layoutUnitEventTimelines(gtx)
 	case "Unit info":
@@ -982,6 +987,11 @@ func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensio
 		return ui.layoutUnitEventPanel(gtx)
 	case unitSectionViewport:
 		return ui.layoutUnitModelSide(gtx)
+	case unitSectionClassicOE:
+		// The classic editor had no separate properties column of its own
+		// here; the section draws left panel and preview across both
+		// columns, so this branch is only for the column drawn alone.
+		return ui.layoutClassicOEPreview(gtx)
 	default:
 		return ui.unitColumn(gtx, sec.rightTitle, "Selected entry properties will appear here.")
 	}

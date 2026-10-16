@@ -1,9 +1,9 @@
 #version 450
 
-// Port of modelGpuVertexShader (HLSL). Per-frame data lives in a uniform
+// Port of modelGpuVertexShader (the reference shader). Per-frame data lives in a uniform
 // block, per-draw data (shade term, tint, UV mapping) in a push constant
 // block, which is what keeps the descriptor single and offset-free.
-// HLSL default packing is column major, which is what GLSL std140 mat4 uses,
+// Column-major packing is the default, which is what GLSL std140 mat4 uses,
 // and mul(M, v) equals M * v, so the buffer bytes are consumed unchanged.
 layout(set = 0, binding = 0, std140) uniform Frame {
     mat4 ViewProj;
@@ -27,7 +27,7 @@ layout(location = 0) out vec3 vNrm;
 layout(location = 1) out vec2 vUV;
 
 // rotateUV turns the coordinates a quarter turn at a time, folded into 0..3
-// with the same float arithmetic the HLSL original uses.
+// with the same float arithmetic the reference original uses.
 vec2 rotateUV(vec2 uv, float turns) {
     float k = floor(abs(turns) + 0.5);
     k = k - floor(k / 4.0) * 4.0;

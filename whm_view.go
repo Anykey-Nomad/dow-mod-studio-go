@@ -38,31 +38,49 @@ func whmViewerLayout(ui *uiState, t *fileTab) layout.Widget {
 	}
 }
 
-// layoutWhmModelViewport keeps the control strip below the canvas while the
-// lists of animations, markers and bones sit beside it.
+// layoutWhmModelViewport builds the .whm preview the way the Object window's
+// Viewport section builds its view area: one framed panel with the section
+// header, the canvas taking the space beside a side panel of the width the
+// viewport's side panel takes, and the lists in that side panel. The playback
+// strip stays under the canvas rather than moving into the side panel: the
+// viewport's own side controls are drawn as a column, while this strip is one
+// wide row of buttons that does not fit in a 300dp panel.
 func (ui *uiState) layoutWhmModelViewport(gtx layout.Context, t *fileTab) layout.Dimensions {
 	if t == nil || t.model == nil || t.model.model == nil {
 		return ui.layoutModelViewer(gtx, t)
 	}
 	v := t.model
 	v.sideControls = true
-	listWidth := minInt(gtx.Dp(unit.Dp(220)), maxInt(gtx.Dp(unit.Dp(160)), gtx.Constraints.Max.X/3))
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutModelViewer(gtx, t)
-				}),
-				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-				layout.Rigid(ui.fixedPanel(listWidth, func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutWhmModelList(gtx, t)
-				})),
-			)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.modelControlsWithUV(gtx, t)
-		}),
-	)
+	sideW := gtx.Dp(unit.Dp(unitViewportSideDp))
+	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.layoutUnitColumnHeader(gtx, "Viewport")
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
+					func(gtx layout.Context) layout.Dimensions {
+						return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+										return ui.layoutModelViewer(gtx, t)
+									}),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										return ui.modelControlsWithUV(gtx, t)
+									}),
+								)
+							}),
+							layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+							layout.Rigid(ui.fixedPanel(sideW, func(gtx layout.Context) layout.Dimensions {
+								return ui.layoutWhmModelList(gtx, t)
+							})),
+						)
+					})
+			}),
+		)
+	})
 }
 
 func (ui *uiState) layoutWhmModelList(gtx layout.Context, t *fileTab) layout.Dimensions {
@@ -80,26 +98,26 @@ func (ui *uiState) layoutWhmModelList(gtx layout.Context, t *fileTab) layout.Dim
 
 // whmModelListControls switches the list beside the canvas.
 func (ui *uiState) whmModelListControls(gtx layout.Context, t *fileTab) layout.Dimensions {
-	labels := [3]string{"Animations", "Markers", "Bones"}
+	labels := []string{"Animations", "Markers", "Bones", "FX"}
 	if t.modelListMode < 0 || t.modelListMode >= len(labels) {
 		t.modelListMode = 0
 	}
-	children := make([]layout.FlexChild, 0, len(labels))
-	for i, label := range labels {
-		i, label := i, label
-		click := &t.modelListClicks[i]
-		if click.Clicked(gtx) {
+	for i := range labels {
+		if t.modelListClicks[i].Clicked(gtx) {
 			t.modelListMode = i
 			t.modelListScroll = panelScrollState{}
 		}
-		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButton(gtx, click, label)
-		}))
 	}
-	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
+	return ui.modelListTabButtons(gtx, labels, t.modelListClicks[:], t.modelListMode)
 }
 
 func (ui *uiState) whmModelList(gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t.modelListMode == 3 {
+		if t.model == nil || t.model.model == nil {
+			return centeredPanelLabel(gtx, ui.th, "No model", unit.Sp(10), cTextDim)
+		}
+		return ui.unitFXListWithHeader(gtx, t.model, &t.modelFXClicks)
+	}
 	return ui.unitModelListContent(gtx, t, t.modelListMode)
 }
 

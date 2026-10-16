@@ -89,6 +89,12 @@ var unitSections = []unitSection{
 		rightTitle:  "Model",
 		hint:        "The unit's model, with the animations it can be played with.",
 	},
+	{
+		label:       unitSectionClassicOE,
+		middleTitle: "Classic OE",
+		rightTitle:  "Properties",
+		hint:        "The classic object editor's layout: its panel column, with the unit previewed beside it.",
+	},
 }
 
 // unitSectionNamed is where a section of the dialog is, by name. It is here
@@ -345,6 +351,17 @@ func (ui *uiState) layoutUnitBody(gtx layout.Context) layout.Dimensions {
 			layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
 			layout.Flexed(1, ui.layoutUnitViewportArea),
+		)
+	}
+	if ui.currentUnitSection().label == unitSectionClassicOE {
+		// The classic editor's layout takes the middle and right columns
+		// together for the same reason the Viewport section does: its panel
+		// column plus a model preview needs the room, and a properties panel
+		// beside a preview would squeeze both.
+		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+			layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
+			layout.Flexed(1, ui.layoutClassicOEArea),
 		)
 	}
 	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,

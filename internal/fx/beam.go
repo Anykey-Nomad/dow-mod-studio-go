@@ -414,6 +414,9 @@ type Ring struct {
 	spinX   []FxKey
 	SpinY   []FxKey
 	SpinZ   []FxKey
+	OffsetX []FxKey
+	OffsetY []FxKey
+	OffsetZ []FxKey
 	Loop    bool
 	// epsX, epsY and epsZ are the node's SpinEpsilon curves: how much of an
 	// extra turn each axis may be given on top of its Spin curve, so that
@@ -450,6 +453,9 @@ func RingFromNode(n *FxNode) (Ring, bool) {
 	r.spinX = beamCurve(n, "SpinX")
 	r.SpinY = beamCurve(n, "SpinY")
 	r.SpinZ = beamCurve(n, "SpinZ")
+	r.OffsetX = beamCurve(n, "OffsetX")
+	r.OffsetY = beamCurve(n, "OffsetY")
+	r.OffsetZ = beamCurve(n, "OffsetZ")
 	r.EpsX = spinCurve(n, "SpinEpsilonX")
 	r.EpsY = spinCurve(n, "SpinEpsilonY")
 	r.EpsZ = spinCurve(n, "SpinEpsilonZ")
@@ -550,14 +556,30 @@ func RingRibbon(r Ring, centre, axX, axY, axZ fauxgl.Vector, camUp fauxgl.Vector
 		out.R, out.G, out.B, out.Alpha = st.R, st.G, st.B, st.A
 	}
 	// The Offset is in the marker's own frame, which is the whole of how a
-	// ring knows to sit at the end of a barrel rather than at its base. It is
-	// measured across the second and third of the marker's axes, which are
-	// the two columns MarkerBasis hands out.
+	// ring knows to sit at the end of a barrel rather than at its base. The
+	// marker's three columns map it into model space.
 	if o, ok := vec3Sample(r.Offset, u); ok {
+		// STYLE_RING Offset is a vector in the marker's frame, not a world
+		// displacement. FileVec swaps its Y-up coordinates into the same
+		// model-space frame as the marker axes.
+		o = FileVec(o)
 		centre = centre.
-			Add(axY.MulScalar(o.X)).
-			Add(axZ.MulScalar(o.Y)).
-			Add(CrossOf(axY, axZ).MulScalar(o.Z))
+			Add(axX.MulScalar(o.X)).
+			Add(axY.MulScalar(o.Y)).
+			Add(axZ.MulScalar(o.Z))
+	}
+	// Particle rings in a spray carry OffsetX/Y/Z curves rather than one
+	// shared 3D Offset. Those values move the ring's local plane center; their
+	// orientation comes from the marker frame, with the spray axis as normal.
+	if len(r.OffsetX) > 0 || len(r.OffsetY) > 0 || len(r.OffsetZ) > 0 {
+		local := fauxgl.Vector{
+			X: SampleCurve(r.OffsetX, u),
+			Y: SampleCurve(r.OffsetY, u),
+			Z: SampleCurve(r.OffsetZ, u),
+		}
+		local = FileVec(local)
+		centre = centre.Add(axX.MulScalar(local.X)).Add(axY.MulScalar(local.Y)).Add(axZ.MulScalar(local.Z))
+		return ringSpriteRibbon(out, centre, axX, axY, axZ, r, u, spread)
 	}
 	// A billboard ring squares itself to the eye; the others keep the
 	// marker's own plane, which is what a ring lying on a surface does.
@@ -596,6 +618,32 @@ func RingRibbon(r Ring, centre, axX, axY, axZ fauxgl.Vector, camUp fauxgl.Vector
 	// sets meet at a waist instead of flaring apart. Hanged the other way up
 	// the same panels make a barrel. A billboard ring has no up of its own to
 	// obey - the eye's is the only one there is - so it is left as it falls.
+	out.FlipV = !r.billboard
+	return out
+}
+
+// ringSpriteRibbon represents a non-billboard spray ring as a fixed-plane
+// sprite. The authored OffsetX/Y/Z locate its particle center; the ring keeps
+// the local XY plane, whose normal is axZ, while the ring quad's UV/up axis
+// follows the authored vertical axY.
+func ringSpriteRibbon(out BeamRibbon, centre, axX, axY, axZ fauxgl.Vector, r Ring, u, spread float64) BeamRibbon {
+	half := SampleCurve(r.Radius, u)
+	// Spray rings keep their authored local XY plane. Its normal is axZ,
+	// while the authored vertical/spin axis is axY; using axZ as the quad's
+	// up axis turns phase_in/out rings onto their edges.
+	right := axX
+	up := axY
+	if r.billboard {
+		right = CamRight(fauxgl.Vector{Z: 1}, centre)
+		up = fauxgl.Vector{Z: 1}
+	}
+	angle := (SampleCurve(r.spinX, u) + SampleCurve(r.SpinY, u) + SampleCurve(r.SpinZ, u) +
+		SampleCurve(r.EpsX, u)*spread + SampleCurve(r.EpsY, u)*spread + SampleCurve(r.EpsZ, u)*spread) * math.Pi * 2
+	right, up = rotateInPlane(right, up, angle)
+	out.From = centre.Sub(up.MulScalar(half))
+	out.To = centre.Add(up.MulScalar(half))
+	out.Across = right
+	out.Fixed = true
 	out.FlipV = !r.billboard
 	return out
 }

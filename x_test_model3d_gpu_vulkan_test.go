@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || linux
 
 package main
 
@@ -16,18 +16,18 @@ import (
 	"github.com/fogleman/fauxgl"
 )
 
-// The Direct3D tests prove nothing about the Vulkan renderer: it is a
-// separate port with its own shaders, its own uniform block layout, a
-// projection mirrored into Vulkan's downward Y, and a winding decision that
-// has to be re-derived for that mirror. These tests put it through the same
-// checks the Direct3D renderer goes through — the shape of what it draws,
+// Passing the software renderer's tests proves nothing about the Vulkan
+// renderer: it is a separate port with its own shaders, its own uniform block
+// layout, a projection mirrored into Vulkan's downward Y, and a winding
+// decision that has to be re-derived for that mirror. These tests put it
+// through the same checks the software renderer is held to — the shape of what it draws,
 // which side of a model faces the camera, which way up it comes out — and
 // one of them paints the frame through Gio, which is the only way to see
 // that an adopted texture reaches the screen at all.
 
 // requireVulkanRenderer opens a headless window on the Vulkan backend and a
 // model renderer on it. Everything skips rather than fails when the machine
-// has no Vulkan: the Direct3D tests carry the rest of the coverage.
+// has no Vulkan: the software tests carry the rest of the coverage.
 func requireVulkanRenderer(t *testing.T) (*headless.Window, *modelGpuVkRenderer, func() []byte, func()) {
 	t.Helper()
 	const size = 256
@@ -98,7 +98,7 @@ func TestVulkanRendererDrawsTheSameShapeAsTheSoftwareRenderer(t *testing.T) {
 }
 
 // TestVulkanShowsTheOutsideOfAModel pins the winding decision: front faces
-// are declared clockwise to match Direct3D, but Vulkan's clip space runs Y
+// are declared clockwise, but Vulkan's clip space runs Y
 // downward and the projection is mirrored to compensate, and a mirror
 // reverses apparent winding. Get either half wrong and the quad that should
 // be visible is culled or the one behind it shows through.

@@ -16,6 +16,7 @@ import (
 
 	"gioui.org/io/key"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -116,6 +117,7 @@ func (ui *uiState) ensureUnitEvents() {
 	ui.unitClipCur = -1
 	ui.unitEvtBound = ""
 	ui.unitEvtEntryBound = ""
+	ui.unitActCondBound = ""
 	ui.unitEvtPath = unitEventsWhePath(ui.modTree, ui.currentUnitDetails())
 	if ui.unitEvtPath == "" {
 		ui.unitEvtDoc = nil
@@ -288,6 +290,16 @@ func (ui *uiState) unitEvtFieldFocused(gtx layout.Context) bool {
 			return true
 		}
 	}
+	for i := range ui.unitActCondEds {
+		if ui.unitActCondEds[i].Focused(gtx) {
+			return true
+		}
+	}
+	for i := range ui.unitActNameEds {
+		if ui.unitActNameEds[i].Focused(gtx) {
+			return true
+		}
+	}
 	for _, ed := range []*widget.Editor{&ui.unitEvtNameEd, &ui.unitEvtTimeEd, &ui.unitEvtFxEd, &ui.unitEvtSndEd, &ui.unitEvtMarkerEd} {
 		if ed.Focused(gtx) {
 			return true
@@ -302,6 +314,12 @@ func (ui *uiState) unitEvtFieldFocused(gtx layout.Context) bool {
 func (ui *uiState) unitEvtBlurFields(gtx layout.Context) {
 	for i := range ui.unitEvtEntryEds {
 		ui.unitEvtEntryEds[i].Blur(gtx)
+	}
+	for i := range ui.unitActCondEds {
+		ui.unitActCondEds[i].Blur(gtx)
+	}
+	for i := range ui.unitActNameEds {
+		ui.unitActNameEds[i].Blur(gtx)
 	}
 	for _, ed := range []*widget.Editor{&ui.unitEvtNameEd, &ui.unitEvtTimeEd, &ui.unitEvtFxEd, &ui.unitEvtSndEd, &ui.unitEvtMarkerEd} {
 		ed.Blur(gtx)
@@ -347,6 +365,7 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 	ui.ensureUnitEventClicks(len(timelines), events)
 	for i := range ui.unitEvtTlClicks {
 		if i < len(timelines) && ui.unitEvtTlClicks[i].Clicked(gtx) {
+			ui.unitEvtFocusAction = false
 			ui.selectUnitEventTimeline(timelines[i].Name)
 			tl = ui.selectedUnitEventTimeline()
 			events = 0
@@ -355,6 +374,28 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 			}
 			ui.ensureUnitEventClicks(len(timelines), events)
 		}
+	}
+	// The action list under the timelines picks which action's conditions the
+	// Events column draws beside it, and moves that column onto the actions —
+	// the panel shows one or the other, never both.
+	acts := ui.unitEvtDoc.Actions()
+	ui.ensureUnitEvtActionClicks(len(acts))
+	for i := range ui.unitEvtActionClicks {
+		if i < len(acts) && ui.unitEvtActionClicks[i].Clicked(gtx) {
+			ui.unitEvtBlurFields(gtx)
+			// The panel leaves the timeline behind completely, and a sound
+			// it was auditioning belongs to that timeline.
+			if !ui.unitEvtFocusAction {
+				ui.evtPlayer.stopAll()
+			}
+			ui.unitEvtFocusAction = true
+			ui.unitEvtActionSel = i
+		}
+	}
+	// While an action is the panel on screen, its conditions are the fields
+	// being edited: their typing, the guard chips and the commit below.
+	if ui.unitEvtFocusAction {
+		ui.unitActConditionsInput(gtx)
 	}
 	for i := range ui.unitEvtClicks {
 		if i >= events || !ui.unitEvtClicks[i].Clicked(gtx) {
@@ -957,6 +998,7 @@ func (ui *uiState) applySelectedEventForm() {
 	// written, so what is shown is what the document holds.
 	ui.unitEvtBound = ""
 	ui.unitEvtEntryBound = ""
+	ui.unitActCondBound = ""
 	ui.reloadUnitModelFx()
 	ui.statusText = "Applied to " + ev.Name + " — Save .whe to write it into the mod"
 }
@@ -1022,6 +1064,7 @@ func (ui *uiState) revertUnitEvents() {
 	ui.unitEvtSelAnchor = 0
 	ui.unitEvtBound = ""
 	ui.unitEvtEntryBound = ""
+	ui.unitActCondBound = ""
 	ui.statusText = "Changes to " + filepath.Base(ui.unitEvtPath) + " thrown away"
 	// The document is the file's own copy again, so the viewport resolves it
 	// rather than the edits that were thrown away.
@@ -1056,19 +1099,1073 @@ func (ui *uiState) unitEventsMessage(gtx layout.Context, msg string) layout.Dime
 }
 
 // layoutUnitEventTimelines is the middle column: every DATAMTON timeline of
-// the .whe, the selected one highlighted, and which clips each drives.
+// the .whe, the selected one highlighted, and which clips each drives. The
+// .whe's actions are drawn under that list — they are file-wide and their
+// motion lines name these very timelines, so they belong beside the list of
+// them rather than inside the events of whichever timeline is picked.
 func (ui *uiState) layoutUnitEventTimelines(gtx layout.Context) layout.Dimensions {
 	ui.ensureUnitEvents()
 	sec := ui.currentUnitSection()
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return ui.layoutUnitColumnHeader(gtx, sec.middleTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, ui.layoutUnitEventTimelineList),
+		}
+		if ui.unitEvtDoc != nil {
+			if acts := ui.unitEvtDoc.Actions(); len(acts) > 0 {
+				children = append(children,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return ui.layoutUnitEvtActions(gtx, acts)
+					}),
+				)
+			}
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	})
+}
+
+// layoutUnitEvtActions is the .whe's action list under the timelines list: the
+// header, then one row per DATAACTS action, the picked one highlighted. What
+// each action guards its choices with is not here — those conditions belong to
+// one action at a time and are drawn in the Events column beside this list.
+//
+// The list is laid out after the timelines, so it is a rigid child — it claims
+// its height first and the list keeps what is left. A .whe with many actions is
+// taller than that room, so the block is measured at its natural height and
+// capped at a share of the column when it does not fit: long action lists scroll
+// inside their own region rather than squeezing the animations off the column.
+func (ui *uiState) layoutUnitEvtActions(gtx layout.Context, acts []whe.FxAction) layout.Dimensions {
+	ui.ensureUnitEvtActionClicks(len(acts))
+	ui.selectedUnitEvtAction(acts)
+	content := func(gtx layout.Context) layout.Dimensions {
+		children := []layout.FlexChild{
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return sectionHeader(gtx, ui.th, "Actions")
+				})
+			}),
+		}
+		for i := range acts {
+			i := i
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.layoutUnitEvtActionRow(gtx, i, acts[i])
+			}))
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	}
+	// Measure it the way panelScrollView measures its own content: against an
+	// unbounded height with input off, so a block that fills the room it is
+	// handed cannot pass the room off as its own height.
+	macro := op.Record(gtx.Ops)
+	measureGTX := gtx.Disabled()
+	measureGTX.Constraints.Min.Y = 0
+	measureGTX.Constraints.Max.Y = panelScrollMeasureHeight
+	natural := content(measureGTX).Size.Y
+	if natural >= panelScrollMeasureHeight {
+		measureGTX.Constraints.Max.Y = maxInt(1, gtx.Constraints.Max.Y)
+		natural = content(measureGTX).Size.Y
+	}
+	macro.Stop()
+	height := natural
+	// Two fifths of the column is the most the block may claim, which leaves
+	// the timelines list with the majority however many actions there are.
+	if cap := gtx.Constraints.Max.Y * 2 / 5; cap > 0 && height > cap {
+		height = cap
+	}
+	agtx := gtx
+	agtx.Constraints.Min.Y = height
+	agtx.Constraints.Max.Y = height
+	return ui.panelScrollView(agtx, &ui.unitEvtActionsScroll, content)
+}
+
+// selectedUnitEvtAction is the action whose conditions the Events column draws:
+// the one picked in the list under the timelines, kept inside that list when
+// the file changes under it.
+func (ui *uiState) selectedUnitEvtAction(acts []whe.FxAction) *whe.FxAction {
+	if len(acts) == 0 {
+		return nil
+	}
+	if ui.unitEvtActionSel < 0 || ui.unitEvtActionSel >= len(acts) {
+		ui.unitEvtActionSel = 0
+	}
+	return &acts[ui.unitEvtActionSel]
+}
+
+func (ui *uiState) ensureUnitEvtActionClicks(n int) {
+	if len(ui.unitEvtActionClicks) != n {
+		ui.unitEvtActionClicks = make([]widget.Clickable, n)
+	}
+}
+
+// layoutUnitEvtActionRow is one action of the list: its name and how many
+// choices it carries, the picked one highlighted. Pressing it shows that
+// action's conditions in the Events column.
+func (ui *uiState) layoutUnitEvtActionRow(gtx layout.Context, i int, a whe.FxAction) layout.Dimensions {
+	if i < 0 || i >= len(ui.unitEvtActionClicks) {
+		return layout.Dimensions{}
+	}
+	c := &ui.unitEvtActionClicks[i]
+	selected := i == ui.unitEvtActionSel
+	bg := cPanelBg
+	switch {
+	case selected:
+		bg = cSelectBg
+	case c.Hovered():
+		bg = cMenuHover
+	}
+	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		h := gtx.Dp(unit.Dp(unitRowHeightDp - 4))
+		sz := image.Pt(gtx.Constraints.Max.X, h)
+		gtx.Constraints.Min = sz
+		gtx.Constraints.Max = sz
+		return layout.Stack{}.Layout(gtx,
+			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+				if bg != cPanelBg {
+					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
+				}
+				return layout.Dimensions{Size: gtx.Constraints.Max}
+			}),
+			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							l := material.Label(ui.th, unit.Sp(10), unitViewportRowText(a.Name))
+							l.Color = cText
+							l.MaxLines = 1
+							return l.Layout(gtx)
+						}),
+						layout.Flexed(1, flexGap()),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							note := fmt.Sprintf("%d choices", len(a.Motions)+len(a.Subactions))
+							l := material.Label(ui.th, unit.Sp(9), note)
+							l.Color = cTextDim
+							l.MaxLines = 1
+							return l.Layout(gtx)
+						}),
+					)
+				})
+			}),
 		)
 	})
+}
+
+// unitActLinks is one action's choices in file order: the motions it plays,
+// then the actions it calls — the order the condition fields are sized and
+// bound in.
+func unitActLinks(a whe.FxAction) []whe.FxActionLink {
+	links := make([]whe.FxActionLink, 0, len(a.Motions)+len(a.Subactions))
+	links = append(links, a.Motions...)
+	links = append(links, a.Subactions...)
+	return links
+}
+
+// unitActLinkAt is the editable copy of one of those choices: an index into
+// the motions, then into the sub-actions.
+func unitActLinkAt(a *whe.FxAction, i int) *whe.FxActionLink {
+	if i < 0 {
+		return nil
+	}
+	if i < len(a.Motions) {
+		return &a.Motions[i]
+	}
+	if i-len(a.Motions) < len(a.Subactions) {
+		return &a.Subactions[i-len(a.Motions)]
+	}
+	return nil
+}
+
+// unitActGuardLabel is what a guard chip reads for a step of the chain.
+func unitActGuardLabel(cmp int32) string {
+	switch cmp {
+	case whe.FxCompareIf:
+		return "if"
+	case whe.FxCompareElseIf:
+		return "else if"
+	case whe.FxCompareElse:
+		return "else"
+	default:
+		return "always"
+	}
+}
+
+// ensureUnitActConditions sizes the condition fields to the picked action's
+// choices and refills them whenever the pick or the file changes under them,
+// so what the fields show is what the document holds.
+func (ui *uiState) ensureUnitActConditions() {
+	if ui.unitEvtDoc == nil {
+		ui.unitActCondEds = nil
+		ui.unitActNameEds = nil
+		ui.unitActCondStaged = nil
+		ui.unitActGuardClicks = nil
+		ui.unitActCondBound = ""
+		return
+	}
+	a := ui.selectedUnitEvtAction(ui.unitEvtDoc.Actions())
+	if a == nil {
+		ui.unitActCondEds = nil
+		ui.unitActNameEds = nil
+		ui.unitActCondStaged = nil
+		ui.unitActGuardClicks = nil
+		ui.unitActCondBound = ""
+		return
+	}
+	links := unitActLinks(*a)
+	if len(ui.unitActCondEds) != len(links) || len(ui.unitActGuardClicks) != len(links) || len(ui.unitActNameEds) != len(links) {
+		ui.unitActCondEds = make([]widget.Editor, len(links))
+		ui.unitActNameEds = make([]widget.Editor, len(links))
+		ui.unitActCondStaged = make([]int32, len(links))
+		ui.unitActGuardClicks = make([]widget.Clickable, len(links))
+		ui.unitActCondBound = ""
+	}
+	bound := strconv.Itoa(ui.unitEvtActionSel) + "|" + a.Name
+	for _, ln := range links {
+		bound += "|" + ln.Name
+	}
+	if ui.unitActCondBound == bound {
+		if ui.unitActSel >= len(links) {
+			ui.unitActSel = 0
+		}
+		return
+	}
+	ui.unitActCondBound = bound
+	if ui.unitActSel >= len(links) {
+		ui.unitActSel = 0
+	}
+	for i, ln := range links {
+		ui.unitActCondStaged[i] = ln.Compare
+		ui.unitActCondEds[i].SetText(ln.Condition)
+		ui.unitActNameEds[i].SetText(ln.Name)
+	}
+}
+
+// unitActConditionsInput runs the presses and typing of the action panel: the
+// guard chips cycle a choice's if / else if / else / always step, the
+// condition and name fields take the typing, Apply or Enter commits them,
+// and the chain tools add, move and delete choices around the caret.
+func (ui *uiState) unitActConditionsInput(gtx layout.Context) {
+	ui.ensureUnitActConditions()
+	for i := range ui.unitActGuardClicks {
+		if i >= len(ui.unitActCondStaged) || !ui.unitActGuardClicks[i].Clicked(gtx) {
+			continue
+		}
+		ui.unitActSel = i
+		cmp := ui.unitActCondStaged[i]
+		if cmp < whe.FxCompareIf || cmp >= whe.FxCompareNone {
+			// A press starts the chain over from if — including for a compare
+			// value outside the four the format defines.
+			ui.unitActCondStaged[i] = whe.FxCompareIf
+			continue
+		}
+		ui.unitActCondStaged[i] = cmp + 1
+	}
+	for i := range ui.unitActCondEds {
+		ui.unitActUpdateEditor(gtx, &ui.unitActCondEds[i], i)
+	}
+	for i := range ui.unitActNameEds {
+		ui.unitActUpdateEditor(gtx, &ui.unitActNameEds[i], i)
+	}
+	// Whichever field holds the caret is the selected choice: the move, add
+	// and delete buttons of the footer act on it.
+	for i := range ui.unitActCondEds {
+		if ui.unitActCondEds[i].Focused(gtx) || (i < len(ui.unitActNameEds) && ui.unitActNameEds[i].Focused(gtx)) {
+			ui.unitActSel = i
+		}
+	}
+	if ui.unitActApply.Clicked(gtx) {
+		ui.applyUnitActConditions()
+	}
+	if ui.unitActAddIf.Clicked(gtx) {
+		ui.unitActAddChoice(actAddIf)
+	}
+	if ui.unitActAddElseIf.Clicked(gtx) {
+		ui.unitActAddChoice(actAddElseIf)
+	}
+	if ui.unitActAddElse.Clicked(gtx) {
+		ui.unitActAddChoice(actAddElse)
+	}
+	if ui.unitActMoveUp.Clicked(gtx) {
+		ui.unitActMoveChoice(-1)
+	}
+	if ui.unitActMoveDown.Clicked(gtx) {
+		ui.unitActMoveChoice(1)
+	}
+	if ui.unitActDelete.Clicked(gtx) {
+		ui.unitActDeleteChoice()
+	}
+}
+
+// unitActUpdateEditor processes one field of a choice line: a click takes
+// the caret and selects that line, and Enter commits the conditions the way
+// Apply does, never dropping a line break into the value.
+func (ui *uiState) unitActUpdateEditor(gtx layout.Context, ed *widget.Editor, row int) {
+	ed.SingleLine = true
+	ed.Submit = true
+	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
+		ui.unitActSel = row
+		gtx.Execute(key.FocusCmd{Tag: ed})
+	}
+	for {
+		ev, ok := ed.Update(gtx)
+		if !ok {
+			break
+		}
+		if _, submit := ev.(widget.SubmitEvent); submit {
+			ui.unitActSel = row
+			ui.applyUnitActConditions()
+			ed.Blur(gtx)
+		}
+	}
+}
+
+// applyUnitActConditions writes the condition fields and their guards into
+// the selected action of the in-memory document — the DATAACTS payload is
+// rebuilt, the document is marked dirty, and the fields refill from what was
+// written so what is shown is what the document holds. Nothing touches the
+// file: Save .whe does that.
+func (ui *uiState) applyUnitActConditions() {
+	if ui.unitEvtDoc == nil {
+		ui.unitActErr = "No .whe is loaded."
+		return
+	}
+	acts := ui.unitEvtDoc.Actions()
+	if ui.unitEvtActionSel < 0 || ui.unitEvtActionSel >= len(acts) {
+		ui.unitActErr = "Select an action to apply the conditions to."
+		return
+	}
+	a := acts[ui.unitEvtActionSel]
+	links := unitActLinks(a)
+	if len(links) == 0 {
+		// Nothing to flush — an action with no choices yet only waits for
+		// its first Add.
+		ui.unitActErr = ""
+		return
+	}
+	if len(ui.unitActCondEds) != len(links) || len(ui.unitActCondStaged) != len(links) {
+		ui.unitActErr = "The condition fields are out of step with the file — pick the action again."
+		return
+	}
+	changed := false
+	for i, ln := range links {
+		cmp := ui.unitActCondStaged[i]
+		cond := ""
+		if (whe.FxActionLink{Compare: cmp}).HasCondition() {
+			cond = strings.TrimSpace(ui.unitActCondEds[i].Text())
+		}
+		name := ln.Name
+		if i < len(ui.unitActNameEds) {
+			name = strings.TrimSpace(ui.unitActNameEds[i].Text())
+		}
+		if name == "" {
+			ui.unitActErr = "Every choice must name the motion or action it runs — fill in the name of line " + strconv.Itoa(i+1) + "."
+			return
+		}
+		if ln.Compare == cmp && ln.Condition == cond && ln.Name == name {
+			continue
+		}
+		if dst := unitActLinkAt(&a, i); dst != nil {
+			dst.Compare = cmp
+			dst.Condition = cond
+			dst.Name = name
+			changed = true
+		}
+	}
+	if !changed {
+		ui.unitActErr = ""
+		ui.statusText = "no changes to apply"
+		return
+	}
+	if err := ui.unitEvtDoc.SetAction(ui.unitEvtActionSel, a); err != nil {
+		ui.unitActErr = err.Error()
+		return
+	}
+	ui.unitActErr = ""
+	ui.unitEvtDirty = true
+	// The fields refill from what was just written.
+	ui.unitActCondBound = ""
+	ui.ensureUnitActConditions()
+	ui.statusText = "Applied conditions to " + a.Name + " — Save .whe to write it into the mod"
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB: chain tools — add, move and delete choices of the if / else if / else
+// chain ═════════════════════════════════════════════════════════════════════
+//
+// The choices of an action live in two lists the format keeps apart — the
+// motions, then the sub-actions — and each list reads as one if / else if /
+// else chain: a head (an if, or an unguarded step) followed by its
+// continuations. The tools below keep those shapes: a head moves with the
+// whole chain it carries, a continuation only slides between the
+// continuations of its own chain, a new continuation extends the chain it
+// was added to, and deleting a head takes its chain while deleting a
+// continuation removes only that step.
+
+const (
+	actAddIf = iota
+	actAddElseIf
+	actAddElse
+)
+
+// actIsHead reports whether a link starts a chain rather than continuing one.
+func actIsHead(ln whe.FxActionLink) bool {
+	return ln.Compare != whe.FxCompareElseIf && ln.Compare != whe.FxCompareElse
+}
+
+func actChainStart(list []whe.FxActionLink, i int) int {
+	for i > 0 && !actIsHead(list[i]) {
+		i--
+	}
+	return i
+}
+
+func actChainEnd(list []whe.FxActionLink, i int) int {
+	e := actChainStart(list, i)
+	for e+1 < len(list) && !actIsHead(list[e+1]) {
+		e++
+	}
+	return e
+}
+
+// actLocate maps a combined row index onto the list it lives in and that
+// list's own index — the motions come first, then the sub-actions.
+func actLocate(a whe.FxAction, i int) (list []whe.FxActionLink, local int, motion, ok bool) {
+	if i < 0 {
+		return nil, i, false, false
+	}
+	if i < len(a.Motions) {
+		return a.Motions, i, true, true
+	}
+	if i-len(a.Motions) < len(a.Subactions) {
+		return a.Subactions, i - len(a.Motions), false, true
+	}
+	return nil, i, false, false
+}
+
+// actCombined maps a list index back onto the combined row index.
+func actCombined(a whe.FxAction, motion bool, local int) int {
+	if motion {
+		return local
+	}
+	return len(a.Motions) + local
+}
+
+// actMoveLink slides one choice within its list — dir is -1 up, +1 down. A
+// chain head swaps places with the neighbouring whole chain, so moving it
+// never breaks the continuations it carries; an else if slides between the
+// continuations of its own chain; the else that ends a chain stays pinned.
+func actMoveLink(list []whe.FxActionLink, i, dir int) ([]whe.FxActionLink, int, bool) {
+	if i < 0 || i >= len(list) || (dir != -1 && dir != 1) {
+		return list, i, false
+	}
+	if actIsHead(list[i]) {
+		s := actChainStart(list, i)
+		e := actChainEnd(list, i)
+		if dir < 0 {
+			if s == 0 {
+				return list, i, false
+			}
+			ps := actChainStart(list, s-1)
+			out := make([]whe.FxActionLink, 0, len(list))
+			out = append(out, list[:ps]...)
+			out = append(out, list[s:e+1]...)
+			out = append(out, list[ps:s]...)
+			out = append(out, list[e+1:]...)
+			return out, ps, true
+		}
+		if e == len(list)-1 {
+			return list, i, false
+		}
+		ns := e + 1
+		ne := actChainEnd(list, ns)
+		out := make([]whe.FxActionLink, 0, len(list))
+		out = append(out, list[:s]...)
+		out = append(out, list[ns:ne+1]...)
+		out = append(out, list[s:e+1]...)
+		out = append(out, list[ne+1:]...)
+		return out, s + (ne - ns + 1), true
+	}
+	if list[i].Compare == whe.FxCompareElse {
+		// The else ends its chain; there is no position for it to slide to.
+		return list, i, false
+	}
+	s := actChainStart(list, i)
+	e := actChainEnd(list, i)
+	j := i + dir
+	if j < s || j > e || actIsHead(list[j]) || list[j].Compare == whe.FxCompareElse {
+		return list, i, false
+	}
+	out := append([]whe.FxActionLink(nil), list...)
+	out[i], out[j] = out[j], out[i]
+	return out, j, true
+}
+
+// actAddLink inserts a new choice into the list the selected row lives in: a
+// new if starts a fresh chain at the end of that list, while an else if /
+// else continues the selected row's chain right after it and takes over the
+// head's target name — the usual reason to guard the same motion twice.
+func actAddLink(a *whe.FxAction, kind, at int) (int, bool) {
+	// Which list the selected row lives in: rows are the motions first,
+	// then the sub-actions. An action whose choices are all sub-actions has
+	// no motions at all, and `at < len(a.Motions)` — not a length check on
+	// the motions — is what tells the two apart; with no motions the old
+	// check resolved every row to an empty motion list and every add was
+	// refused.
+	motion := at < len(a.Motions)
+	if len(a.Motions) == 0 && len(a.Subactions) == 0 {
+		// A brand-new action: its first choice starts as a motion.
+		motion = true
+	}
+	local := at
+	if !motion {
+		local = at - len(a.Motions)
+	}
+	var list []whe.FxActionLink
+	if motion {
+		list = a.Motions
+	} else {
+		list = a.Subactions
+	}
+	ln := whe.FxActionLink{}
+	switch kind {
+	case actAddIf:
+		ln.Compare = whe.FxCompareIf
+		list = append(list, ln)
+		newAt := actCombined(*a, motion, len(list)-1)
+		if motion {
+			a.Motions = list
+		} else {
+			a.Subactions = list
+		}
+		return newAt, true
+	case actAddElseIf, actAddElse:
+		if len(list) == 0 || local < 0 || local >= len(list) {
+			return at, false
+		}
+		e := actChainEnd(list, local)
+		insert := e + 1
+		if kind == actAddElse {
+			if list[e].Compare == whe.FxCompareElse {
+				// A chain has one else, and it is its last step.
+				return at, false
+			}
+			ln.Compare = whe.FxCompareElse
+		} else {
+			if list[e].Compare == whe.FxCompareElse {
+				// The else ends the chain: a new else if goes in front of
+				// it, so the chain keeps ending with the else and the move
+				// buttons have somewhere to slide it from.
+				insert = e
+			}
+			ln.Compare = whe.FxCompareElseIf
+		}
+		ln.Name = list[actChainStart(list, local)].Name
+		out := make([]whe.FxActionLink, 0, len(list)+1)
+		out = append(out, list[:insert]...)
+		out = append(out, ln)
+		out = append(out, list[insert:]...)
+		newAt := actCombined(*a, motion, insert)
+		if motion {
+			a.Motions = out
+		} else {
+			a.Subactions = out
+		}
+		return newAt, true
+	}
+	return at, false
+}
+
+// actDeleteLink removes one choice: deleting a chain head takes its whole
+// chain with it, deleting an else if / else removes only that step.
+func actDeleteLink(a *whe.FxAction, at int) (int, bool) {
+	list, j, motion, ok := actLocate(*a, at)
+	if !ok {
+		return at, false
+	}
+	end := j
+	if actIsHead(list[j]) {
+		end = actChainEnd(list, j)
+	}
+	out := make([]whe.FxActionLink, 0, len(list)-(end-j))
+	out = append(out, list[:j]...)
+	out = append(out, list[end+1:]...)
+	if motion {
+		a.Motions = out
+	} else {
+		a.Subactions = out
+	}
+	newAt := actCombined(*a, motion, j)
+	if total := len(a.Motions) + len(a.Subactions); newAt >= total {
+		newAt = total - 1
+	}
+	if newAt < 0 {
+		newAt = 0
+	}
+	return newAt, true
+}
+
+// unitActMutate flushes the typed fields into the document and then runs one
+// structural change on the selected action's choices. Every step goes
+// through SetAction and marks the document dirty, so it lands in the file
+// with the same Save .whe the text edits take.
+func (ui *uiState) unitActMutate(what string, change func(a *whe.FxAction) (int, bool)) {
+	if ui.unitEvtDoc == nil {
+		ui.unitActErr = "No .whe is loaded."
+		return
+	}
+	// The typed fields go in first: a structural change refills them from
+	// the document, and unsaved typing would be dropped under it.
+	ui.applyUnitActConditions()
+	if ui.unitActErr != "" {
+		return
+	}
+	acts := ui.unitEvtDoc.Actions()
+	if ui.unitEvtActionSel < 0 || ui.unitEvtActionSel >= len(acts) {
+		ui.unitActErr = "Select an action first."
+		return
+	}
+	a := acts[ui.unitEvtActionSel]
+	if rows := len(a.Motions) + len(a.Subactions); rows > 0 && (ui.unitActSel < 0 || ui.unitActSel >= rows) {
+		ui.unitActSel = 0
+	}
+	newAt, ok := change(&a)
+	if !ok {
+		ui.unitActErr = what + " is not possible here."
+		return
+	}
+	if err := ui.unitEvtDoc.SetAction(ui.unitEvtActionSel, a); err != nil {
+		ui.unitActErr = err.Error()
+		return
+	}
+	ui.unitActErr = ""
+	ui.unitEvtDirty = true
+	ui.unitActCondBound = ""
+	ui.ensureUnitActConditions()
+	ui.unitActSel = newAt
+	ui.statusText = what + " — Save .whe to write it into the mod"
+}
+
+func (ui *uiState) unitActAddChoice(kind int) {
+	what := "Added if"
+	switch kind {
+	case actAddElseIf:
+		what = "Added else if"
+	case actAddElse:
+		what = "Added else"
+	}
+	ui.unitActMutate(what, func(a *whe.FxAction) (int, bool) {
+		return actAddLink(a, kind, ui.unitActSel)
+	})
+}
+
+func (ui *uiState) unitActMoveChoice(dir int) {
+	what := "Moved down"
+	if dir < 0 {
+		what = "Moved up"
+	}
+	ui.unitActMutate(what, func(a *whe.FxAction) (int, bool) {
+		list, j, motion, ok := actLocate(*a, ui.unitActSel)
+		if !ok {
+			return ui.unitActSel, false
+		}
+		moved, nj, ok := actMoveLink(list, j, dir)
+		if !ok {
+			return ui.unitActSel, false
+		}
+		if motion {
+			a.Motions = moved
+		} else {
+			a.Subactions = moved
+		}
+		return actCombined(*a, motion, nj), true
+	})
+}
+
+func (ui *uiState) unitActDeleteChoice() {
+	ui.unitActMutate("Deleted", func(a *whe.FxAction) (int, bool) {
+		return actDeleteLink(a, ui.unitActSel)
+	})
+}
+
+// unitActMoveEnabled reports whether the move buttons act: the selected
+// choice has a neighbour of the kind it may swap with.
+func (ui *uiState) unitActMoveEnabled(dir int) bool {
+	if ui.unitEvtDoc == nil {
+		return false
+	}
+	a := ui.selectedUnitEvtAction(ui.unitEvtDoc.Actions())
+	if a == nil {
+		return false
+	}
+	list, j, _, ok := actLocate(*a, ui.unitActSel)
+	if !ok {
+		return false
+	}
+	_, _, ok = actMoveLink(list, j, dir)
+	return ok
+}
+
+// unitActionConditions is one action's choices as a chain of one-line steps:
+// each choice reads as "<guard> <condition> → <motion or action>", the
+// guard chip is pressed to cycle if → else if → else → always, and the line
+// is committed with Apply and written with Save .whe like every other edit
+// of this section.
+func (ui *uiState) unitActionConditions(gtx layout.Context, a whe.FxAction) layout.Dimensions {
+	ui.ensureUnitActConditions()
+	if len(a.Motions)+len(a.Subactions) == 0 {
+		l := material.Label(ui.th, unit.Sp(9), "This action carries no motion and calls no action.")
+		l.Color = cTextDim
+		return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
+	}
+	var rows []layout.FlexChild
+	for i, m := range a.Motions {
+		i, ln := i, m
+		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.layoutUnitActConditionRow(gtx, i, ln)
+		}))
+	}
+	for i, s := range a.Subactions {
+		i, ln := len(a.Motions)+i, s
+		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.layoutUnitActConditionRow(gtx, i, ln)
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
+}
+
+// layoutUnitActConditionRow is one choice of the picked action, drawn as a
+// single line: the guard chip — press it to cycle if → else if → else →
+// always — then the condition that guard carries, an arrow, and the motion
+// or action the choice runs. An else / else if line continues the if above
+// it, so it is indented the way a nested line of code is, and each line
+// sits in its own card so the chain reads as steps rather than one wall of
+// text.
+func (ui *uiState) layoutUnitActConditionRow(gtx layout.Context, i int, ln whe.FxActionLink) layout.Dimensions {
+	if i < 0 || i >= len(ui.unitActCondEds) || i >= len(ui.unitActCondStaged) || i >= len(ui.unitActGuardClicks) || i >= len(ui.unitActNameEds) {
+		return layout.Dimensions{}
+	}
+	cmp := ui.unitActCondStaged[i]
+	hasCond := (whe.FxActionLink{Compare: cmp}).HasCondition()
+	indent := unit.Dp(0)
+	switch cmp {
+	case whe.FxCompareElseIf, whe.FxCompareElse:
+		indent = unit.Dp(14)
+	}
+	line := func(gtx layout.Context) layout.Dimensions {
+		children := []layout.FlexChild{
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.unitActGuardChip(gtx, i, unitActGuardLabel(cmp))
+			}),
+		}
+		if hasCond {
+			children = append(children,
+				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return ui.unitActFieldEditor(gtx, &ui.unitActCondEds[i], "condition")
+				}),
+			)
+		}
+		children = append(children,
+			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				l := material.Label(ui.th, unit.Sp(10), "\u2192")
+				l.Color = cTextDim
+				l.MaxLines = 1
+				return l.Layout(gtx)
+			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+			layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
+				return ui.unitActFieldEditor(gtx, &ui.unitActNameEds[i], "motion or action")
+			}),
+		)
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
+	}
+	// Measure the line before the card is drawn. The card's Expanded
+	// background fills whatever height the row is handed, and in the
+	// unbounded measure a scrolling panel makes that the whole panel —
+	// every line after the first would be pushed off screen and no
+	// scrollbar would appear. Clamping the row to its measured height is
+	// what the fixed-height event rows do for the same reason.
+	macro := op.Record(gtx.Ops)
+	measureGTX := gtx.Disabled()
+	measureGTX.Constraints.Min.Y = 0
+	measureGTX.Constraints.Max.Y = panelScrollMeasureHeight
+	h := line(measureGTX).Size.Y
+	macro.Stop()
+	if h <= 0 || h >= panelScrollMeasureHeight {
+		macro := op.Record(gtx.Ops)
+		measureGTX := gtx.Disabled()
+		measureGTX.Constraints.Min.Y = 0
+		h = line(measureGTX).Size.Y
+		macro.Stop()
+	}
+	if h <= 0 {
+		h = gtx.Dp(unit.Dp(28))
+	}
+	// The card's inner inset adds its own top and bottom padding around the
+	// line, so the row claims the line *plus* that padding — clamping to the
+	// line alone drew a card shorter than its content, and the chip and the
+	// fields hung over its bottom edge into the next row.
+	rowGTX := gtx
+	rowGTX.Constraints.Min.Y = h + gtx.Dp(unit.Dp(12))
+	rowGTX.Constraints.Max.Y = h + gtx.Dp(unit.Dp(12))
+	bg := cTabOff
+	if i == ui.unitActSel {
+		bg = cSelectBg
+	}
+	return layout.Inset{Left: indent, Bottom: unit.Dp(4)}.Layout(rowGTX, func(gtx layout.Context) layout.Dimensions {
+		return layout.Stack{}.Layout(gtx,
+			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+				sz := gtx.Constraints.Max
+				rrect(gtx, bg, sz, gtx.Dp(3))
+				return layout.Dimensions{Size: sz}
+			}),
+			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+				inset := layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}
+				return inset.Layout(gtx, line)
+			}),
+		)
+	})
+}
+
+// unitActFieldEditor is an inline field of one choice line — the same
+// bordered field the event definition rows use, clamped to one line's height
+// so it sits on the line beside the arrow without stretching the row.
+func (ui *uiState) unitActFieldEditor(gtx layout.Context, ed *widget.Editor, hint string) layout.Dimensions {
+	ed.SingleLine = true
+	ed.Submit = true
+	gtx.Constraints.Min.Y = gtx.Dp(36)
+	gtx.Constraints.Max.Y = gtx.Dp(40)
+	b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+	return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			w := material.Editor(ui.th, ed, hint)
+			w.TextSize = unit.Sp(10)
+			w.HintColor = cTextDim
+			return w.Layout(gtx)
+		})
+	})
+}
+
+// unitActGuardChip is the operator of one choice line, sized from its own
+// label rather than from the room the row has left. smallButton reads the
+// ambient constraints for its size, and inside a card row those numbers
+// belong to the row, not to the chip — the chip must carry its own width so
+// the arrow and the fields after it are not pushed off the line.
+func (ui *uiState) unitActGuardChip(gtx layout.Context, i int, label string) layout.Dimensions {
+	if i < 0 || i >= len(ui.unitActGuardClicks) {
+		return layout.Dimensions{}
+	}
+	c := &ui.unitActGuardClicks[i]
+	// Measure the label on its own; the discarded pass draws nothing.
+	macro := op.Record(gtx.Ops)
+	lgtx := gtx.Disabled()
+	lgtx.Constraints.Min = image.Point{}
+	l := material.Label(ui.th, unit.Sp(11), label)
+	l.Color = cText
+	ldims := l.Layout(lgtx)
+	macro.Stop()
+	padX, padY := unit.Dp(10), unit.Dp(5)
+	inner := image.Pt(ldims.Size.X+2*gtx.Dp(padX), ldims.Size.Y+2*gtx.Dp(padY))
+	if inner.Y < gtx.Dp(unit.Dp(30)) {
+		inner.Y = gtx.Dp(unit.Dp(30))
+	}
+	bg := cSaveBg
+	switch {
+	case c.Pressed():
+		bg = cMenuOpen
+	case c.Hovered():
+		bg = cSaveHover
+	}
+	return widget.Border{Color: cSaveBd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		// Exact constraints inside: nothing the row hands down can leak
+		// into the chip's own size or into where its label is drawn.
+		gtx.Constraints.Min = inner
+		gtx.Constraints.Max = inner
+		return layout.Stack{}.Layout(gtx,
+			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+				sz := gtx.Constraints.Max
+				rrect(gtx, bg, sz, gtx.Dp(3))
+				return layout.Dimensions{Size: sz}
+			}),
+			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+				// Centre the label: the chip is taller than the text, and
+				// fixed padding would pin it to the top of the box. The
+				// offset stays in pixels so scaling does not double it.
+				padTop := (inner.Y - ldims.Size.Y) / 2
+				if padTop < 0 {
+					padTop = 0
+				}
+				off := op.Offset(image.Pt(gtx.Dp(padX), padTop)).Push(gtx.Ops)
+				l := material.Label(ui.th, unit.Sp(11), label)
+				l.Color = cText
+				dims := l.Layout(gtx)
+				off.Pop()
+				return layout.Dimensions{Size: image.Pt(dims.Size.X+2*gtx.Dp(padX), dims.Size.Y)}
+			}),
+			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+				return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Dimensions{Size: gtx.Constraints.Max}
+				})
+			}),
+		)
+	})
+}
+
+// unitActPanelFooter is the bottom of the right column while an action is
+// being worked on: the commit for the condition fields above, and the same
+// Save .whe / Revert pair the timeline form carries — an action edit is
+// written to the file exactly the way a timeline edit is.
+func (ui *uiState) unitActPanelFooter(gtx layout.Context) layout.Dimensions {
+	hasAction := false
+	rows := 0
+	selName := ""
+	if ui.unitEvtDoc != nil {
+		if a := ui.selectedUnitEvtAction(ui.unitEvtDoc.Actions()); a != nil {
+			hasAction = true
+			rows = len(a.Motions) + len(a.Subactions)
+			if ui.unitActSel >= 0 && ui.unitActSel < rows {
+				if list, j, _, ok := actLocate(*a, ui.unitActSel); ok {
+					selName = list[j].Name
+				}
+			}
+		}
+	}
+	var children []layout.FlexChild
+	if ui.unitActErr != "" {
+		err := ui.unitActErr
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(9), err)
+			l.Color = rgb(0xC98A8A)
+			l.MaxLines = 4
+			return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
+		}))
+	}
+	// The chain tools act on the selected choice — whichever line held the
+	// caret last — and keep the if / else if / else shape intact: a head
+	// moves with its whole chain, a continuation slides inside its own.
+	selLabel := ""
+	if selName != "" {
+		selLabel = "selected:  " + unitViewportRowText(selName)
+	} else if hasAction && rows > 0 {
+		selLabel = "pick a line first"
+	}
+	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButtonDisabled(gtx, &ui.unitActAddIf, "Add if", !hasAction)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButtonDisabled(gtx, &ui.unitActAddElseIf, "+elif", !hasAction)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButtonDisabled(gtx, &ui.unitActAddElse, "+else", !hasAction)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButtonDisabled(gtx, &ui.unitActMoveUp, "\u25b2", !ui.unitActMoveEnabled(-1))
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButtonDisabled(gtx, &ui.unitActMoveDown, "\u25bc", !ui.unitActMoveEnabled(1))
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButtonDisabled(gtx, &ui.unitActDelete, "Delete", rows == 0)
+				}),
+				layout.Flexed(1, rowGap()),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					l := material.Label(ui.th, unit.Sp(9), selLabel)
+					l.Color = cTextDim
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				}),
+			)
+		})
+	}))
+	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.smallButtonDisabled(gtx, &ui.unitActApply, "Apply", !hasAction)
+			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.primaryButton(gtx, &ui.unitEvtSave, "Save .whe")
+			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.smallButtonDisabled(gtx, &ui.unitEvtRevert, "Revert", !ui.unitEvtDirty)
+			}),
+		)
+	}))
+	note := "Saved into this mod's own .whe; the game's files are never written."
+	if ui.unitEvtDirty {
+		note = "Unsaved changes. " + note
+	}
+	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return unitFieldNote(gtx, ui.th, note)
+		})
+	}))
+	inset := layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}
+	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	})
+}
+
+// unitEvtActionPanelBody is the right column while an action is being worked
+// on: that action's own properties — its name and the choices the game walks
+// when it runs, each guarded by its step of the if / else if / else chain —
+// and none of the timeline's events. The panel shows one or the other, so a
+// timeline being edited gives the whole panel to its events instead.
+func (ui *uiState) unitEvtActionPanelBody(gtx layout.Context) []layout.FlexChild {
+	acts := ui.unitEvtDoc.Actions()
+	a := ui.selectedUnitEvtAction(acts)
+	if a == nil {
+		return []layout.FlexChild{
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.unitEventsMessage(gtx, "This .whe carries no actions.")
+			}),
+		}
+	}
+	act := *a
+	text := "Action  " + act.Name
+	if ui.unitEvtDirty {
+		text += "  • unsaved"
+	}
+	return []layout.FlexChild{
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(9), text)
+			l.Color = cTextDim
+			l.MaxLines = 2
+			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return sectionHeader(gtx, ui.th, "Conditions")
+			})
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(9), "One line per choice — press a guard to cycle it, type the condition inline. Apply or Enter writes the document; Save .whe writes the file.")
+			l.Color = cTextDim
+			l.MaxLines = 3
+			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.unitActionConditions(gtx, act)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(9), "Pick a timeline above to edit its events instead.")
+			l.Color = cTextDim
+			l.MaxLines = 2
+			return layout.Inset{Top: unit.Dp(8)}.Layout(gtx, l.Layout)
+		}),
+	}
 }
 
 func (ui *uiState) layoutUnitEventTimelineList(gtx layout.Context) layout.Dimensions {
@@ -1104,31 +2201,53 @@ func (ui *uiState) layoutUnitEventTimelineList(gtx layout.Context) layout.Dimens
 	)
 }
 
-// layoutUnitEventPanel is the right column: the events of the selected
-// timeline, the form that adds one, and the save/revert buttons.
+// layoutUnitEventPanel is the right column. It carries the tools of whatever
+// the reader is working on: the sound transport, the selected timeline's
+// events and the form that edits one while a timeline is picked, and the
+// picked action's conditions while an action is — never both tool sets at
+// once, since an action carries no timeline and no event of its own.
 func (ui *uiState) layoutUnitEventPanel(gtx layout.Context) layout.Dimensions {
 	ui.ensureUnitEvents()
 	sec := ui.currentUnitSection()
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return ui.layoutUnitColumnHeader(gtx, sec.rightTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitEvtTransport(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return ui.panelScrollView(gtx, &ui.unitEvtPanelScroll, func(gtx layout.Context) layout.Dimensions {
-					return ui.unitEventPanelBody(gtx)
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitEventPanelForm(gtx)
-			}),
-		)
+		}
+		if !ui.unitEvtFocusAction {
+			children = append(children,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.layoutUnitEvtTransport(gtx)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			)
+		}
+		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return ui.panelScrollView(gtx, &ui.unitEvtPanelScroll, func(gtx layout.Context) layout.Dimensions {
+				return ui.unitEventPanelBody(gtx)
+			})
+		}))
+		if !ui.unitEvtFocusAction {
+			children = append(children,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.unitEventPanelForm(gtx)
+				}),
+			)
+		} else {
+			// The action panel carries the same commit and file pair the
+			// timeline form does, so an action's conditions are written the
+			// way a timeline's events are.
+			children = append(children,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.unitActPanelFooter(gtx)
+				}),
+			)
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
 }
 
@@ -1140,15 +2259,20 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 	inset := layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}
 	tl := ui.selectedUnitEventTimeline()
 	var children []layout.FlexChild
-	if tl == nil {
+	// The panel carries one editor at a time. While an action is being worked
+	// on it shows that action's conditions and none of the timeline's events,
+	// and the other way round: stacking the two put both editors in one panel
+	// and left the reader hunting for the one they were in.
+	if ui.unitEvtFocusAction {
+		children = ui.unitEvtActionPanelBody(gtx)
+	} else if tl == nil {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.unitEventsMessage(gtx, "Select a timeline in the middle column.")
 		}))
 	} else {
 		// The body below this point belongs to the selected timeline: its header,
 		// the motion's own properties, its event rows and the selected event's
-		// definition. The actions block after it is file-wide and shows even with
-		// no timeline picked.
+		// definition.
 		// Which file and timeline this is, and whether it has unsaved changes.
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			text := "Timeline  " + tl.Name
@@ -1198,96 +2322,10 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 				}))
 			}
 		}
-		// What the selected event actually does, read from its definition.
-		if ui.unitEvtSel >= 0 && ui.unitEvtSel < len(tl.Events) {
-			ev := tl.Events[ui.unitEvtSel]
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Top: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return sectionHeader(gtx, ui.th, "Selected event")
-				})
-			}))
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), "Values are editable — Set or Enter applies, Save .whe writes the file.")
-							l.Color = cTextDim
-							return l.Layout(gtx)
-						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &ui.unitEvtEntrySetClick, "Set")
-						}),
-					)
-				})
-			}))
-			children = append(children,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.unitKeyValueRow(gtx, "Name", ev.Name, false)
-					})
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.unitKeyValueRow(gtx, "At", unitEventTimeLabel(ev.Time), false)
-					})
-				}),
-			)
-			def, ok := ui.unitEvtDoc.Events()[strings.ToLower(ev.Name)]
-			if !ok {
-				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(9), "No definition in this .whe — the game has nothing to play for it.")
-					l.Color = rgb(0xC98A8A)
-					return l.Layout(gtx)
-				}))
-			} else {
-				// The values are typed fields: Enter writes the value into the
-				// in-memory document and the viewport re-resolves from it, and
-				// Save .whe writes the file. The fields refill for the selection
-				// first, so a value typed for the event that was picked a moment
-				// ago cannot land on this one.
-				ui.ensureUnitEvtEntryEditors(len(def.Entries))
-				ui.syncUnitEvtEntryEditors(ev.Name, def)
-				ui.updateUnitEvtEntryEditors(gtx, ev.Name)
-				for i := range def.Entries {
-					i := i
-					key := def.Entries[i].Key
-					children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							return ui.unitEvtEntryRow(gtx, i, key)
-						})
-					}))
-				}
-			}
-		}
 	}
-	// The .whe's actions: which timelines each named action plays and which
-	// other actions it calls, every choice guarded by an if / else if / else
-	// condition — the chain the game walks when the action runs.
-	if acts := ui.unitEvtDoc.Actions(); len(acts) > 0 {
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return sectionHeader(gtx, ui.th, "Actions")
-			})
-		}))
-		for _, a := range acts {
-			a := a
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitActionBlock(gtx, a)
-			}))
-		}
-	}
-
 	dims := inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
-	// Set applies what was typed in the value fields: the button answers even
-	// when no field has focus, so it works where Enter in the field may not.
-	if ui.unitEvtEntrySetClick.Clicked(gtx) {
-		if tl := ui.selectedUnitEventTimeline(); tl != nil && ui.unitEvtSel >= 0 && ui.unitEvtSel < len(tl.Events) {
-			ui.setUnitEvtEntryValues(tl.Events[ui.unitEvtSel].Name)
-		}
-	}
 	return dims
 }
 
@@ -1473,38 +2511,6 @@ func (ui *uiState) reloadUnitModelFx() {
 		}
 	}
 	ui.fxReload(v, doc)
-}
-
-// unitActionBlock renders one DATAACTS action: its name, then each motion it
-// plays and each sub-action it calls with the condition guarding that line.
-func (ui *uiState) unitActionBlock(gtx layout.Context, a whe.FxAction) layout.Dimensions {
-	var rows []layout.FlexChild
-	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), a.Name)
-			l.Color = cText
-			l.MaxLines = 1
-			return l.Layout(gtx)
-		})
-	}))
-	add := func(kind string, ln whe.FxActionLink) {
-		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			text := kind + "  " + ln.Name + "   · " + ln.Guard()
-			return layout.Inset{Left: unit.Dp(12), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(9), text)
-				l.Color = cTextDim
-				l.MaxLines = 2
-				return l.Layout(gtx)
-			})
-		}))
-	}
-	for _, m := range a.Motions {
-		add("motion", m)
-	}
-	for _, s := range a.Subactions {
-		add("action", s)
-	}
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
 
 // unitEventPanelForm draws the static input form and action buttons at the bottom of the right column.

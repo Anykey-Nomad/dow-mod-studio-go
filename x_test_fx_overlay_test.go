@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || linux
 
 package main
 
@@ -444,6 +444,37 @@ func TestFxPreviewScaleAffectsCPUOverlaySpriteGeometry(t *testing.T) {
 	small, large := render(0.5), render(2)
 	if small == 0 || large <= small {
 		t.Fatalf("CPU overlay pixels at scale 0.5=%d and scale 2=%d; larger scale must cover more pixels", small, large)
+	}
+}
+
+func TestMarkerLocalParticleOffsetAndPlaneFollowMarker(t *testing.T) {
+	frame := [3]fauxgl.Vector{
+		{Y: 1},
+		{Z: 1},
+		{X: 1},
+	}
+	e := fxOverlayEffect{
+		Origin: fauxgl.Vector{X: 10, Y: 20, Z: 30},
+		Frame:  frame,
+		Axis:   frame[2],
+	}
+	sp := e.fxTurnSprite(fx.Sprite{
+		Pos:        [3]float64{2, 3, 4},
+		Horizontal: true,
+	})
+	axX, axY, axZ := e.fxRingFrame()
+	sp = fxOrientSprite(sp, [3]fauxgl.Vector{axX, axY, axZ})
+	if got, want := sp.Pos, [3]float64{4, 2, 3}; got != want {
+		t.Errorf("marker-local particle offset = %v, want %v", got, want)
+	}
+	if got, want := sp.PlaneNormal, [3]float64{1, 0, 0}; got != want {
+		t.Errorf("spray ring plane normal = %v, want marker forward %v", got, want)
+	}
+	// The marker's placement remains the pivot; its world-space position is
+	// not rotated or replaced by the local particle displacement.
+	world := e.Origin.Add(fauxgl.Vector{X: sp.Pos[0], Y: sp.Pos[1], Z: sp.Pos[2]})
+	if want := (fauxgl.Vector{X: 14, Y: 22, Z: 33}); world != want {
+		t.Errorf("world particle position = %v, want marker origin plus mapped offset %v", world, want)
 	}
 }
 

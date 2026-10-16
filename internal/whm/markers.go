@@ -99,20 +99,30 @@ func (m *Model) markerParentIndex(mk Marker) int {
 // the rest of the marker's frame uses is not applied: it only chooses between
 // the two signs of an aim, and both signs are scored here anyway.
 func (m *Model) boneAim(bone int, pose Pose) (fauxgl.Vector, bool) {
-	if bone < 0 || bone >= len(pose.Bones) {
+	if bone < 0 || bone >= len(pose.Bones) || bone >= len(m.Bones) {
 		return fauxgl.Vector{}, false
 	}
-	local := fauxgl.Vector{
+	// A root's orientation is only the model's chosen world frame, not an
+	// aim: its axis says nothing about which direction a marker on the model
+	// should point. Let the marker's position and the model geometry provide
+	// that cue below instead.
+	if m.Bones[bone].Parent < 0 {
+		return fauxgl.Vector{}, false
+	}
+	// pose.Bones already contains the accumulated parent and local rotations.
+	// Its second column is therefore the bone's world-space aim. Applying the
+	// accumulated matrix to that column again squares the world rotation; on
+	// the monolith's quarter-turn root this turns a horizontal axis into -Z,
+	// making mrkr_portal_01 point straight down.
+	axis := fauxgl.Vector{
 		X: pose.Bones[bone].X01,
 		Y: pose.Bones[bone].X11,
 		Z: pose.Bones[bone].X21,
 	}
-	rot := pose.Bones[bone].MulPosition(local).
-		Sub(pose.Bones[bone].MulPosition(fauxgl.Vector{}))
-	if rot.Length() < 1e-6 {
+	if axis.Length() < 1e-6 {
 		return fauxgl.Vector{}, false
 	}
-	return rot.Normalize(), true
+	return axis.Normalize(), true
 }
 
 // ModelMarkerForwards picks, for each marker, which of its matrix's six columns
@@ -199,6 +209,17 @@ func ModelMarkerForwards(m *Model) []int {
 				// points, so there is nothing to score against and
 				// column one stands as the reading this has always
 				// fallen back to.
+				continue
+			}
+			// Portal markers on a structure root sit below the model centre.
+			// A full 3D vector to the centroid therefore points diagonally up,
+			// and choosing the closest marker column makes the portal point
+			// straight up/down. Its intended forward is into the structure, so
+			// use the horizontal component of the vector toward the mesh.
+			if strings.Contains(strings.ToLower(mk.Name), "portal") && m.Bones[b].Parent < 0 {
+				aim.Z = 0
+			}
+			if aim.Length() < 1e-6 {
 				continue
 			}
 		}

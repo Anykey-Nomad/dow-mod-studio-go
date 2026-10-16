@@ -36,6 +36,7 @@ func main() {
 	locale := flag.String("locale", "English", "locale used to expand %LOCALE% in a module")
 	force := flag.Bool("force", false, "overwrite files that already exist when extracting")
 	verbose := flag.Bool("v", false, "also print every entry that was walked past")
+	missOnlyVerbose := flag.Bool("miss", false, "only print MISS lines when -v is also set")
 	flag.Var(&sgas, "sga", "archive to search: a path, or a name beside the module (repeatable, or comma separated)")
 	flag.Var(&actions, "act", "what to do: check, extract, list (repeatable, or comma separated). Default check")
 	flag.Parse()
@@ -80,7 +81,7 @@ func main() {
 			hits := matchEntries(entries, name)
 			switch {
 			case len(hits) == 0:
-				if wantCheck {
+				if wantCheck && (*missOnlyVerbose && *verbose || !*missOnlyVerbose) {
 					fmt.Printf("MISS %-48s %s\n", name, a.path)
 					missing++
 				}

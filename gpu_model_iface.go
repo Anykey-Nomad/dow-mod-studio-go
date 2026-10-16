@@ -6,10 +6,8 @@ import (
 	"gioui.org/layout"
 )
 
-// The hardware renderer is only available where Gio's backend is Direct3D 11.
-// These types are the seam between the 3D view and the platform specific
-// implementation, so the view itself stays portable and simply falls back to
-// the software renderer when there is no handle.
+// These types are the seam between the 3D view and its Vulkan renderer, so the
+// view stays portable and can fall back to software when Vulkan is unavailable.
 
 // modelGpuHandle renders models on the GPU. A nil handle means the window's
 // backend cannot do it, and every frame goes through the software renderer

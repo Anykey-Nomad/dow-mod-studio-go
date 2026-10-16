@@ -6,10 +6,12 @@ import (
 	viewer "dow-mod-studio/internal/3d_viewer"
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/whe"
+	"dow-mod-studio/internal/whm"
 	"fmt"
 	"image"
 	"image/draw"
 	"log"
+	"strings"
 	"time"
 
 	"gioui.org/io/event"
@@ -17,15 +19,14 @@ import (
 	"gioui.org/widget"
 )
 
-// modelFrame is the result of one background render.
+// modelMaterialResult carries resolved textures back to the UI goroutine.
+// modelFrame is one finished software render and the serial it was asked for.
 type modelFrame struct {
 	image  *image.RGBA
 	serial uint64
 }
 
-// modelMaterialResult carries resolved materials back to the UI goroutine. The
-// raw .rsh bytes are only sent when the hardware renderer is in use, since it
-// uploads them without decoding anything.
+// modelMaterialResult carries resolved textures back to the UI goroutine.
 type modelMaterialResult struct {
 	materials map[string]WhmMaterial
 	rsh       map[string][]byte
@@ -49,6 +50,34 @@ type modelViewer struct {
 	time         float32 // normalised 0..1 within the clip
 	showSkeleton bool
 	textured     bool
+	// frame is the last software render, painted by the canvas.
+	frame *image.RGBA
+	// frameCh delivers the render in flight; serial orders renders so a late
+	// frame never replaces a newer one, and pending records a camera move that
+	// arrived while a render was running.
+	frameCh chan modelFrame
+	serial  uint64
+	pending bool
+	// painted is the serial of the last software frame the canvas scheduled a
+	// paint for, so a frame that lands between layouts gets one.
+	painted uint64
+	// rendering is set while a frame is being produced.
+	rendering bool
+	// gpuBroken and gpuFrame belong to the hardware path. gpuFrame is the last
+	// frame drawn on the GPU; it lives in video memory, so painting it is a
+	// hand over of a device handle rather than a copy. gpuRetries counts
+	// renders deferred by a transient backend refusal (see modelGpuErrTransient):
+	// past modelGpuRetryLimit the hardware path is given up on as if it had
+	// failed outright.
+	gpuBroken  bool
+	gpuFrame   modelGpuFrame
+	gpuRetries int
+	// gpuProbeW/H and gpuProbedTextured record which GPU frames have already
+	// been read back, so the readback runs on the transitions that matter only.
+	gpuProbeW, gpuProbeH int
+	gpuProbedTextured    bool
+	// rshData holds the raw .rsh bytes of every material.
+	rshData map[string][]byte
 	// sideControls puts the playback strip beside the canvas instead of under
 	// it, which is what the object window's viewport wants: its canvas is a
 	// third of the window wide and a strip of eight buttons does not fit under
@@ -87,35 +116,13 @@ type modelViewer struct {
 	uvExtent   [4]float32
 	uvExtentOK bool
 
-	// rshData holds the raw .rsh bytes of every material, which is what the
-	// hardware renderer uploads. The software path decodes them instead and
-	// keeps the result in materials.
-	rshData map[string][]byte
-	// gpuFrame is the last frame drawn on the GPU. It lives in video memory
-	// and is owned by the renderer.
-	gpuFrame modelGpuFrame
-	// gpuBroken remembers that hardware rendering failed, so a broken driver
-	// does not cost a failed render on every frame.
-	gpuBroken bool
-
-	// async state
-	frameCh         chan modelFrame
-	frame           *image.RGBA
-	rendering       bool
-	pending         bool
-	serial          uint64
-	painted         uint64
+	// Async material loading and viewport state.
 	loading         bool
 	materialsLoaded bool
 	missing         int
 	renderW         int
 	renderH         int
-	// gpuProbeW/H mark the frame size the content probe last ran at, and
-	// gpuProbedTextured whether a frame with real textures bound was probed.
-	gpuProbeW         int
-	gpuProbeH         int
-	gpuProbedTextured bool
-	stop              context.CancelFunc
+	stop            context.CancelFunc
 
 	// showFX plays the model's effects over the frame. They live in the
 	// events its entity blueprint references and hang off markers on its
@@ -123,10 +130,46 @@ type modelViewer struct {
 	// simulated from then on, which is what keeps the canvas repainting
 	// while the toggle is on.
 	showFX      bool
+	showFXAxes  bool
 	showGround  bool
 	groundImage *image.RGBA
 	fxEffects   []fxOverlayEffect
+	fxAxesClick widget.Clickable
 	fxTextures  map[string]*image.RGBA
+	// FX checklist selection is reset with the clip, then defaults to the
+	// events on that clip's timelines.
+	fxSelectionAnim   string
+	fxManualOn        map[int]bool
+	fxManualOff       map[int]bool
+	fxOverrides       map[int]fxAttributeOverride
+	fxAttrClicks      []widget.Clickable
+	fxAttrIndex       int
+	fxAttrClick       widget.Clickable
+	fxAttrOpen        bool
+	fxAttrDragging    bool
+	fxAttrDragX       float32
+	fxAttrDragY       float32
+	fxAttrWindowX     int
+	fxAttrWindowY     int
+	fxAttrPosX        widget.Editor
+	fxAttrPosY        widget.Editor
+	fxAttrPosZ        widget.Editor
+	fxAttrRotX        widget.Editor
+	fxAttrRotY        widget.Editor
+	fxAttrRotZ        widget.Editor
+	fxAttrSetPos      widget.Clickable
+	fxAttrSetAngle    widget.Clickable
+	fxAttrResetPos    widget.Clickable
+	fxAttrResetRot    widget.Clickable
+	fxAttrError       string
+	fxAttrSetDistance widget.Clickable
+	fxAttrDir         widget.Clickable
+	fxAttrMarker      widget.Clickable
+	fxAttrClose       widget.Clickable
+	fxAttrTitle       widget.Clickable
+	fxAttrDistance    widget.Editor
+	fxAttrDragTag     event.Tag
+	fxAttrDragOrigin  image.Point
 	// fxScale uniformly adjusts model-local FX geometry while leaving marker
 	// origins fixed. One is the authored model-space size; the viewport exposes
 	// the factor to inspect effects whose sizes need manual calibration.
@@ -152,8 +195,8 @@ type modelViewer struct {
 	// separate from the player's own flag so that switching them off and on
 	// again does not decode anything a second time.
 	fxSoundOn bool
-	// fxOverlay is the picture the software path paints over the frame, and
-	// fxScene the same particles as the hardware renderer draws them.
+	// fxOverlay is the software-rendered particle image and fxScene is its
+	// Vulkan rendering input.
 	fxOverlay *image.RGBA
 	fxScene   *fxGpuScene
 	fxCh      chan fxLoadResult
@@ -250,7 +293,8 @@ func newModelViewer(model *WhmModel, modelFile string) *modelViewer {
 		uvExtentOK: modelHasUVs(model),
 		// The effects at the size their files ask for; the panel moves this
 		// from there.
-		fxScale: fxScaleDefaultValue,
+		fxScale:     fxScaleDefaultValue,
+		fxAttrIndex: -1,
 		// Nothing has been rendered yet, so the canvas must ask for the first
 		// frame as soon as it is laid out.
 		redraw: true,
@@ -285,15 +329,11 @@ func newObjectModelViewer(model *WhmModel, modelFile string, ground image.Image)
 	return v
 }
 
-// modelClose drops this viewer's cached GPU data before stopping its async jobs.
+// modelClose stops this viewer's async jobs.
 func (ui *uiState) modelClose(v *modelViewer) {
-	if v == nil {
-		return
+	if v != nil {
+		v.close()
 	}
-	if ui.modelGpu != nil && v.model != nil {
-		ui.modelGpu.forget(v.model)
-	}
-	v.close()
 }
 
 // close stops any running render so the goroutine does not outlive the tab.
@@ -329,10 +369,8 @@ func (v *modelViewer) invalidate() {
 	}
 }
 
-// setRenderSize records the size the next render should use. A change means the
-// projection changed, so the frame already on screen no longer fits and a
-// redraw is scheduled. The first call always schedules one, because that is
-// what gets the very first frame rendered.
+// setRenderSize records the size the next GPU render should use. A change means
+// the projection changed, so the view needs a redraw.
 func (v *modelViewer) setRenderSize(w, h int) {
 	if w < 1 || h < 1 {
 		return
@@ -348,13 +386,146 @@ func (v *modelViewer) setRenderSize(w, h int) {
 // requestRender starts a background render unless one is running. Only the
 // newest request is kept, so a burst of camera movement collapses into a
 // single follow-up frame.
+// renderModelOnGpu draws a frame with the hardware renderer, which is far
+// cheaper than the software one and can animate. It reports false when the
+// software path has to draw instead: no hardware renderer, the skeleton or
+// the settings checkbox, or a failure that marks the path broken.
+//
+// The pass runs here, on the goroutine that calls Frame and before it. Its
+// command buffer remains open so the next Gio frame submits both the offscreen
+// render and the blit that samples it in queue order.
+func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bool {
+	v := t.model
+	if v == nil {
+		return false
+	}
+	reason := ui.modelGpuUnavailable(v)
+	if reason != "" {
+		// The software path takes over, so its frame has to be the one on
+		// screen rather than whatever the hardware path drew last.
+		if modelGpuSkipLogged != reason {
+			log.Printf("3D preview: using software renderer (%s)", reason)
+			modelGpuSkipLogged = reason
+		}
+		v.gpuFrame = nil
+		return false
+	}
+	if modelGpuSkipLogged != "" {
+		log.Printf("3D preview: hardware renderer taking over again (%s resolved)", modelGpuSkipLogged)
+		modelGpuSkipLogged = ""
+	}
+	gpu := ui.modelGpuRenderer()
+	opts := v.options(w, h)
+	opts.Quality = modelQualityFinal
+	var rsh func(string) ([]byte, bool)
+	if v.textured && len(v.rshData) > 0 {
+		rsh = func(material string) ([]byte, bool) {
+			data, ok := v.rshData[material]
+			return data, ok
+		}
+	}
+	// The first frame of a stretch on the hardware path proves the render
+	// itself completed; without it a silent window cannot be told apart from
+	// a render that never returned.
+	firstGPUFrame := v.gpuFrame == nil
+	start := time.Now()
+	frame, err := gpu.Render(v.model, v.pose(), opts, v.materials, rsh)
+	if err == nil {
+		d := time.Since(start)
+		if firstGPUFrame {
+			log.Printf("3D preview: GPU frame ready %dx%d in %v (serial=%d)", w, h, d, v.serial)
+		}
+		if d >= 50*time.Millisecond {
+			log.Printf("3D preview: slow GPU render %v (%dx%d)", d, w, h)
+		}
+		// Read the frame back on the transitions that matter (the first frame,
+		// the first with textures bound, and the first after a resize) so a
+		// grey window can be told apart from a black model and lost draws.
+		needProbe := v.gpuProbeW != w || v.gpuProbeH != h
+		if rsh != nil && !v.gpuProbedTextured {
+			needProbe = true
+			v.gpuProbedTextured = true
+		}
+		if needProbe {
+			v.gpuProbeW, v.gpuProbeH = w, h
+			context := fmt.Sprintf("%dx%d textures=%v", w, h, rsh != nil)
+			if !probeGpuFrame(frame, context) {
+				// The device did not survive the readback. Every later submit
+				// would fail the same way, so the hardware path is given up on
+				// here rather than one frame at a time.
+				log.Printf("3D preview: hardware render gave up after the probe, falling back to software")
+				v.gpuBroken = true
+				v.gpuFrame = nil
+				return false
+			}
+		}
+	}
+	if err != nil {
+		if modelGpuErrTransient(err) {
+			// The backend refusing a render right now, not a device that has
+			// failed: the custom pass's command buffer stays open until Gio
+			// submits the frame it belongs to, and a render asked for before
+			// that is refused. The .whm preview starts playback in its own
+			// constructor, so its second render lands in exactly that window
+			// — marking the path broken here stranded it on the software
+			// renderer for the rest of the session. Ask for another frame
+			// instead, bounded so a backend that never clears still gives up.
+			if v.gpuRetries < modelGpuRetryLimit {
+				v.gpuRetries++
+				v.redraw = true
+				// The counter is reset by every successful render, so the
+				// modulo above never fires while the path keeps working;
+				// a time throttle is what keeps the log readable.
+				if time.Since(modelGpuRetryLogged) >= time.Second {
+					modelGpuRetryLogged = time.Now()
+					log.Printf("3D preview: GPU render deferred (%v), retry %d/%d", err, v.gpuRetries, modelGpuRetryLimit)
+				}
+				return v.gpuFrame != nil
+			}
+			log.Printf("3D preview: hardware render still refused after %d deferred retries, falling back to software: %v", v.gpuRetries, err)
+		} else {
+			// One failure is enough: the software path is always there.
+			log.Printf("3D preview: hardware render failed, falling back to software: %v", err)
+		}
+		v.gpuBroken = true
+		v.gpuFrame = nil
+		return false
+	}
+	v.gpuRetries = 0
+	v.gpuFrame = frame
+	return true
+}
+
+// modelGpuRetryLimit bounds how many renders a transient refusal may defer
+// before the hardware path is treated as broken: 300 frames at the 16ms the
+// canvas invalidates on is about five seconds of a refusal that never clears.
+const modelGpuRetryLimit = 300
+
+// modelGpuRetryLogged throttles the deferral line to once a second.
+var modelGpuRetryLogged time.Time
+
+// modelGpuErrTransient reports whether an error from the hardware renderer is
+// a backend refusal to run right now rather than a device failure. The Vulkan
+// backend of the Gio fork refuses a custom pass, or a texture upload, while
+// Gio is mid-frame — that is, while the previous custom pass's command buffer
+// is still open awaiting the frame that submits it. Such a refusal clears by
+// itself once that frame goes through, so the render is worth asking for again.
+func modelGpuErrTransient(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "cannot run inside a Gio frame") ||
+		strings.Contains(s, "a custom pass is already active") ||
+		strings.Contains(s, "command buffer is in flight") ||
+		strings.Contains(s, "upload while a custom pass is active") ||
+		strings.Contains(s, "another command buffer is already being recorded")
+}
+
 func (v *modelViewer) requestRender(width, height, quality int) {
 	if v.rendering {
 		v.pending = true
 		return
 	}
-	log.Printf("3D preview: soft render start serial=%d size=%dx%d", v.serial+1, width, height)
-	opts := v.options(width, height, quality)
+	opts := v.options(width, height)
+	opts.Quality = quality
 	model := v.model
 	pose := v.pose()
 	v.serial++
@@ -367,8 +538,16 @@ func (v *modelViewer) requestRender(width, height, quality int) {
 	}()
 }
 
+// modelData returns the decoded model the canvas renders, or nil before one is loaded.
+func (v *modelViewer) modelData() *whm.Model {
+	if v.model == nil {
+		return nil
+	}
+	return &v.model.Model
+}
+
 // options builds the render request for the current camera and pose.
-func (v *modelViewer) options(width, height, quality int) RenderOptions {
+func (v *modelViewer) options(width, height int) RenderOptions {
 	var mats map[string]WhmMaterial
 	if v.textured {
 		mats = v.materials
@@ -393,7 +572,6 @@ func (v *modelViewer) options(width, height, quality int) RenderOptions {
 			Ambient:   10,
 			Diffuse:   10,
 			BaseColor: rgbaWhite,
-			Quality:   quality,
 			Skeleton:  v.showSkeleton,
 			// nil rather than v.markerIndex: the viewer's -1 is its own
 			// "nothing picked", and the render request says the same thing
@@ -410,85 +588,7 @@ func (v *modelViewer) options(width, height, quality int) RenderOptions {
 	}
 }
 
-func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bool {
-	v := t.model
-	if v == nil {
-		return false
-	}
-	reason := ui.modelGpuUnavailable(v)
-	if reason != "" {
-		// The software path takes over, so its frame has to be the one on
-		// screen rather than whatever the hardware path drew last.
-		if modelGpuSkipLogged != reason {
-			log.Printf("3D preview: using software renderer (%s)", reason)
-			modelGpuSkipLogged = reason
-		}
-		v.gpuFrame = nil
-		return false
-	}
-	if modelGpuSkipLogged != "" {
-		log.Printf("3D preview: hardware renderer taking over again (%s resolved)", modelGpuSkipLogged)
-		modelGpuSkipLogged = ""
-	}
-	gpu := ui.modelGpuRenderer()
-	opts := v.options(w, h, modelQualityFinal)
-	var rsh func(string) ([]byte, bool)
-	if v.textured && len(v.rshData) > 0 {
-		rsh = func(material string) ([]byte, bool) {
-			data, ok := v.rshData[material]
-			return data, ok
-		}
-	}
-	// The first frame of a stretch on the hardware path proves the render
-	// itself completed — without it a silent window cannot be told apart
-	// from a render that never returned.
-	firstGPUFrame := v.gpuFrame == nil
-	start := time.Now()
-	frame, err := gpu.Render(v.model, v.pose(), opts, v.materials, rsh)
-	if err == nil {
-		d := time.Since(start)
-		if firstGPUFrame {
-			log.Printf("3D preview: GPU frame ready %dx%d in %v (serial=%d)", w, h, d, v.serial)
-		}
-		if d >= 50*time.Millisecond {
-			log.Printf("3D preview: slow GPU render %v (%dx%d)", d, w, h)
-		}
-		// Read the frame back on the transitions that matter — the first
-		// frame ever, the first one with textures bound, and the first one
-		// after a resize — so a grey window can be told apart from a black
-		// model and from lost draws.
-		needProbe := v.gpuProbeW != w || v.gpuProbeH != h
-		if rsh != nil && !v.gpuProbedTextured {
-			needProbe = true
-			v.gpuProbedTextured = true
-		}
-		if needProbe {
-			v.gpuProbeW, v.gpuProbeH = w, h
-			context := fmt.Sprintf("%dx%d textures=%v", w, h, rsh != nil)
-			if !probeGpuFrame(frame, context) {
-				// The device did not survive the readback. Every
-				// later submit would fail the same way, so the
-				// hardware path is given up on here rather than
-				// one frame at a time.
-				log.Printf("3D preview: hardware render gave up after the probe, falling back to software")
-				v.gpuBroken = true
-				v.gpuFrame = nil
-				return false
-			}
-		}
-	}
-	if err != nil {
-		// One failure is enough: the software path is always there.
-		log.Printf("3D preview: hardware render failed, falling back to software: %v", err)
-		v.gpuBroken = true
-		v.gpuFrame = nil
-		return false
-	}
-	v.gpuFrame = frame
-	return true
-}
-
-// pollModelJobs runs on the UI goroutine and applies whatever the workers sent.
+// pollModelJobs runs on the UI goroutine and applies texture/FX results.
 func (ui *uiState) pollModelJobs() {
 	for _, t := range ui.openTabs {
 		ui.pollViewerJobs(t)
@@ -498,9 +598,8 @@ func (ui *uiState) pollModelJobs() {
 	ui.pollViewerJobs(ui.unitModel)
 }
 
-// pollViewerJobs takes whatever one viewer has finished: its textures, and the
-// frame a worker rendered. A nil tab, or one with no model on it, is the normal
-// case for most of them.
+// pollViewerJobs takes whatever one viewer has finished: its textures and FX.
+// A nil tab, or one with no model on it, is the normal case for most of them.
 func (ui *uiState) pollViewerJobs(t *fileTab) {
 	if t == nil || t.model == nil {
 		return
@@ -547,16 +646,8 @@ func (ui *uiState) pollViewerJobs(t *fileTab) {
 			if frame.serial >= v.serial {
 				v.serial = frame.serial
 				v.frame = frame.image
-				size := "nil"
-				if frame.image != nil {
-					b := frame.image.Bounds()
-					size = fmt.Sprintf("%dx%d", b.Dx(), b.Dy())
-				}
-				log.Printf("3D preview: soft frame applied serial=%d size=%s", frame.serial, size)
 			} else {
-				// A frame the camera already moved past. Silent here it used
-				// to be, which hides a render loop that gets nowhere.
-				log.Printf("3D preview: soft frame DROPPED serial=%d current=%d", frame.serial, v.serial)
+				// A frame the camera already moved past.
 				v.redraw = true
 			}
 			// A camera move during the render means the frame is already

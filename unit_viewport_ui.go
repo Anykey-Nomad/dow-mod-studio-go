@@ -121,9 +121,7 @@ func (ui *uiState) layoutUnitModelSide(gtx layout.Context) layout.Dimensions {
 }
 
 // unitModelSideControls is the part of the side panel that does not scroll:
-// the playback strip, the toggles that change what the preview shows, and the
-// camera list. It is placed before the scroll area in layout order, so it stays
-// put while the bone and keyframe lists move under it.
+// the playback strip, preview toggles, camera list, and model-list tabs.
 func (ui *uiState) unitModelSideControls(gtx layout.Context) layout.Dimensions {
 	t := ui.unitModel
 	v := ui.unitModelViewer()
@@ -134,6 +132,7 @@ func (ui *uiState) unitModelSideControls(gtx layout.Context) layout.Dimensions {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Playback") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelTransport(gtx, t) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelToggles(gtx, t) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelListTabs(gtx, t) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Cameras") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitCameraList(gtx, v) }),
@@ -148,14 +147,8 @@ func (ui *uiState) unitModelSideEmpty(gtx layout.Context) layout.Dimensions {
 }
 
 // unitModelSideScrollArea is the scrollable body of the side panel. It holds
-// the animations, markers, bones and the button that opens the model in its
-// own tab.
+// the selected model list and any controls belonging to that list.
 func (ui *uiState) unitModelSideScrollArea(gtx layout.Context) layout.Dimensions {
-	// The pose bar goes ahead of the list rather than after it. Flex places
-	// children in the order given, and the list fills whatever is left, so a
-	// bar placed after it sat below the bottom edge of the panel and its Save
-	// WHM row was never on screen. Ahead of the list it is always drawn, and
-	// the list still scrolls underneath it.
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.unitBonePoseBar(gtx)
@@ -191,9 +184,15 @@ func (ui *uiState) unitModelSideBody(gtx layout.Context) layout.Dimensions {
 			return ui.unitClipOrMarkerSection(gtx, v)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if ui.unitFXListMode {
+				return layout.Dimensions{}
+			}
 			return ui.unitImportSection(gtx, v)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if ui.unitFXListMode {
+				return layout.Dimensions{}
+			}
 			return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return ui.smallButton(gtx, &ui.unitOpenModelClick, "Open model in a tab")
 			})
@@ -262,25 +261,12 @@ func (ui *uiState) unitModelFrameLabel(gtx layout.Context, v *modelViewer) layou
 	return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 }
 
-// unitModelToggles is the second row of the strip: what is left of the
-// preview's own controls — the camera reset, which is how a view turned by
-// hand comes back to the framing the model was opened with, and the button
-// that swaps the list below for the next one of the three. The swap lives
-// here rather than on the list's own header so it stays in reach however
-// long the list grows: this row is the part of the panel that never scrolls.
+// unitModelToggles holds the viewport reset and effect playback controls.
 func (ui *uiState) unitModelToggles(gtx layout.Context, t *fileTab) layout.Dimensions {
 	ui.modelControlClicks(gtx, t)
-	// The click is drained before the button is laid out below, the same
-	// order every other button in this panel uses.
-	if ui.unitMarkerListToggle.Clicked(gtx) {
-		ui.unitListMode = (ui.unitListMode + 1) % 3
-		if v := t.model; v != nil {
-			v.redraw = true
-		}
-	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitModelViewButtons(gtx, t, true)
+			return ui.unitModelViewButtons(gtx, t, false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.unitModelFXRow(gtx, t)
@@ -288,8 +274,7 @@ func (ui *uiState) unitModelToggles(gtx layout.Context, t *fileTab) layout.Dimen
 	)
 }
 
-// unitModelViewButtons is the viewport's reset/list row. WHM tabs reuse its
-// reset button without showing the unit-only list switch.
+// unitModelViewButtons is the viewport's reset row. WHM tabs reuse it as well.
 func (ui *uiState) unitModelViewButtons(gtx layout.Context, t *fileTab, showListToggle bool) layout.Dimensions {
 	gtx = modelRowHeight(gtx)
 	return layout.Inset{Top: unit.Dp(2), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx,
@@ -297,14 +282,6 @@ func (ui *uiState) unitModelViewButtons(gtx layout.Context, t *fileTab, showList
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return ui.smallButton(gtx, &t.modelReset, "Reset view")
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					if !showListToggle {
-						return layout.Dimensions{}
-					}
-					return layout.Inset{Left: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButton(gtx, &ui.unitMarkerListToggle, ui.unitListToggleLabel())
-					})
 				}),
 				layout.Flexed(1, rowGap()),
 			)
@@ -320,6 +297,7 @@ func (ui *uiState) unitModelFXRow(gtx layout.Context, t *fileTab) layout.Dimensi
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.smallButton(gtx, &t.modelFX, modelFXLabel(v))
 		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAxesButton(gtx, v) }),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v == nil || v.groundImage == nil)
@@ -328,15 +306,49 @@ func (ui *uiState) unitModelFXRow(gtx layout.Context, t *fileTab) layout.Dimensi
 	)
 }
 
-// unitListToggleLabel is what the list swap button says: the list it would
-// show next, so the label names where the click goes.
-func (ui *uiState) unitListToggleLabel() string {
-	next := [3]string{"Show markers", "Show bones", "Show animations"}
-	mode := ui.unitListMode
-	if mode < 0 || mode >= len(next) {
-		mode = 0
+func (ui *uiState) unitModelListTabs(gtx layout.Context, t *fileTab) layout.Dimensions {
+	ui.handleUnitModelListTabClicks(gtx, t)
+	labels := []string{"Animations", "Markers", "Bones", "FX"}
+	selected := ui.unitListMode
+	if ui.unitFXListMode {
+		selected = 3
 	}
-	return next[mode]
+	return ui.modelListTabButtons(gtx, labels, ui.unitListTabClicks[:], selected)
+}
+
+func (ui *uiState) handleUnitModelListTabClicks(gtx layout.Context, t *fileTab) {
+	ui.unitListTrackModifiers(gtx)
+	for i := range ui.unitListTabClicks {
+		if ui.unitListTabClicks[i].Clicked(gtx) {
+			ui.unitFXListMode = i == 3
+			if i < 3 {
+				ui.unitListMode = i
+			}
+			ui.unitViewportScroll = panelScrollState{}
+			if t != nil && t.model != nil {
+				t.model.invalidate()
+			}
+		}
+	}
+}
+
+func (ui *uiState) modelListTabButtons(gtx layout.Context, labels []string, clicks []widget.Clickable, selected int) layout.Dimensions {
+	if len(clicks) < len(labels) {
+		return layout.Dimensions{}
+	}
+	if selected < 0 || selected >= len(labels) {
+		selected = 0
+	}
+	children := make([]layout.FlexChild, 0, len(labels))
+	for i, label := range labels {
+		i, label := i, label
+		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return ui.toggleButton(gtx, &clicks[i], label, selected == i, cSelectBg)
+		}))
+	}
+	return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
+	})
 }
 
 // unitModelFileLabel is the model file the viewport is showing.
@@ -405,7 +417,7 @@ func (ui *uiState) unitAnimListWithClicks(gtx layout.Context, v *modelViewer, cl
 }
 
 // unitClipOrMarkerSection is the one section of the panel that holds the
-// clip list, the marker list or the bone list. All three are lists of the
+// clip list, marker list, bone list, or FX list. All four are lists of the
 // same model's contents, and all have to be reachable while looking at the
 // others: which clip plays an effect is a marker question, which marker a
 // beam leaves is a clip question, and a bone sits under both.
@@ -413,12 +425,32 @@ func (ui *uiState) unitAnimListWithClicks(gtx layout.Context, v *modelViewer, cl
 // The header says which list is on show; the button that swaps it lives in
 // the Playback strip above, which never scrolls away.
 func (ui *uiState) unitClipOrMarkerSection(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	return ui.unitModelListSection(gtx, v, ui.unitListMode, &ui.unitAnimClicks, &ui.unitMarkerClicks, &ui.unitBoneClicks)
+	return ui.unitModelListSectionOrFX(gtx, v, ui.unitListMode, ui.unitFXListMode,
+		&ui.unitAnimClicks, &ui.unitMarkerClicks, &ui.unitBoneClicks, &ui.unitFXClicks)
 }
 
 func (ui *uiState) unitModelListContent(gtx layout.Context, t *fileTab, mode int) layout.Dimensions {
 	ui.unitListTrackModifiers(gtx)
-	return ui.unitModelListSection(gtx, t.model, mode, &t.modelAnimClicks, &t.modelMarkerClicks, &t.modelBoneClicks)
+	return ui.unitModelListSectionOrFX(gtx, t.model, mode, mode == 3, &t.modelAnimClicks, &t.modelMarkerClicks, &t.modelBoneClicks, &t.modelFXClicks)
+}
+
+func (ui *uiState) unitModelListSectionOrFX(gtx layout.Context, v *modelViewer, mode int, fxMode bool, animClicks, markerClicks, boneClicks, fxClicks *[]widget.Clickable) layout.Dimensions {
+	if fxMode {
+		return ui.unitFXListWithHeader(gtx, v, fxClicks)
+	}
+	return ui.unitModelListSection(gtx, v, mode, animClicks, markerClicks, boneClicks)
+}
+
+func (ui *uiState) unitFXListWithHeader(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
+	if v == nil || v.model == nil {
+		return sectionHeader(gtx, ui.th, "FX")
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return sectionHeader(gtx, ui.th, fmt.Sprintf("FX (%d)", len(v.fxEffects)))
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelFxChecklist(gtx, v, clicks) }),
+	)
 }
 
 func (ui *uiState) unitModelListSection(gtx layout.Context, v *modelViewer, mode int, animClicks, markerClicks, boneClicks *[]widget.Clickable) layout.Dimensions {

@@ -8,7 +8,7 @@ import (
 	"github.com/fogleman/fauxgl"
 )
 
-// Texture samples game textures in top-down Direct3D coordinate order, unlike
+// Texture samples game textures in top-down row order, unlike
 // fauxgl's built-in ImageTexture which flips V.
 type Texture struct {
 	img *image.RGBA

@@ -1,10 +1,15 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package main
 
 import "gioui.org/app"
 
-// newModelGpuForWindow returns nil off Windows: the hardware renderer draws
-// through Gio's Direct3D 11 backend, and the 3D view falls back to the
-// software renderer everywhere else.
+// modelGpuTooEarly is only ever set by the Vulkan path; without it, it stays false.
+var modelGpuTooEarly bool
+
+// newModelGpuForWindow returns nil on platforms without the Vulkan model renderer.
 func newModelGpuForWindow(w *app.Window) modelGpuHandle { return nil }
+
+// probeGpuFrame has no hardware frame to read back here, so there is nothing
+// to fail: it reports success.
+func probeGpuFrame(f modelGpuFrame, context string) bool { return true }

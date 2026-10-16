@@ -145,6 +145,9 @@ func init() {
 // ── UI state ─────────────────────────────────────────────────────────────────
 
 type uiState struct {
+	// forceSoftRenderer keeps the 3D viewport on the software rasteriser.
+	forceSoftRenderer bool
+
 	th *material.Theme
 
 	menuOpen       int
@@ -262,22 +265,9 @@ type uiState struct {
 	settingsFormatEditor   widget.Editor
 	settingsFormatOriginal string
 	settingsThemeClick     widget.Clickable
-	settingsVkClick        widget.Clickable
-	settingsD3DClick       widget.Clickable
-	settingsSoftClick      widget.Clickable
 	settingsOk             widget.Clickable
 	settingsCancel         widget.Clickable
-	settingsRendererOrig   string
 	darkTheme              bool
-	// rendererPref picks the graphics backend: "vulkan" (UI and models
-	// on Vulkan), "d3d11" (the Direct3D path, GPU models) or "software"
-	// (Direct3D UI, models on the CPU). The choice is applied at the next
-	// start through the DOW_GPU_API environment variable.
-	rendererPref string
-	// forceSoftRenderer keeps the 3D viewport on the software rasteriser
-	// in every mode (textured and skeleton alike), which is the escape
-	// hatch from the hardware renderer's bugs.
-	forceSoftRenderer bool
 
 	archiveDialog       bool
 	archiveOptions      []archiveOption
@@ -387,6 +377,15 @@ type uiState struct {
 	unitSection       int
 	unitToolClicks    []widget.Clickable
 	unitSectionClicks []widget.Clickable
+
+	// Classic OE section state: which of the classic editor's header panels
+	// are open, their click targets, the scroll of the panel column, and the
+	// clip list's own click targets — separate from the Viewport section's, so
+	// the two lists cannot both read one press.
+	classicOEOpen       []bool
+	classicOEClicks     []widget.Clickable
+	classicOEScroll     panelScrollState
+	classicOEAnimClicks []widget.Clickable
 
 	// The dialog browses the mod's own units rather than the open file, so it
 	// carries its own selection. unitCatalog is built once per mod; the
@@ -542,9 +541,11 @@ type uiState struct {
 	// one list for the next: all three are lists of the same model's
 	// contents and either may be the one being read, so one button between
 	// them is enough.
-	unitMarkerClicks     []widget.Clickable
-	unitBoneClicks       []widget.Clickable
-	unitMarkerListToggle widget.Clickable
+	unitMarkerClicks  []widget.Clickable
+	unitBoneClicks    []widget.Clickable
+	unitFXListMode    bool
+	unitFXClicks      []widget.Clickable
+	unitListTabClicks [4]widget.Clickable
 	// unitBoneKeyClicks are the rows of the currently picked bone's keyframes,
 	// sized for the current bone whenever the bone list changes which bone is
 	// picked.
@@ -638,9 +639,7 @@ type uiState struct {
 	// unit viewport because that is where the bone keys can be edited.
 	unitBoneKeySaveClick widget.Clickable
 	unitModelWhmDirty    bool
-	// unitListMode picks the list on show: 0 animations, 1 markers,
-	// 2 bones. It cycles rather than toggles, so one button reaches all
-	// three.
+	// unitListMode picks the list on show: 0 animations, 1 markers, 2 bones.
 	unitListMode int
 	// unitViewportScroll is the side panel's scrollbar, and unitOpenModelClick
 	// opens the .whm in a tab of its own, which is the way to reach the
@@ -694,8 +693,41 @@ type uiState struct {
 	unitEvtList          layout.List
 	unitEvtScroll        panelScrollState
 	unitEvtPanelScroll   panelScrollState
-	unitEvtTlClicks      []widget.Clickable
-	unitEvtClicks        []widget.Clickable
+	unitEvtActionsScroll panelScrollState
+	unitEvtActionSel     int // selected action of the DATAACTS list
+	unitEvtActionClicks  []widget.Clickable
+	// unitEvtFocusAction says the reader is working on an action rather than a
+	// timeline: the panel then shows the picked action's conditions and none of
+	// the timeline's events, since the two are one panel and not two stacked.
+	unitEvtFocusAction bool
+	unitEvtTlClicks    []widget.Clickable
+	unitEvtClicks      []widget.Clickable
+	// unitActCondEds are the condition fields of the picked action's choices —
+	// one per motion and sub-action link, in file order — with
+	// unitActCondStaged holding the guard step each is edited as and
+	// unitActCondBound naming the action they were last filled from. Apply
+	// writes them into the in-memory document and Save .whe writes that to
+	// the file, the same two steps the event form takes.
+	unitActCondEds     []widget.Editor
+	unitActCondStaged  []int32
+	unitActCondBound   string
+	unitActGuardClicks []widget.Clickable
+	unitActSel         int // the choice the chain tools act on: where the caret last was
+	unitActApply       widget.Clickable
+	// The chain tools add, move and delete choices with the shape of an
+	// if / else if / else chain kept intact: they act on the document the
+	// way Apply does, so every step is one Save .whe away.
+	unitActAddIf     widget.Clickable
+	unitActAddElseIf widget.Clickable
+	unitActAddElse   widget.Clickable
+	unitActMoveUp    widget.Clickable
+	unitActMoveDown  widget.Clickable
+	unitActDelete    widget.Clickable
+	// unitActNameEds are the target-name fields beside the conditions — one
+	// per choice — so a newly added line can name the motion or action it
+	// runs.
+	unitActNameEds []widget.Editor
+	unitActErr     string
 	// The add form: event name, moment, FX path, sound path and marker. The
 	// FX and sound paths are separate fields: an effect and a sound name
 	// different things.
@@ -861,11 +893,12 @@ type fileTab struct {
 	model             *modelViewer
 	modelMaterialCh   chan modelMaterialResult
 	modelListMode     int
-	modelListClicks   [3]widget.Clickable
+	modelListClicks   [4]widget.Clickable
 	modelListScroll   panelScrollState
 	modelAnimClicks   []widget.Clickable
 	modelMarkerClicks []widget.Clickable
 	modelBoneClicks   []widget.Clickable
+	modelFXClicks     []widget.Clickable
 	modelPlay         widget.Clickable
 	modelPrevAnim     widget.Clickable
 	modelNextAnim     widget.Clickable
@@ -878,15 +911,14 @@ type fileTab struct {
 	// than nothing at all because a preview that starts making noise the
 	// moment a model opens is a preview nobody can look at, and one that
 	// cannot be stopped is worse than that.
-	modelSFX    widget.Clickable
-	modelGround widget.Clickable
+	modelSFX      widget.Clickable
+	modelGround   widget.Clickable
 	modelTexture  widget.Clickable
 	modelZoomIn   widget.Clickable
 	modelZoomOut  widget.Clickable
 	modelUVRotate widget.Clickable
 	modelUVMirror widget.Clickable
 	modelUVReset  widget.Clickable
-
 	// image state (when kind=="image")
 	imageData       image.Image
 	imageMipmaps    []image.Image
@@ -1189,6 +1221,10 @@ func findFirstModuleArg() string {
 // ── entry ────────────────────────────────────────────────────────────────────
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--debug-markers" {
+		os.Exit(runMarkerDebugCLI(os.Args[2:], os.Stdout, os.Stderr))
+	}
+
 	initLogger()
 	defer closeLogger()
 	defer handlePanic()
@@ -1241,6 +1277,7 @@ func main() {
 			fmt.Println("  dow-mod-studio.exe --register        Register .module file association (current user, HKCU)")
 			fmt.Println("  dow-mod-studio.exe --unregister      Remove .module file association")
 			fmt.Println("  dow-mod-studio.exe --assoc-status    Show association status")
+			fmt.Println("  dow-mod-studio.exe --debug-markers --module <file> --unit <name|path>  Dump model marker coordinates as JSON")
 			log.Printf("help shown, exiting 0; log=%q", logFilePath)
 			exitLogged(0)
 		}
@@ -1288,8 +1325,6 @@ func run(w *app.Window) error {
 		ui.tryAutoLoad()
 	}
 
-	os.Setenv("DOW_GPU_API", ui.rendererChoice())
-
 	for {
 		e := w.Event()
 		switch e := e.(type) {
@@ -1297,7 +1332,6 @@ func run(w *app.Window) error {
 			if err := savePersistedState(ui); err != nil {
 				log.Printf("save state on exit: %v", err)
 			}
-			ui.releaseModelGpu()
 			ui.stopModFileWatcher()
 			ui.closeAllFileTabs()
 			if ui.modTree != nil {
@@ -1316,16 +1350,6 @@ func run(w *app.Window) error {
 			e.Frame(gtx.Ops)
 		}
 	}
-}
-
-// rendererChoice returns the selected renderer, defaulting to Vulkan for
-// fresh sessions and for those that predate the setting.
-func (ui *uiState) rendererChoice() string {
-	switch ui.rendererPref {
-	case "d3d11", "software":
-		return ui.rendererPref
-	}
-	return "vulkan"
 }
 
 func (ui *uiState) syncWindowTitle() {

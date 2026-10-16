@@ -19,9 +19,6 @@ type persistedTab struct {
 type persistedState struct {
 	Version   int  `json:"version"`
 	DarkTheme bool `json:"darkTheme"`
-	// Renderer selects the graphics backend: "vulkan", "d3d11" or
-	// "software". Empty means Vulkan, the default.
-	Renderer string `json:"renderer,omitempty"`
 	// TextFormats is the list of file formats the built-in text editor
 	// opens, as the reader typed it: ".lua, .txt, .mydsl". An empty value
 	// means the built-in default, which is why it is written only when it
@@ -91,7 +88,6 @@ func savePersistedState(ui *uiState) error {
 	state := persistedState{
 		Version:          1,
 		DarkTheme:        ui.darkTheme,
-		Renderer:         ui.rendererChoice(),
 		TextFormats:      formatTextFormats(ui.textEditorFormats),
 		GamePath:         ui.gamePath,
 		ModulePath:       ui.modulePath,
@@ -161,10 +157,6 @@ func (ui *uiState) maybeSaveState() {
 
 func (ui *uiState) applyPersistedSettings(state persistedState) {
 	ui.darkTheme = state.DarkTheme
-	if state.Renderer != "" {
-		ui.rendererPref = state.Renderer
-	}
-	ui.forceSoftRenderer = ui.rendererPref == "software"
 	// A state file from before the setting existed has no list, and so does
 	// one whose field was cleared: both mean the built-in default, which is
 	// what parseTextFormats answers for an empty string.

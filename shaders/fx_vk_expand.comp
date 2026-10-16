@@ -22,8 +22,9 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 struct Sprite {
     vec4 pos;         // model space position (xyz); w is unused
     float radius;     // radius in model units
-    vec4 tint;        // colour and alpha; negative alpha marks self-lit
-    vec4 orientation; // angle, fixed horizontal-plane flag, self-lit flag, padding
+    vec4 tint;        // colour and alpha
+    vec4 orientation; // angle, plane mode, self-lit flag, padding
+    vec4 planeNormal; // marker forward axis for a local fixed-plane sprite
 };
 
 layout(std430, binding = 0) buffer SpriteInput {
@@ -95,9 +96,9 @@ void main() {
         verts.data[vi + 13] = s.orientation.y;
         verts.data[vi + 14] = s.orientation.z;
         verts.data[vi + 15] = 0.0;
-        verts.data[vi + 16] = 0.0;
-        verts.data[vi + 17] = 0.0;
-        verts.data[vi + 18] = 1.0;
+        verts.data[vi + 16] = s.planeNormal.x;
+        verts.data[vi + 17] = s.planeNormal.y;
+        verts.data[vi + 18] = s.planeNormal.z;
         verts.data[vi + 19] = 0.0;
     }
 }

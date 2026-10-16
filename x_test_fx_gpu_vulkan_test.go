@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || linux
 
 package main
 
@@ -18,16 +18,17 @@ import (
 func TestFxSpriteInputRecordLayout(t *testing.T) {
 	r := &fxVkRenderer{spriteBytes: make([]byte, fxComputeSpriteInputFloats*4)}
 	sp := fx.Sprite{
-		Pos:        [3]float64{1.5, -2, 3.25},
-		Radius:     0.75,
-		R:          0.25,
-		G:          0.5,
-		B:          0.75,
-		A:          0.5,
-		Additive:   true,
-		Horizontal: true,
-		Rotation:   0.75,
-		SelfLit:    true,
+		Pos:         [3]float64{1.5, -2, 3.25},
+		Radius:      0.75,
+		R:           0.25,
+		G:           0.5,
+		B:           0.75,
+		A:           0.5,
+		Additive:    true,
+		Horizontal:  true,
+		PlaneNormal: [3]float64{1, 0, 0},
+		Rotation:    0.75,
+		SelfLit:     true,
 	}
 	// The record sits after the count header, at sprite index 3, and carries
 	// the site added to the particle's own offset.
@@ -58,9 +59,14 @@ func TestFxSpriteInputRecordLayout(t *testing.T) {
 			t.Errorf("tint[%d] = %v, want %v", i, got, want)
 		}
 	}
-	for i, want := range []float32{0.75, 1, 1, 0} {
+	for i, want := range []float32{0.75, 2, 1, 0} {
 		if got := at(48 + 4*i); got != want {
 			t.Errorf("orientation[%d] = %v, want %v", i, got, want)
+		}
+	}
+	for i, want := range []float32{1, 0, 0, 0} {
+		if got := at(64 + 4*i); got != want {
+			t.Errorf("planeNormal[%d] = %v, want %v", i, got, want)
 		}
 	}
 	// A particle whose file carries no Radius curve is drawn at the fallback
@@ -81,15 +87,16 @@ func TestFxSpriteInputRecordLayout(t *testing.T) {
 func TestFxCPUVertexLayoutCarriesHorizontalOrientationAndLighting(t *testing.T) {
 	r := &fxVkRenderer{vertsData: make([]byte, 0, fxVertexStride*fxVertsPerQuad)}
 	sp := fx.Sprite{
-		Pos:        [3]float64{1, 2, 3},
-		Radius:     2,
-		R:          0.2,
-		G:          0.4,
-		B:          0.6,
-		A:          0.8,
-		Horizontal: true,
-		Rotation:   math.Pi / 2,
-		SelfLit:    true,
+		Pos:         [3]float64{1, 2, 3},
+		Radius:      2,
+		R:           0.2,
+		G:           0.4,
+		B:           0.6,
+		A:           0.8,
+		Horizontal:  true,
+		PlaneNormal: [3]float64{1, 0, 0},
+		Rotation:    math.Pi / 2,
+		SelfLit:     true,
 	}
 	r.appendSprite([3]float64{10, 20, 30}, sp)
 	if got, want := len(r.vertsData), fxVertexStride*fxVertsPerQuad; got != want {
@@ -99,7 +106,7 @@ func TestFxCPUVertexLayoutCarriesHorizontalOrientationAndLighting(t *testing.T) 
 	at := func(off int) float32 {
 		return math.Float32frombits(binary.LittleEndian.Uint32(vertex[off:]))
 	}
-	for i, want := range []float32{11, 22, 33, -1, -1, 2, 0.2, 0.4, 0.6, 0.8, 0, 1, float32(math.Pi / 2), 1, 1, 0, 0, 0, 1, 0} {
+	for i, want := range []float32{11, 22, 33, -1, -1, 2, 0.2, 0.4, 0.6, 0.8, 0, 1, float32(math.Pi / 2), 2, 1, 0, 1, 0, 0, 0} {
 		if got := at(i * 4); got != want {
 			t.Errorf("vertex float[%d] = %v, want %v", i, got, want)
 		}

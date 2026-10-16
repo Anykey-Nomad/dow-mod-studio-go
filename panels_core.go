@@ -26,17 +26,11 @@ func (ui *uiState) layoutContent(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				total := gtx.Constraints.Max.X
 				ui.ensurePanelWidths(total)
-				// The object interface takes the space of the file tree and the
-				// middle panel; the right panel stays where it is, so the
-				// usual properties panel is still beside it.
+				// The object interface takes the whole content width: its
+				// own right-hand panel is hidden on every section, and the
+				// properties panel belongs to the plain modtree view below.
 				if ui.unitTabOwnsLeftPanel() {
-					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							return ui.layoutUnitTabBody(gtx)
-						}),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.layoutPanelSplitter(gtx, 1, total) }),
-						layout.Rigid(ui.fixedPanel(ui.rightPanelWidth, ui.layoutRightPanel)),
-					)
+					return ui.layoutUnitTabBody(gtx)
 				}
 				return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 					layout.Rigid(ui.fixedPanel(ui.leftPanelWidth, ui.layoutLeftPanel)),

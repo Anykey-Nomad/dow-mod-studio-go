@@ -27,7 +27,7 @@ for breakage.
 
 ## System requirements
 
-* Windows (primary platform: Direct3D 11 / Vulkan rendering, `.module` association). On other OSes the
+* Windows (primary platform: Vulkan rendering, `.module` association). On other OSes the
   program builds and runs on the software renderer, without hardware 3D and without file association.
 * An installed copy of **Dawn of War Definitive Edition** (the standard Steam paths are pre-filled in the
   open-module dialog).
@@ -198,7 +198,7 @@ engine), with type filters and ranking (a filename match beats a folder match).
 ## Settings (File → Settings)
 
 * **Dark/light theme** — applied immediately; Cancel restores the previous one.
-* **Graphics renderer**: `Vulkan` (default), `Direct3D 11`, `Software` — applied at the next start (through the
+* **Graphics renderer**: `Vulkan` (default), `Software` — applied at the next start (through the
   `DOW_GPU_API` environment variable). The software renderer is the escape hatch from hardware-renderer bugs.
 * **Game folder** — it determines the set of languages and localization tables.
 * **Text editor formats** — a comma-separated list of extensions (`.lua, .txt, .mydsl`); clearing the field
@@ -265,7 +265,7 @@ go build ./...
 > **Note for a fresh clone:** `go.mod` contains `replace` directives pointing at a local fork of Gio
 > (paths like `C:/Users/…/gio`), including `vulkan-go` and a fork of the shaders. To build on your machine,
 > repoint these paths at your own checkouts of the fork (or remove the `replace` directives and use upstream
-> Gio — the hardware Vulkan/D3D renderer may then be unavailable).
+> Gio — the hardware Vulkan renderer may then be unavailable).
 
 ## Repository layout
 

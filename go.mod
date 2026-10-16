@@ -24,8 +24,8 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 )
 
-replace gioui.org => C:/Users/anyke/go/src/github.com/Anykey-Nomad/gio
+replace gioui.org => ../gio
 
-replace github.com/christerso/vulkan-go => C:/Users/anyke/go/src/github.com/Anykey-Nomad/gio/third_party/vulkan-go
+replace github.com/christerso/vulkan-go => ../gio/third_party/vulkan-go
 
-replace gioui.org/shader => C:/Users/anyke/go/src/github.com/Anykey-Nomad/gio/third_party/gio-shader
+replace gioui.org/shader => ../gio/third_party/gio-shader

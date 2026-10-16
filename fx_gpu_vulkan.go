@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || linux
 
 package main
 
@@ -53,8 +53,9 @@ const (
 	fxComputeSpriteCountFloats = 4
 	// fxComputeSpriteStrideFloats is the size of one compact sprite record the
 	// CPU writes into the storage buffer, in floats. It matches the std430
-	// structure: vec4 pos, float radius, padding, vec4 tint, vec4 orientation.
-	fxComputeSpriteStrideFloats = 16
+	// structure: vec4 pos, float radius, padding, vec4 tint, orientation and
+	// plane normal.
+	fxComputeSpriteStrideFloats = 20
 	// One emitter is capped at fx.MaxParticles; a model can carry this many
 	// effects at once, so keep the compute input capacity in step with the
 	// existing model-wide vertex buffer limit.
@@ -170,6 +171,35 @@ type fxVkRenderer struct {
 	// coordinate so a bone is the flat colour it asks for: the round soft
 	// falloff in white would shade a straight line into a smudge.
 	solid *gpu.VulkanTexture
+
+	frameBuffers []fxVkFrameBuffers
+	frameIndex   int
+}
+
+type fxVkFrameBuffers struct {
+	frame        *gpu.VulkanBuffer
+	verts        *gpu.VulkanBuffer
+	computeVerts *gpu.VulkanBuffer
+	spriteBuf    *gpu.VulkanBuffer
+	ribbonBuf    *gpu.VulkanBuffer
+}
+
+func (b fxVkFrameBuffers) release() {
+	if b.ribbonBuf != nil {
+		b.ribbonBuf.Release()
+	}
+	if b.spriteBuf != nil {
+		b.spriteBuf.Release()
+	}
+	if b.computeVerts != nil {
+		b.computeVerts.Release()
+	}
+	if b.verts != nil {
+		b.verts.Release()
+	}
+	if b.frame != nil {
+		b.frame.Release()
+	}
 }
 
 // fxFallbackSprite is the map a particle whose own texture could not be read
@@ -242,7 +272,7 @@ func newFxVkRenderer(v *gpu.VulkanPass) (*fxVkRenderer, error) {
 			Fragment: fxVkFragSPIRV,
 			Stride:   fxVertexStride,
 			Inputs:   inputs,
-			Cull:     gpu.CullNone,
+			Cull:     gpu.VulkanCullNone,
 			// A particle is tested against the model, so geometry in
 			// front of it hides it, and writes no depth, so the
 			// particles behind one another still blend.
@@ -272,14 +302,14 @@ func newFxVkRenderer(v *gpu.VulkanPass) (*fxVkRenderer, error) {
 		cover.Release()
 		return nil, fmt.Errorf("overlay pipeline: %w", err)
 	}
-	frame, err := v.NewBuffer(gpu.ConstantBuffer, fxFrameFloats*4, true)
+	frame, err := v.FrameBuffer(gpu.VulkanConstantBuffer, fxFrameFloats*4)
 	if err != nil {
 		overlay.Release()
 		add.Release()
 		cover.Release()
 		return nil, fmt.Errorf("particle frame buffer: %w", err)
 	}
-	verts, err := v.NewBuffer(gpu.VertexBuffer, fxVertexStride*fxMaxVerts, false)
+	verts, err := v.FrameBuffer(gpu.VulkanVertexBuffer, fxVertexStride*fxMaxVerts)
 	if err != nil {
 		frame.Release()
 		add.Release()
@@ -419,6 +449,16 @@ func newFxVkRenderer(v *gpu.VulkanPass) (*fxVkRenderer, error) {
 			}
 		}
 	}
+	frameBuffers := []fxVkFrameBuffers{{
+		frame: frame, verts: verts, computeVerts: computeVerts,
+		spriteBuf: spriteBuf, ribbonBuf: ribbonBuf,
+	}}
+	second, frameErr := newFxVkFrameBuffers(v, computeVerts != nil, ribbonBuf != nil)
+	if frameErr != nil {
+		log.Printf("3D preview: second frame resource set unavailable, reusing buffers with synchronization: %v", frameErr)
+	} else {
+		frameBuffers = append(frameBuffers, second)
+	}
 	return &fxVkRenderer{
 		cover:        cover,
 		add:          add,
@@ -440,7 +480,49 @@ func newFxVkRenderer(v *gpu.VulkanPass) (*fxVkRenderer, error) {
 		pushFloats:   make([]float32, fxPushFloats),
 		pushBytes:    make([]byte, fxPushFloats*4),
 		vertsData:    make([]byte, 0, fxVertexStride*fxVertsPerQuad*64),
+		frameBuffers: frameBuffers,
 	}, nil
+}
+
+func newFxVkFrameBuffers(v *gpu.VulkanPass, compute, ribbon bool) (buffers fxVkFrameBuffers, err error) {
+	defer func() {
+		if err != nil {
+			buffers.release()
+		}
+	}()
+	alloc := func(kind gpu.VulkanBufferKind, size int) (*gpu.VulkanBuffer, error) {
+		return v.FrameBuffer(kind, size)
+	}
+	if buffers.frame, err = alloc(gpu.VulkanConstantBuffer, fxFrameFloats*4); err != nil {
+		return buffers, err
+	}
+	if buffers.verts, err = alloc(gpu.VulkanVertexBuffer, fxVertexStride*fxMaxVerts); err != nil {
+		return buffers, err
+	}
+	if compute {
+		if buffers.computeVerts, err = v.FrameVertexStorageBuffer(fxVertexStride * (fxVertsPerQuad*fxComputeMaxSprites + fxComputeMaxRibbonVerts)); err != nil {
+			return buffers, err
+		}
+		if buffers.spriteBuf, err = v.FrameStorageBuffer(fxComputeSpriteInputFloats * 4); err != nil {
+			return buffers, err
+		}
+	}
+	if ribbon {
+		if buffers.ribbonBuf, err = v.FrameStorageBuffer(fxComputeRibbonInputFloats * 4); err != nil {
+			return buffers, err
+		}
+	}
+	return buffers, nil
+}
+
+func (r *fxVkRenderer) uploadFrameBuffer(buffer *gpu.VulkanBuffer, data []byte) error {
+	if buffer == nil {
+		return nil
+	}
+	if len(r.frameBuffers) > 1 {
+		return buffer.UploadNoWait(data)
+	}
+	return buffer.Upload(data)
 }
 
 func (r *fxVkRenderer) release() {
@@ -455,22 +537,15 @@ func (r *fxVkRenderer) release() {
 	if r.expand != nil {
 		r.expand.Release()
 	}
-	if r.computeVerts != nil {
-		r.computeVerts.Release()
-	}
-	if r.spriteBuf != nil {
-		r.spriteBuf.Release()
-	}
 	if r.ribbonExpand != nil {
 		r.ribbonExpand.Release()
 	}
-	if r.ribbonBuf != nil {
-		r.ribbonBuf.Release()
+	for _, buffers := range r.frameBuffers {
+		buffers.release()
 	}
 	r.solid.Release()
+
 	r.white.Release()
-	r.verts.Release()
-	r.frame.Release()
 	r.overlay.Release()
 	r.add.Release()
 	r.cover.Release()
@@ -532,12 +607,22 @@ func fxTextureBytes(img *image.RGBA) []byte {
 // the CPU expansion fallback for driver debugging. Sprite compute work is queued
 // into the command buffer used by the following graphics pass, avoiding an
 // intermediate submit-and-wait.
+//
+// Nothing here waits for the GPU: every upload retires only the submission that
+// last read the buffer being written, and a rotated frame resource whose reader
+// has already finished does not wait at all.
 func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay []modelOverlayLine, view fauxgl.Matrix, opts RenderOptions) ([]fxVkGroup, error) {
 	nGroups := 0
 	if scene != nil {
 		nGroups = len(scene.Groups)
 	}
 	groups := make([]fxVkGroup, 0, nGroups*2+1)
+	if len(r.frameBuffers) > 1 {
+		r.frameIndex = (r.frameIndex + 1) % len(r.frameBuffers)
+		buffers := r.frameBuffers[r.frameIndex]
+		r.frame, r.verts = buffers.frame, buffers.verts
+		r.computeVerts, r.spriteBuf, r.ribbonBuf = buffers.computeVerts, buffers.spriteBuf, buffers.ribbonBuf
+	}
 	r.vertsData = r.vertsData[:0]
 	computeEnabled := os.Getenv("DOW_FX_COMPUTE") != "0" && r.expand != nil && r.computeVerts != nil && r.spriteBuf != nil
 	totalSprites := 0
@@ -559,7 +644,7 @@ func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay 
 	if totalSprites > 0 {
 		binary.LittleEndian.PutUint32(r.spriteBytes, uint32(totalSprites))
 		inputBytes := fxComputeSpriteCountFloats*4 + totalSprites*fxComputeSpriteStrideFloats*4
-		if err := r.spriteBuf.Upload(r.spriteBytes[:inputBytes]); err != nil {
+		if err := r.uploadFrameBuffer(r.spriteBuf, r.spriteBytes[:inputBytes]); err != nil {
 			return nil, fmt.Errorf("particle sprite input upload: %w", err)
 		}
 	}
@@ -587,7 +672,7 @@ func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay 
 	for i, v := range r.frameFloats {
 		binary.LittleEndian.PutUint32(r.frameBytes[i*4:], math.Float32bits(v))
 	}
-	if err := r.frame.Upload(r.frameBytes); err != nil {
+	if err := r.uploadFrameBuffer(r.frame, r.frameBytes); err != nil {
 		return nil, fmt.Errorf("particle frame uniform: %w", err)
 	}
 	for i, v := range []float32{1, 1, 1, 1} {
@@ -697,7 +782,7 @@ func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay 
 		}
 	}
 	if len(r.vertsData) > 0 {
-		if err := r.verts.Upload(r.vertsData); err != nil {
+		if err := r.uploadFrameBuffer(r.verts, r.vertsData); err != nil {
 			return nil, fmt.Errorf("particle CPU vertices: %w", err)
 		}
 	}
@@ -724,7 +809,7 @@ func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay 
 	if ribbonCount > 0 {
 		binary.LittleEndian.PutUint32(r.ribbonBytes, uint32(ribbonCount))
 		inputBytes := fxComputeRibbonCountFloats*4 + ribbonCount*fxComputeRibbonStrideFloats*4
-		if err := r.ribbonBuf.Upload(r.ribbonBytes[:inputBytes]); err != nil {
+		if err := r.uploadFrameBuffer(r.ribbonBuf, r.ribbonBytes[:inputBytes]); err != nil {
 			return nil, fmt.Errorf("ribbon input upload: %w", err)
 		}
 		if err := pass.SetStorageBuffer(0, r.ribbonBuf); err != nil {
@@ -774,12 +859,20 @@ func (r *fxVkRenderer) appendSprite(origin [3]float64, sp fx.Sprite) {
 	orientationMode := float32(0)
 	if sp.Horizontal {
 		orientationMode = 1
+		if sp.PlaneNormal != [3]float64{} && sp.PlaneNormal != [3]float64{0, 0, 1} {
+			orientationMode = 2
+		}
 	}
 	selfLit := float32(0)
+
 	if sp.SelfLit {
 		selfLit = 1
 	}
 	orientation := [4]float32{float32(sp.Rotation), orientationMode, selfLit, 0}
+	planeNormal := sp.PlaneNormal
+	if planeNormal == [3]float64{} {
+		planeNormal = [3]float64{0, 0, 1}
+	}
 	for _, c := range fxQuadCorners {
 		r.vertsData = binary.LittleEndian.AppendUint32(r.vertsData, math.Float32bits(pos[0]))
 		r.vertsData = binary.LittleEndian.AppendUint32(r.vertsData, math.Float32bits(pos[1]))
@@ -795,8 +888,11 @@ func (r *fxVkRenderer) appendSprite(origin [3]float64, sp fx.Sprite) {
 		for _, ch := range orientation {
 			r.vertsData = binary.LittleEndian.AppendUint32(r.vertsData, math.Float32bits(ch))
 		}
-		for _, ch := range []float32{0, 0, 1, 0} {
-			r.vertsData = binary.LittleEndian.AppendUint32(r.vertsData, math.Float32bits(ch))
+		if !sp.Horizontal {
+			planeNormal = [3]float64{0, 0, 1}
+		}
+		for _, ch := range []float64{planeNormal[0], planeNormal[1], planeNormal[2], 0} {
+			r.vertsData = binary.LittleEndian.AppendUint32(r.vertsData, math.Float32bits(float32(ch)))
 		}
 	}
 }
@@ -853,12 +949,15 @@ func (r *fxVkRenderer) appendSpriteInput(origin [3]float64, sp fx.Sprite, idx in
 	put(36, tint[1])
 	put(40, tint[2])
 	put(44, tint[3])
-	// orientation (vec4) at offset 48: angle, horizontal-plane flag,
+	// orientation (vec4) at offset 48: angle, fixed-plane flag,
 	// self-lit flag, padding.
 	put(48, float32(sp.Rotation))
 	mode := float32(0)
 	if sp.Horizontal {
 		mode = 1
+		if sp.PlaneNormal != [3]float64{} && sp.PlaneNormal != [3]float64{0, 0, 1} {
+			mode = 2
+		}
 	}
 	put(52, mode)
 	if sp.SelfLit {
@@ -867,6 +966,16 @@ func (r *fxVkRenderer) appendSpriteInput(origin [3]float64, sp fx.Sprite, idx in
 		put(56, 0)
 	}
 	put(60, 0)
+	// Plane normal (vec4) at offset 64. A zero normal in older/default sprite
+	// values means the renderer's original world-Z horizontal plane.
+	planeNormal := sp.PlaneNormal
+	if planeNormal == [3]float64{} {
+		planeNormal = [3]float64{0, 0, 1}
+	}
+	put(64, float32(planeNormal[0]))
+	put(68, float32(planeNormal[1]))
+	put(72, float32(planeNormal[2]))
+	put(76, 0)
 }
 
 // appendRibbonInput writes one compact ribbon record into the compute input

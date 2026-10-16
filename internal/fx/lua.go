@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/fogleman/fauxgl"
 )
 
 // The .lua files under art/fx are the output of Relic's FX editor: a flat
@@ -28,6 +30,7 @@ type FxProp struct {
 	Curve  []FxKey        // VARTYPE_ARRAY_TIMEFLOAT: (time, value) pairs
 	Colour []FxColourStop // VARTYPE_ARRAY_TIMECOLOUR
 	Vec3   []FxVec3Key    // VARTYPE_ARRAY_TIMEVECTOR3: (time, x, y, z)
+	Tuple  fauxgl.Vector  // VARTYPE_VECTOR3: x, y, z
 }
 
 // FxKey is one point of a time/value curve.
@@ -252,6 +255,16 @@ func fxParseValue(typ, value string) FxProp {
 		p.Colour = fxColourRamp(value)
 	case "VARTYPE_ARRAY_TIMEVECTOR3":
 		p.Vec3 = fxVec3Curve(value)
+	case "VARTYPE_VECTOR3":
+		body, ok := fxBraceBody(value)
+		if ok {
+			parts := fxNumRe.FindAllString(body, -1)
+			if len(parts) >= 3 {
+				p.Tuple.X, _ = strconv.ParseFloat(parts[0], 64)
+				p.Tuple.Y, _ = strconv.ParseFloat(parts[1], 64)
+				p.Tuple.Z, _ = strconv.ParseFloat(parts[2], 64)
+			}
+		}
 	default:
 		// Numbers, booleans and small enums all start the same way.
 		if m := fxNumRe.FindString(value); m != "" {

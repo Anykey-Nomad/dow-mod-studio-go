@@ -8,6 +8,14 @@ import (
 	"github.com/fogleman/fauxgl"
 )
 
+// absInt returns the absolute value of v.
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
 // boneTrack returns the animation track that belongs to the picked bone, or nil
 // when the picked bone has no track in the current clip.
 func (v *modelViewer) boneTrack() *WhmTrack {
