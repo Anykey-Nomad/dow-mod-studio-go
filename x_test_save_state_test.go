@@ -22,8 +22,18 @@ func TestSaveEligibleOnlyForDirtyEditableTabs(t *testing.T) {
 		t.Fatal("dirty RGD file must enable Save")
 	}
 
-	ui.activeTab().kind = "fda"
+	ui.activeTab().kind = "sgb"
 	ui.activeTab().rgdDirty = false
+	if ui.saveEligible() {
+		t.Fatal("clean SGB map must not enable Save")
+	}
+	ui.activeTab().sgbDirty = true
+	if !ui.saveEligible() {
+		t.Fatal("dirty SGB map must enable Save")
+	}
+
+	ui.activeTab().kind = "fda"
+	ui.activeTab().sgbDirty = false
 	if ui.saveEligible() {
 		t.Fatal("FDA playback/export must not enable top Save")
 	}

@@ -3,7 +3,6 @@ package main
 import (
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
-	"path/filepath"
 	"strings"
 )
 
@@ -194,5 +193,16 @@ func (ui *uiState) unitLabel(u unitEntry) string {
 // looking at actually is — which matters because the string table gives
 // several units of one race the same text.
 func unitFileLabel(u unitEntry) string {
-	return strings.TrimSuffix(filepath.Base(u.path), filepath.Ext(u.path))
+	// The tree path is virtual and always uses backslashes, whichever OS the
+	// app runs on. filepath.Base only knows the separator of the host OS, so
+	// on Linux it returned the whole path — the row then showed
+	// "Data\attrib\ebps\…" instead of the file name.
+	name := u.path
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	if i := strings.LastIndexByte(name, '.'); i >= 0 {
+		name = name[:i]
+	}
+	return name
 }

@@ -110,6 +110,27 @@ func parseActs(p []byte) ([]FxAction, error) {
 			out = append(out, a)
 		}
 	}
+	if r.Err == nil && r.Off < len(p) {
+		// Older action payloads end at the links. Newer ones append base-action
+		// and sub-data-type metadata for every action; the editor uses the
+		// explicit type when deciding whether it follows an action or a motion.
+		for i := range out {
+			if len(p)-r.Off < 8 {
+				break
+			}
+			base := r.I32()
+			typ := r.I32()
+			if base != 0 && base != 1 {
+				r.Off -= 8
+				break
+			}
+			_ = typ // reserved metadata; link counts already specify the type.
+			if base != 0 {
+				out[i].Motions = nil
+				out[i].Subactions = nil
+			}
+		}
+	}
 	if r.Err != nil {
 		return nil, r.Err
 	}

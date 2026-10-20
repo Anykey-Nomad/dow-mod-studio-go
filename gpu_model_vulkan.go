@@ -3,7 +3,10 @@
 package main
 
 import (
+	engine "dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/sgb"
 	_ "embed"
+
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -66,14 +69,16 @@ const modelGpuVkFrameFloats = 16 + 4 + modelGpuMaxBones*16
 // Shade, Tint and UV, one vec4 each.
 const modelGpuVkPushFloats = 12
 
-// modelGpuVkDraw is one sub mesh: the index buffer that holds its triangles
-// and how many of there are, with the material whose texture it samples. Each sub mesh
-// owns its index buffer because a draw has no
-// index offset of its own.
+// modelGpuVkDraw is one sub mesh: the vertex buffer holding its corners,
+// the index buffer that walks its triangles, and the material whose texture
+// it samples. Each sub mesh owns both buffers because a draw binds its own
+// and has no offset of its own to share with the next one.
 type modelGpuVkDraw struct {
-	indexes  *gpu.VulkanBuffer
-	count    int
-	material string
+	vertices     *gpu.VulkanBuffer
+	indexes      *gpu.VulkanBuffer
+	count        int
+	material     string
+	materialPath string
 	// name is the sub mesh this draw is, which is what a clip's visibility
 	// track is named after. The geometry never changes, so the name is
 	// carried here rather than looked up by index every frame.
@@ -86,10 +91,10 @@ type modelGpuVkDraw struct {
 }
 
 // modelGpuVkMesh is the GPU copy of a model's geometry. It never changes, so
-// it is built once per model and kept for as long as the tab is open.
+// it is built once per model and kept for as long as the tab is open; the
+// draws carry their own vertex buffers.
 type modelGpuVkMesh struct {
-	vertices *gpu.VulkanBuffer
-	draws    []modelGpuVkDraw
+	draws []modelGpuVkDraw
 }
 
 // modelGpuVkResolvedDraw is one sub mesh with its material already settled:
@@ -352,8 +357,8 @@ func (m *modelGpuVkMesh) release() {
 	if m == nil {
 		return
 	}
-	m.vertices.Release()
 	for _, d := range m.draws {
+		d.vertices.Release()
 		d.indexes.Release()
 	}
 }
@@ -373,50 +378,17 @@ func (r *modelGpuVkRenderer) mesh(model *WhmModel) (*modelGpuVkMesh, error) {
 	return m, nil
 }
 
-// buildMesh interleaves the vertices into the layout the vertex shader reads
-// and collects one draw range per sub mesh.
+// buildMesh splits a model into draws, each carrying its own vertex buffer
+// and a 16 bit index buffer over that buffer's own vertices. A sub mesh
+// whose geometry would not fit a 16 bit index space is split into several
+// draws, so the limit that once capped a whole model at 0xffff vertices is
+// now a limit per draw — which is what lets a map scene carry hundreds of
+// placed meshes.
 func (r *modelGpuVkRenderer) buildMesh(model *WhmModel) (*modelGpuVkMesh, error) {
-	if len(model.Vertices) > 0xffff {
-		// The index buffer is 16 bit. A model this large has to go through
-		// the software path, whose indices are 32 bit.
-		return nil, fmt.Errorf("model has %d vertices, more than a 16 bit index buffer holds", len(model.Vertices))
-	}
-	verts := make([]byte, len(model.Vertices)*modelGpuVertexStride)
-	put32 := func(at int, v float32) {
-		binary.LittleEndian.PutUint32(verts[at:], math.Float32bits(v))
-	}
-	for i := range model.Vertices {
-		v := &model.Vertices[i]
-		at := i * modelGpuVertexStride
-		put32(at, v.Pos[0])
-		put32(at+4, v.Pos[1])
-		put32(at+8, v.Pos[2])
-		put32(at+12, v.Normal[0])
-		put32(at+16, v.Normal[1])
-		put32(at+20, v.Normal[2])
-		put32(at+24, v.UV[0])
-		put32(at+28, v.UV[1])
-		for k := range 4 {
-			bone, w := v.Bones[k], v.Weights[k]
-			if bone < 0 || bone >= int32(modelGpuMaxBones) {
-				w = 0
-			}
-			put32(at+32+4*k, float32(bone))
-			put32(at+48+4*k, w)
-		}
-	}
-	vbuf, err := r.vk.NewBuffer(gpu.VulkanVertexBuffer, len(verts), false)
-	if err != nil {
-		return nil, fmt.Errorf("vertex buffer: %w", err)
-	}
-	if err := vbuf.Upload(verts); err != nil {
-		vbuf.Release()
-		return nil, fmt.Errorf("vertex upload: %w", err)
-	}
 	draws := make([]modelGpuVkDraw, 0, len(model.Meshes))
 	cleanup := func() {
-		vbuf.Release()
 		for _, d := range draws {
+			d.vertices.Release()
 			d.indexes.Release()
 		}
 	}
@@ -424,47 +396,136 @@ func (r *modelGpuVkRenderer) buildMesh(model *WhmModel) (*modelGpuVkMesh, error)
 		if len(m.Indices) == 0 {
 			continue
 		}
-		idx := make([]byte, 0, len(m.Indices)*2)
-		for _, i := range m.Indices {
-			if i > 0xffff {
-				cleanup()
-				return nil, fmt.Errorf("mesh %q indexes vertex %d, out of range", m.Name, i)
+		for _, group := range modelVkIndexGroups(m.Indices, modelGpuVkMaxGroupVerts) {
+			verts := make([]byte, len(group.local)*modelGpuVertexStride)
+			put32 := func(at int, v float32) {
+				binary.LittleEndian.PutUint32(verts[at:], math.Float32bits(v))
 			}
-			idx = binary.LittleEndian.AppendUint16(idx, uint16(i))
+			for i, global := range group.local {
+				if int(global) >= len(model.Vertices) {
+					cleanup()
+					return nil, fmt.Errorf("mesh %q indexes vertex %d, out of range", m.Name, global)
+				}
+				v := &model.Vertices[global]
+				at := i * modelGpuVertexStride
+				put32(at, v.Pos[0])
+				put32(at+4, v.Pos[1])
+				put32(at+8, v.Pos[2])
+				put32(at+12, v.Normal[0])
+				put32(at+16, v.Normal[1])
+				put32(at+20, v.Normal[2])
+				put32(at+24, v.UV[0])
+				put32(at+28, v.UV[1])
+				for k := range 4 {
+					bone, w := v.Bones[k], v.Weights[k]
+					if bone < 0 || bone >= int32(modelGpuMaxBones) {
+						w = 0
+					}
+					put32(at+32+4*k, float32(bone))
+					put32(at+48+4*k, w)
+				}
+			}
+			vbuf, err := r.vk.NewBuffer(gpu.VulkanVertexBuffer, len(verts), false)
+			if err != nil {
+				cleanup()
+				return nil, fmt.Errorf("vertex buffer: %w", err)
+			}
+			if err := vbuf.Upload(verts); err != nil {
+				vbuf.Release()
+				cleanup()
+				return nil, fmt.Errorf("vertex upload: %w", err)
+			}
+			idx := make([]byte, 0, len(group.idx)*2)
+			for _, i := range group.idx {
+				idx = binary.LittleEndian.AppendUint16(idx, uint16(i))
+			}
+			ibuf, err := r.vk.NewBuffer(gpu.VulkanIndexBuffer, len(idx), false)
+			if err != nil {
+				vbuf.Release()
+				cleanup()
+				return nil, fmt.Errorf("index buffer: %w", err)
+			}
+			if err := ibuf.Upload(idx); err != nil {
+				ibuf.Release()
+				vbuf.Release()
+				cleanup()
+				return nil, fmt.Errorf("index upload: %w", err)
+			}
+			draws = append(draws, modelGpuVkDraw{
+				vertices:     vbuf,
+				indexes:      ibuf,
+				count:        len(group.idx),
+				material:     m.Material,
+				materialPath: m.MaterialPath,
+				name:         m.Name,
+				centre:       modelGroupCentre(model, group.local),
+			})
 		}
-		ibuf, err := r.vk.NewBuffer(gpu.VulkanIndexBuffer, len(idx), false)
-		if err != nil {
-			cleanup()
-			return nil, fmt.Errorf("index buffer: %w", err)
-		}
-		if err := ibuf.Upload(idx); err != nil {
-			ibuf.Release()
-			cleanup()
-			return nil, fmt.Errorf("index upload: %w", err)
-		}
-		draws = append(draws, modelGpuVkDraw{
-			indexes:  ibuf,
-			count:    len(m.Indices),
-			material: m.Material,
-			name:     m.Name,
-			centre:   modelMeshCentre(model, m.Indices),
-		})
 	}
-	return &modelGpuVkMesh{vertices: vbuf, draws: draws}, nil
+	return &modelGpuVkMesh{draws: draws}, nil
 }
 
-// modelMeshCentre is where a sub mesh sits, averaged over the vertices it
-// indexes. It is the rest pose's centre, which is what a fading mesh is sorted
-// by: a skinned part moves, but the pieces a clip fades are the rigid ones it
-// assembles from, and their order is decided by where they were built.
+// modelGpuVkMaxGroupVerts is how many vertices one draw may index; below the
+// 0xffff a 16 bit index buffer can name.
+const modelGpuVkMaxGroupVerts = 60000
+
+// modelVkIndexGroup is one draw's worth of a sub mesh: the model vertices it
+// uses, in first-use order, and the triangle indices rebased onto that list.
+type modelVkIndexGroup struct {
+	local []uint32
+	idx   []uint32
+}
+
+// modelVkIndexGroups walks a sub mesh's triangles and cuts the index list
+// into groups of at most maxVerts vertices each. The cut lands on a triangle
+// boundary, so no group ever holds a partial face.
+func modelVkIndexGroups(indices []uint32, maxVerts int) []modelVkIndexGroup {
+	if maxVerts < 3 {
+		maxVerts = 3
+	}
+	var out []modelVkIndexGroup
+	var cur modelVkIndexGroup
+	slot := make(map[uint32]uint32)
+	flush := func() {
+		if len(cur.idx) == 0 {
+			return
+		}
+		out = append(out, cur)
+		cur = modelVkIndexGroup{}
+		slot = make(map[uint32]uint32)
+	}
+	for i := 0; i+2 < len(indices); i += 3 {
+		if len(cur.local)+3 > maxVerts {
+			flush()
+		}
+		for k := 0; k < 3; k++ {
+			g := indices[i+k]
+			l, ok := slot[g]
+			if !ok {
+				l = uint32(len(cur.local))
+				slot[g] = l
+				cur.local = append(cur.local, g)
+			}
+			cur.idx = append(cur.idx, l)
+		}
+	}
+	flush()
+	return out
+}
+
+// modelGroupCentre is where a draw's geometry sits, averaged over the model
+// vertices it references. It is the rest pose's centre, which is what a
+// fading mesh is sorted by: a skinned part moves, but the pieces a clip
+// fades are the rigid ones it assembles from, and their order is decided by
+// where they were built.
 //
-// An index past the end of the vertex array is ignored rather than clamped:
-// a draw that had been built already threw that mesh out, and this only ever
-// reads what survived.
-func modelMeshCentre(model *WhmModel, indices []uint32) [3]float64 {
+// A vertex past the end of the vertex array is ignored rather than clamped:
+// a draw that had been built already threw that vertex out, and this only
+// ever reads what survived.
+func modelGroupCentre(model *WhmModel, local []uint32) [3]float64 {
 	var sum [3]float64
 	n := 0
-	for _, i := range indices {
+	for _, i := range local {
 		if int(i) >= len(model.Vertices) {
 			continue
 		}
@@ -513,11 +574,18 @@ func modelVkDepth(view fauxgl.Matrix, p [3]float64) float64 {
 // nothing is every frame of most animations — that one keeps issuing its
 // draws in the same sequence it always did.
 func modelVkDrawsAfter(a, b *modelGpuVkResolvedDraw) bool {
-	fa, fb := a.alpha < 1, b.alpha < 1
+	fa := a.alpha < 1 || a.draw.name == sgb.WaterMeshName
+	fb := b.alpha < 1 || b.draw.name == sgb.WaterMeshName
 	if fa != fb {
 		return fa
 	}
 	if !fa {
+		return false
+	}
+	if a.draw.name == sgb.WaterMeshName {
+		return b.draw.name != sgb.WaterMeshName
+	}
+	if b.draw.name == sgb.WaterMeshName {
 		return false
 	}
 	// Equal depth means the order is left alone too: swapping two meshes
@@ -653,6 +721,48 @@ func (r *modelGpuVkRenderer) materialTexture(material string, data []byte) (*gpu
 	return entry.tex, nil
 }
 
+// materialImageTexture uploads a decoded in-memory diffuse image for a
+// material whose .rsh does not exist — a terrain mesh built from a scenario's
+// own relief is the first of those. Like the .rsh path it is cached by
+// material name, and an entry that holds nothing reads as the white texture
+// rather than failing the frame.
+func (r *modelGpuVkRenderer) materialImageTexture(material string, img *image.RGBA) (*gpu.VulkanTexture, error) {
+	if material == "" || img == nil {
+		return r.white, nil
+	}
+	if entry, ok := r.textures[material]; ok {
+		if entry.tex == nil {
+			return r.white, nil
+		}
+		return entry.tex, nil
+	}
+	b := img.Bounds()
+	if b.Empty() {
+		r.textures[material] = &modelGpuVkTexture{}
+		return r.white, nil
+	}
+	pixels := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(pixels, pixels.Bounds(), img, b.Min, draw.Src)
+	tex, err := r.vk.NewTexture(gpu.VulkanTextureDesc{
+		Width: b.Dx(), Height: b.Dy(), MipLevels: 1,
+		Format: gpu.VulkanFormatR8G8B8A8SRGB, Sampled: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("texture %q: %w", material, err)
+	}
+	if err := tex.UploadMip(0, pixels.Pix); err != nil {
+		tex.Release()
+		return nil, fmt.Errorf("texture %q upload: %w", material, err)
+	}
+	if err := tex.UploadDone(); err != nil {
+		tex.Release()
+		return nil, fmt.Errorf("texture %q: %w", material, err)
+	}
+	r.textures[material] = &modelGpuVkTexture{tex: tex}
+	log.Printf("3D preview: image texture %q uploaded %dx%d", material, b.Dx(), b.Dy())
+	return tex, nil
+}
+
 // renderTarget returns the offscreen render target, recreated when the size
 // changes.
 func (r *modelGpuVkRenderer) renderTarget(size image.Point) (*modelGpuVkTarget, error) {
@@ -699,8 +809,8 @@ func (r *modelGpuVkRenderer) renderTarget(size image.Point) (*modelGpuVkTarget, 
 // Render draws one frame and returns the texture Gio should paint. The caller
 // passes it to paint.NewImageOpFromTexture, which hands the same GPU memory
 // to Gio's blitter with nothing copied in between. rsh resolves a material
-// name to the raw bytes of its .rsh file; it may be nil, which leaves every
-// mesh untextured.
+// name to raw bytes of a block-compressed .rsh file; decoded material images
+// provide the fallback for compiled RTX and other texture formats.
 //
 // The pass is recorded on Gio's queue and left for Gio's immediately following
 // window frame to submit. Queue ordering makes the blit sample the completed
@@ -750,6 +860,7 @@ func (r *modelGpuVkRenderer) Render(
 		if alpha <= 0 {
 			continue
 		}
+		waterMesh := d.name == sgb.WaterMeshName
 		st := modelGpuVkResolvedDraw{
 			draw:    d,
 			tex:     r.white,
@@ -758,20 +869,45 @@ func (r *modelGpuVkRenderer) Render(
 			alpha:   alpha,
 			depth:   modelVkDepth(view, d.centre),
 		}
-		if st.tint == (color.RGBA{}) {
+		if waterMesh {
+			st.tint = color.RGBA{R: sgb.WaterColor[0], G: sgb.WaterColor[1], B: sgb.WaterColor[2], A: sgb.WaterColor[3]}
+			st.alpha = 1
+		} else if st.tint == (color.RGBA{}) {
 			st.tint = rgbaWhite
 		}
-		if mat, ok := materials[d.material]; ok {
-			if mat.Color != (color.RGBA{}) {
-				st.tint = mat.Color
+		if !waterMesh {
+			materialKey := d.material
+			if _, ok := materials[materialKey]; !ok {
+				if alias := opts.MaterialAliases[materialKey]; alias != "" {
+					materialKey = alias
+				} else if d.materialPath != "" {
+					materialKey = d.materialPath
+				}
 			}
-			if rsh != nil {
-				if data, ok := rsh(d.material); ok {
-					tex, terr := r.materialTexture(d.material, data)
-					if terr != nil {
-						return nil, terr
+			if mat, ok := materials[materialKey]; ok {
+				if mat.Color != (color.RGBA{}) {
+					st.tint = mat.Color
+				}
+				if rsh != nil {
+					if data, ok := rsh(materialKey); ok {
+						tex, terr := r.materialTexture(materialKey, data)
+						if terr != nil {
+							return nil, terr
+						}
+						st.tex = tex
 					}
-					st.tex = tex
+				}
+				if st.tex == r.white {
+					// A decoded diffuse image is used for synthesized terrain
+					// materials and compiled RTX/DDS/TGA assets that do not
+					// have raw RSH bytes to upload directly.
+					if img := engine.ImageOf(mat.Texture); img != nil {
+						tex, terr := r.materialImageTexture(materialKey, img)
+						if terr != nil {
+							return nil, terr
+						}
+						st.tex = tex
+					}
 				}
 			}
 		}
@@ -779,7 +915,9 @@ func (r *modelGpuVkRenderer) Render(
 		// premultiplies the colour by. Texture transparency is handled by
 		// the shader's alpha test instead, so a mesh a clip holds whole is
 		// drawn solid on the opaque pipeline.
-		st.tint.A = meshAlphaByte(alpha)
+		if !waterMesh {
+			st.tint.A = meshAlphaByte(alpha)
+		}
 		resolved = append(resolved, st)
 	}
 	// The buffer is kept for the next frame rather than left to the
@@ -805,6 +943,14 @@ func (r *modelGpuVkRenderer) Render(
 	// world space quads with a colour — the overlay is one more group of
 	// them, drawn through a pipeline without the depth test.
 	overlay := modelOverlayLines(model, pose, opts)
+	if len(opts.SgbSelectedEntities) > 0 {
+		selectionPose := pose
+		if len(opts.AnimatedEntities) > 0 {
+			selectionPose = sgb.CombineEntityPoses(len(pose.Bones), opts.AnimatedEntities)
+		}
+		camera := engine.Camera{Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch, Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov}
+		overlay = append(overlay, prepareSgbSelectionBounds(&model.Model, opts.SgbSelectedEntities, opts.SgbEntityMeshIDs, view, camera, selectionPose, len(selectionPose.Bones) > 0)...)
+	}
 	r.fxGroups = nil
 	if (opts.FX != nil && len(opts.FX.Groups) > 0) || len(overlay) > 0 {
 		if r.fx == nil {
@@ -849,9 +995,6 @@ func (r *modelGpuVkRenderer) Render(
 	if err := r.vk.SetPipeline(r.pipeline); err != nil {
 		return nil, err
 	}
-	if err := r.vk.SetVertexBuffer(mesh.vertices, 0); err != nil {
-		return nil, err
-	}
 	// Each uniform buffer is used once per two frames. The upload below waits
 	// only for the submission that last read this slot, and returns at once
 	// when it has finished, so preparing the next frame does not stall behind
@@ -872,9 +1015,6 @@ func (r *modelGpuVkRenderer) Render(
 			return nil, err
 		}
 		if err := r.vk.SetPipeline(r.pipeline); err != nil {
-			return nil, err
-		}
-		if err := r.vk.SetVertexBuffer(mesh.vertices, 0); err != nil {
 			return nil, err
 		}
 		if err := r.vk.SetUniforms(r.uniforms); err != nil {
@@ -899,10 +1039,16 @@ func (r *modelGpuVkRenderer) Render(
 	written := false
 	var writtenTint color.RGBA
 	var writtenUV uvMapping
+	waterPipeline := false
 	for _, at := range order {
 		st := &resolved[at]
-		if (st.alpha < 1) != blending {
-			blending = st.alpha < 1
+		waterMesh := st.draw.name == sgb.WaterMeshName
+		wantBlending := st.alpha < 1
+		if waterMesh {
+			wantBlending = true
+		}
+		if wantBlending != blending || waterMesh != waterPipeline {
+			blending, waterPipeline = wantBlending, waterMesh
 			pipe := r.pipeline
 			if blending {
 				pipe = r.blend
@@ -911,8 +1057,12 @@ func (r *modelGpuVkRenderer) Render(
 				return nil, err
 			}
 		}
-		if !written || st.tint != writtenTint || st.mapping != writtenUV {
-			r.writePush(opts, st.tint, st.mapping, modelVkAlphaRef)
+		if !written || st.tint != writtenTint || st.mapping != writtenUV || waterMesh {
+			alphaRef := float32(modelVkAlphaRef)
+			if waterMesh {
+				alphaRef = 0
+			}
+			r.writePush(opts, st.tint, st.mapping, alphaRef)
 			if err := r.uploadPush(); err != nil {
 				return nil, err
 			}
@@ -922,6 +1072,9 @@ func (r *modelGpuVkRenderer) Render(
 			written, writtenTint, writtenUV = true, st.tint, st.mapping
 		}
 		if err := r.vk.SetTexture(0, st.tex); err != nil {
+			return nil, err
+		}
+		if err := r.vk.SetVertexBuffer(st.draw.vertices, 0); err != nil {
 			return nil, err
 		}
 		if err := r.vk.SetIndexBuffer(st.draw.indexes); err != nil {
@@ -1101,6 +1254,9 @@ func (r *modelGpuVkRenderer) drawFx(groups []fxVkGroup) error {
 // writeFrame fills the frame uniform block: the view projection, the light
 // and the bone matrices, in the std140 order model3d_vk.vert declares.
 func (r *modelGpuVkRenderer) writeFrame(view fauxgl.Matrix, pose WhmPose, opts RenderOptions) {
+	if len(opts.AnimatedEntities) > 0 {
+		pose = sgb.CombineEntityPoses(len(pose.Bones), opts.AnimatedEntities)
+	}
 	c := r.frame
 	hslslMatrix(c[0:16], view)
 	// Vulkan's clip space has Y running downward,

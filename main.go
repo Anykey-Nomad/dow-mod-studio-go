@@ -6,6 +6,7 @@ import (
 	"dow-mod-studio/internal/fda"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/sgb"
 	"dow-mod-studio/internal/wav"
 	"dow-mod-studio/internal/whe"
 	"dow-mod-studio/internal/whm"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fogleman/fauxgl"
 	"github.com/fsnotify/fsnotify"
 
 	"gioui.org/app"
@@ -145,6 +147,8 @@ func init() {
 // ── UI state ─────────────────────────────────────────────────────────────────
 
 type uiState struct {
+	gpuAPI string
+
 	// forceSoftRenderer keeps the 3D viewport on the software rasteriser.
 	forceSoftRenderer bool
 
@@ -386,6 +390,44 @@ type uiState struct {
 	classicOEClicks     []widget.Clickable
 	classicOEScroll     panelScrollState
 	classicOEAnimClicks []widget.Clickable
+
+	// The Motions and Actions folders press like the tree's rows: one
+	// click target per row, index-keyed because a folder's contents
+	// change only with the .whe, never with expansion.
+	classicOEMotionClicks []widget.Clickable
+	classicOEActionClicks []widget.Clickable
+
+	// The four folders of the Anims / Motions / Actions tree — which are
+	// open, and the expand toggles of the action tree's nodes. The toggles
+	// are keyed by node path rather than an index, because the visible rows
+	// change with every expansion while the click targets have to survive
+	// the re-render. Expansion state lives in its own map so that a key's
+	// absence can mean "the default" — open for a root action, closed for
+	// anything nested.
+	classicOEFolderOpen   [classicOEFolderCount]bool
+	classicOEFolderInit   bool
+	classicOEFolderClicks [classicOEFolderCount]widget.Clickable
+	classicOEExpandClicks map[string]*widget.Clickable
+	classicOEExpandOpen   map[string]bool
+	// classicOEJumpClicks is the other press target of a tree row: the
+	// marker column toggles a branch, the rest of the row plays the
+	// animation the node points at, so the two never share a click.
+	classicOEJumpClicks map[string]*widget.Clickable
+
+	// The double-click dialog of the Motions and Actions folders: which
+	// editor is on show, the item it was opened for, and its own scroll
+	// and buttons. It borrows the Events section's editor state — the
+	// document, the fields and Save .whe — rather than keeping a second
+	// copy of any of it.
+	classicOEDialog     int // classicOEDialogNone / Timeline / Action
+	classicOEDialogName string
+	classicOEevtScroll  panelScrollState
+	classicOEevtClose   widget.Clickable
+	classicOEevtDim     widget.Clickable
+	// Double-click detection for the folder rows: the row last pressed
+	// and when, in the same window the mod tree's file rows use.
+	classicOELastClickKey string
+	classicOELastClickAt  time.Time
 
 	// The dialog browses the mod's own units rather than the open file, so it
 	// carries its own selection. unitCatalog is built once per mod; the
@@ -888,6 +930,71 @@ type fileTab struct {
 	whmConverting   bool
 	whmExportDone   string
 	whmConvertClick widget.Clickable
+	// whmIsSgm says the model tab was opened from an Object Editor .sgm
+	// rather than a game .whm. The two share this state — both are models
+	// with the same content — but only the .whm can be converted.
+	whmIsSgm bool
+
+	// sgb state (when kind=="sgb"): a scenario map with editable placements.
+	sgbMap            *sgb.Map
+	sgbDirty          bool
+	sgbCameraTag      event.Tag  // arrow-key focus while the 3D map view is active
+	sgbCameraKeys     [4]bool    // held Up, Down, Left, Right arrows
+	sgbCameraVelocity [2]float64 // forward and strafe velocity, in normalized axes
+	sgbCameraLastMove time.Time
+	sgbError          string
+	sgbBytes          int
+	sgbImage          *image.NRGBA
+	sgbMask           uint8 // sgbOver* bits currently baked into sgbImage
+	sgbToggleTypes    widget.Clickable
+	sgbTogglePass     widget.Clickable
+	sgbToggleDecals   widget.Clickable
+	sgbToggleEntities widget.Clickable
+	// sgbView3D trades the flat map image for the terrain mesh; the switch
+	// is the button that does it.
+	sgbView3D     bool
+	sgbViewSwitch widget.Clickable
+	// Entity selection belongs to its map tab so later edit operations can use
+	// stable scenario entity IDs rather than renderer mesh indices.
+	sgbSelectedEntities map[int]bool
+	sgbSelectionAnchor  image.Point
+	sgbSelectionCurrent image.Point
+	sgbSelecting        bool
+	sgbSelectionDrag    bool
+
+	sgbObjectDragging bool
+	sgbObjectRotating bool
+
+	sgbDragHasPoint bool
+	sgbDragLast     fauxgl.Vector
+	sgbRotateLastX  float32
+	sgbObjectMoved  bool
+
+	// sgbEntityMeshIDs is delivered with the asynchronously built map scene.
+	sgbEntityMeshIDs    map[string]int
+	sgbAnimatedEntities []sgb.AnimatedEntity
+
+	sgbObjectRoot             *modtree.TreeFolder
+	sgbObjectExpanded         map[string]bool
+	sgbObjectClicks           map[string]*widget.Clickable
+	sgbObjectList             layout.List
+	sgbObjectScroll           panelScrollState
+	sgbObjectClear            widget.Clickable
+	sgbPlayerList             *widget.Enum
+	sgbPlayerSet              widget.Clickable
+	sgbObjectSelected         string
+	sgbObjectModelPath        string
+	sgbObjectModelFile        string
+	sgbObjectModel            *whm.Model
+	sgbObjectModelCh          chan sgbObjectModelResult
+	sgbObjectMaterialsCh      chan sgbObjectMaterialsResult
+	sgbObjectMaterialsActive  sgbObjectMaterialRequest
+	sgbObjectMaterialsPending []sgbObjectMaterialRequest
+	sgbObjectMaterialsLoaded  map[string]bool
+	sgbObjectMaterialsCache   map[string]sgbObjectMaterialsResult
+	sgbEntityModelFiles       map[int]string
+	sgbPlacementPending       *sgbPlacementRequest
+	sgbNextEntityID           int
 
 	// 3D preview state (when kind=="whm" and a model was decoded)
 	model             *modelViewer
@@ -988,7 +1095,7 @@ func newPointerTag(name string) event.Tag {
 }
 
 func newUI(th *material.Theme) *uiState {
-	s := &uiState{th: th, menuOpen: -1, tabSel: 0, darkTheme: true, keyboardArea: "files", imageCache: make(map[string]imageCacheEntry), modRefreshCh: make(chan modCatalogRefreshResult, 1), modFileWatchSignal: make(chan struct{}, 1), stateDirty: true, leftTreePointerTag: newPointerTag("left-tree"), tabBarPointerTag: newPointerTag("tab-bar"), locale: localeDefault}
+	s := &uiState{th: th, menuOpen: -1, tabSel: 0, darkTheme: true, gpuAPI: defaultGPUAPI, keyboardArea: "files", imageCache: make(map[string]imageCacheEntry), modRefreshCh: make(chan modCatalogRefreshResult, 1), modFileWatchSignal: make(chan struct{}, 1), stateDirty: true, leftTreePointerTag: newPointerTag("left-tree"), tabBarPointerTag: newPointerTag("tab-bar"), locale: localeDefault}
 	applyMaterialTheme(th, true)
 	s.menuClicks = make([]widget.Clickable, len(menus))
 	s.menuItemClicks = make([][]widget.Clickable, len(menus))
@@ -1317,6 +1424,12 @@ func run(w *app.Window) error {
 	if stateExists {
 		ui.applyPersistedSettings(state)
 	}
+	// Gio creates its window GPU on the first frame. Install the persisted
+	// choice before receiving that frame; otherwise Windows' Vulkan driver
+	// sees an empty DOW_GPU_API and falls through to EGL.
+	if err := setGPUAPI(ui.gpuAPI); err != nil {
+		return err
+	}
 
 	// An explicit module argument always wins over the saved session.
 	if findFirstModuleArg() != "" {
@@ -1459,6 +1572,12 @@ func (ui *uiState) loadModule(path string) {
 	ui.visibleNodes = nil
 	ui.rowClicks = nil
 
+	// The hashed field names inside a .rgd resolve through the game's own
+	// dictionary, which ships in the game folder rather than beside the
+	// executable; the hard coded Windows install path in InitDict is only a
+	// last resort. The module sits in the game folder, so its directory says
+	// where to look before anything parses a .rgd.
+	rgd.AddDictRoot(filepath.Dir(path))
 	tree, err := modtree.BuildModTree(path, "English")
 	if err != nil {
 		ui.statusText = fmt.Sprintf("Failed to load %s: %v", filepath.Base(path), err)
@@ -1718,6 +1837,16 @@ func (ui *uiState) layoutMiddlePanel(gtx layout.Context) layout.Dimensions {
 				layout.Rigid(ui.middleHeader),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.layoutWhmViewer(gtx, tab) }),
+			)
+		})
+	}
+	// Scenario map (.sgb) viewer
+	if tab != nil && tab.kind == "sgb" {
+		return ui.panelWithScroll(gtx, &ui.middleScroll, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(ui.middleHeader),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.layoutSgbViewer(gtx, tab) }),
 			)
 		})
 	}

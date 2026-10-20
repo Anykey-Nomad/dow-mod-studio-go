@@ -2,6 +2,7 @@ package main
 
 import (
 	engine "dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/sgb"
 	"dow-mod-studio/internal/whm"
 	"image"
 	"image/color"
@@ -129,11 +130,15 @@ func quatMatrix(q [4]float32) fauxgl.Matrix { return whm.QuatMatrix(q) }
 // render state; only the FX scene and material types remain app-specific.
 type RenderOptions struct {
 	engine.RenderOptions
-	FX                *fxGpuScene
-	GroundImage       *image.RGBA
-	Ground            bool
-	MaterialOverrides map[string]WhmMaterial
-	viewOverride      *fauxgl.Matrix
+	FX                  *fxGpuScene
+	GroundImage         *image.RGBA
+	Ground              bool
+	MaterialOverrides   map[string]WhmMaterial
+	MaterialAliases     map[string]string
+	viewOverride        *fauxgl.Matrix
+	AnimatedEntities    []sgb.AnimatedEntity
+	SgbSelectedEntities map[int]bool
+	SgbEntityMeshIDs    map[string]int
 }
 
 const (
@@ -226,6 +231,7 @@ func RenderWhmModel(model *WhmModel, pose WhmPose, opts RenderOptions) *image.RG
 		engineOpts.Ground = true
 	}
 	engineOpts.MaterialOverrides = opts.MaterialOverrides
+	engineOpts.MaterialAliases = opts.MaterialAliases
 	engineOpts.ViewOverride = opts.viewOverride
 	return engine.Render(modelData, pose, engineOpts)
 }

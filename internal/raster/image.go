@@ -298,23 +298,24 @@ func decodeRtx(data []byte) (image.Image, []image.Image, error) {
 		attr   *chunky.Chunk
 		pixels *chunky.Chunk
 	)
-	var walk func(cs []*chunky.Chunk)
-	walk = func(cs []*chunky.Chunk) {
+	var findImage func(cs []*chunky.Chunk)
+	findImage = func(cs []*chunky.Chunk) {
 		for _, c := range cs {
-			switch c.TypeID {
-			case "DATAATTR":
-				if attr == nil {
-					attr = c
-				}
-			case "DATADATA":
-				if pixels == nil {
-					pixels = c
+			if c.TypeID == "FOLDIMAG" {
+				candidateAttr := c.Child("DATAATTR")
+				candidatePixels := c.Child("DATADATA")
+				if candidateAttr != nil && candidatePixels != nil {
+					attr, pixels = candidateAttr, candidatePixels
+					return
 				}
 			}
-			walk(c.Children)
+			findImage(c.Children)
+			if attr != nil && pixels != nil {
+				return
+			}
 		}
 	}
-	walk(chunks)
+	findImage(chunks)
 	if attr == nil || pixels == nil {
 		return nil, nil, fmt.Errorf("rtx has no image data")
 	}

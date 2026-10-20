@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"path"
 	"strings"
 )
 
@@ -77,6 +78,124 @@ func (d *Document) Timelines() []FxTimeline {
 		}
 	}
 	return out
+}
+
+// LinkedAnimations maps an animation name declared by this model's .whe to
+// the source model and animation it imports from. Keys are normalized for
+// case-insensitive lookup, like the reference editor's linkedAnims map.
+func (d *Document) LinkedAnimations() map[string]LinkedAnimation {
+	out := make(map[string]LinkedAnimation)
+	d.walk(func(c *chunky.Chunk) {
+		typeID := strings.TrimSpace(strings.TrimRight(c.TypeID, "\x00"))
+		if !strings.EqualFold(typeID, "ANIM") && !strings.EqualFold(typeID, "FOLDANIM") {
+			return
+		}
+		var xref *chunky.Chunk
+		var visit func([]*chunky.Chunk)
+		visit = func(chunks []*chunky.Chunk) {
+			for _, child := range chunks {
+				if strings.EqualFold(strings.TrimSpace(strings.TrimRight(child.TypeID, "\x00")), "DATA") && strings.EqualFold(child.Name, "XREF") {
+					xref = child
+					return
+				}
+				visit(child.Children)
+				if xref != nil {
+					return
+				}
+			}
+		}
+		visit(c.Children)
+		if xref == nil {
+			return
+		}
+		r := &chunky.Reader{Data: xref.Payload}
+		source, name := strings.TrimSpace(r.Str()), strings.TrimSpace(r.Str())
+		if r.Err == nil && name != "" {
+			out[strings.ToLower(strings.TrimSpace(c.Name))] = LinkedAnimation{SourceModel: source, Animation: name}
+		}
+	})
+	return out
+}
+
+// LinkedAnimation names an animation imported from a different model.
+type LinkedAnimation struct {
+	SourceModel string
+	Animation   string
+}
+
+// IdleAnimation follows the same default action -> last motion/action link ->
+// last motion animation chain as the reference editor. Conditions are ignored,
+// matching its editor preview which treats the final listed branch as default.
+func (d *Document) IdleAnimation() string {
+	if d == nil {
+		return ""
+	}
+	actions := d.Actions()
+	motions := make(map[string]FxTimeline, len(d.Timelines()))
+	for _, timeline := range d.Timelines() {
+		motions[strings.ToLower(strings.TrimSpace(timeline.Name))] = timeline
+	}
+	actionByName := make(map[string]FxAction, len(actions))
+	for _, action := range actions {
+		actionByName[strings.ToLower(strings.TrimSpace(action.Name))] = action
+	}
+	action, ok := actionByName["default"]
+	if !ok {
+		return ""
+	}
+	seenActions := make(map[string]bool)
+	for {
+		name := strings.ToLower(strings.TrimSpace(action.Name))
+		if seenActions[name] {
+			return ""
+		}
+		seenActions[name] = true
+		if len(action.Motions) > 0 {
+			break
+		}
+		if len(action.Subactions) == 0 {
+			return ""
+		}
+		next := strings.ToLower(strings.TrimSpace(action.Subactions[len(action.Subactions)-1].Name))
+		var found bool
+		action, found = actionByName[next]
+		if !found {
+			return ""
+		}
+	}
+	motionName := strings.ToLower(strings.TrimSpace(action.Motions[len(action.Motions)-1].Name))
+	seenMotions := make(map[string]bool)
+	for {
+		if seenMotions[motionName] {
+			return ""
+		}
+		seenMotions[motionName] = true
+		timeline, found := motions[motionName]
+		if !found {
+			return ""
+		}
+		if len(timeline.Animations) > 0 {
+			return strings.TrimSpace(timeline.Animations[len(timeline.Animations)-1])
+		}
+		if len(timeline.Motions) == 0 {
+			return ""
+		}
+		motionName = strings.ToLower(strings.TrimSpace(timeline.Motions[len(timeline.Motions)-1]))
+	}
+}
+
+// RGDLinkedAnimationPath resolves a .whe XREF source against the game's art tree.
+func RGDLinkedAnimationPath(source string) string {
+	source = strings.ReplaceAll(strings.TrimSpace(source), "\\", "/")
+	source = strings.TrimPrefix(source, "./")
+	if strings.HasPrefix(strings.ToLower(source), "data:") {
+		source = source[len("data:"):]
+	}
+	source = strings.TrimPrefix(source, "/")
+	if !strings.HasPrefix(strings.ToLower(source), "art/") {
+		source = "art/ebps/" + source
+	}
+	return "Data/" + strings.TrimSuffix(source, path.Ext(source)) + ".whm"
 }
 
 func (d *Document) findTimeline(name string) *chunky.Chunk {

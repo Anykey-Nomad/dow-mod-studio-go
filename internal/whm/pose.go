@@ -17,6 +17,22 @@ type Pose struct {
 	BindInv []fauxgl.Matrix
 }
 
+// TransformPoint applies a matrix to a point in model space.
+func TransformPoint(m fauxgl.Matrix, p [3]float32) [3]float32 {
+	v := m.MulPosition(vec3From(p))
+	return [3]float32{float32(v.X), float32(v.Y), float32(v.Z)}
+}
+
+// TransformDirection applies a matrix's rotational/scaling part to a vector.
+func TransformDirection(m fauxgl.Matrix, p [3]float32) [3]float32 {
+	v := fauxgl.Vector{X: float64(p[0]), Y: float64(p[1]), Z: float64(p[2])}
+	v = fauxgl.Vector{X: m.X00*v.X + m.X01*v.Y + m.X02*v.Z, Y: m.X10*v.X + m.X11*v.Y + m.X12*v.Z, Z: m.X20*v.X + m.X21*v.Y + m.X22*v.Z}
+	if v.Length() > 1e-9 {
+		v = v.Normalize()
+	}
+	return [3]float32{float32(v.X), float32(v.Y), float32(v.Z)}
+}
+
 // SkinMatrix returns the transform that maps a bind pose vertex of bone b into
 // the current pose.
 func (p Pose) SkinMatrix(bone int32) fauxgl.Matrix {
@@ -35,6 +51,13 @@ func (m *Model) RestPose() Pose {
 // when anim is nil. Key times are relative to the clip length and the game
 // stores a few beyond 1, so t is clamped.
 func (m *Model) PoseAt(anim *Animation, t float32) Pose {
+	return m.PoseAtWithFrame(anim, t, fauxgl.Identity())
+}
+
+// PoseAtWithFrame evaluates animation relative to a placement's world matrix.
+// Bind inverses are calculated before the frame is applied, preserving each
+// copy's bind pose while moving all animated bones with its placement.
+func (m *Model) PoseAtWithFrame(anim *Animation, t float32, frame fauxgl.Matrix) Pose {
 	n := len(m.Bones)
 	pose := Pose{
 		Bones:   make([]fauxgl.Matrix, n),
@@ -44,6 +67,7 @@ func (m *Model) PoseAt(anim *Animation, t float32) Pose {
 	bind := m.accumulate(nil)
 	for i, mat := range bind {
 		pose.BindInv[i] = safeInverse(mat)
+		bind[i] = frame.Mul(mat)
 	}
 	if anim == nil {
 		pose.Bones = bind
@@ -52,6 +76,9 @@ func (m *Model) PoseAt(anim *Animation, t float32) Pose {
 	t = clampFloat32(t, 0, 1)
 	// Bones with no key in this clip keep their bind transform.
 	pose.Bones = m.accumulate(m.boneLocals(anim.Bones, t))
+	for i := range pose.Bones {
+		pose.Bones[i] = frame.Mul(pose.Bones[i])
+	}
 	return pose
 }
 

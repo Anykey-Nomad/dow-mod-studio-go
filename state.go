@@ -17,8 +17,9 @@ type persistedTab struct {
 }
 
 type persistedState struct {
-	Version   int  `json:"version"`
-	DarkTheme bool `json:"darkTheme"`
+	Version   int    `json:"version"`
+	DarkTheme bool   `json:"darkTheme"`
+	GPUAPI    string `json:"gpuAPI"`
 	// TextFormats is the list of file formats the built-in text editor
 	// opens, as the reader typed it: ".lua, .txt, .mydsl". An empty value
 	// means the built-in default, which is why it is written only when it
@@ -88,6 +89,7 @@ func savePersistedState(ui *uiState) error {
 	state := persistedState{
 		Version:          1,
 		DarkTheme:        ui.darkTheme,
+		GPUAPI:           normalizeGPUAPI(ui.gpuAPI),
 		TextFormats:      formatTextFormats(ui.textEditorFormats),
 		GamePath:         ui.gamePath,
 		ModulePath:       ui.modulePath,
@@ -157,6 +159,7 @@ func (ui *uiState) maybeSaveState() {
 
 func (ui *uiState) applyPersistedSettings(state persistedState) {
 	ui.darkTheme = state.DarkTheme
+	ui.gpuAPI = normalizeGPUAPI(state.GPUAPI)
 	// A state file from before the setting existed has no list, and so does
 	// one whose field was cleared: both mean the built-in default, which is
 	// what parseTextFormats answers for an empty string.
@@ -287,6 +290,8 @@ func (ui *uiState) restoreSavedTab(saved persistedTab) {
 		// A model tab has to go back through the model viewer, otherwise the
 		// 3D preview is lost on every restart and the file opens as text.
 		ui.openWhm(saved.Path)
+	case "sgb":
+		ui.openSgb(saved.Path)
 	default:
 		ui.openTextFile(saved.Path)
 	}

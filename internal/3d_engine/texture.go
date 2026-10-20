@@ -34,6 +34,19 @@ func NewTexture(img image.Image) fauxgl.Texture {
 	return Texture{img: out}
 }
 
+// ImageOf returns the image a Texture was built from, or nil for any other
+// implementation of the interface. The hardware renderer needs the pixels
+// themselves to upload a diffuse map in its own format, which is what lets a
+// mesh synthesized in memory — a terrain mesh from a map's heightmap — carry
+// its texture on the GPU path as well as the software one.
+func ImageOf(t fauxgl.Texture) *image.RGBA {
+	tex, ok := t.(Texture)
+	if !ok {
+		return nil
+	}
+	return tex.img
+}
+
 func (t Texture) Sample(u, v float64) fauxgl.Color {
 	b := t.img.Bounds()
 	return texelColor(t.img.RGBAAt(b.Min.X+wrapTexel(u, b.Dx()), b.Min.Y+wrapTexel(v, b.Dy())))

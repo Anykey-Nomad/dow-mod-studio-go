@@ -5,6 +5,7 @@ import (
 	engine "dow-mod-studio/internal/3d_engine"
 	viewer "dow-mod-studio/internal/3d_viewer"
 	"dow-mod-studio/internal/fx"
+	"dow-mod-studio/internal/sgb"
 	"dow-mod-studio/internal/whe"
 	"dow-mod-studio/internal/whm"
 	"fmt"
@@ -28,17 +29,34 @@ type modelFrame struct {
 
 // modelMaterialResult carries resolved textures back to the UI goroutine.
 type modelMaterialResult struct {
-	materials map[string]WhmMaterial
-	rsh       map[string][]byte
-	missing   int
+	materials   map[string]WhmMaterial
+	rsh         map[string][]byte
+	aliases     map[string]string
+	diagnostics map[string]modelMaterialDiagnostic
+	missing     int
+	// more says another result follows on the same channel. A map scene
+	// delivers its terrain diffuse first and its entities second, so the
+	// channel stays set until a result arrives without one following it.
+	more bool
+	// model replaces the viewer's model outright: how a map scene grows
+	// from the terrain-only mesh it opens with into the full scene with
+	// the placed objects. A .whm tab never sends one.
+	model *WhmModel
+	// entityMeshes maps the scene's uniquely named entity meshes back to the
+	// stable scenario IDs used by the map tab's in-memory selection.
+	entityMeshes     map[string]int
+	animatedEntities []sgb.AnimatedEntity
 }
 
 // modelViewer is the per tab state of the 3D preview. Everything here is
 // touched on the UI goroutine only; workers communicate through channels.
 type modelViewer struct {
-	model     *WhmModel
-	materials map[string]WhmMaterial
-	anim      *WhmAnimation
+	model            *WhmModel
+	materials        map[string]WhmMaterial
+	materialAliases  map[string]string
+	anim             *WhmAnimation
+	animatedEntities []sgb.AnimatedEntity
+	sgbAnimLast      time.Time
 	// poseCache is the pose at poseTime of poseAnim, kept so a frame that
 	// asks for the pose more than once walks the skeleton once.
 	poseCache    WhmPose
@@ -76,8 +94,11 @@ type modelViewer struct {
 	// been read back, so the readback runs on the transitions that matter only.
 	gpuProbeW, gpuProbeH int
 	gpuProbedTextured    bool
-	// rshData holds the raw .rsh bytes of every material.
+	// rshData holds raw .rsh bytes for the Vulkan block-compressed path.
 	rshData map[string][]byte
+	// materialDiagnostics records where each map came from and which image
+	// encoding decoded successfully, keyed by the model's material reference.
+	materialDiagnostics map[string]modelMaterialDiagnostic
 	// sideControls puts the playback strip beside the canvas instead of under
 	// it, which is what the object window's viewport wants: its canvas is a
 	// third of the window wide and a strip of eight buttons does not fit under
@@ -275,10 +296,13 @@ type modelViewer struct {
 func newModelViewer(model *WhmModel, modelFile string) *modelViewer {
 	camera := NewCameraState(model, 0.7, 0.2, modelDefaultFov)
 	return &modelViewer{
-		model:       model,
-		modelFile:   modelFile,
-		materials:   map[string]WhmMaterial{},
-		rshData:     map[string][]byte{},
+		model:     model,
+		modelFile: modelFile,
+		materials: map[string]WhmMaterial{},
+		rshData:   map[string][]byte{},
+		// Textures start on. Set here rather than when a texture batch
+		// lands, so a Textures toggle made while loading is not overwritten.
+		textured:    true,
 		CameraState: camera,
 		// The map as the file has it, and the sliders showing that: no
 		// offset, no turn, no mirror, and a scale of one. A reader moves
@@ -417,11 +441,22 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 	gpu := ui.modelGpuRenderer()
 	opts := v.options(w, h)
 	opts.Quality = modelQualityFinal
+	if t.kind == "sgb" && t.sgbView3D {
+		opts.SgbSelectedEntities = t.sgbSelectedEntities
+		opts.SgbEntityMeshIDs = t.sgbEntityMeshIDs
+	}
+	// Textures off means no materials and no .rsh lookups, so every draw
+	// falls back to the base colour. The GPU path must honour this too:
+	// it used to receive v.materials unconditionally.
+	var mats map[string]WhmMaterial
 	var rsh func(string) ([]byte, bool)
-	if v.textured && len(v.rshData) > 0 {
-		rsh = func(material string) ([]byte, bool) {
-			data, ok := v.rshData[material]
-			return data, ok
+	if v.textured {
+		mats = v.materials
+		if len(v.rshData) > 0 {
+			rsh = func(material string) ([]byte, bool) {
+				data, ok := v.rshData[material]
+				return data, ok
+			}
 		}
 	}
 	// The first frame of a stretch on the hardware path proves the render
@@ -429,7 +464,7 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 	// a render that never returned.
 	firstGPUFrame := v.gpuFrame == nil
 	start := time.Now()
-	frame, err := gpu.Render(v.model, v.pose(), opts, v.materials, rsh)
+	frame, err := gpu.Render(v.model, v.pose(), opts, mats, rsh)
 	if err == nil {
 		d := time.Since(start)
 		if firstGPUFrame {
@@ -580,8 +615,11 @@ func (v *modelViewer) options(width, height int) RenderOptions {
 			PickedBone:    pickedBone(v.boneIndex),
 			UVDefault:     v.uv,
 			UVPerMaterial: v.uvMaterials, MeshAlpha: v.meshAlphas(),
+			AnimatedEntities: v.animatedEntities,
 		},
 		MaterialOverrides: mats,
+		MaterialAliases:   v.materialAliases,
+		AnimatedEntities:  v.animatedEntities,
 		GroundImage:       v.groundImage,
 		Ground:            v.showGround && v.groundImage != nil,
 		FX:                v.fxScene,
@@ -592,6 +630,13 @@ func (v *modelViewer) options(width, height int) RenderOptions {
 func (ui *uiState) pollModelJobs() {
 	for _, t := range ui.openTabs {
 		ui.pollViewerJobs(t)
+		ui.pollSgbObjectModel(t)
+		ui.pollSgbObjectMaterials(t)
+		if t.sgbPlacementPending != nil && t.model != nil && !t.model.loading && !t.model.rendering && t.model.frameCh == nil && t.modelMaterialCh == nil && t.sgbObjectModelCh == nil && t.sgbObjectMaterialsCh == nil && len(t.sgbObjectMaterialsPending) == 0 && t.sgbObjectModel != nil {
+			request := *t.sgbPlacementPending
+			t.sgbPlacementPending = nil
+			ui.appendSgbPlacement(t, request, t.sgbObjectModel)
+		}
 	}
 	// The object window's viewport has a viewer that is not a file tab, and it
 	// renders and loads textures exactly the same way.
@@ -608,17 +653,39 @@ func (ui *uiState) pollViewerJobs(t *fileTab) {
 	if t.modelMaterialCh != nil {
 		select {
 		case res := <-t.modelMaterialCh:
-			t.modelMaterialCh = nil
+			if !res.more {
+				t.modelMaterialCh = nil
+			}
 			v.loading = false
-			v.materialsLoaded = true
+			v.materialsLoaded = !res.more
 			v.materials = res.materials
+			v.materialAliases = res.aliases
+			if len(res.materials) > 0 {
+				v.textured = true
+			}
 			log.Printf("3D preview: textures ready: %d materials resolved, %d missing", len(res.materials)+len(res.rsh), res.missing)
 			if len(res.rsh) > 0 {
 				v.rshData = res.rsh
 			}
-			v.textured = len(res.materials) > 0
+			if res.diagnostics != nil {
+				v.materialDiagnostics = res.diagnostics
+			}
 			if res.missing > 0 {
 				v.missing = res.missing
+			}
+			// A map scene swaps in the model with its objects; a .whm
+			// tab never sends one and keeps its model unchanged.
+			if res.model != nil {
+				v.model = res.model
+			}
+			if res.model != nil {
+				t.model.animatedEntities = res.animatedEntities
+			}
+			if res.model != nil && res.entityMeshes != nil {
+				t.sgbEntityMeshIDs = res.entityMeshes
+				if t.sgbSelectedEntities == nil {
+					t.sgbSelectedEntities = make(map[int]bool)
+				}
 			}
 			v.invalidate()
 		default:

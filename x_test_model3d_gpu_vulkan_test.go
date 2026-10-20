@@ -468,6 +468,50 @@ func TestVulkanRSHAlphaLeavesBackgroundVisible(t *testing.T) {
 	}
 }
 
+func TestVulkanDrawsSgbSelectionBoundsIntoGpuFrame(t *testing.T) {
+	const w, h = 160, 160
+	model := singleQuad(t, true)
+	model.Meshes[0].Name = "entity-4"
+	_, r, readback, release := requireVulkanRenderer(t)
+	defer release()
+	opts := gpuTestOptions(model, w, h)
+	_, err := r.Render(model, model.RestPose(), opts, nil, nil)
+	if err != nil {
+		t.Fatalf("Render without selection: %v", err)
+	}
+	plain := append([]byte(nil), readback()...)
+	opts.SgbSelectedEntities = map[int]bool{4: true}
+	opts.SgbEntityMeshIDs = map[string]int{"entity-4": 4}
+	if _, err := r.Render(model, model.RestPose(), opts, nil, nil); err != nil {
+		t.Fatalf("Render selected entity: %v", err)
+	}
+	selected := readback()
+	changed := 0
+	golden := 0
+	var changedMin, changedMax [3]byte
+	changedMin = [3]byte{255, 255, 255}
+	for i := 0; i+3 < len(plain) && i+3 < len(selected); i += 4 {
+		if plain[i] != selected[i] || plain[i+1] != selected[i+1] || plain[i+2] != selected[i+2] {
+			changed++
+			for c := 0; c < 3; c++ {
+				if selected[i+c] < changedMin[c] {
+					changedMin[c] = selected[i+c]
+				}
+				if selected[i+c] > changedMax[c] {
+					changedMax[c] = selected[i+c]
+				}
+			}
+			if selected[i] > selected[i+1]+8 && selected[i+1] > selected[i+2]+8 {
+				golden++
+			}
+		}
+	}
+	t.Logf("GPU selection pixel changes: %d; yellow-like: %d; RGB bounds %v..%v", changed, golden, changedMin, changedMax)
+	if changed == 0 || golden < 8 {
+		t.Fatalf("GPU selection outline changed %d pixels (%d yellow), want visible yellow outline in the Vulkan color target", changed, golden)
+	}
+}
+
 func TestVulkanFadesAMeshOverWhatIsBehindIt(t *testing.T) {
 	model := singleQuad(t, true)
 	const w, h = 120, 120
@@ -604,21 +648,21 @@ func TestModelMeshCentreAveragesItsVertices(t *testing.T) {
 	} {
 		model.Vertices = append(model.Vertices, WhmVertex{Pos: p})
 	}
-	all := modelMeshCentre(model, []uint32{0, 1, 2, 3})
+	all := modelGroupCentre(model, []uint32{0, 1, 2, 3})
 	if want := [3]float64{2, 3, 0}; all != want {
 		t.Errorf("the centre of the whole quad is %v, want %v", all, want)
 	}
-	half := modelMeshCentre(model, []uint32{2, 3})
+	half := modelGroupCentre(model, []uint32{2, 3})
 	if want := [3]float64{2, 6, 0}; half != want {
 		t.Errorf("the centre of two of its corners is %v, want %v", half, want)
 	}
 	// An index past the end of the vertex array is not a position to average;
 	// buildMesh has already refused to draw that mesh.
-	bad := modelMeshCentre(model, []uint32{1, 99})
+	bad := modelGroupCentre(model, []uint32{1, 99})
 	if want := [3]float64{4, 0, 0}; bad != want {
 		t.Errorf("a mesh with an index out of range centres at %v, want %v", bad, want)
 	}
-	if got := modelMeshCentre(model, nil); got != [3]float64{} {
+	if got := modelGroupCentre(model, nil); got != [3]float64{} {
 		t.Errorf("a mesh with no indexes centres at %v, want the origin", got)
 	}
 }

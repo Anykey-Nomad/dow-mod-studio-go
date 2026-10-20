@@ -34,7 +34,10 @@ type Vertex struct {
 type Mesh struct {
 	Name     string
 	Material string
-	Indices  []uint32
+	// MaterialPath is the full shared-texture reference from the model's
+	// DATASSHR chunks, when Material is only a display/local alias.
+	MaterialPath string
+	Indices      []uint32
 	// SingleBone is the skeleton bone a rigid mesh follows, from the
 	// FOLDMSGR mesh list. -1 when the mesh carries its own skin weights or is
 	// an external reference.
@@ -124,16 +127,20 @@ type Animation struct {
 
 // Model is a decoded model ready for the renderer.
 type Model struct {
-	Name        string
-	Vertices    []Vertex
-	Meshes      []Mesh
-	Bones       []Bone
-	Markers     []Marker
-	Cameras     []Camera
-	Animations  []Animation
-	BoundMin    [3]float32
-	BoundMax    [3]float32
-	boneParents []int
+	Name       string
+	Vertices   []Vertex
+	Meshes     []Mesh
+	Bones      []Bone
+	Markers    []Marker
+	Cameras    []Camera
+	Animations []Animation
+	BoundMin   [3]float32
+	BoundMax   [3]float32
+	// SharedTextures preserves the canonical references from FOLDSTXT.
+	SharedTextures []string
+	// MaterialPaths maps a shared shader's display label to its diffuse map.
+	MaterialPaths map[string]string
+	boneParents   []int
 	// MarkerForwards is which of each marker's six frame directions its
 	// effects leave in, worked out once from the mesh. It lives here rather
 	// than in a table keyed by the model so that a model is freed when the
@@ -171,8 +178,12 @@ func Parse(data []byte) (*Model, error) {
 			err = m.parseMarkers(c)
 		case "DATACAMS":
 			err = m.parseCameras(c)
+		case "FOLDSTXT":
+			m.parseSharedTexture(c)
+		case "FOLDSHDR":
+			m.parseSharedShader(c)
 		case "FOLDMSGR":
-			err = m.parseMeshes(c)
+			err = m.parseMeshes(c, false)
 		case "FOLDANIM":
 			err = m.parseAnimation(c)
 		}
@@ -186,6 +197,44 @@ func Parse(data []byte) (*Model, error) {
 	}
 	m.recomputeBounds()
 	return m, nil
+}
+
+// parseSharedTexture records each FOLDSTXT canonical texture path, indexed by
+// its basename so equivalent shared-shader labels can use it as an alias.
+func (m *Model) parseSharedTexture(c *chunky.Chunk) {
+	path := strings.TrimSpace(c.Name)
+	if path == "" {
+		return
+	}
+	for _, existing := range m.SharedTextures {
+		if strings.EqualFold(existing, path) {
+			return
+		}
+	}
+	m.SharedTextures = append(m.SharedTextures, path)
+}
+
+// parseSharedShader reads the diffuse channel's texture path and indexes it
+// by the shader label used in mesh material lists.
+func (m *Model) parseSharedShader(c *chunky.Chunk) {
+	if c == nil || c.Name == "" {
+		return
+	}
+	for _, channel := range c.Children {
+		if channel.TypeID != "DATACHAN" || len(channel.Payload) < 12 || binary.LittleEndian.Uint32(channel.Payload[:4]) != 0 {
+			continue
+		}
+		r := &chunky.Reader{Data: channel.Payload[12:]}
+		path := strings.TrimSpace(r.Str())
+		if r.Err != nil || path == "" {
+			continue
+		}
+		if m.MaterialPaths == nil {
+			m.MaterialPaths = make(map[string]string)
+		}
+		m.MaterialPaths[strings.ToLower(strings.TrimSpace(c.Name))] = path
+		return
+	}
 }
 
 // --- skeleton ---------------------------------------------------------------
@@ -265,7 +314,11 @@ func (m *Model) parseCameras(c *chunky.Chunk) error {
 
 // --- meshes -----------------------------------------------------------------
 
-func (m *Model) parseMeshes(c *chunky.Chunk) error {
+// parseMeshes reads one FOLDMSGR group. sgm says which container flavour the
+// mesh payloads are in: the .sgm record drops the reserved dword that follows
+// each material's face block, and that is the only difference that reaches
+// this far.
+func (m *Model) parseMeshes(c *chunky.Chunk, sgm bool) error {
 	var ranges []whmMeshRange
 	for _, sub := range c.Children {
 		if sub.TypeID != "FOLDMSLC" {
@@ -276,7 +329,7 @@ func (m *Model) parseMeshes(c *chunky.Chunk) error {
 			continue
 		}
 		beg := len(m.Vertices)
-		mesh, err := m.parseMeshData(data.Payload, beg)
+		mesh, err := m.parseMeshData(data.Payload, beg, sgm)
 		if err != nil {
 			return fmt.Errorf("mesh %q: %w", sub.Name, err)
 		}
@@ -295,11 +348,16 @@ func (m *Model) parseMeshes(c *chunky.Chunk) error {
 		// maps. Models ship with a different texture per range, so the split
 		// is what keeps the second map from being drawn with the first.
 		for i, material := range mesh.materials {
+			materialPath := m.MaterialPaths[strings.ToLower(strings.TrimSpace(material))]
+			if materialPath == "" && len(m.SharedTextures) == len(mesh.materials) {
+				materialPath = m.SharedTextures[i]
+			}
 			m.Meshes = append(m.Meshes, Mesh{
-				Name:       sub.Name,
-				Material:   material,
-				Indices:    mesh.indices[i],
-				SingleBone: -1,
+				Name:         sub.Name,
+				Material:     material,
+				MaterialPath: materialPath,
+				Indices:      mesh.indices[i],
+				SingleBone:   -1,
 			})
 			ranges = append(ranges, whmMeshRange{mesh: len(m.Meshes) - 1, beg: beg, n: len(mesh.vertices)})
 		}
@@ -359,7 +417,7 @@ type whmMeshGeometry struct {
 	materials []string
 }
 
-func (m *Model) parseMeshData(data []byte, vertexBase int) (*whmMeshGeometry, error) {
+func (m *Model) parseMeshData(data []byte, vertexBase int, sgm bool) (*whmMeshGeometry, error) {
 	r := &chunky.Reader{Data: data}
 	r.Take(13) // reserved, flag, triangle count, reserved
 	skinBones := r.Count(4)
@@ -482,7 +540,9 @@ func (m *Model) parseMeshData(data []byte, vertexBase int) (*whmMeshGeometry, er
 		}
 		raw := r.Take(int(indices) * 2)
 		r.Skip(4) // min vertex + vertex count
-		r.Skip(4) // reserved
+		if !sgm {
+			r.Skip(4) // reserved, .whm only; .sgm drops it
+		}
 		var faces []uint32
 		for j := 0; j+2 < len(raw); j += 6 {
 			// Each triangle is stored as three uint16 in the order (x, z, y).

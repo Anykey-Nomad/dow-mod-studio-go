@@ -330,9 +330,11 @@ func (ui *uiState) unitEvtBlurFields(gtx layout.Context) {
 // runs on every frame while the section is on screen, ahead of the layout that
 // draws what it decided.
 func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
-	if ui.currentUnitSection().label != unitSectionEvents {
+	if ui.currentUnitSection().label != unitSectionEvents && !ui.classicOEDialogOpen() {
 		// Leaving the section silences whatever it was playing: a timeline
 		// that keeps sounding behind another section is a leak, not a feature.
+		// The Classic OE double-click dialog is the exception: while it is
+		// up, the editors it embeds are the section, wherever the panel sits.
 		if ui.evtPlayer.playing || ui.evtPlayer.audition != nil {
 			ui.evtPlayer.stopAll()
 		}

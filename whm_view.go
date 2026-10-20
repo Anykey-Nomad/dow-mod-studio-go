@@ -143,7 +143,8 @@ func loadWhmGroundImage(tree *modtree.ModTree) image.Image {
 
 // .whm viewer. Dawn of War ships models as .whm; the Object Editor consumes the
 // same geometry in an .sgm container. whm.ConvertToSgm does that rewrite in
-// process, so no Blender round trip is needed.
+// process, so no Blender round trip is needed — and a modder's saved .sgm opens
+// in this same viewer, with whm.IsSgm choosing the reader.
 
 func (ui *uiState) openWhm(virtualPath string) {
 	if ui.modTree == nil {
@@ -161,16 +162,31 @@ func (ui *uiState) openWhm(virtualPath string) {
 		t.whmError = err.Error()
 	} else {
 		t.whmBytes = len(data)
-		info, err := whm.Inspect(data)
-		if err != nil {
-			t.whmError = err.Error()
+		// One sniff decides the container flavour: the Object Editor's .sgm
+		// and the game's .whm carry the same model, split differently.
+		t.whmIsSgm = whm.IsSgm(data)
+		var info *whm.ModelInfo
+		var ierr error
+		if t.whmIsSgm {
+			info, ierr = whm.InspectSgm(data)
+		} else {
+			info, ierr = whm.Inspect(data)
+		}
+		if ierr != nil {
+			t.whmError = ierr.Error()
 		} else {
 			t.whmInfo = info
 		}
 		// The 3D preview is a bonus: a model the converter cannot handle is
 		// still worth looking at, so a parse failure only hides the canvas.
 		parseStart := time.Now()
-		model, perr := ParseWhmModel(data)
+		var model *WhmModel
+		var perr error
+		if t.whmIsSgm {
+			model, perr = ParseSgmModel(data)
+		} else {
+			model, perr = ParseWhmModel(data)
+		}
 		if perr != nil {
 			log.Printf("3D preview: parse %s failed after %v: %v", filepath.Base(virtualPath), time.Since(parseStart), perr)
 		} else {
@@ -204,6 +220,12 @@ func whmTargetSGM(virtualPath string) string {
 // parent mod or from an SGA archive still lands in this mod.
 func (ui *uiState) convertWhmToSgmFile(t *fileTab) {
 	if t == nil || t.kind != "whm" || t.whmConverting || t.whmError != "" {
+		return
+	}
+	if t.whmIsSgm {
+		// The file is already the Object Editor's own container; running the
+		// whm→sgm rewrite over it would write a mangled copy.
+		ui.statusText = "Save — " + filepath.Base(t.path) + " is already an Object Editor .sgm"
 		return
 	}
 	if ui.modTree == nil {

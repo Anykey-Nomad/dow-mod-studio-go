@@ -6,8 +6,11 @@ import (
 	"image"
 	"sort"
 	"strings"
+	"time"
 
 	"gioui.org/layout"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -95,12 +98,22 @@ func (ui *uiState) layoutClassicOEArea(gtx layout.Context) layout.Dimensions {
 	// has been opened once.
 	ui.ensureUnitEvents()
 	ui.ensureClassicOEClicks()
-	panelW := gtx.Dp(unit.Dp(classicOEPanelDp))
-	gap := gtx.Dp(unit.Dp(unitColGapDp))
-	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-		layout.Rigid(ui.fixedPanel(panelW, ui.layoutClassicOELeftPanel)),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-		layout.Flexed(1, ui.layoutClassicOEPreview),
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			panelW := gtx.Dp(unit.Dp(classicOEPanelDp))
+			gap := gtx.Dp(unit.Dp(unitColGapDp))
+			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+				layout.Rigid(ui.fixedPanel(panelW, ui.layoutClassicOELeftPanel)),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
+				layout.Flexed(1, ui.layoutClassicOEPreview),
+			)
+		}),
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			if ui.classicOEDialog == classicOEDialogNone {
+				return layout.Dimensions{}
+			}
+			return ui.layoutClassicOEEventDialog(gtx)
+		}),
 	)
 }
 
@@ -195,7 +208,7 @@ func (ui *uiState) layoutClassicOEHeaderRow(gtx layout.Context, index int) layou
 func (ui *uiState) layoutClassicOEHeaderBody(gtx layout.Context, index int) layout.Dimensions {
 	switch classicOEHeaders[index].kind {
 	case classicOEKindAnims:
-		return ui.layoutClassicOEAnimList(gtx)
+		return ui.layoutClassicOEAnimTree(gtx)
 	case classicOEKindEvents:
 		return ui.layoutClassicOEEventList(gtx)
 	case classicOEKindConditions:
@@ -295,6 +308,713 @@ func (ui *uiState) layoutClassicOEAnimList(gtx layout.Context) layout.Dimensions
 		return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
 	}
 	return ui.unitAnimListWithClicks(gtx, v, &ui.classicOEAnimClicks)
+}
+
+const (
+	// The four folders of the classic editor's tree, in the order the
+	// editor listed them: the clip names first, then the .whe's own
+	// motion (timeline) and action records, and finally the action
+	// hierarchy built from action-to-subaction links.
+	classicOEFolderAnims = iota
+	classicOEFolderMotions
+	classicOEFolderActions
+	classicOEFolderTree
+	classicOEFolderCount
+)
+
+// classicOETreeMaxDepth caps the nesting of the derived tree so that a .whe
+// with a self-referential link cannot recurse without end. Deeper children
+// stop at this depth; the row itself still renders.
+const classicOETreeMaxDepth = 6
+
+// ensureClassicOEFolders starts the folders with Animations and Action Tree
+// open, as the editor opened them, and leaves the other two closed because
+// the counts alone already answer what they hold. A missing expansion record
+// means "the default", so the maps only need to exist.
+func (ui *uiState) ensureClassicOEFolders() {
+	if !ui.classicOEFolderInit {
+		ui.classicOEFolderInit = true
+		ui.classicOEFolderOpen = [classicOEFolderCount]bool{}
+		ui.classicOEFolderOpen[classicOEFolderAnims] = true
+		ui.classicOEFolderOpen[classicOEFolderTree] = true
+	}
+	if ui.classicOEExpandClicks == nil {
+		ui.classicOEExpandClicks = make(map[string]*widget.Clickable)
+	}
+	if ui.classicOEJumpClicks == nil {
+		ui.classicOEJumpClicks = make(map[string]*widget.Clickable)
+	}
+	if ui.classicOEExpandOpen == nil {
+		ui.classicOEExpandOpen = make(map[string]bool)
+	}
+}
+
+// layoutClassicOEAnimTree is the body of the Anims / Motions / Actions
+// header: the four folders with their counts, each toggling its contents
+// inline, so the whole panel reads as the editor's tree rather than a plain
+// animation list.
+func (ui *uiState) layoutClassicOEAnimTree(gtx layout.Context) layout.Dimensions {
+	ui.ensureClassicOEFolders()
+	v := ui.unitModelViewer()
+	doc, docMsg := ui.classicOEListDoc()
+	var timelines []whe.FxTimeline
+	var actions []whe.FxAction
+	if doc != nil {
+		timelines = doc.Timelines()
+		actions = doc.Actions()
+	}
+	roots := classicOETreeRoots(actions)
+	counts := [classicOEFolderCount]int{}
+	if v != nil && v.model != nil {
+		counts[classicOEFolderAnims] = len(v.model.Animations)
+	}
+	counts[classicOEFolderMotions] = len(timelines)
+	counts[classicOEFolderActions] = len(actions)
+	counts[classicOEFolderTree] = len(roots)
+	labels := [classicOEFolderCount]string{"Animations", "Motions", "Actions", "Action Tree"}
+
+	var children []layout.FlexChild
+	for folder := 0; folder < classicOEFolderCount; folder++ {
+		folder := folder
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.layoutClassicOEFolderRow(gtx, folder, labels[folder], counts[folder])
+		}))
+		if !ui.classicOEFolderOpen[folder] {
+			continue
+		}
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.layoutClassicOEFolderBody(gtx, folder, v, timelines, actions, docMsg)
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+}
+
+// layoutClassicOEFolderRow is one folder header: marker, name, count, and
+// the whole row is the toggle. The count stays visible while closed so that
+// a folder still says what it holds.
+func (ui *uiState) layoutClassicOEFolderRow(gtx layout.Context, folder int, label string, count int) layout.Dimensions {
+	ui.ensureClassicOEFolders()
+	c := &ui.classicOEFolderClicks[folder]
+	if c.Clicked(gtx) {
+		ui.classicOEFolderOpen[folder] = !ui.classicOEFolderOpen[folder]
+	}
+	open := ui.classicOEFolderOpen[folder]
+	bg := cPanelBg
+	if open {
+		bg = cHeaderBg
+	} else if c.Hovered() {
+		bg = cMenuHover
+	}
+	return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			h := gtx.Dp(unit.Dp(21))
+			// The bar spans the column's width, so the size is pinned
+			// before the stack paints: with no minimum the background
+			// would fall back to the row's content width.
+			gtx.Constraints.Min = image.Pt(gtx.Constraints.Max.X, h)
+			gtx.Constraints.Max = image.Pt(gtx.Constraints.Max.X, h)
+			return layout.Stack{Alignment: layout.Center}.Layout(gtx,
+				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(2))
+					return layout.Dimensions{Size: gtx.Constraints.Max}
+				}),
+				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+					marker := "▸"
+					if open {
+						marker = "▾"
+					}
+					return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								l := material.Label(ui.th, unit.Sp(9), marker)
+								l.Color = cTextDim
+								return l.Layout(gtx)
+							}),
+							layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								l := material.Label(ui.th, unit.Sp(11), label)
+								l.Color = cText
+								l.MaxLines = 1
+								return l.Layout(gtx)
+							}),
+							layout.Flexed(1, rowGap()),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								l := material.Label(ui.th, unit.Sp(9), fmt.Sprintf("(%d)", count))
+								l.Color = cTextDim
+								return l.Layout(gtx)
+							}),
+						)
+					})
+				}),
+			)
+		})
+	})
+}
+
+// layoutClassicOEFolderBody renders what one open folder holds: the clip
+// list, the motion rows, the action rows, or the derived action tree.
+func (ui *uiState) layoutClassicOEFolderBody(gtx layout.Context, folder int, v *modelViewer, timelines []whe.FxTimeline, actions []whe.FxAction, docMsg string) layout.Dimensions {
+	switch folder {
+	case classicOEFolderAnims:
+		return ui.layoutClassicOEAnimList(gtx)
+	case classicOEFolderMotions:
+		if len(timelines) == 0 {
+			return ui.layoutClassicOEHint(gtx, docMsg, "This .whe defines no motions.")
+		}
+		if len(ui.classicOEMotionClicks) != len(timelines) {
+			ui.classicOEMotionClicks = make([]widget.Clickable, len(timelines))
+		}
+		children := make([]layout.FlexChild, 0, len(timelines))
+		for i := range timelines {
+			t := timelines[i]
+			c := &ui.classicOEMotionClicks[i]
+			if c.Clicked(gtx) {
+				// A motion is named for the animation it drives, so
+				// one press jumps exactly as the tree's leaf does —
+				// and a double press opens the timeline's editor in
+				// the dialog instead.
+				if ui.classicOEDoubleClick("motion:" + strings.ToLower(t.Name)) {
+					ui.openClassicOEEventDialog(classicOEDialogTimeline, t.Name, 0)
+				} else {
+					ui.classicOETreeActivate(classicOETreeRow{Name: t.Name})
+				}
+			}
+			note := classicOEUseNote(len(t.Events), "event", "events")
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.unitViewportRow(gtx, c, false, t.Name, note)
+			}))
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	case classicOEFolderActions:
+		if len(actions) == 0 {
+			return ui.layoutClassicOEHint(gtx, docMsg, "This .whe defines no actions.")
+		}
+		if len(ui.classicOEActionClicks) != len(actions) {
+			ui.classicOEActionClicks = make([]widget.Clickable, len(actions))
+		}
+		children := make([]layout.FlexChild, 0, len(actions))
+		for i := range actions {
+			a := actions[i]
+			c := &ui.classicOEActionClicks[i]
+			if c.Clicked(gtx) {
+				// One press jumps to the action's clip — the same
+				// resolution the Action Tree's branch rows use —
+				// and a double press opens its condition editor in
+				// the dialog instead.
+				if ui.classicOEDoubleClick("action:" + strings.ToLower(a.Name)) {
+					ui.openClassicOEEventDialog(classicOEDialogAction, a.Name, i)
+				} else {
+					key := "/" + strings.ToLower(strings.TrimSpace(a.Name))
+					ui.classicOETreeActivate(classicOETreeRow{Name: a.Name, Key: key})
+				}
+			}
+			note := classicOEUseNote(len(a.Motions)+len(a.Subactions), "choice", "choices")
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.unitViewportRow(gtx, c, false, a.Name, note)
+			}))
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	case classicOEFolderTree:
+		if len(classicOETreeRoots(actions)) == 0 {
+			return ui.layoutClassicOEHint(gtx, docMsg, "This .whe defines no actions to build a tree from.")
+		}
+		rows := classicOETreeRows(actions, ui.classicOEExpandOpen)
+		children := make([]layout.FlexChild, 0, len(rows))
+		for i := range rows {
+			row := rows[i]
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.layoutClassicOETreeRow(gtx, row)
+			}))
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	}
+	return layout.Dimensions{}
+}
+
+// layoutClassicOEHint is an empty folder's one line: the reason the .whe is
+// missing when there is one, otherwise the folder's own emptiness.
+func (ui *uiState) layoutClassicOEHint(gtx layout.Context, docMsg, fallback string) layout.Dimensions {
+	msg := fallback
+	if docMsg != "" {
+		msg = docMsg
+	}
+	l := material.Label(ui.th, unit.Sp(9), msg)
+	l.Color = cTextDim
+	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(4), Left: unit.Dp(10), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
+}
+
+// layoutClassicOETreeRow is one row of the Action Tree: indentation by
+// depth, the expand marker where the node has children, the name, and the
+// condition dimmed beside it. The row carries two separate press targets —
+// the marker column toggles a branch open, everything else plays the
+// animation the node points at — so navigation and expansion never fight
+// over one press. A leaf's blank marker column belongs to the jump target,
+// which keeps the whole line live.
+func (ui *uiState) layoutClassicOETreeRow(gtx layout.Context, row classicOETreeRow) layout.Dimensions {
+	ui.ensureClassicOEFolders()
+	indent := unit.Dp(8 + row.Depth*10)
+
+	// A map index cannot be addressed, so each node's press targets are
+	// allocated once and kept beside the expansion state.
+	var expand *widget.Clickable
+	if row.Key != "" {
+		expand = ui.classicOEExpandClicks[row.Key]
+		if expand == nil {
+			expand = &widget.Clickable{}
+			ui.classicOEExpandClicks[row.Key] = expand
+		}
+		if expand.Clicked(gtx) {
+			// Toggle from the same default the derivation used, so a
+			// key the map has never seen flips to its opposite once.
+			ui.classicOEExpandOpen[row.Key] = !row.Expanded
+		}
+	}
+	// The jump target is keyed by node path for a branch — its subtree
+	// decides the clip — and by name for a leaf: two leaves of one name
+	// play the same clip anyway.
+	jumpKey := "\x00leaf:" + strings.ToLower(strings.TrimSpace(row.Name))
+	if row.Key != "" {
+		jumpKey = row.Key
+	}
+	jump := ui.classicOEJumpClicks[jumpKey]
+	if jump == nil {
+		jump = &widget.Clickable{}
+		ui.classicOEJumpClicks[jumpKey] = jump
+	}
+	if jump.Clicked(gtx) {
+		ui.classicOETreeActivate(row)
+	}
+
+	hover := jump.Hovered() || (expand != nil && expand.Hovered())
+	content := func(gtx layout.Context) layout.Dimensions {
+		// Pinned like the folder bar: the hover background has to span
+		// the whole row, not the name's width.
+		h := gtx.Dp(unit.Dp(18))
+		gtx.Constraints.Min = image.Pt(gtx.Constraints.Max.X, h)
+		gtx.Constraints.Max = image.Pt(gtx.Constraints.Max.X, h)
+		return layout.Stack{Alignment: layout.Center}.Layout(gtx,
+			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+				if hover {
+					rrect(gtx, cMenuHover, gtx.Constraints.Max, gtx.Dp(2))
+				}
+				return layout.Dimensions{Size: gtx.Constraints.Max}
+			}),
+			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1), Left: indent, Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							marker := ""
+							if row.Key != "" {
+								marker = "▸"
+								if row.Expanded {
+									marker = "▾"
+								}
+							}
+							gtx.Constraints.Min.X = gtx.Dp(unit.Dp(14))
+							gtx.Constraints.Max.X = gtx.Dp(unit.Dp(14))
+							gtx.Constraints.Min.Y = gtx.Constraints.Max.Y
+							draw := func(gtx layout.Context) layout.Dimensions {
+								return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+									l := material.Label(ui.th, unit.Sp(9), marker)
+									l.Color = cTextDim
+									return l.Layout(gtx)
+								})
+							}
+							if expand != nil {
+								return expand.Layout(gtx, draw)
+							}
+							// A leaf's blank marker is part of the jump
+							// target, so no part of the line is dead.
+							return jump.Layout(gtx, draw)
+						}),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+							return jump.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								gtx.Constraints.Min.Y = gtx.Constraints.Max.Y
+								return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										l := material.Label(ui.th, unit.Sp(10), row.Name)
+										l.Color = cText
+										return l.Layout(gtx)
+									}),
+									layout.Flexed(1, rowGap()),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										if row.Note == "" {
+											return layout.Dimensions{}
+										}
+										l := material.Label(ui.th, unit.Sp(9), classicOENote(row.Note))
+										l.Color = cTextDim
+										l.MaxLines = 1
+										return l.Layout(gtx)
+									}),
+								)
+							})
+						}),
+					)
+				})
+			}),
+		)
+	}
+	return content(gtx)
+}
+
+// classicOETreeActivate plays the clip a pressed Action Tree row points at
+// in the preview beside the panel — the same selection and playback the
+// Animations folder's rows perform — and says so in the status bar when the
+// model carries no such clip.
+func (ui *uiState) classicOETreeActivate(row classicOETreeRow) {
+	v := ui.unitModelViewer()
+	if v == nil || v.model == nil {
+		ui.statusText = "Action Tree — the model is still loading"
+		return
+	}
+	clips := make([]string, len(v.model.Animations))
+	for i := range v.model.Animations {
+		clips[i] = v.model.Animations[i].Name
+	}
+	var actions []whe.FxAction
+	if doc, _ := ui.classicOEListDoc(); doc != nil {
+		actions = doc.Actions()
+	}
+	idx := classicOETreeJumpIndex(row, actions, clips)
+	if idx < 0 {
+		ui.statusText = fmt.Sprintf("Action Tree — no animation named %q in this model", row.Name)
+		return
+	}
+	v.selectAnim(idx)
+	v.playing = true
+	v.lastFrame = time.Time{}
+}
+
+// classicOETreeJumpIndex picks the clip a pressed Action Tree row plays.
+// A motion is named for the animation it drives, so an exact match on the
+// row's own name is the normal path; an action's name is structure rather
+// than a clip ("die", "movefire"), so a branch falls back to the first clip
+// its subtree references — the children in the order the tree draws them:
+// each subaction first, then the action's own motions. Names compare
+// case-insensitively; -1 means the model carries no matching animation.
+func classicOETreeJumpIndex(row classicOETreeRow, actions []whe.FxAction, clips []string) int {
+	match := func(name string) int {
+		name = strings.ToLower(strings.TrimSpace(name))
+		for i, clip := range clips {
+			if strings.ToLower(strings.TrimSpace(clip)) == name {
+				return i
+			}
+		}
+		return -1
+	}
+	if i := match(row.Name); i >= 0 {
+		return i
+	}
+	if row.Key == "" || len(actions) == 0 {
+		return -1
+	}
+	byName := make(map[string]*whe.FxAction, len(actions))
+	for i := range actions {
+		byName[strings.ToLower(strings.TrimSpace(actions[i].Name))] = &actions[i]
+	}
+	// The key is the lowercased action names of the chain from a root to
+	// this node, exactly as the derivation stored them.
+	chain := strings.Split(strings.Trim(row.Key, "/"), "/")
+	var target *whe.FxAction
+	if len(chain) > 0 {
+		target = byName[chain[0]]
+	}
+	for i := 1; target != nil && i < len(chain); i++ {
+		var next *whe.FxAction
+		for _, ln := range target.Subactions {
+			name := strings.ToLower(strings.TrimSpace(ln.Name))
+			if name == chain[i] {
+				if t, ok := byName[name]; ok {
+					next = t
+					break
+				}
+			}
+		}
+		target = next
+	}
+	if target == nil {
+		return -1
+	}
+	seen := make(map[string]bool)
+	var search func(a *whe.FxAction, depth int) int
+	search = func(a *whe.FxAction, depth int) int {
+		name := strings.ToLower(strings.TrimSpace(a.Name))
+		if seen[name] || depth > classicOETreeMaxDepth {
+			return -1
+		}
+		seen[name] = true
+		for _, ln := range a.Subactions {
+			child, ok := byName[strings.ToLower(strings.TrimSpace(ln.Name))]
+			if !ok {
+				continue
+			}
+			if i := search(child, depth+1); i >= 0 {
+				return i
+			}
+		}
+		for _, ln := range a.Motions {
+			if i := match(ln.Name); i >= 0 {
+				return i
+			}
+		}
+		return -1
+	}
+	return search(target, 0)
+}
+
+// ── the double-click dialog ─────────────────────────────────────────────────
+//
+// A double press on a Motions or Actions row opens a small dialog with that
+// item's editor. The dialog carries no editing logic of its own: it is a
+// second surface on the Events section's own state — the same document, the
+// same fields, the same Save .whe — so the two surfaces cannot drift apart.
+
+const (
+	classicOEDialogNone = iota
+	classicOEDialogTimeline
+	classicOEDialogAction
+)
+
+// classicOEDoubleClickDelay is the window the mod tree's file rows use to
+// read two presses as one double press.
+const classicOEDoubleClickDelay = 350 * time.Millisecond
+
+// classicOEDialogOpen reports whether the dialog is on screen; while it is,
+// the Events editors it embeds are live even though Classic OE is the
+// section showing.
+func (ui *uiState) classicOEDialogOpen() bool {
+	return ui.classicOEDialog != classicOEDialogNone
+}
+
+// classicOEDoubleClick records a press on key and reports whether it repeats
+// the previous one inside the window. A double consumes the record, so a
+// third press counts as a fresh first one.
+func (ui *uiState) classicOEDoubleClick(key string) bool {
+	now := time.Now()
+	if ui.classicOELastClickKey == key && now.Sub(ui.classicOELastClickAt) < classicOEDoubleClickDelay {
+		ui.classicOELastClickKey = ""
+		return true
+	}
+	ui.classicOELastClickKey = key
+	ui.classicOELastClickAt = now
+	return false
+}
+
+// openClassicOEEventDialog raises the dialog on the clicked item by pointing
+// the shared Events editor at it: the picked timeline for a motion, the
+// picked action for an action.
+func (ui *uiState) openClassicOEEventDialog(kind int, name string, actionIndex int) {
+	ui.ensureUnitEvents()
+	ui.classicOEDialog = kind
+	ui.classicOEDialogName = name
+	if kind == classicOEDialogAction {
+		// The same switch the Events section's action rows make: the panel
+		// shows the action's conditions and none of the timeline's events.
+		if !ui.unitEvtFocusAction {
+			ui.evtPlayer.stopAll()
+		}
+		ui.unitEvtFocusAction = true
+		if ui.unitEvtDoc != nil {
+			if acts := ui.unitEvtDoc.Actions(); actionIndex >= 0 && actionIndex < len(acts) {
+				ui.unitEvtActionSel = actionIndex
+			}
+		}
+		return
+	}
+	ui.unitEvtFocusAction = false
+	ui.selectUnitEventTimeline(name)
+}
+
+// layoutClassicOEEventDialog is the dialog itself: a dimmed card over the
+// Classic OE panel with the Events section's own editor body and footer
+// inside. A press on the dim or the Close button shuts it; Save .whe and
+// Revert act on the same document the Events section would act on.
+func (ui *uiState) layoutClassicOEEventDialog(gtx layout.Context) layout.Dimensions {
+	if ui.classicOEevtClose.Clicked(gtx) || ui.classicOEevtDim.Clicked(gtx) {
+		ui.classicOEDialog = classicOEDialogNone
+		return layout.Dimensions{}
+	}
+	title := "Timeline editor"
+	if ui.classicOEDialog == classicOEDialogAction {
+		title = "Action editor"
+	}
+	sub := ui.classicOEDialogName
+	if ui.unitEvtDirty {
+		sub += "  \u2022 unsaved"
+	}
+	body := func(gtx layout.Context) layout.Dimensions {
+		// The action body reads straight from the document, so a file that
+		// never loaded stays on the guarded timeline body, which carries
+		// the reason instead of a nil dereference.
+		if ui.classicOEDialog == classicOEDialogAction && ui.unitEvtDoc != nil {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, ui.unitEvtActionPanelBody(gtx)...)
+		}
+		return ui.unitEventPanelBody(gtx)
+	}
+	footer := func(gtx layout.Context) layout.Dimensions {
+		if ui.classicOEDialog == classicOEDialogAction {
+			return ui.unitActPanelFooter(gtx)
+		}
+		return ui.unitEventPanelForm(gtx)
+	}
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			// The dim is the dialog's own click target: a press on it
+			// closes the card and never reaches the panel underneath.
+			return ui.classicOEevtDim.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				sz := gtx.Constraints.Max
+				st := clip.Rect{Max: sz}.Push(gtx.Ops)
+				paint.ColorOp{Color: rgba(0, 0, 0, 70)}.Add(gtx.Ops)
+				paint.PaintOp{}.Add(gtx.Ops)
+				st.Pop()
+				return layout.Dimensions{Size: sz}
+			})
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				cardW := minInt(gtx.Dp(unit.Dp(700)), gtx.Constraints.Max.X-gtx.Dp(unit.Dp(30)))
+				cardH := minInt(gtx.Dp(unit.Dp(680)), gtx.Constraints.Max.Y-gtx.Dp(unit.Dp(30)))
+				gtx.Constraints.Min = image.Pt(cardW, cardH)
+				gtx.Constraints.Max = image.Pt(cardW, cardH)
+				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Stack{}.Layout(gtx,
+						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+							rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
+							return layout.Dimensions{Size: gtx.Constraints.Max}
+						}),
+						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+							inset := layout.Inset{Top: unit.Dp(12), Bottom: unit.Dp(10), Left: unit.Dp(12), Right: unit.Dp(12)}
+							return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+												l := material.Label(ui.th, unit.Sp(12), title)
+												l.Color = cText
+												return l.Layout(gtx)
+											}),
+											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+												l := material.Label(ui.th, unit.Sp(9), sub)
+												l.Color = cTextDim
+												return l.Layout(gtx)
+											}),
+											layout.Flexed(1, rowGap()),
+											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+												return ui.smallButton(gtx, &ui.classicOEevtClose, "Close")
+											}),
+										)
+									}),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+										return ui.panelScrollView(gtx, &ui.classicOEevtScroll, body)
+									}),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+									layout.Rigid(footer),
+								)
+							})
+						}),
+					)
+				})
+			})
+		}),
+	)
+}
+
+// classicOETreeRoots is the actions no other action calls — the roots the
+// classic editor's Action Tree hung from. A called sub-action lives under
+// its caller instead, which is what turns the flat list of DATAACTS records
+// into the nested tree the editor drew.
+func classicOETreeRoots(actions []whe.FxAction) []whe.FxAction {
+	called := make(map[string]bool, len(actions))
+	for _, a := range actions {
+		for _, ln := range a.Subactions {
+			called[strings.ToLower(strings.TrimSpace(ln.Name))] = true
+		}
+	}
+	roots := make([]whe.FxAction, 0, len(actions))
+	for _, a := range actions {
+		if !called[strings.ToLower(strings.TrimSpace(a.Name))] {
+			roots = append(roots, a)
+		}
+	}
+	return roots
+}
+
+// classicOETreeRow is one row of the Action Tree folder.
+type classicOETreeRow struct {
+	Name     string
+	Depth    int
+	Note     string // condition of the incoming subaction link
+	Key      string // expansion key; "" for a leaf
+	Expanded bool   // the default or current state, used by the toggle
+}
+
+// classicOETreeRows flattens the derived action tree depth-first: each
+// action under its caller, then that action's own motions as leaves. The
+// expansion state is consulted per node, with roots open by default and
+// nested nodes closed, mirroring how the editor opened the tree.
+func classicOETreeRows(actions []whe.FxAction, open map[string]bool) []classicOETreeRow {
+	byName := make(map[string]*whe.FxAction, len(actions))
+	for i := range actions {
+		byName[strings.ToLower(strings.TrimSpace(actions[i].Name))] = &actions[i]
+	}
+	var rows []classicOETreeRow
+	var walk func(a *whe.FxAction, depth int, path, note string, onPath map[string]bool)
+	walk = func(a *whe.FxAction, depth int, path, note string, onPath map[string]bool) {
+		name := strings.ToLower(strings.TrimSpace(a.Name))
+		key := path + "/" + name
+		row := classicOETreeRow{Name: a.Name, Depth: depth, Note: note, Key: key}
+		if v, ok := open[key]; ok {
+			row.Expanded = v
+		} else {
+			row.Expanded = path == "" // roots open, nested nodes closed
+		}
+		rows = append(rows, row)
+		if !row.Expanded || depth >= classicOETreeMaxDepth {
+			return
+		}
+		childPath := make(map[string]bool, len(onPath)+1)
+		for k := range onPath {
+			childPath[k] = onPath[k]
+		}
+		childPath[name] = true
+		for _, ln := range a.Subactions {
+			childName := strings.ToLower(strings.TrimSpace(ln.Name))
+			childNote := ""
+			if ln.HasCondition() && ln.Condition != "" {
+				childNote = ln.Guard()
+			}
+			target, ok := byName[childName]
+			if ok && childPath[childName] {
+				// A link back up the tree: show the name as an inert
+				// leaf rather than recursing into it again.
+				rows = append(rows, classicOETreeRow{Name: ln.Name, Depth: depth + 1, Note: childNote})
+				continue
+			}
+			if !ok {
+				// A subaction with no record of its own (a .whe typo
+				// or an engine built-in): still show the name.
+				rows = append(rows, classicOETreeRow{Name: ln.Name, Depth: depth + 1, Note: childNote})
+				continue
+			}
+			walk(target, depth+1, key, childNote, childPath)
+		}
+		for _, ln := range a.Motions {
+			motionNote := ""
+			if ln.HasCondition() && ln.Condition != "" {
+				motionNote = ln.Guard()
+			}
+			rows = append(rows, classicOETreeRow{Name: ln.Name, Depth: depth + 1, Note: motionNote})
+		}
+	}
+	for _, root := range classicOETreeRoots(actions) {
+		if target, ok := byName[strings.ToLower(strings.TrimSpace(root.Name))]; ok {
+			walk(target, 0, "", "", nil)
+		}
+	}
+	return rows
 }
 
 // layoutClassicOEEventList is the Event List panel: every event definition of

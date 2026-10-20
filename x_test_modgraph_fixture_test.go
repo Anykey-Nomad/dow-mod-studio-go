@@ -169,7 +169,11 @@ func newGraphTestMod(t *testing.T) *modtree.ModTree {
 func writeTreeFile(t *testing.T, tree *modtree.ModTree, virtualPath string, data []byte) {
 	t.Helper()
 	rel := strings.TrimPrefix(virtualPath, `Data\`)
-	disk := filepath.Join(tree.AppPath, "GraphTestMod", "Data", rel)
+	// The tree path is virtual and uses backslashes on every OS; on Linux a
+	// backslash is an ordinary file name character, so both the disk path and
+	// the segment walk have to split on it explicitly.
+	slashRel := strings.ReplaceAll(rel, `\`, "/")
+	disk := filepath.Join(tree.AppPath, "GraphTestMod", "Data", filepath.FromSlash(slashRel))
 	if err := os.MkdirAll(filepath.Dir(disk), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +184,7 @@ func writeTreeFile(t *testing.T, tree *modtree.ModTree, virtualPath string, data
 	// created one segment at a time.
 	src := &modtree.FileSource{Kind: modtree.KindThisMod, DiskRoot: filepath.Join(tree.AppPath, "GraphTestMod", "Data")}
 	folder := tree.Root
-	segs := strings.Split(filepath.ToSlash(rel), "/")
+	segs := strings.Split(slashRel, "/")
 	for _, seg := range segs[:len(segs)-1] {
 		folder = tree.GetOrCreateFolder(folder, seg, src)
 	}

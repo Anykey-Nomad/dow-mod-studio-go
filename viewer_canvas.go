@@ -1,6 +1,7 @@
 package main
 
 import (
+	"dow-mod-studio/internal/sgb"
 	"fmt"
 	"image"
 	"log"
@@ -10,6 +11,7 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/io/event"
+	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -17,6 +19,8 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
+
+	engine "dow-mod-studio/internal/3d_engine"
 )
 
 // modelCanvasWithFxList stacks readouts and diagnostics over the rendered frame.
@@ -31,6 +35,10 @@ func (ui *uiState) modelCanvasWithFxList(gtx layout.Context, t *fileTab) layout.
 }
 
 // modelCanvas paints the last rendered frame and handles orbiting.
+func sgbCameraDragRequested(modifiers key.Modifiers) bool {
+	return modifiers.Contain(key.ModAlt)
+}
+
 func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions {
 	v := t.model
 	area := gtx.Constraints.Max
@@ -42,6 +50,14 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 	if w > 1280 {
 		h = int(float64(h) * 1280 / float64(w))
 		w = 1280
+	}
+	// A synthetic layout height — the scroll panel measures its tabs with
+	// one — must never reach the renderer: it recreates the render target
+	// at that height, the allocation fails, and the hardware path is then
+	// treated as broken for the rest of the session.
+	if h > 4096 {
+		w = int(float64(w) * 4096 / float64(h))
+		h = 4096
 	}
 	if h < 1 {
 		h = 1
@@ -69,6 +85,24 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 	}
 
 	now := gtx.Now
+	if t.kind == "sgb" && t.sgbView3D && len(v.animatedEntities) > 0 {
+		if v.sgbAnimLast.IsZero() {
+			v.sgbAnimLast = now
+		} else {
+			dt := now.Sub(v.sgbAnimLast).Seconds()
+			v.sgbAnimLast = now
+			if dt > 0.1 {
+				dt = 0.1
+			}
+			for i := range v.animatedEntities {
+				sgb.AdvanceEntityAnimation(&v.animatedEntities[i], dt)
+			}
+		}
+		v.redraw = true
+		gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
+	} else {
+		v.sgbAnimLast = time.Time{}
+	}
 	if v.playing && v.anim != nil {
 		if v.lastFrame.IsZero() {
 			v.lastFrame = now
@@ -102,6 +136,67 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 	}
 
+	if t.kind == "sgb" && t.sgbView3D {
+		if t.sgbCameraTag == nil {
+			t.sgbCameraTag = new(int)
+		}
+		event.Op(gtx.Ops, t.sgbCameraTag)
+		for {
+			ev, ok := gtx.Event(key.FocusFilter{Target: t.sgbCameraTag})
+			if !ok {
+				break
+			}
+			if focus, ok := ev.(key.FocusEvent); ok && !focus.Focus {
+				t.sgbCameraKeys = [4]bool{}
+				t.sgbCameraVelocity = [2]float64{}
+				t.sgbCameraLastMove = time.Time{}
+			}
+		}
+		arrowKeys := [...]key.Name{key.NameUpArrow, key.NameDownArrow, key.NameLeftArrow, key.NameRightArrow}
+		allModifiers := key.ModCtrl | key.ModCommand | key.ModShift | key.ModAlt | key.ModSuper
+		moved := false
+		for i, name := range arrowKeys {
+			for {
+				ev, ok := gtx.Event(key.Filter{Focus: t.sgbCameraTag, Name: name, Optional: allModifiers})
+				if !ok {
+					break
+				}
+				ke, ok := ev.(key.Event)
+				if !ok {
+					continue
+				}
+				t.sgbCameraKeys[i] = ke.State == key.Press && ke.Modifiers == 0
+			}
+		}
+		forward, strafe := 0.0, 0.0
+		if t.sgbCameraKeys[0] {
+			forward++
+		}
+		if t.sgbCameraKeys[1] {
+			forward--
+		}
+		if t.sgbCameraKeys[2] {
+			strafe++ // left/right intentionally follow screen-facing convention
+		}
+		if t.sgbCameraKeys[3] {
+			strafe--
+		}
+		dt := 1.0 / 60.0
+		if !t.sgbCameraLastMove.IsZero() && !gtx.Now.IsZero() {
+			dt = gtx.Now.Sub(t.sgbCameraLastMove).Seconds()
+		}
+		// Bound catch-up after a pause, then ease velocity toward the held
+		// direction or back to rest after release for acceleration/braking.
+		t.sgbCameraLastMove = gtx.Now
+		dt = math.Max(0, math.Min(dt, 0.05))
+		t.sgbCameraVelocity[0] = sgbApproachCameraVelocity(t.sgbCameraVelocity[0], forward, dt)
+		t.sgbCameraVelocity[1] = sgbApproachCameraVelocity(t.sgbCameraVelocity[1], strafe, dt)
+		moved = ui.sgbMoveCamera(t, t.sgbCameraVelocity[0], t.sgbCameraVelocity[1], dt)
+		if moved || t.sgbCameraVelocity != [2]float64{} {
+			gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
+		}
+	}
+
 	rect := clip.Rect{Max: area}.Push(gtx.Ops)
 	event.Op(gtx.Ops, &v.tag)
 	for {
@@ -120,7 +215,58 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 		}
 		switch e.Kind {
 		case pointer.Press:
+			if e.Buttons.Contain(pointer.ButtonPrimary) && t.kind == "sgb" && t.sgbView3D {
+				if scrubHit(v.scrubRect, e.Position) {
+					t.sgbObjectDragging, t.sgbObjectRotating = false, false
+					v.seeking = true
+					v.dragging = false
+					v.scrubSeek(e.Position.X, true)
+					continue
+				}
+				gtx.Execute(key.FocusCmd{Tag: t.sgbCameraTag})
+				v.dragging = sgbCameraDragRequested(e.Modifiers | heldModifiers())
+				v.panning = false
+				t.sgbSelecting = !v.dragging && t.sgbObjectSelected == ""
+				t.sgbSelectionDrag = false
+				t.sgbSelectionAnchor = sgbCanvasToFramePoint(area, w, h, e.Position)
+				t.sgbSelectionCurrent = t.sgbSelectionAnchor
+				if !v.dragging && len(t.sgbSelectedEntities) > 0 {
+					camera := engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}
+					if id, hit := sgbPickEntity(v.modelData(), t.sgbEntityMeshIDs, camera, float64(t.sgbSelectionAnchor.X), float64(t.sgbSelectionAnchor.Y)); hit && t.sgbSelectedEntities[id] {
+						if (e.Modifiers | heldModifiers()).Contain(key.ModShift) {
+							t.sgbObjectRotating = true
+							t.sgbRotateLastX = e.Position.X
+							t.sgbObjectMoved = false
+							t.sgbSelecting = false
+							continue
+						}
+						if point, onTerrain := sgbPickTerrainPoint(v.modelData(), camera, float64(t.sgbSelectionAnchor.X), float64(t.sgbSelectionAnchor.Y)); onTerrain {
+							t.sgbObjectDragging = true
+							t.sgbDragHasPoint = true
+							t.sgbDragLast = point
+							t.sgbObjectMoved = false
+							t.sgbSelecting = false
+							continue
+						}
+					}
+				}
+				if t.sgbObjectSelected != "" && !v.dragging {
+					if point, hit := sgbPickTerrainPoint(v.modelData(), engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.sgbSelectionAnchor.X), float64(t.sgbSelectionAnchor.Y)); hit {
+						ui.placeSgbObject(t, point)
+					} else {
+						ui.statusText = "Object placement — click on the terrain surface"
+					}
+					continue
+				}
+				if v.dragging {
+					v.lastX, v.lastY = e.Position.X, e.Position.Y
+				}
+				continue
+			}
 			if e.Buttons.Contain(pointer.ButtonSecondary) {
+				if t.kind == "sgb" && t.sgbView3D {
+					t.sgbSelecting = false
+				}
 				v.panning = true
 				v.dragging = false
 				v.lastX, v.lastY = e.Position.X, e.Position.Y
@@ -138,9 +284,77 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 				LogInfo("3D preview: strip press pos=(%.1f, %.1f) keymark=%v", e.Position.X, e.Position.Y, v.keyDrag)
 				continue
 			}
+			if t.kind == "sgb" && t.sgbView3D {
+				continue
+			}
 			v.dragging = true
 			v.lastX, v.lastY = e.Position.X, e.Position.Y
 		case pointer.Drag:
+			if t.kind == "sgb" && t.sgbView3D && t.sgbObjectRotating && e.Buttons.Contain(pointer.ButtonPrimary) {
+				if !(e.Modifiers | heldModifiers()).Contain(key.ModShift) {
+					t.sgbObjectRotating = false
+					t.sgbObjectMoved = false
+					continue
+				}
+				dx := float64(e.Position.X - t.sgbRotateLastX)
+				t.sgbRotateLastX = e.Position.X
+				if rotated := sgbRotateEntities(t.sgbMap, v.modelData(), t.sgbEntityMeshIDs, v.animatedEntities, t.sgbSelectedEntities, -dx*0.01); rotated > 0 {
+					if ui.modelGpu != nil {
+						ui.modelGpu.forget(v.model)
+					}
+					t.sgbObjectMoved = true
+					t.sgbDirty = true
+					v.invalidate()
+					gtx.Execute(op.InvalidateCmd{})
+					ui.statusText = fmt.Sprintf("Rotated %d selected map object(s) around vertical axis", rotated)
+				}
+				continue
+			}
+			if t.kind == "sgb" && t.sgbView3D && t.sgbObjectDragging && e.Buttons.Contain(pointer.ButtonPrimary) {
+				pixel := sgbCanvasToFramePoint(area, w, h, e.Position)
+				camera := engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}
+				if point, hit := sgbPickTerrainPoint(v.modelData(), camera, float64(pixel.X), float64(pixel.Y)); hit {
+					if t.sgbDragHasPoint {
+						dx, dy := point.X-t.sgbDragLast.X, point.Y-t.sgbDragLast.Y
+						var moved int
+						t.model.animatedEntities, moved = sgbMoveEntitiesOnSurface(t.sgbMap, v.modelData(), t.sgbEntityMeshIDs, v.animatedEntities, t.sgbSelectedEntities, dx, dy)
+						if moved > 0 {
+							if ui.modelGpu != nil {
+								ui.modelGpu.forget(v.model)
+							}
+							t.sgbObjectMoved = true
+							t.sgbDirty = true
+							v.invalidate()
+							gtx.Execute(op.InvalidateCmd{})
+							ui.statusText = fmt.Sprintf("Moved %d selected map object(s) along the terrain", moved)
+						}
+					}
+					t.sgbDragLast, t.sgbDragHasPoint = point, true
+				} else {
+					t.sgbDragHasPoint = false
+				}
+				continue
+			}
+			if t.kind == "sgb" && t.sgbView3D && v.dragging && e.Buttons.Contain(pointer.ButtonPrimary) {
+				dx := float64(e.Position.X - v.lastX)
+				dy := float64(e.Position.Y - v.lastY)
+				v.lastX, v.lastY = e.Position.X, e.Position.Y
+				v.Yaw -= dx * 0.01
+				v.Pitch = clampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
+				v.redraw = true
+				gtx.Execute(op.InvalidateCmd{})
+				continue
+			}
+			if t.kind == "sgb" && t.sgbView3D && t.sgbSelecting {
+				t.sgbSelectionCurrent = sgbCanvasToFramePoint(area, w, h, e.Position)
+				dx := t.sgbSelectionCurrent.X - t.sgbSelectionAnchor.X
+				dy := t.sgbSelectionCurrent.Y - t.sgbSelectionAnchor.Y
+				if dx*dx+dy*dy > 16 {
+					t.sgbSelectionDrag = true
+				}
+				gtx.Execute(op.InvalidateCmd{})
+				continue
+			}
 			if v.panning {
 				dx := float64(e.Position.X - v.lastX)
 				dy := float64(e.Position.Y - v.lastY)
@@ -172,6 +386,53 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			v.zoomBy(modelZoomByDelta(e.Scroll.Y))
 			v.redraw = true
 		case pointer.Release, pointer.Cancel:
+			if t.kind == "sgb" && t.sgbView3D && t.sgbObjectRotating {
+				t.sgbObjectRotating = false
+				if e.Kind == pointer.Release && t.sgbObjectMoved {
+					v.invalidate()
+				}
+				t.sgbObjectMoved = false
+				gtx.Execute(op.InvalidateCmd{})
+				continue
+			}
+			if t.kind == "sgb" && t.sgbView3D && t.sgbObjectDragging {
+				t.sgbObjectDragging = false
+				t.sgbDragHasPoint = false
+				t.sgbSelecting, t.sgbSelectionDrag = false, false
+				if e.Kind == pointer.Release && t.sgbObjectMoved {
+					v.invalidate()
+				}
+				t.sgbObjectMoved = false
+				gtx.Execute(op.InvalidateCmd{})
+				continue
+			}
+			if t.kind == "sgb" && t.sgbView3D && v.dragging {
+				v.dragging = false
+				v.redraw = e.Kind == pointer.Release
+				gtx.Execute(op.InvalidateCmd{})
+				continue
+			}
+			if t.kind == "sgb" && t.sgbView3D && t.sgbSelecting {
+				t.sgbSelectionCurrent = sgbCanvasToFramePoint(area, w, h, e.Position)
+				if t.sgbSelectedEntities == nil {
+					t.sgbSelectedEntities = make(map[int]bool)
+				}
+				if e.Kind == pointer.Release {
+					if t.sgbSelectionDrag {
+						opts := v.options(w, h)
+						selection := sgbRectangleEntities(v.modelData(), t.sgbEntityMeshIDs, buildViewMatrix(opts), w, h, sgbSelectionRect(t.sgbSelectionAnchor, t.sgbSelectionCurrent))
+						t.sgbSelectedEntities = selection
+					} else if id, hit := sgbPickEntity(v.modelData(), t.sgbEntityMeshIDs, engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.sgbSelectionCurrent.X), float64(t.sgbSelectionCurrent.Y)); hit {
+						t.sgbSelectedEntities = map[int]bool{id: true}
+					} else {
+						clear(t.sgbSelectedEntities)
+					}
+					v.invalidate()
+				}
+				t.sgbSelecting, t.sgbSelectionDrag = false, false
+				gtx.Execute(op.InvalidateCmd{})
+				continue
+			}
 			if v.keyDrag && v.keyDragMoved {
 				if f, ok := v.boneKeyFrameAt(); ok {
 					LogInfo("3D preview: bone key drag ended on frame %d", f+1)
@@ -184,7 +445,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 	}
 
 	if v.gpuFrame != nil {
-		if v.dragging || v.panning || (v.playing && v.anim != nil) {
+		if v.dragging || v.panning || (t.kind == "sgb" && (t.sgbCameraKeys[0] || t.sgbCameraKeys[1] || t.sgbCameraKeys[2] || t.sgbCameraKeys[3] || t.sgbCameraVelocity != [2]float64{})) || (v.playing && v.anim != nil) || (t.kind == "sgb" && t.sgbView3D && len(v.animatedEntities) > 0) {
 			// Keep the frame refreshing while something is moving.
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		}
@@ -204,6 +465,9 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 		v.gpuFrame.Overlay(gtx, image.Rectangle{Max: area}, func(gtx layout.Context) {
 			v.paintMarkerOverlay(gtx, w, h)
 		})
+		if t.kind == "sgb" && t.sgbView3D {
+			paintSgbSelectionMarquee(gtx, t, image.Rectangle{Max: area})
+		}
 		rect.Pop()
 		return layout.Dimensions{Size: area}
 	}
@@ -232,7 +496,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			}),
 		)
 	}
-	if v.dragging || v.panning || (v.playing && v.anim != nil) {
+	if v.dragging || v.panning || (t.kind == "sgb" && (t.sgbCameraKeys[0] || t.sgbCameraKeys[1] || t.sgbCameraKeys[2] || t.sgbCameraKeys[3] || t.sgbCameraVelocity != [2]float64{})) || (v.playing && v.anim != nil) || (t.kind == "sgb" && t.sgbView3D && len(v.animatedEntities) > 0) {
 		gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 	}
 	b := img.Bounds()
@@ -251,6 +515,9 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 	}
 	v.paintMarkerOverlay(gtx, w, h)
 	v.paintFXAttributeMarkers(gtx, w, h)
+	if t.kind == "sgb" && t.sgbView3D {
+		paintSgbSelection(gtx, t, v, w, h, true)
+	}
 	tr.Pop()
 	rect.Pop()
 	return layout.Dimensions{Size: area}

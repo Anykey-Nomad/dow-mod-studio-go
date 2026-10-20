@@ -45,3 +45,13 @@ func ParseWhmModel(data []byte) (*WhmModel, error) {
 	}
 	return &WhmModel{Model: *m}, nil
 }
+
+// ParseSgmModel reads an Object Editor .sgm model into the same wrapper the
+// .whm parser fills, so a tab holding either flavour drives one viewer.
+func ParseSgmModel(data []byte) (*WhmModel, error) {
+	m, err := whm.ParseSgm(data)
+	if err != nil {
+		return nil, err
+	}
+	return &WhmModel{Model: *m}, nil
+}

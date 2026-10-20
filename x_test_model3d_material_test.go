@@ -16,6 +16,153 @@ import (
 // than "art/ebps/races/necrons/texture_share/necron_lord01_src_b". A path
 // lookup misses those, the model comes out untextured and the preview shows a
 // flat white silhouette.
+func TestMaterialResolverFindsCompiledRTXBesideModel(t *testing.T) {
+	dir := t.TempDir()
+	modelDir := filepath.Join(dir, "Data", "art", "ebps", "environment", "gameplay")
+	if err := os.MkdirAll(modelDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "slag_deposit.rtx"), []byte("rtx"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	tree := &modtree.ModTree{Root: modtree.NewFolder("Data", "Data", nil), Sources: []*modtree.FileSource{{DiskRoot: filepath.Join(dir, "Data")}}}
+	roots := materialSearchRoots(tree)
+	got, ok := readModelMaterial(tree, roots, `Data\art\ebps\environment\gameplay\slag_deposit.whm`, "slag_deposit")
+	if !ok || string(got) != "rtx" {
+		t.Fatalf("material resolution = (%q, %v), want the RTX beside the model", got, ok)
+	}
+}
+
+func TestInstalledCompiledEntityTexturesResolve(t *testing.T) {
+	tree, _ := sgbTestSetup(t)
+	roots := materialSearchRoots(tree)
+	for _, tc := range []struct {
+		name      string
+		modelPath string
+	}{
+		{"slag_deposit", `Data\art\ebps\environment\gameplay\slag_deposit.whm`},
+		{"starting_position", `Data\art\ebps\environment\gameplay\starting_position.whm`},
+		{"carnage_necron_01", `Data\art\ebps\environment\all\carnage_necron_01.whm`},
+		{"carnage_necron_02", `Data\art\ebps\environment\all\carnage_necron_02.whm`},
+		{"carnage_necron_03", `Data\art\ebps\environment\all\carnage_necron_03.whm`},
+		{"carnage_necron_04", `Data\art\ebps\environment\all\carnage_necron_04.whm`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			modelData, err := tree.ReadFile(tc.modelPath)
+			if err != nil {
+				t.Fatalf("read model %s: %v", tc.modelPath, err)
+			}
+			model, err := ParseWhmModel(modelData)
+			if err != nil {
+				t.Fatalf("parse model %s: %v", tc.modelPath, err)
+			}
+			var names []string
+			for _, mesh := range model.Meshes {
+				if mesh.Material != "" {
+					names = append(names, mesh.Material)
+				}
+			}
+			if len(names) == 0 {
+				t.Fatal("model has no material references")
+			}
+			if strings.HasPrefix(tc.name, "carnage_necron_") {
+				if len(model.Meshes) != 1 || model.Meshes[0].Material != "necron warrior" ||
+					model.Meshes[0].MaterialPath != "art/ebps/races/necrons/texture_share/nec_warrior" {
+					t.Fatalf("Carnage material mapping = %+v, want necron warrior -> .../nec_warrior", model.Meshes)
+				}
+			}
+			files, paths := resolveModelMaterialsWithPaths(tree, roots, tc.modelPath, names)
+			result := decodeModelMaterials(files, true)
+			attachMaterialSourcePaths(result.diagnostics, paths)
+			for _, name := range names {
+				if result.materials[name].Texture == nil {
+					t.Errorf("material %q did not resolve and decode: %+v", name, result.diagnostics[name])
+				}
+			}
+			if result.missing != 0 {
+				t.Errorf("%d/%d material textures missing", result.missing, len(names))
+			}
+		})
+	}
+}
+
+func TestModelMaterialReferenceResolvesUnderRendererMaterialKey(t *testing.T) {
+	const material = "necron warrior"
+	const diffusePath = "art/ebps/races/necrons/texture_share/nec_warrior"
+	modelData := materialPathTestWHM(material, diffusePath)
+	parsedModel, parseErr := ParseWhmModel(modelData)
+	if parseErr != nil {
+		t.Fatalf("parse test WHM: %v", parseErr)
+	}
+	if len(parsedModel.Meshes) != 1 || parsedModel.Meshes[0].Material != material || parsedModel.Meshes[0].MaterialPath != diffusePath {
+		t.Fatalf("test WHM material mapping = %+v", parsedModel.Meshes)
+	}
+	dir := t.TempDir()
+	textures := filepath.Join(dir, "art", "ebps", "races", "necrons", "texture_share")
+	if err := os.MkdirAll(textures, 0755); err != nil {
+		t.Fatal(err)
+	}
+	textureData := syntheticRSHDXT1(t)
+	if err := os.WriteFile(filepath.Join(textures, "nec_warrior.rsh"), textureData, 0644); err != nil {
+		t.Fatal(err)
+	}
+	tree := &modtree.ModTree{
+		Root:    modtree.NewFolder("Data", "Data", nil),
+		Sources: []*modtree.FileSource{{DiskRoot: dir}},
+	}
+	modelPath := `Data\art\ebps\races\necrons\carnage_necron.whm`
+	modelFile := &modtree.TreeFile{Name: "carnage_necron.whm", FullPath: modelPath, Source: tree.Sources[0], DiskPath: filepath.Join(dir, "carnage_necron.whm")}
+	modelDir := tree.GetOrCreateFolder(tree.Root, "art", nil)
+	modelDir = tree.GetOrCreateFolder(modelDir, "ebps", nil)
+	modelDir = tree.GetOrCreateFolder(modelDir, "races", nil)
+	modelDir = tree.GetOrCreateFolder(modelDir, "necrons", nil)
+	modelDir.Files = append(modelDir.Files, modelFile)
+	modelDir.FileByLower[strings.ToLower(modelFile.Name)] = modelFile
+	if err := os.WriteFile(modelFile.DiskPath, modelData, 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Request exactly the key a parsed mesh and both renderers use, not the
+	// canonical MaterialPath stored in the WHM shared shader.
+	files, paths := resolveModelMaterialsWithPaths(tree, materialSearchRoots(tree), modelPath, []string{material})
+	decoded := decodeModelMaterials(files, true)
+	attachMaterialSourcePaths(decoded.diagnostics, paths)
+	if got := string(files[material]); got != string(textureData) {
+		t.Fatalf("material lookup returned %d bytes, want the diffuse for key %q", len(files[material]), material)
+	}
+	if decoded.materials[material].Texture == nil || len(decoded.rsh[material]) == 0 {
+		t.Fatalf("resolved texture was not available under renderer key %q: materials=%v raw=%v", material, decoded.materials, len(decoded.rsh[material]))
+	}
+	if got := decoded.diagnostics[material].ResolvedPath; !strings.HasSuffix(strings.ToLower(got), "nec_warrior.rsh") {
+		t.Fatalf("diagnostic source path = %q, want the resolved canonical diffuse", got)
+	}
+}
+
+func materialPathTestWHM(material, diffusePath string) []byte {
+	channel := make([]byte, 12)
+	channel = append(channel, tStr(diffusePath)...)
+	mesh := make([]byte, 13)
+	mesh = append(mesh, chunky.I32(0)...)
+	mesh = append(mesh, chunky.I32(3)...)
+	mesh = append(mesh, chunky.I32(32)...)
+	mesh = append(mesh, tF32(0, 0, 0, 1, 0, 0, 0, 1, 0)...)
+	mesh = append(mesh, tF32(0, 0, 1, 0, 0, 1, 0, 0, 1)...)
+	mesh = append(mesh, tF32(0, 0, 1, 0, 0, 1)...)
+	mesh = append(mesh, chunky.I32(0)...)
+	mesh = append(mesh, chunky.I32(1)...)
+	mesh = append(mesh, tStr(material)...)
+	mesh = append(mesh, chunky.I32(3)...)
+	mesh = append(mesh, tU16(0, 1, 2)...)
+	mesh = append(mesh, chunky.I32(0)...)
+	mesh = append(mesh, chunky.I32(3)...)
+	mesh = append(mesh, chunky.I32(0)...)
+	root := &chunky.Chunk{TypeID: "FOLDRSGM", Version: 3, Name: "material-key-test", Children: []*chunky.Chunk{
+		{TypeID: "FOLDSHDR", Version: 1, Name: material, Children: []*chunky.Chunk{{TypeID: "DATACHAN", Version: 1, Payload: channel}}},
+		{TypeID: "FOLDSTXT", Version: 1, Name: diffusePath},
+		{TypeID: "FOLDMSGR", Version: 1, Children: []*chunky.Chunk{{TypeID: "FOLDMSLC", Version: 1, Name: "test-mesh", Children: []*chunky.Chunk{{TypeID: "DATADATA", Version: 2, Payload: mesh}}}}},
+	}}
+	return append(chunky.Preamble(), chunky.Serialize(root)...)
+}
+
 func TestMaterialResolvesByNameAlone(t *testing.T) {
 	appPath := t.TempDir()
 	modFolder := "TestMod"
@@ -193,6 +340,20 @@ func TestDecodeModelMaterialsKeepsCompressedRSHForVulkan(t *testing.T) {
 	}
 }
 
+func TestDecodeModelMaterialsKeepsCompiledRTXForVulkan(t *testing.T) {
+	data := syntheticRTXDXT1(t)
+	got := decodeModelMaterials(map[string][]byte{"slag_deposit": data}, true)
+	if len(got.rsh) != 0 {
+		t.Errorf("compiled RTX was incorrectly returned as raw RSH: %d", len(got.rsh))
+	}
+	if material := got.materials["slag_deposit"]; material.Texture == nil {
+		t.Fatal("compiled RTX did not produce a decoded material texture")
+	}
+	if got.missing != 0 {
+		t.Fatalf("compiled RTX was counted as missing: %d", got.missing)
+	}
+}
+
 func TestVulkanFragmentAlphaTestsRSHAlpha(t *testing.T) {
 	data := makeRSHWithFormat(11, solidDXT5AlphaBlock())
 	got := decodeModelMaterials(map[string][]byte{"wire": data}, true)
@@ -280,6 +441,18 @@ func TestDecodeModelMaterialsRejectsMalformedRSH(t *testing.T) {
 	if len(got.rsh) != 0 || got.missing != 1 {
 		t.Fatalf("malformed RSH result = raw:%d missing:%d", len(got.rsh), got.missing)
 	}
+}
+
+func syntheticRTXDXT1(t *testing.T) []byte {
+	t.Helper()
+	attr := []byte{8, 0, 0, 0, 4, 0, 0, 0, 4, 0, 0, 0, 1, 0, 0, 0}
+	root := &chunky.Chunk{TypeID: "FOLDRTXTR", Children: []*chunky.Chunk{
+		{TypeID: "FOLDIMAG", Children: []*chunky.Chunk{
+			{TypeID: "DATAATTR", Payload: attr},
+			{TypeID: "DATADATA", Payload: []byte{0, 0xf8, 0, 0, 0, 0, 0, 0}},
+		}},
+	}}
+	return append(chunky.Preamble(), chunky.Serialize(root)...)
 }
 
 func syntheticRSHDXT1(t *testing.T) []byte {

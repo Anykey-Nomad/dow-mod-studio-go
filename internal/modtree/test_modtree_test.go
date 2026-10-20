@@ -2,11 +2,19 @@ package modtree
 
 import (
 	"fmt"
+	"os"
 	"testing"
 )
 
+// The path the game installs to on Windows; another drive or install shows
+// up here as a skip rather than a failure.
+const dxp3ModulePath = `C:/Program Files/Steam/steamapps/common/Dawn of War Definitive Edition/DXP3.module`
+
 func TestBuildModTree_DXP3(t *testing.T) {
-	path := `C:/Program Files/Steam/steamapps/common/Dawn of War Definitive Edition/DXP3.module`
+	if _, err := os.Stat(dxp3ModulePath); err != nil {
+		t.Skip("DXP3 is not installed here")
+	}
+	path := dxp3ModulePath
 	tree, err := BuildModTree(path, "English")
 	if err != nil {
 		t.Fatalf("BuildModTree: %v", err)
@@ -56,7 +64,10 @@ func TestBuildModTree_DXP3(t *testing.T) {
 }
 
 func TestParseModule_DXP3(t *testing.T) {
-	m, err := ParseModule(`C:/Program Files/Steam/steamapps/common/Dawn of War Definitive Edition/DXP3.module`)
+	if _, err := os.Stat(dxp3ModulePath); err != nil {
+		t.Skip("DXP3 is not installed here")
+	}
+	m, err := ParseModule(dxp3ModulePath)
 	if err != nil {
 		t.Fatalf("ParseModule: %v", err)
 	}

@@ -6,9 +6,12 @@ package rgd
 
 import (
 	"bufio"
+	"bytes"
+	_ "embed"
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -326,6 +329,15 @@ func mix(a, b, c *uint32) {
 
 var rgdDict map[uint32]string
 
+// embeddedRGDDict is the game's own dictionary, shipped with the package so
+// hashed field names resolve even where no installed copy has been found yet —
+// the Linux build, the test binary, or a module opened before the game folder
+// is known. A dictionary found on disk still wins, because that one can carry
+// the installation's own custom.txt additions.
+//
+//go:embed RGD_DIC.TXT
+var embeddedRGDDict []byte
+
 func InitDict() map[uint32]string {
 	if rgdDict != nil {
 		return rgdDict
@@ -372,6 +384,7 @@ func InitDict() map[uint32]string {
 	candidates = append(candidates, `C:/Users/anyke/Downloads/CDMSSrc_055/Rainman_src/RGD_DIC.TXT`)
 
 	seen := map[string]bool{}
+	loaded := false
 	for _, p := range candidates {
 		if seen[p] {
 			continue
@@ -381,6 +394,7 @@ func InitDict() map[uint32]string {
 			continue
 		}
 		loadRgdDictionaryFile(m, p)
+		loaded = true
 		// also load custom.txt in same folder
 		dir := filepath.Dir(p)
 		custom := filepath.Join(dir, "custom.txt")
@@ -389,8 +403,40 @@ func InitDict() map[uint32]string {
 		}
 		break // use first found
 	}
+	if !loaded {
+		loadRgdDictionaryReader(m, bytes.NewReader(embeddedRGDDict))
+	}
 	rgdDict = m
 	return m
+}
+
+// AddDictRoot loads the dictionary that ships with a game installation rooted
+// at dir, if it has one. InitDict only finds the dictionary beside the
+// executable or at the hard coded Windows install path, but the game can live
+// anywhere — on Linux under a mount prefix — and the folder of the open module
+// says exactly where it is. Entries already resolved keep their value, so a
+// second copy of the same dictionary cannot disagree with the first.
+func AddDictRoot(dir string) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return
+	}
+	m := InitDict()
+	for _, sub := range []string{
+		filepath.Join(dir, "Mod_studio_files", "dictionaries", "RGD_DIC.TXT"),
+		filepath.Join(dir, "Mod_Studio_Files", "dictionaries", "RGD_DIC.TXT"),
+		filepath.Join(dir, "dictionaries", "RGD_DIC.TXT"),
+	} {
+		if _, err := os.Stat(sub); err != nil {
+			continue
+		}
+		loadRgdDictionaryFile(m, sub)
+		custom := filepath.Join(filepath.Dir(sub), "custom.txt")
+		if _, err := os.Stat(custom); err == nil {
+			loadRgdDictionaryFile(m, custom)
+		}
+		return
+	}
 }
 
 func loadRgdDictionaryFile(m map[uint32]string, path string) {
@@ -399,7 +445,11 @@ func loadRgdDictionaryFile(m map[uint32]string, path string) {
 		return
 	}
 	defer f.Close()
-	scanner := bufio.NewScanner(f)
+	loadRgdDictionaryReader(m, f)
+}
+
+func loadRgdDictionaryReader(m map[uint32]string, r io.Reader) {
+	scanner := bufio.NewScanner(r)
 	// increase buffer
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)

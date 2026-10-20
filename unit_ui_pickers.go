@@ -59,7 +59,7 @@ func (ui *uiState) unitCatalogFor() *unitCatalog {
 		ui.forgetFreezeBook()
 		return nil
 	}
-	mod := ui.modTree.FileMapName
+	mod := ui.modTree.FileMapName + "|" + ui.modTree.ModFilePath
 	if ui.unitCatalog != nil && ui.unitCatalogMod == mod {
 		return ui.unitCatalog
 	}

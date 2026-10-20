@@ -110,6 +110,23 @@ func (ui *uiState) handleKeyboard(gtx layout.Context) {
 	if ui.textActive() {
 		return
 	}
+	if tab := ui.activeTab(); tab != nil && tab.kind == "sgb" && tab.sgbView3D && tab.model != nil && tab.sgbCameraTag != nil && gtx.Focused(tab.sgbCameraTag) {
+		for {
+			ev, ok := gtx.Event(key.Filter{Focus: tab.sgbCameraTag, Name: key.NameDeleteForward})
+			if !ok {
+				break
+			}
+			ke, ok := ev.(key.Event)
+			if !ok || ke.State != key.Press {
+				continue
+			}
+			ui.deleteSelectedSgbEntities(tab)
+			return
+		}
+		// The focused map viewer consumes its own arrows after input handling;
+		// do not also move the file-tree selection on the same key press.
+		return
+	}
 	if ui.treeHasKeyboard() {
 		for _, name := range treeActionKeyNames {
 			for {
@@ -306,7 +323,11 @@ func (ui *uiState) openTreeFile(n modtree.VisibleNode) {
 		ui.openWav(n.FullPath)
 		ui.markStateDirty()
 		return
-	case ".whm":
+	case ".sgb":
+		ui.openSgb(n.FullPath)
+		ui.markStateDirty()
+		return
+	case ".whm", ".sgm":
 		ui.openWhm(n.FullPath)
 		ui.markStateDirty()
 		return
@@ -885,8 +906,10 @@ func (ui *uiState) handleInput(gtx layout.Context) {
 						case "Save":
 							if ui.saveEligible() {
 								ui.handleSaveActiveTab()
+							} else if tab := ui.activeTab(); tab != nil && tab.kind == "sgb" && tab.sgbMap != nil {
+								ui.handleSgbSave(tab)
 							} else {
-								ui.statusText = "Save — no unsaved RGD/text changes"
+								ui.statusText = "Save — no unsaved changes"
 							}
 						case "Export File":
 							if eligible, reason := ui.exportEligible(ui.activeTab()); eligible {

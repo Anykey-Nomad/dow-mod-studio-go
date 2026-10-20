@@ -153,6 +153,62 @@ func (ui *uiState) modelInfoTable(gtx layout.Context, t *fileTab) layout.Dimensi
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
+// modelMaterialDiagnosticsTable lists each mesh's material reference, source,
+// and decoded image encoding. Repeated materials remain visible per mesh so
+// the reader can identify which geometry uses a missing or unexpected map.
+func (ui *uiState) modelMaterialDiagnosticsTable(gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t == nil || t.model == nil || t.model.model == nil {
+		return layout.Dimensions{}
+	}
+	v := t.model
+	if !v.materialsLoaded && !v.loading {
+		return centeredPanelLabel(gtx, ui.th, "Material lookup has not run", unit.Sp(10), cTextDim)
+	}
+	if v.loading && len(v.materialDiagnostics) == 0 {
+		return centeredPanelLabel(gtx, ui.th, "Resolving materials…", unit.Sp(10), cTextDim)
+	}
+	rows := make([]layout.FlexChild, 0, len(v.model.Meshes)*3)
+	for meshIndex, mesh := range v.model.Meshes {
+		if mesh.Material == "" {
+			continue
+		}
+		diag, ok := v.materialDiagnostics[mesh.Material]
+		if !ok {
+			diag = modelMaterialDiagnostic{Format: "—", Status: "not resolved"}
+		}
+		meshLabel := mesh.Name
+		if meshLabel == "" {
+			meshLabel = fmt.Sprintf("Mesh %d", meshIndex+1)
+		}
+		rows = append(rows,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.tableRow2WithTooltip(gtx, meshLabel, mesh.Material, meshIndex%2 == 0, mesh.Material)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.tableRow2WithTooltip(gtx, "Format", diagnosticValue(diag.Format), meshIndex%2 != 0, diag.Status)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				path := diag.ResolvedPath
+				if path == "" {
+					path = diag.Status
+				}
+				return ui.tableRow2WithTooltip(gtx, "Source", path, meshIndex%2 == 0, diag.ResolvedPath)
+			}),
+		)
+	}
+	if len(rows) == 0 {
+		return centeredPanelLabel(gtx, ui.th, "No meshes reference a material", unit.Sp(10), cTextDim)
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
+}
+
+func diagnosticValue(value string) string {
+	if value == "" {
+		return "—"
+	}
+	return value
+}
+
 // modelPlayLabel is what the play button says: the action it will do.
 func modelPlayLabel(v *modelViewer) string {
 	if v.playing {

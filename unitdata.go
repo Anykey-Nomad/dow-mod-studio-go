@@ -10,8 +10,10 @@ import (
 
 // ── unit catalogue ──────────────────────────────────────────────────────────
 //
-// The Object dialog browses the mod's own units rather than the currently open
-// file. Every unit of every race lives at a fixed place in the tree:
+// The Object dialog browses the active mod's merged units rather than the
+// currently open file. This includes units inherited from required mods and
+// overridden by the active mod. Every unit of every race lives at a fixed place
+// in the tree:
 //
 //	Data\attrib\ebps\races\<race>\troops\*.rgd
 //	Data\attrib\ebps\races\<race>\structures\*.rgd
@@ -143,7 +145,10 @@ func buildUnitCatalog(tree *modtree.ModTree) *unitCatalog {
 	return cat
 }
 
-// collectUnitRgds lists the .rgd units of one folder, sorted by name.
+// collectUnitRgds lists every visible .rgd unit in one merged folder, sorted
+// by name. A mod commonly inherits its units from DXP3/W40k and overrides only
+// selected files, so filtering to KindThisMod leaves the Object tab empty for
+// those mods even though the merged tree contains the units they edit.
 func collectUnitRgds(folder *modtree.TreeFolder, race string, kind unitKind) []unitEntry {
 	var out []unitEntry
 	for _, f := range folder.Files {

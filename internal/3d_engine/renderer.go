@@ -6,6 +6,7 @@ import (
 	"image/draw"
 	"math"
 
+	"dow-mod-studio/internal/sgb"
 	"dow-mod-studio/internal/whm"
 	"github.com/fogleman/fauxgl"
 )
@@ -26,8 +27,10 @@ type RenderOptions struct {
 	UVDefault             UVMapping
 	UVPerMaterial         map[string]*UVMapping
 	MaterialOverrides     map[string]Material
+	MaterialAliases       map[string]string
 	MeshAlpha             map[string]float32
 	ViewOverride          *fauxgl.Matrix
+	AnimatedEntities      []sgb.AnimatedEntity
 }
 
 // Material is a resolved diffuse image and its tint.
@@ -153,6 +156,12 @@ func Render(model *whm.Model, pose whm.Pose, opts RenderOptions) *image.RGBA {
 	// means swapping its texture and base colour between draw calls.
 	meshMaterial := func(mesh *whm.Mesh) {
 		mat, ok := opts.MaterialOverrides[mesh.Material]
+		if !ok && opts.MaterialAliases[mesh.Material] != "" {
+			mat, ok = opts.MaterialOverrides[opts.MaterialAliases[mesh.Material]]
+		}
+		if !ok && mesh.MaterialPath != "" {
+			mat, ok = opts.MaterialOverrides[mesh.MaterialPath]
+		}
 		if !ok {
 			shader.texture = nil
 			shader.base = rgbaToColor(opts.BaseColor)
@@ -168,7 +177,11 @@ func Render(model *whm.Model, pose whm.Pose, opts RenderOptions) *image.RGBA {
 	// Skin once, then reuse the transformed vertex for every mesh that uses it.
 	// The texture coordinates are not filled in here: they are per material,
 	// so they are mapped per sub mesh below, from the mapping that sub mesh's
-	// material is drawn with.
+	// material is drawn with. An SGB scene keeps a separate animation clock per
+	// placement; combine those poses before visiting the shared scene vertices.
+	if len(opts.AnimatedEntities) > 0 {
+		pose = sgb.CombineEntityPoses(len(pose.Bones), opts.AnimatedEntities)
+	}
 	skinned := make([]fauxgl.Vertex, len(model.Vertices))
 	for i := range model.Vertices {
 		pos, normal := whm.SkinnedVertex(model, pose, &model.Vertices[i])
@@ -200,12 +213,21 @@ func Render(model *whm.Model, pose whm.Pose, opts RenderOptions) *image.RGBA {
 		if alpha <= 0 {
 			continue
 		}
-		if meshMaterial != nil {
+		waterMesh := mesh.Name == sgb.WaterMeshName
+		if waterMesh {
+			shader.texture = nil
+			shader.base = fauxgl.Color{
+				R: float64(sgb.WaterColor[0]) / 255,
+				G: float64(sgb.WaterColor[1]) / 255,
+				B: float64(sgb.WaterColor[2]) / 255,
+				A: float64(sgb.WaterColor[3]) / 255,
+			}
+		} else if meshMaterial != nil {
 			meshMaterial(mesh)
 		} else {
 			shader.base = rgbaToColor(opts.BaseColor)
 		}
-		if alpha < 1 {
+		if alpha < 1 && !waterMesh {
 			base := shader.base
 			base.A *= float64(alpha)
 			shader.base = base
@@ -227,7 +249,6 @@ func Render(model *whm.Model, pose whm.Pose, opts RenderOptions) *image.RGBA {
 	if opts.Ground && opts.Texture != nil {
 		drawGround(ctx, shader, opts)
 	}
-
 	drawSoftwareOverlay(ctx, model, pose, opts, view)
 
 	// fauxgl hands back an *image.NRGBA, so convert rather than assert.

@@ -23,6 +23,7 @@ type panelSplitterState struct {
 	tag           event.Tag
 	hover         bool
 	dragging      bool
+	layoutOrigin  int
 	startPointerX float32
 
 	startLeft  int
@@ -108,12 +109,32 @@ func (ui *uiState) panelSplitterWidth(total int) int {
 	return panelSplitterWidthDp
 }
 
+func panelSplitterLayoutOrigin(index, total, splitterWidth, leftWidth, rightWidth int) int {
+	if index == 1 {
+		return total - rightWidth - splitterWidth
+	}
+	return leftWidth
+}
+
+func panelSplitterWidthFromDrag(index int, pointerX, pressPointerX float32, startLeft, startRight int) (int, int) {
+	delta := int(pointerX - pressPointerX)
+	if index == 0 {
+		return startLeft + delta, startRight
+	}
+	return startLeft, startRight - delta
+}
+
 func (ui *uiState) layoutPanelSplitter(gtx layout.Context, index int, total int) layout.Dimensions {
 	w := gtx.Dp(unit.Dp(panelSplitterWidthDp))
 	gtx.Constraints.Min.X = w
 	gtx.Constraints.Max.X = w
 	gtx.Constraints.Min.Y = 0
 	s := &ui.panelSplitters[index]
+	// Input is handled before layout, so event positions are local to the
+	// splitter's position in the previous frame. Keep that rendered origin
+	// separately from the widths being updated by this frame's input; using
+	// the new origin with old local coordinates makes slow drags oscillate.
+	eventOrigin := s.layoutOrigin
 	rect := clip.Rect{Max: image.Pt(w, gtx.Constraints.Max.Y)}.Push(gtx.Ops)
 	event.Op(gtx.Ops, &s.tag)
 	pointer.CursorColResize.Add(gtx.Ops)
@@ -136,32 +157,25 @@ func (ui *uiState) layoutPanelSplitter(gtx layout.Context, index int, total int)
 		case pointer.Press:
 			s.dragging = true
 			s.hover = true
-			origin := ui.leftPanelWidth
-			if index == 1 {
-				origin = total - ui.rightPanelWidth - w
-			}
-			s.startPointerX = float32(origin) + e.Position.X
+			s.startPointerX = float32(eventOrigin) + e.Position.X
 			s.startLeft = ui.leftPanelWidth
 			s.startRight = ui.rightPanelWidth
 		case pointer.Drag:
 			if !s.dragging {
 				break
 			}
-			origin := ui.leftPanelWidth
-			if index == 1 {
-				origin = total - ui.rightPanelWidth - w
-			}
-			delta := int(float32(origin) + e.Position.X - s.startPointerX)
-			if index == 0 {
-				ui.leftPanelWidth = s.startLeft + delta
-			} else {
-				ui.rightPanelWidth = s.startRight - delta
-			}
+			pointerX := float32(eventOrigin) + e.Position.X
+			ui.leftPanelWidth, ui.rightPanelWidth = panelSplitterWidthFromDrag(
+				index, pointerX, s.startPointerX, s.startLeft, s.startRight,
+			)
 			ui.clampPanelWidths(total)
 		case pointer.Release, pointer.Cancel:
 			s.dragging = false
 		}
 	}
+	// Record the origin of the operations emitted below. Pointer positions
+	// received before the next layout will be relative to this origin.
+	s.layoutOrigin = panelSplitterLayoutOrigin(index, total, w, ui.leftPanelWidth, ui.rightPanelWidth)
 	col := cBorder
 	if s.hover || s.dragging {
 		col = rgb(0x0078D4)

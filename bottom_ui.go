@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"path/filepath"
 
 	"gioui.org/font"
 	"gioui.org/layout"
@@ -14,6 +15,9 @@ import (
 
 func (ui *uiState) layoutRightPanel(gtx layout.Context) layout.Dimensions {
 	tab := ui.activeTab()
+	if tab != nil && tab.kind == "sgb" {
+		return ui.layoutSgbObjectPanel(gtx, tab)
+	}
 	// The object tab keeps this panel, but there is no open file behind it, so
 	// it describes the selected unit instead of a file's properties.
 	if isUnitTab(tab) {
@@ -68,6 +72,9 @@ func (ui *uiState) layoutRightPanel(gtx layout.Context) layout.Dimensions {
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "3D Preview") }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelInfoTable(gtx, tab) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Materials by Mesh") }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelMaterialDiagnosticsTable(gtx, tab) }),
 				)
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -161,11 +168,16 @@ func (ui *uiState) saveEligible() bool {
 	if t == nil {
 		return false
 	}
+	if t.kind == "sgb" {
+		return t.sgbDirty
+	}
 	return (t.kind == "rgd" && t.rgdDirty) || (t.kind == "text" && t.textDirty)
 }
 
 func (ui *uiState) handleSaveActiveTab() {
-	if t := ui.activeTab(); t != nil && t.kind == "rgd" {
+	if t := ui.activeTab(); t != nil && t.kind == "sgb" {
+		ui.handleSgbSave(t)
+	} else if t := ui.activeTab(); t != nil && t.kind == "rgd" {
 		ui.handleRgdSave(t)
 	} else if t := ui.activeTab(); t != nil && t.kind == "text" {
 		ui.handleTextSave(t)
@@ -178,10 +190,38 @@ func (ui *uiState) handleSaveActiveTab() {
 	} else if ui.modTree == nil {
 		ui.statusText = "Save — no mod loaded"
 	} else if ui.activeTab() == nil {
-		ui.statusText = "Save — open a .rgd, .txt, .lua, .ai, .fda, .wav, or .whm file first"
+		ui.statusText = "Save — open an editable file first"
 	} else {
 		ui.statusText = "Save — the active file type is not editable"
 	}
+}
+
+func (ui *uiState) handleSgbSave(t *fileTab) {
+	if t == nil || t.kind != "sgb" || t.sgbMap == nil {
+		ui.statusText = "Save failed: no editable scenario is open"
+		return
+	}
+	if ui.modTree == nil {
+		ui.statusText = "Save failed: no mod loaded"
+		return
+	}
+	if !t.sgbDirty {
+		ui.statusText = filepath.Base(t.path) + " — no map changes"
+		return
+	}
+	data, err := t.sgbMap.MarshalBinary()
+	if err != nil {
+		ui.statusText = fmt.Sprintf("Save failed: %v", err)
+		return
+	}
+	diskPath, err := ui.modTree.WriteOverlayFile(t.path, data)
+	if err != nil {
+		ui.statusText = fmt.Sprintf("Save failed: %v", err)
+		return
+	}
+	t.sgbBytes = len(data)
+	t.sgbDirty = false
+	ui.statusText = fmt.Sprintf("Saved map %s → %s (%d bytes)", filepath.Base(t.path), diskPath, len(data))
 }
 
 // exportEligible reports whether the active file can be copied from its

@@ -303,8 +303,7 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 											}),
 										)
 									}),
-									layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
-									layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
+									layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {

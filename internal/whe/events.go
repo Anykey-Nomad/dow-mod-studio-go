@@ -87,6 +87,7 @@ func ParseFxEvents(data []byte) ([]FxEvent, error) {
 type FxTimeline struct {
 	Name       string
 	Animations []string
+	Motions    []string
 	Events     []FxTimelineEvent
 	// Tail is the part of the payload after the event list: how the motion
 	// blends and is delayed, and the modifier it may drive.
@@ -225,11 +226,11 @@ func parseDataMton(chunkName string, p []byte) (FxTimeline, error) {
 	for i := 0; i < n && r.Err == nil; i++ {
 		tl.Animations = append(tl.Animations, r.Str())
 	}
-	// The random motions are weighted picks between the clips above; the
-	// preview plays the first one, so the names are read and dropped.
-	n = r.Count(4)
+	// Motion links chain into another DATAMTON when this motion does not
+	// carry an animation. Preserve names so idle resolution can follow them.
+	n = r.Count(8)
 	for i := 0; i < n && r.Err == nil; i++ {
-		r.Str()
+		tl.Motions = append(tl.Motions, strings.TrimSpace(r.Str()))
 		r.F32()
 	}
 	// Whether the pick is reshuffled every loop.

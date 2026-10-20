@@ -202,6 +202,15 @@ func (t *ModTree) Close() {
 
 // BuildModTree is the main entry point: given a .module path and locale,
 // parse, recursively load required mods, engine, data folders, SGAs, and build merged tree.
+// moduleRelPath converts a relative path the way .module files write it —
+// separators are backslashes, whatever the OS reading them — into an OS path.
+// On Linux a backslash is an ordinary file name character, so joining
+// "Locale\\English\\Data" untouched stats one directory of that literal name
+// and the folder it names is silently never found.
+func moduleRelPath(rel string) string {
+	return filepath.FromSlash(strings.ReplaceAll(rel, "\\", "/"))
+}
+
 func BuildModTree(modulePath, locale string) (*ModTree, error) {
 	if locale == "" {
 		locale = "English"
@@ -287,19 +296,19 @@ func (t *ModTree) tryLoadDataGeneric(mf *ModFile, locale, appPath string) {
 		}
 		key := "project:" + mf.ModFolder
 		if v, ok := m[key]["DataGeneric"]; ok && v != "" {
-			full := filepath.Join(appPath, v)
+			full := filepath.Join(appPath, moduleRelPath(v))
 			t.tryAddFSFolder(full, mf.FileMapName, "DataGeneric", KindThisMod, 99, locale)
 			// Also for required mods and engine
 			reqKeys := sortedKeysInt(mf.RequiredMods)
 			for _, k := range reqKeys {
 				rName := mf.RequiredMods[k]
 				if vr, ok := m["project:"+rName]["DataGeneric"]; ok && vr != "" {
-					full2 := filepath.Join(appPath, vr)
+					full2 := filepath.Join(appPath, moduleRelPath(vr))
 					t.tryAddFSFolder(full2, rName, "DataGeneric", KindReqMod, 15000+k, locale)
 				}
 			}
 			if ve, ok := m["project:Engine"]["DataGeneric"]; ok && ve != "" {
-				full3 := filepath.Join(appPath, ve)
+				full3 := filepath.Join(appPath, moduleRelPath(ve))
 				t.tryAddFSFolder(full3, "(Engine)", "DataGeneric", KindEngine, 30001, locale)
 			}
 			return
@@ -362,7 +371,7 @@ func ParsePipelineIni(path string) (map[string]map[string]string, error) {
 
 func (t *ModTree) loadDoWMod(mf *ModFile, kind SourceKind, priorityBase int, locale string) error {
 	appPath := mf.AppPath
-	modFolderPath := filepath.Join(appPath, mf.ModFolder)
+	modFolderPath := filepath.Join(appPath, moduleRelPath(mf.ModFolder))
 
 	// Heuristic for default write folder: prefer "Data" without dynamics.
 	// We don't need to track output folder for the tree, just need to register all sources.
@@ -372,7 +381,7 @@ func (t *ModTree) loadDoWMod(mf *ModFile, kind SourceKind, priorityBase int, loc
 	keys := sortedKeysInt(mf.DataFolders)
 	for _, k := range keys {
 		raw := mf.DataFolders[k]
-		resolved := ResolveDynamics(raw, locale, "")
+		resolved := moduleRelPath(ResolveDynamics(raw, locale, ""))
 		fullPath := filepath.Join(modFolderPath, resolved)
 		// dir name reported as raw? original uses raw DataFolder string as SourceName
 		srcName := raw
@@ -404,7 +413,7 @@ func (t *ModTree) loadDoWMod(mf *ModFile, kind SourceKind, priorityBase int, loc
 		if !strings.HasSuffix(strings.ToLower(raw), ".sga") {
 			suffix = ".sga"
 		}
-		resolved := ResolveDynamics(raw, locale, suffix)
+		resolved := moduleRelPath(ResolveDynamics(raw, locale, suffix))
 		fullPath := filepath.Join(modFolderPath, resolved)
 		srcName := raw
 		if !strings.HasSuffix(strings.ToLower(srcName), ".sga") {
@@ -473,7 +482,7 @@ func (t *ModTree) tryLoadDataGenericForReq(mf *ModFile, locale, appPath string, 
 		}
 		key := "project:" + mf.ModFolder
 		if v, ok := m[key]["DataGeneric"]; ok && v != "" {
-			full := filepath.Join(appPath, v)
+			full := filepath.Join(appPath, moduleRelPath(v))
 			t.tryAddFSFolder(full, mf.FileMapName, "DataGeneric", KindReqMod, priorityBase, locale)
 			return
 		}
@@ -483,21 +492,67 @@ func (t *ModTree) tryLoadDataGenericForReq(mf *ModFile, locale, appPath string, 
 }
 
 func (t *ModTree) tryAddFSFolder(fullPath, modName, sourceName string, kind SourceKind, priority int, locale string) {
-	// Check existence; if not exists, silently skip (like original try/catch)
-	info, err := os.Stat(fullPath)
-	if err != nil || !info.IsDir() {
-		return
+	// Register the exact spelling the .module asked for and every sibling
+	// directory that differs from it only in case. Windows folds directory
+	// names, so a mod that wrote both "Data" and "data" has one folder there;
+	// on a case-sensitive filesystem they are two folders holding a piece of
+	// the mod each, and registering only the exact spelling shows whichever
+	// half happened to match — for UA_DE that hid every unit the mod adds.
+	var seen []os.FileInfo
+	for _, candidate := range fsFolderVariants(fullPath) {
+		info, err := os.Stat(candidate)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		dup := false
+		for _, prev := range seen {
+			if os.SameFile(prev, info) {
+				dup = true
+				break
+			}
+		}
+		if dup {
+			// The same directory under another spelling: a Windows
+			// filesystem answers for both, and it must not be scanned twice.
+			continue
+		}
+		seen = append(seen, info)
+		src := &FileSource{
+			ModName:    modName,
+			SourceName: sourceName,
+			Kind:       kind,
+			Priority:   priority,
+			IsSGA:      false,
+			DiskRoot:   candidate,
+		}
+		t.Sources = append(t.Sources, src)
+		t.pending = append(t.pending, pendingSource{kind: pendingFS, diskPath: candidate, src: src})
 	}
-	src := &FileSource{
-		ModName:    modName,
-		SourceName: sourceName,
-		Kind:       kind,
-		Priority:   priority,
-		IsSGA:      false,
-		DiskRoot:   fullPath,
+}
+
+// fsFolderVariants lists fullPath and any sibling directory whose name matches
+// its base name case-insensitively, the exact spelling first.
+func fsFolderVariants(fullPath string) []string {
+	out := []string{fullPath}
+	dir, base := filepath.Dir(fullPath), filepath.Base(fullPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return out
 	}
-	t.Sources = append(t.Sources, src)
-	t.pending = append(t.pending, pendingSource{kind: pendingFS, diskPath: fullPath, src: src})
+	for _, e := range entries {
+		name := e.Name()
+		if name == base || !strings.EqualFold(name, base) {
+			continue
+		}
+		if !e.IsDir() {
+			// A symlink to a directory still counts as one.
+			if info, err := os.Stat(filepath.Join(dir, name)); err != nil || !info.IsDir() {
+				continue
+			}
+		}
+		out = append(out, filepath.Join(dir, name))
+	}
+	return out
 }
 
 func (t *ModTree) tryAddSGA(fullPath, modName, sourceName string, kind SourceKind, priority int, locale string) {
@@ -845,7 +900,7 @@ func (t *ModTree) ResolveWritableRoot() (string, error) {
 			modFolder = mf.ModFolder
 		}
 	}
-	root := filepath.Clean(filepath.Join(t.AppPath, modFolder, rel))
+	root := filepath.Clean(filepath.Join(t.AppPath, modFolder, moduleRelPath(rel)))
 	t.WritableOverlayRoot = root
 	return root, nil
 }
