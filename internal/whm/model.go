@@ -105,7 +105,10 @@ const (
 type MeshTrack struct {
 	Name           string
 	ForceInvisible bool
-	Keys           []Key3 // Time, value, 0
+	// Force — значение, на котором меш удерживается, пока кривая не
+	// сказала иное: ноль — меш не виден, единица — виден целиком.
+	Force float32
+	Keys  []Key3 // Time, value, 0
 }
 
 // TextureTrack is an animated material UV offset, tiling or colour channel.
@@ -635,7 +638,7 @@ func (m *Model) parseAnimationData(c *chunky.Chunk) (Animation, error) {
 			// the vis_level clips that show the finished obelisk hold it
 			// visible.
 			force := decodeFloat(r.Take(4))
-			track := MeshTrack{Name: name, ForceInvisible: force == 0}
+			track := MeshTrack{Name: name, ForceInvisible: force == 0, Force: force}
 			if n > 0 {
 				raw := r.Take(n * 8)
 				for j := 0; j < n; j++ {

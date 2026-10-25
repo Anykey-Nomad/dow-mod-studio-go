@@ -19,6 +19,30 @@ const (
 	panelSplitterMinMidDp = 220
 )
 
+// absorbDialogCardPress covers a dialog card with an input area that takes
+// pointer events and gives nothing back.
+//
+// A card is stacked over the dialog's dim, and a press on the card's own empty
+// space reaches no control, so without this the press falls through to the dim
+// — which is the dialog's close target — and the dialog shut while the user was
+// reaching for a field. Registering this area over the card, ahead of the
+// controls laid out after it, is what makes the card modal: controls stay on
+// top of it, and only a press outside the card's border reaches the dim, which
+// is where a press is meant to close.
+func absorbDialogCardPress(gtx layout.Context, tag event.Tag) {
+	st := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
+	event.Op(gtx.Ops, tag)
+	for {
+		if _, ok := gtx.Event(pointer.Filter{
+			Target: tag,
+			Kinds:  pointer.Press | pointer.Release | pointer.Drag | pointer.Scroll,
+		}); !ok {
+			break
+		}
+	}
+	st.Pop()
+}
+
 type panelSplitterState struct {
 	tag           event.Tag
 	hover         bool

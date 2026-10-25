@@ -90,9 +90,8 @@ type modelGpuVkDraw struct {
 	centre [3]float64
 }
 
-// modelGpuVkMesh is the GPU copy of a model's geometry. It never changes, so
-// it is built once per model and kept for as long as the tab is open; the
-// draws carry their own vertex buffers.
+// modelGpuVkMesh is the GPU copy of a model's geometry. It is built once per
+// model and explicitly retired when mutable scene geometry changes.
 type modelGpuVkMesh struct {
 	draws []modelGpuVkDraw
 }
@@ -160,6 +159,10 @@ type modelGpuVkRenderer struct {
 	white        *gpu.VulkanTexture
 
 	meshes map[*WhmModel]*modelGpuVkMesh
+	// dirtyMeshes defers buffer retirement until the next Render call, which
+	// begins after Gio has submitted the layout frame that may still reference
+	// the current mesh's buffers.
+	dirtyMeshes map[*WhmModel]bool
 	// textures is keyed by material and holds both the texture and the
 	// file bytes its mip slices point into.
 	textures  map[string]*modelGpuVkTexture
@@ -296,6 +299,7 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 		uniformsNext:   uniformsNext,
 		white:          white,
 		meshes:         map[*WhmModel]*modelGpuVkMesh{},
+		dirtyMeshes:    map[*WhmModel]bool{},
 		textures:       map[string]*modelGpuVkTexture{},
 		frame:          make([]float32, modelGpuVkFrameFloats),
 		frameBuf:       make([]byte, modelGpuVkFrameFloats*4),
@@ -304,15 +308,49 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 	}, nil
 }
 
-// forget drops the cached geometry of a model, which is what a closing tab
-// needs.
-func (r *modelGpuVkRenderer) forget(model *WhmModel) {
+// retireMesh removes a model's cached device buffers only after queued draws
+// can no longer reference them.
+func (r *modelGpuVkRenderer) retireMesh(model *WhmModel) error {
 	m, ok := r.meshes[model]
 	if !ok {
-		return
+		return nil
+	}
+	if r.vk == nil {
+		delete(r.meshes, model)
+		m.release()
+		return nil
+	}
+	if err := r.vk.WaitForPreviousFrame(); err != nil {
+		return err
 	}
 	delete(r.meshes, model)
 	m.release()
+	return nil
+}
+
+// forget drops the cached geometry of a model, which is what a closing tab
+// needs.
+func (r *modelGpuVkRenderer) forget(model *WhmModel) {
+	if err := r.retireMesh(model); err != nil {
+		log.Printf("3D preview: wait before forgetting mesh: %v", err)
+		return
+	}
+	delete(r.dirtyMeshes, model)
+}
+
+// geometryChanged marks in-place geometry edits for retirement at the start
+// of the next Render. This method can run from pointer handling in the same
+// Gio layout that recorded draws using the old buffers; freeing them here
+// would leave the frame submitted after Layout with references to destroyed
+// Vulkan buffers.
+func (r *modelGpuVkRenderer) geometryChanged(model *WhmModel) {
+	if model == nil {
+		return
+	}
+	if r.dirtyMeshes == nil {
+		r.dirtyMeshes = make(map[*WhmModel]bool)
+	}
+	r.dirtyMeshes[model] = true
 }
 
 // release frees every device resource the renderer owns.
@@ -323,6 +361,8 @@ func (r *modelGpuVkRenderer) release() {
 	for _, m := range r.meshes {
 		m.release()
 	}
+	r.meshes = nil
+	r.dirtyMeshes = nil
 	for _, t := range r.textures {
 		if t.tex != nil {
 			t.tex.Release()
@@ -365,6 +405,12 @@ func (m *modelGpuVkMesh) release() {
 
 // mesh returns the GPU copy of a model, building it on first use.
 func (r *modelGpuVkRenderer) mesh(model *WhmModel) (*modelGpuVkMesh, error) {
+	if r.dirtyMeshes[model] {
+		if err := r.retireMesh(model); err != nil {
+			return nil, fmt.Errorf("retire changed mesh: %w", err)
+		}
+		delete(r.dirtyMeshes, model)
+	}
 	if m, ok := r.meshes[model]; ok {
 		return m, nil
 	}
@@ -937,11 +983,9 @@ func (r *modelGpuVkRenderer) Render(
 	// validation is a crash. What prepare writes is the vertex buffer and
 	// the camera; the draws themselves go into the pass below.
 	//
-	// The overlay is the skeleton and the picked marker's frame, taken
-	// from the same segment list the software renderer draws. It is prepared
-	// through the particle machinery because that is what already carries
-	// world space quads with a colour — the overlay is one more group of
-	// them, drawn through a pipeline without the depth test.
+	// The overlay is the optional selection indicator, skeleton and picked
+	// marker frame, prepared through the ribbon machinery as world-space
+	// quads with a colour and drawn through its depth-independent pipeline.
 	overlay := modelOverlayLines(model, pose, opts)
 	if len(opts.SgbSelectedEntities) > 0 {
 		selectionPose := pose

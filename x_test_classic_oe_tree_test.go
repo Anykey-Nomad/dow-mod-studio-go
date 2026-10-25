@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"strconv"
 	"testing"
 
+	"dow-mod-studio/internal/chunky"
 	"dow-mod-studio/internal/whe"
 )
 
@@ -215,5 +217,75 @@ func TestClassicOEDoubleClick(t *testing.T) {
 	}
 	if ui.classicOEDoubleClick("action:default") {
 		t.Fatal("a first press on another row counted as a double")
+	}
+}
+
+// A double press on a tree row opens that row's own editor: an action row
+// raises the action's condition editor, a motion leaf the timeline of the
+// same name — the same two dialogs the Actions and Motions folders raise.
+// A row whose name is neither has no editor, so no dialog is named for it.
+func TestClassicOETreeRowDialogPicksTheEditorsArea(t *testing.T) {
+	mton := func(name string) *chunky.Chunk {
+		payload := (&whe.Mton{Animations: []string{name + "_clip"}}).MarshalBinary()
+		return &chunky.Chunk{TypeID: "DATAMTON", Version: 4, Name: name, Payload: payload}
+	}
+	mt := &chunky.Chunk{TypeID: "FOLDMTRE", Version: 1}
+	mt.Children = append(mt.Children, mton("idle_shared"))
+	acts := []whe.FxAction{{Name: "idle", Motions: []whe.FxActionLink{
+		{Name: "idle_shared", Compare: whe.FxCompareNone},
+	}}}
+	root := &chunky.Chunk{TypeID: "FOLDREBP", Version: 4, Children: []*chunky.Chunk{
+		{TypeID: "DATAACTS", Version: 1, Payload: whe.MarshalActs(acts)},
+		mt,
+	}}
+	var buf bytes.Buffer
+	buf.Write(chunky.Preamble())
+	buf.Write(chunky.Serialize(root))
+	doc, err := whe.ParseDocument(buf.Bytes())
+	if err != nil {
+		t.Fatalf("parsing the fixture .whe: %v", err)
+	}
+
+	kind, name, index, ok := classicOETreeRowDialog(doc, classicOETreeRow{Name: "idle", Key: "/idle"})
+	if !ok || kind != classicOEDialogAction || name != "idle" || index != 0 {
+		t.Errorf("action row = (%d, %q, %d, %v), want the action editor at index 0", kind, name, index, ok)
+	}
+
+	kind, name, _, ok = classicOETreeRowDialog(doc, classicOETreeRow{Name: "idle_shared"})
+	if !ok || kind != classicOEDialogTimeline || name != "idle_shared" {
+		t.Errorf("motion leaf = (%d, %q, _, %v), want the timeline editor for idle_shared", kind, name, ok)
+	}
+
+	// A motion the file carries no timeline for has no editor to raise.
+	if _, _, _, ok := classicOETreeRowDialog(doc, classicOETreeRow{Name: "missing_clip"}); ok {
+		t.Error("a name with no timeline and no action reported an editor")
+	}
+	// Nor does a branch whose action is not in the file (a broken tree).
+	if _, _, _, ok := classicOETreeRowDialog(doc, classicOETreeRow{Name: "gone", Key: "/gone"}); ok {
+		t.Error("an action row with no such action reported an editor")
+	}
+	if _, _, _, ok := classicOETreeRowDialog(nil, classicOETreeRow{Name: "idle", Key: "/idle"}); ok {
+		t.Error("a nil document reported an editor")
+	}
+}
+
+// TestClassicOEHeadersKeepTheAnimsPanelDefault guards the panel list: the
+// anims panel must stay the one that starts open even after another panel —
+// the mesh list — is appended past it, which is why the index is found by
+// kind rather than by being last.
+func TestClassicOEHeadersKeepTheAnimsPanelDefault(t *testing.T) {
+	if classicOEHeaders[classicOEAnimsHeader].kind != classicOEKindAnims {
+		t.Fatalf("default-open panel = %q (%s), want the anims panel",
+			classicOEHeaders[classicOEAnimsHeader].label,
+			classicOEHeaders[classicOEAnimsHeader].kind)
+	}
+	meshes := false
+	for _, h := range classicOEHeaders {
+		if h.kind == classicOEKindMeshes {
+			meshes = true
+		}
+	}
+	if !meshes {
+		t.Error("the panel list carries no Meshes panel")
 	}
 }

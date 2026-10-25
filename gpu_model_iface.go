@@ -24,6 +24,9 @@ type modelGpuHandle interface {
 	// forget drops the cached geometry of a model whose tab is closing, so a
 	// long session does not hold every model it ever opened.
 	forget(model *WhmModel)
+	// geometryChanged invalidates a model cache after its vertices, indices,
+	// or mesh list are changed in place.
+	geometryChanged(model *WhmModel)
 	// release frees the device resources the handle owns.
 	release()
 }
@@ -61,6 +64,20 @@ func (ui *uiState) modelGpuRenderer() modelGpuHandle {
 		ui.modelGpuTried = false
 	}
 	return ui.modelGpu
+}
+
+func (ui *uiState) geometryChangedModelGpu(model *WhmModel) {
+	if model == nil || ui.modelGpu == nil {
+		return
+	}
+	ui.modelGpu.geometryChanged(model)
+}
+
+func (ui *uiState) forgetModelGpu(model *WhmModel) {
+	if model == nil || ui.modelGpu == nil {
+		return
+	}
+	ui.modelGpu.forget(model)
 }
 
 // releaseModelGpu frees the hardware renderer and everything it cached.

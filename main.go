@@ -273,6 +273,12 @@ type uiState struct {
 	settingsCancel         widget.Clickable
 	darkTheme              bool
 
+	// File association rows of the Settings dialog: one button per assocTypes
+	// format, sized when the dialog opens. assocOn caches what the registry
+	// said about each, so the button can tell an add from a removal.
+	assocClicks []widget.Clickable
+	assocOn     []bool
+
 	archiveDialog       bool
 	archiveOptions      []archiveOption
 	archiveSelected     []bool
@@ -424,10 +430,47 @@ type uiState struct {
 	classicOEevtScroll  panelScrollState
 	classicOEevtClose   widget.Clickable
 	classicOEevtDim     widget.Clickable
+	// classicOEevtCardTag is the area the editor card covers against the dim:
+	// a press on the card's own empty space is taken here so it never reaches
+	// the dim and closes the editor under the user's hand.
+	classicOEevtCardTag struct{}
 	// Double-click detection for the folder rows: the row last pressed
 	// and when, in the same window the mod tree's file rows use.
-	classicOELastClickKey string
-	classicOELastClickAt  time.Time
+	classicOELastClickKey      string
+	classicOELastClickAt       time.Time
+	classicOEModifierClicks    []widget.Clickable
+	classicOEModifierEditors   [4]widget.Editor
+	classicOEModifierFill      [4]string
+	classicOEModifierName      string
+	classicOEModifierBound     string
+	classicOEModifierError     string
+	classicOEModifierApply     widget.Clickable
+	classicOESelectedUIEditors [20]widget.Editor
+	classicOESelectedUIFill    [20]string
+	classicOESelectedUIBound   string
+	classicOESelectedUIError   string
+	classicOESelectedUIApply   widget.Clickable
+	classicOESelectedUIType    *widget.Enum
+	classicOESelectedUIVisible *widget.Bool
+	classicOEClauseClicks      []widget.Clickable
+	classicOEClauseEditors     [5]widget.Editor
+	classicOEClauseFill        [5]string
+	classicOEClauseName        string
+	classicOEClauseBound       string
+	classicOEClauseError       string
+	classicOEClauseApply       widget.Clickable
+	classicOEConditionClicks   []widget.Clickable
+	classicOEConditionEditors  []widget.Editor
+	classicOEConditionFill     []string
+	classicOEConditionName     string
+	classicOEConditionBound    string
+	classicOEConditionError    string
+	classicOEConditionApply    widget.Clickable
+	classicOEConditionAdd      widget.Clickable
+	classicOEConditionRemove   widget.Clickable
+	classicOESelectedUICreate  widget.Clickable
+	classicOEWheSave           widget.Clickable
+	classicOEWheRevert         widget.Clickable
 
 	// The dialog browses the mod's own units rather than the open file, so it
 	// carries its own selection. unitCatalog is built once per mod; the
@@ -480,6 +523,11 @@ type uiState struct {
 	// same pairing unitDetails uses, for the same reason.
 	unitIcons    map[string]iconCacheEntry
 	unitIconsMod string
+	// actionIcons caches the Classic OE action icons of the open mod, keyed by
+	// the action's lower-cased name, and actionIconsMod says which mod they
+	// belong to — the same pairing unitIcons uses, for the same reason.
+	actionIcons    map[string]iconCacheEntry
+	actionIconsMod string
 	// unitInfoList and unitInfoScroll are the info column's scroll state. The
 	// column holds a hundred scalars rather than the dozen it started with, so
 	// it scrolls like the other lists in the app.
@@ -583,11 +631,15 @@ type uiState struct {
 	// one list for the next: all three are lists of the same model's
 	// contents and either may be the one being read, so one button between
 	// them is enough.
-	unitMarkerClicks  []widget.Clickable
-	unitBoneClicks    []widget.Clickable
-	unitFXListMode    bool
+	unitMarkerClicks []widget.Clickable
+	unitBoneClicks   []widget.Clickable
+	unitFXListMode   bool
+	// unitMeshListMode is the fifth list tab of the side panel: the model's
+	// meshes with an eye toggle each, beside Animations, Markers, Bones and
+	// FX. It shares the side panel's scroll state with the other tabs.
+	unitMeshListMode  bool
 	unitFXClicks      []widget.Clickable
-	unitListTabClicks [4]widget.Clickable
+	unitListTabClicks [5]widget.Clickable
 	// unitBoneKeyClicks are the rows of the currently picked bone's keyframes,
 	// sized for the current bone whenever the bone list changes which bone is
 	// picked.
@@ -744,6 +796,38 @@ type uiState struct {
 	unitEvtFocusAction bool
 	unitEvtTlClicks    []widget.Clickable
 	unitEvtClicks      []widget.Clickable
+	// unitEvtAnimClicks are the per-row Remove buttons of the selected
+	// timeline's animation list — one per Animations entry — so each blend
+	// entry can be dropped individually.
+	unitEvtAnimClicks []widget.Clickable
+	// unitMeshClicks are the eye toggles of the pinned mesh list at the bottom
+	// of the Events panel — one per mesh of the unit's model — and
+	// unitMeshScroll is that list's own scroller, so a long list scrolls
+	// instead of pushing the panel's body away.
+	unitMeshClicks []widget.Clickable
+	unitMeshScroll panelScrollState
+	// unitMeshNameClicks are the name half of each mesh row: pressing one
+	// and pressing it again inside the window raises that mesh's material
+	// editor, the dialog the eye toggle's button sits beside.
+	unitMeshNameClicks []widget.Clickable
+	// unitMeshMat* drive the dialog a double press on a mesh row raises:
+	// the mesh's material references in editable fields, with unitMeshMatOrig
+	// holding the references the file holds so Cancel can put a previewed
+	// texture back. Preview applies the fields to the model on show; Save
+	// WHM writes them into the file through the .whm material patcher.
+	unitMeshMatOpen    bool
+	unitMeshMatName    string
+	unitMeshMatOrig    []string
+	unitMeshMatEditors []widget.Editor
+	unitMeshMatScroll  panelScrollState
+	unitMeshMatErr     string
+	unitMeshMatDim     widget.Clickable
+	unitMeshMatPreview widget.Clickable
+	unitMeshMatSave    widget.Clickable
+	unitMeshMatCancel  widget.Clickable
+	// unitMeshMatCardTag is the area the card covers against the dim, the same
+	// guard the Classic OE editor card takes.
+	unitMeshMatCardTag struct{}
 	// unitActCondEds are the condition fields of the picked action's choices —
 	// one per motion and sub-action link, in file order — with
 	// unitActCondStaged holding the guard step each is edited as and
@@ -934,6 +1018,13 @@ type fileTab struct {
 	// rather than a game .whm. The two share this state — both are models
 	// with the same content — but only the .whm can be converted.
 	whmIsSgm bool
+
+	// sga archive listing (when kind=="sga"): what an opened .sga carries,
+	// flattened to one row per folder and file. Read-only.
+	sgaRows   []sgaRow
+	sgaError  string
+	sgaList   layout.List
+	sgaScroll panelScrollState
 
 	// sgb state (when kind=="sgb"): a scenario map with editable placements.
 	sgbMap            *sgb.Map
@@ -1437,6 +1528,12 @@ func run(w *app.Window) error {
 	} else if !stateExists || !ui.restorePersistedState(state) {
 		ui.tryAutoLoad()
 	}
+	// A file the OS handed over (a registered association) opens once the
+	// module is in place: the .whe lookup needs the unit catalog, and the
+	// viewers read through the tree where the file lives in one.
+	if arg := findFirstAssocArg(); arg != "" {
+		ui.openAssociatedFile(arg)
+	}
 
 	for {
 		e := w.Event()
@@ -1856,6 +1953,16 @@ func (ui *uiState) layoutMiddlePanel(gtx layout.Context) layout.Dimensions {
 				layout.Rigid(ui.middleHeader),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.layoutImageViewer(gtx, tab) }),
+			)
+		})
+	}
+	// Archive listing (.sga)
+	if tab != nil && tab.kind == "sga" {
+		return ui.panelWithScroll(gtx, &ui.middleScroll, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(ui.middleHeader),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.layoutSgaListing(gtx, tab) }),
 			)
 		})
 	}

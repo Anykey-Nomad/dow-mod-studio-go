@@ -80,7 +80,7 @@ func modelOverlayLines(model *WhmModel, pose WhmPose, opts RenderOptions) []mode
 	eo := engine.OverlayOptions{Camera: engine.Camera{
 		Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch,
 		Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov,
-	}, Skeleton: opts.Skeleton, Marker: opts.Marker, PickedBone: opts.PickedBone}
+	}, Skeleton: opts.Skeleton, Marker: opts.Marker, PickedBone: opts.PickedBone, Selection: opts.SelectionIndicator}
 	return engine.OverlayLines(&model.Model, pose, eo)
 }
 
@@ -139,6 +139,7 @@ type RenderOptions struct {
 	AnimatedEntities    []sgb.AnimatedEntity
 	SgbSelectedEntities map[int]bool
 	SgbEntityMeshIDs    map[string]int
+	SelectionIndicator  *engine.SelectionIndicator
 }
 
 const (
@@ -233,6 +234,7 @@ func RenderWhmModel(model *WhmModel, pose WhmPose, opts RenderOptions) *image.RG
 	engineOpts.MaterialOverrides = opts.MaterialOverrides
 	engineOpts.MaterialAliases = opts.MaterialAliases
 	engineOpts.ViewOverride = opts.viewOverride
+	engineOpts.Selection = opts.SelectionIndicator
 	return engine.Render(modelData, pose, engineOpts)
 }
 

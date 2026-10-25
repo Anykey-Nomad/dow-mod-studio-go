@@ -9,11 +9,11 @@ import (
 // CameraState is the orbit camera and framing state shared by the model-viewer
 // canvas and the object viewport. It contains no application or Gio widgets.
 type CameraState struct {
-	Yaw          float64
-	Pitch        float64
-	Distance     float64
-	Center       fauxgl.Vector
-	FitDistance  float64
+	Yaw         float64
+	Pitch       float64
+	Distance    float64
+	Center      fauxgl.Vector
+	FitDistance float64
 	// MinDistance and MaxDistance bound the zoom. Zero derives the range
 	// from FitDistance (15%..6×), which is right for a model; a scene the
 	// size of a map sets its own so the wheel can reach a close orbit and

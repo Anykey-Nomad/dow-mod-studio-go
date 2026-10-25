@@ -137,11 +137,17 @@ func TestSgbPlacementBlueprintPathAndEntityID(t *testing.T) {
 		t.Fatalf("canonical blueprint = %q, want %q", got, want)
 	}
 	entities := []sgb.Entity{{ID: 0}, {ID: 2}, {ID: 4}}
-	if got := sgbNextPlacementID(entities, 0); got != 1 {
-		t.Fatalf("next placement ID = %d, want 1", got)
+	if got := sgbNextPlacementID(entities, 0); got != 5 {
+		t.Fatalf("next placement ID = %d, want 5 after the highest existing ID", got)
 	}
-	if got := sgbNextPlacementID(entities, 3); got != 3 {
-		t.Fatalf("next placement ID after cached value = %d, want 3", got)
+	if got := sgbNextPlacementID(entities, 3); got != 5 {
+		t.Fatalf("next placement ID after stale cached value = %d, want 5", got)
+	}
+	if got := sgbNextPlacementID(nil, 0); got != 2 {
+		t.Fatalf("first placement ID = %d, want 2 because IDs 0 and 1 are reserved", got)
+	}
+	if got := sgbNextPlacementID([]sgb.Entity{{ID: 2}, {ID: 3}}, 2); got != 4 {
+		t.Fatalf("next placement ID with occupied cache = %d, want 4", got)
 	}
 }
 

@@ -147,18 +147,17 @@ func TestGunTubeMarkerPointsAlongTheWeapon(t *testing.T) {
 			best, truth.X, truth.Y, truth.Z)
 	}
 
-	// And the forward the renderer will actually use has to run along the tube
-	// rather than across it. Which way along is a separate question: the sign
-	// comes from the heuristic in modelMarkerForwards, which measures the
-	// direction away from the bone's own mesh rather than from the tube, and
-	// this marker's mesh sits behind it. Collinearity is what the barrel
-	// needs and what this checks.
-	ax, aok := m.MarkerAxis(base, pose, true)
+	// And the axis a single-marker beam at this marker actually runs along has
+	// to follow the tube rather than cross it. That is MarkerBeamAxis's second
+	// column; the forward MarkerAxis scores the marker as facing is a different
+	// question — here it points straight across the barrel, which is why tube
+	// beams used to draw athwart the weapon.
+	ax, aok := m.MarkerBeamAxis(base, pose, true)
 	if !aok {
-		t.Fatal("the tube marker has no forward axis")
+		t.Fatal("the tube marker has no frame")
 	}
 	if d := math.Abs(ax.Dot(truth)); d < 0.99 {
-		t.Errorf("the marker's forward (%.2f %.2f %.2f) runs across the weapon rather "+
+		t.Errorf("the beam axis (%.2f %.2f %.2f) runs across the weapon rather "+
 			"than along it: |dot| %.3f with (%.2f %.2f %.2f)",
 			ax.X, ax.Y, ax.Z, d, truth.X, truth.Y, truth.Z)
 	}
@@ -190,9 +189,11 @@ func TestMarkerLookupIgnoresStrayWhitespace(t *testing.T) {
 }
 
 // A tube beam that names no second marker has to take its direction from the
-// marker's forward. This is the check that the warrior's tube events really
+// marker's own frame. This is the check that the warrior's tube events really
 // are single-marker, which is why they lean on the frame rather than on a
-// span between two markers.
+// span between two markers — and that the column read is the one the tube
+// runs along, which is MarkerBeamAxis's second column rather than the axis
+// MarkerAxis scores the marker as facing.
 func TestGunTubeBeamEventsNameOnlyOneMarker(t *testing.T) {
 	tree := sgaTree(t)
 	m := sgaModel(t, warriorWhmPath)
@@ -228,14 +229,14 @@ func TestGunTubeBeamEventsNameOnlyOneMarker(t *testing.T) {
 		if m2 >= 0 {
 			continue
 		}
-		ax, aok := m.MarkerAxis(m1, m.RestPose(), true)
+		ax, aok := m.MarkerBeamAxis(m1, m.RestPose(), true)
 		if !aok {
-			t.Errorf("event %q plays at a marker with no forward axis", ev.Name)
+			t.Errorf("event %q plays at a marker with no frame", ev.Name)
 			continue
 		}
 		if d := math.Abs(ax.Dot(truth)); d < 0.9 {
 			t.Errorf("event %q has no second marker, so its beam runs along the "+
-				"marker's forward, which points across the weapon: |dot| %.3f",
+				"marker's frame column two, which points across the weapon: |dot| %.3f",
 				ev.Name, d)
 		}
 	}

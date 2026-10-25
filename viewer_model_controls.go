@@ -27,6 +27,49 @@ const modelDefaultFov = 45.0
 // frame stays on screen; the full quality frame replaces it when the movement
 // stops.
 
+// hiddenMeshes is the set of mesh names the reader has turned off with the
+// eye toggle of the mesh list. It is shared by every viewer so hiding a mesh
+// in the object window's viewport also hides it in a .whm tab showing the
+// same model. The render options are built on the viewer, which has no handle
+// on uiState, so the set lives here rather than on the ui state; names are
+// compared in lower case because a model's mesh casing is not guaranteed
+// consistent between the mesh list and the clips.
+var hiddenMeshes = map[string]bool{}
+
+// setMeshHidden records one mesh as shown or hidden for every viewer.
+func setMeshHidden(name string, hidden bool) {
+	key := strings.ToLower(name)
+	if hidden {
+		hiddenMeshes[key] = true
+	} else {
+		delete(hiddenMeshes, key)
+	}
+}
+
+// meshHidden says whether the reader has turned the named mesh off.
+func meshHidden(name string) bool { return hiddenMeshes[strings.ToLower(name)] }
+
+// modelMeshNames is the model's mesh names, each once, in the order the model
+// declares them. A mesh ships as several sub meshes (one per material) that
+// share a name, so the list de-dupes by name while keeping the first casing
+// — which is the order the eye toggle list wants.
+func modelMeshNames(m *WhmModel) []string {
+	if m == nil {
+		return nil
+	}
+	seen := make(map[string]bool, len(m.Meshes))
+	out := make([]string, 0, len(m.Meshes))
+	for _, mesh := range m.Meshes {
+		key := strings.ToLower(mesh.Name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, mesh.Name)
+	}
+	return out
+}
+
 // meshAlphas is how much of each mesh the clip on show draws at the playhead,
 // for the clips that hide or fade part of a model: the restored monolith
 // holds its pieces back through phase_out, and the Obelisk fades its body in
@@ -35,13 +78,38 @@ const modelDefaultFov = 45.0
 // The map is built per frame rather than kept, because a model has a few dozen
 // meshes at most and one that says nothing is the common case: MeshAlphas
 // returns nil for it, and nil means every mesh is drawn whole.
+//
+// A mesh the reader has hidden with the eye toggle is forced to 0 here, on top
+// of whatever the clip says: both the software and the hardware renderer skip
+// a mesh whose alpha is 0, so this is the one place that turns the toggle into
+// a mesh that is not drawn.
 func (v *modelViewer) meshAlphas() map[string]float32 {
-	if v == nil || v.model == nil || v.anim == nil {
+	if v == nil || v.model == nil {
 		return nil
 	}
-	// The playhead is normalised over the clip, which is the measure the
-	// visibility keys are written in.
-	return v.model.MeshAlphas(v.anim.Name, float32(v.time))
+	var out map[string]float32
+	if v.anim != nil {
+		// The playhead is normalised over the clip, which is the measure the
+		// visibility keys are written in.
+		out = v.model.MeshAlphas(v.anim.Name, float32(v.time))
+	}
+	if len(hiddenMeshes) == 0 {
+		return out
+	}
+	// Force every hidden mesh of this model to 0 by the mesh's own name,
+	// which is how both renderers look it up. A hidden name that belongs to
+	// another model simply is not in this loop.
+	for i := range v.model.Meshes {
+		name := v.model.Meshes[i].Name
+		if !meshHidden(name) {
+			continue
+		}
+		if out == nil {
+			out = map[string]float32{}
+		}
+		out[name] = 0
+	}
+	return out
 }
 
 // The range the three mapping sliders cover. An offset of a whole tile is

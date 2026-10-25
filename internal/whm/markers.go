@@ -330,6 +330,32 @@ func (m *Model) MarkerAxis(i int, pose Pose, boneLocal bool) (fauxgl.Vector, boo
 	return rot.Normalize(), true
 }
 
+// MarkerBeamAxis returns the direction a beam played at marker i runs in: the
+// second column of the marker's own frame, in model space under pose.
+//
+// This is a different question from the one MarkerAxis answers. MarkerAxis
+// says which way a marker was placed to face, scored against the bone it hangs
+// off, and for a beam that is the wrong reading: a beam runs along the tube the
+// marker sits on, not away from its bone. Measured over the 1496 models of the
+// installed Ultimate Apocalypse tree, 63 marker pairs name the two ends of one
+// tube — _base/_muzzle, _base/_end or _start/_end inside a single bone — and
+// this column aligns with the span in all 63 of them, where MarkerAxis manages
+// 3.
+//
+// The necron monolith is where the difference shows. Both its models put the
+// barrel along column two of every gun marker, and MarkerAxis picks column one,
+// so tube_surface_hilight drew its beam athwart the guns; on the hull's corner
+// lights the marker hangs off the root bone, MarkerAxis aims the beam
+// horizontally out of the model, and the file wants it running down the
+// chamfer. Column two is that chamfer.
+func (m *Model) MarkerBeamAxis(i int, pose Pose, boneLocal bool) (fauxgl.Vector, bool) {
+	_, y, _, ok := m.MarkerFrameAxes(i, pose, boneLocal)
+	if !ok {
+		return fauxgl.Vector{}, false
+	}
+	return y, true
+}
+
 // MarkerFrameAxes returns the marker's own X/Y/Z axes in model space under
 // pose. The marker matrix is column-major, so each column is one local axis.
 // Rotations around these axes turn an effect with the marker instead of using

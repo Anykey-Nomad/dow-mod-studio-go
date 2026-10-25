@@ -107,13 +107,18 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 		if v.lastFrame.IsZero() {
 			v.lastFrame = now
 		}
-		frames := maxInt(1, v.anim.NumFrames)
 		dt := now.Sub(v.lastFrame).Seconds()
 		v.lastFrame = now
-		v.time += float32(dt * animFramesPerSecond(v.anim) / float64(frames))
-		if v.time > 1 {
-			v.time -= 1
+		if v.animPlaybackDuration > 0 {
+			v.time += float32(dt / v.animPlaybackDuration)
+		} else {
+			frames := maxInt(1, v.anim.NumFrames)
+			v.time += float32(dt * animFramesPerSecond(v.anim) / float64(frames))
 		}
+		if v.time > 1 {
+			v.time = float32(math.Mod(float64(v.time), 1))
+		}
+		v.poseValid = false
 		v.redraw = true
 	}
 	if v.redraw {
@@ -299,9 +304,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 				dx := float64(e.Position.X - t.sgbRotateLastX)
 				t.sgbRotateLastX = e.Position.X
 				if rotated := sgbRotateEntities(t.sgbMap, v.modelData(), t.sgbEntityMeshIDs, v.animatedEntities, t.sgbSelectedEntities, -dx*0.01); rotated > 0 {
-					if ui.modelGpu != nil {
-						ui.modelGpu.forget(v.model)
-					}
+					ui.geometryChangedModelGpu(v.model)
 					t.sgbObjectMoved = true
 					t.sgbDirty = true
 					v.invalidate()
@@ -319,9 +322,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 						var moved int
 						t.model.animatedEntities, moved = sgbMoveEntitiesOnSurface(t.sgbMap, v.modelData(), t.sgbEntityMeshIDs, v.animatedEntities, t.sgbSelectedEntities, dx, dy)
 						if moved > 0 {
-							if ui.modelGpu != nil {
-								ui.modelGpu.forget(v.model)
-							}
+							ui.geometryChangedModelGpu(v.model)
 							t.sgbObjectMoved = true
 							t.sgbDirty = true
 							v.invalidate()

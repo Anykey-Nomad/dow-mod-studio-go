@@ -310,7 +310,13 @@ func (ui *uiState) handleUnitTabInput(gtx layout.Context) {
 	// Last, because it acts on the section that was just chosen: a press that
 	// left the info section must not be read as a press inside it.
 	ui.handleUnitFieldInput(gtx)
+	// The mesh eye toggles belong to whichever section shows the mesh list —
+	// Events and Classic OE both — so they are drained here rather than
+	// inside the Events handler, which returns early for other sections.
+	ui.handleUnitMeshToggles(gtx)
 	ui.handleUnitEventsInput(gtx)
+	ui.handleClassicOEWheInput(gtx)
+	ui.handleClassicOEClauseConditionInput(gtx)
 }
 
 // ── column geometry ─────────────────────────────────────────────────────────
@@ -338,38 +344,52 @@ func unitColumnWidths(bodyW, leftW, gap, minW int) (left, mid, right int) {
 // worked out in pixels rather than with flex weights, because the middle column
 // is specified as a third of the space and the left one as a fixed menu width.
 func (ui *uiState) layoutUnitBody(gtx layout.Context) layout.Dimensions {
-	gap := gtx.Dp(unit.Dp(unitColGapDp))
-	minW := gtx.Dp(unit.Dp(unitColMinWidthDp))
-	// The card's own padding was already consumed by the caller's inset.
-	// The caller's own padding was already consumed before this was called.
-	leftW, midW, rightW := unitColumnWidths(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(unitLeftColumnDp)), gap, minW)
-	if ui.currentUnitSection().label == unitSectionViewport {
-		// The 3D view takes the middle and right columns together. A model in a
-		// third of the window is a thumbnail, and the cameras the section lists
-		// need a column of their own to be picked out of.
+	// The columns themselves; the material dialog's dim and card wrap them
+	// below, so a double press on a mesh row raises that editor over
+	// whichever section is on show — Viewport and Classic OE both.
+	columns := func(gtx layout.Context) layout.Dimensions {
+		gap := gtx.Dp(unit.Dp(unitColGapDp))
+		minW := gtx.Dp(unit.Dp(unitColMinWidthDp))
+		// The card's own padding was already consumed by the caller's inset.
+		// The caller's own padding was already consumed before this was called.
+		leftW, midW, rightW := unitColumnWidths(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(unitLeftColumnDp)), gap, minW)
+		if ui.currentUnitSection().label == unitSectionViewport {
+			// The 3D view takes the middle and right columns together. A model in a
+			// third of the window is a thumbnail, and the cameras the section lists
+			// need a column of their own to be picked out of.
+			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+				layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
+				layout.Flexed(1, ui.layoutUnitViewportArea),
+			)
+		}
+		if ui.currentUnitSection().label == unitSectionClassicOE {
+			// The classic editor's layout takes the middle and right columns
+			// together for the same reason the Viewport section does: its panel
+			// column plus a model preview needs the room, and a properties panel
+			// beside a preview would squeeze both.
+			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+				layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
+				layout.Flexed(1, ui.layoutClassicOEArea),
+			)
+		}
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 			layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-			layout.Flexed(1, ui.layoutUnitViewportArea),
-		)
-	}
-	if ui.currentUnitSection().label == unitSectionClassicOE {
-		// The classic editor's layout takes the middle and right columns
-		// together for the same reason the Viewport section does: its panel
-		// column plus a model preview needs the room, and a properties panel
-		// beside a preview would squeeze both.
-		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-			layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
+			layout.Rigid(ui.fixedPanel(midW, ui.layoutUnitMiddleColumn)),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-			layout.Flexed(1, ui.layoutClassicOEArea),
+			layout.Rigid(ui.fixedPanel(rightW, ui.layoutUnitRightColumn)),
 		)
 	}
-	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-		layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-		layout.Rigid(ui.fixedPanel(midW, ui.layoutUnitMiddleColumn)),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-		layout.Rigid(ui.fixedPanel(rightW, ui.layoutUnitRightColumn)),
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(columns),
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			if !ui.unitMeshMatOpen {
+				return layout.Dimensions{}
+			}
+			return ui.layoutUnitMeshMatDialog(gtx)
+		}),
 	)
 }
 

@@ -8,10 +8,19 @@
 //	sgafind -sga DXP3/DXP3Data.sga -act check art/fx/vortex_ring.dds
 //	sgafind -sga DXP3/DXP3Data.sga -act extract marked_target_00.tga
 //	sgafind -mod AdvancedCampaign -act check *.tga
+//	sgafind -sga DOWDE/DoWDE.sga -act extract -ext fda
+//	sgafind -sga DOWDE/DoWDE.sga -act extract -ext fda,wav -out unpacked
 //
 // With -mod every archive the module loads is searched, this mod's own
 // folders and archives first and the required mods after it, which is the
 // order the game itself resolves names in.
+//
+// With -ext only files of those formats are taken, whatever names were
+// given; with no names at all, every file of them is. Everything extracted
+// is written under the folders it is filed under inside the archive, its
+// entry point included: a file the archive files as music/example.fda under
+// the entry point data lands in <archive folder>/data/music/example.fda,
+// which is where the game keeps the same file loose. -out moves that root.
 package main
 
 import (
@@ -30,19 +39,25 @@ import (
 func main() {
 	var sgas stringsFlag
 	var actions stringsFlag
+	var exts stringsFlag
 	mod := flag.String("mod", "", "module file or name to resolve the archives from, e.g. AdvancedCampaign")
 
-	out := flag.String("out", "", "where extracted files go; by default beside the archive, keeping its internal folders")
+	out := flag.String("out", "", "where extracted files go; by default beside the archive, keeping its entry point and internal folders")
 	locale := flag.String("locale", "English", "locale used to expand %LOCALE% in a module")
 	force := flag.Bool("force", false, "overwrite files that already exist when extracting")
 	verbose := flag.Bool("v", false, "also print every entry that was walked past")
 	missOnlyVerbose := flag.Bool("miss", false, "only print MISS lines when -v is also set")
 	flag.Var(&sgas, "sga", "archive to search: a path, or a name beside the module (repeatable, or comma separated)")
 	flag.Var(&actions, "act", "what to do: check, extract, list (repeatable, or comma separated). Default check")
+	flag.Var(&exts, "ext", "only take files of these formats: fda or .fda (repeatable, or comma separated)")
 	flag.Parse()
 
 	if len(actions) == 0 {
 		actions = append(actions, "check")
+	}
+	extList, err := normalizeExts(exts)
+	if err != nil {
+		fail("%v", err)
 	}
 
 	names := flag.Args()
@@ -57,8 +72,8 @@ func main() {
 	if err != nil {
 		fail("%v", err)
 	}
-	if len(names) == 0 && !wantList {
-		fail("nothing to look for: give a file or folder name, or -act list")
+	if len(names) == 0 && len(extList) == 0 && !wantList {
+		fail("nothing to look for: give a file or folder name, -ext <format>, or -act list")
 	}
 
 	missing := 0
@@ -78,7 +93,7 @@ func main() {
 			fmt.Printf("%s: %d entries\n", a.path, len(entries))
 		}
 		for _, name := range names {
-			hits := matchEntries(entries, name)
+			hits := filterByExt(matchEntries(entries, name), extList)
 			switch {
 			case len(hits) == 0:
 				if wantCheck && (*missOnlyVerbose && *verbose || !*missOnlyVerbose) {
@@ -86,22 +101,19 @@ func main() {
 					missing++
 				}
 			default:
-				for _, h := range hits {
-					line := fmt.Sprintf("HIT  %-48s %s :: %s (%s)",
-						name, a.path, h.Path, humanSize(h.Size))
-					if wantCheck {
-						fmt.Println(line)
-					}
-					if wantExtract && !h.IsDir {
-						dest, err := extract(f, a, h, *out, *force)
-						if err != nil {
-							fmt.Fprintf(os.Stderr, "FAIL %s: %v\n", h.Path, err)
-							continue
-						}
-						fmt.Println("SAVED", dest)
-					}
+				handleHits(f, a, hits, name, wantCheck, wantExtract, *out, *force)
+			}
+		}
+		// With no names and -ext, every file of the wanted formats is the
+		// selection: the way to unpack a whole format out of an archive.
+		if len(names) == 0 && len(extList) > 0 {
+			var hits []entry
+			for _, e := range entries {
+				if !e.IsDir && matchExt(e.Path, extList) {
+					hits = append(hits, e)
 				}
 			}
+			handleHits(f, a, hits, strings.Join(extList, ","), wantCheck, wantExtract, *out, *force)
 		}
 		f.Close()
 	}
@@ -248,7 +260,8 @@ func parseActions(actions []string) (check, extract, list bool, err error) {
 
 // entry is one file or folder inside an archive.
 type entry struct {
-	Path   string // as it is filed inside the archive, slash separated
+	Path   string // as it is filed under its entry point, slash separated
+	Root   string // the entry point (ToC alias) the file sits under
 	FileID int
 	Size   int64
 	IsDir  bool
@@ -259,8 +272,8 @@ type entry struct {
 // can be a file in it or a whole branch of it.
 func indexArchive(f *sga.SGAFile, a archive, verbose bool) []entry {
 	var out []entry
-	var walk func(dir int, prefix string, depth int)
-	walk = func(dir int, prefix string, depth int) {
+	var walk func(dir int, prefix string, depth int, alias string)
+	walk = func(dir int, prefix string, depth int, alias string) {
 		if depth > 32 {
 			return
 		}
@@ -274,13 +287,13 @@ func indexArchive(f *sga.SGAFile, a archive, verbose bool) []entry {
 				p = prefix + "/" + e.Name
 			}
 			if e.IsDir {
-				out = append(out, entry{Path: p, IsDir: true})
-				walk(e.DirID, p, depth+1)
+				out = append(out, entry{Path: p, Root: alias, IsDir: true})
+				walk(e.DirID, p, depth+1, alias)
 				continue
 			}
-			out = append(out, entry{Path: p, FileID: e.FileID, Size: e.Size})
+			out = append(out, entry{Path: p, Root: alias, FileID: e.FileID, Size: e.Size})
 			if verbose {
-				fmt.Printf("  %-10s %s\n", humanSize(e.Size), p)
+				fmt.Printf("  %-10s %s/%s\n", humanSize(e.Size), alias, p)
 			}
 		}
 	}
@@ -289,7 +302,11 @@ func indexArchive(f *sga.SGAFile, a archive, verbose bool) []entry {
 		if err != nil {
 			continue
 		}
-		walk(root, "", 0)
+		alias := f.ToCName(t)
+		if alias == "" {
+			alias = "Data"
+		}
+		walk(root, "", 0, alias)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
@@ -371,9 +388,11 @@ func matchEntries(entries []entry, name string) []entry {
 }
 
 // extract writes one entry out, into the folder the archive sits in and under
-// the folders it is filed under inside: an archive of art/fx/... unpacks to
-// <archive folder>/art/fx/... exactly as the game lays it down. -out replaces
-// that root, and -force overwrites what is already there.
+// the folders it is filed under inside, its entry point included: a file the
+// archive files as art/fx/... under the entry point data unpacks to
+// <archive folder>/data/art/fx/..., which is where the game keeps the same
+// file loose. -out replaces that root, and -force overwrites what is already
+// there.
 func extract(f *sga.SGAFile, a archive, e entry, out string, force bool) (string, error) {
 	data, err := f.ReadFile(e.FileID)
 	if err != nil {
@@ -383,7 +402,7 @@ func extract(f *sga.SGAFile, a archive, e entry, out string, force bool) (string
 	if out != "" {
 		root = out
 	}
-	dest := filepath.Join(root, filepath.FromSlash(e.Path))
+	dest := filepath.Join(root, filepath.FromSlash(e.Root), filepath.FromSlash(e.Path))
 	if st, err := os.Stat(dest); err == nil && !st.IsDir() {
 		if !force && st.Size() == int64(len(data)) {
 			return dest, fmt.Errorf("already there")
@@ -400,6 +419,77 @@ func extract(f *sga.SGAFile, a archive, e entry, out string, force bool) (string
 		return "", err
 	}
 	return dest, nil
+}
+
+// handleHits reports and extracts the entries one name, or one -ext
+// selection, stands for.
+func handleHits(f *sga.SGAFile, a archive, hits []entry, name string, wantCheck, wantExtract bool, out string, force bool) {
+	for _, h := range hits {
+		line := fmt.Sprintf("HIT  %-48s %s :: %s (%s)",
+			name, a.path, h.Path, humanSize(h.Size))
+		if wantCheck {
+			fmt.Println(line)
+		}
+		if wantExtract && !h.IsDir {
+			dest, err := extract(f, a, h, out, force)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "FAIL %s: %v\n", h.Path, err)
+				continue
+			}
+			fmt.Println("SAVED", dest)
+		}
+	}
+}
+
+// filterByExt drops the entries that are not of the wanted formats. With no
+// formats given it is the identity, so name matching works unchanged.
+func filterByExt(hits []entry, exts []string) []entry {
+	if len(exts) == 0 {
+		return hits
+	}
+	out := hits[:0]
+	for _, h := range hits {
+		if h.IsDir || matchExt(h.Path, exts) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// matchExt reports whether a path ends in one of the wanted formats.
+func matchExt(p string, exts []string) bool {
+	lp := strings.ToLower(p)
+	for _, e := range exts {
+		if strings.HasSuffix(lp, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeExts turns what was typed into lower-case extensions with their
+// dot, so fda, .FDA and .fda are all the same format.
+func normalizeExts(in []string) ([]string, error) {
+	var out []string
+	seen := map[string]bool{}
+	for _, raw := range in {
+		e := strings.ToLower(strings.TrimSpace(raw))
+		e = strings.TrimPrefix(e, "*")
+		if e == "" {
+			continue
+		}
+		if !strings.HasPrefix(e, ".") {
+			e = "." + e
+		}
+		if strings.ContainsAny(e, `/\`) || strings.Contains(e, "..") {
+			return nil, fmt.Errorf("bad format %q", raw)
+		}
+		if !seen[e] {
+			seen[e] = true
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }
 
 func humanSize(n int64) string {

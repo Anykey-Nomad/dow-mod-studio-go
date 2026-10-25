@@ -118,7 +118,8 @@ type FxSim struct {
 	// keeps the FX file's own frame instead of inheriting its model marker's
 	// orientation.
 	NoRotate bool
-	// Axis is the authored emission direction in renderer-local space.
+	// Axis is the authored emission direction in the effect's own Y-up
+	// frame; the marker frame carries it into model space.
 	Axis      fauxgl.Vector
 	Anchored  []Visual // leaf effects that hang at the origin on their own
 	BeamNodes []Beam   // STYLE_BEAM nodes, drawn between the event's markers
@@ -154,10 +155,12 @@ func NewFxSim(f *FxFile) *FxSim {
 		return s
 	}
 	s.NoRotate = root.Bool("No_Rotate", false)
-	// The root emitter's authored direction is the spray's local axis;
-	// default to +Z only when a file does not declare it.
+	// The root emitter's authored direction is the spray's local axis, taken
+	// as the file writes it: every other local vector below is read in the
+	// same Y-up frame, and the marker frame (or fxFallbackFrame when the
+	// event names none) is what turns the lot into model space.
 	if p, ok := root.Prop("Emitter_Direction"); ok && p.Tuple.Length() > 1e-6 {
-		s.Axis = FileVec(p.Tuple).Normalize()
+		s.Axis = p.Tuple.Normalize()
 	}
 	// add reads one node into the simulation, recursing through the combos
 	// that hold others.
@@ -482,43 +485,22 @@ func (s *FxSim) Step(dt float64) {
 		p.Vel[0] *= damp
 		p.Vel[1] *= damp
 		p.Vel[2] *= damp
-		// Models are authored Z up, so gravity pulls on Z. Particle_Gravity
+		// Particles live in the effect file's own Y-up frame, the same frame
+		// its Volume and Offset are written in, so gravity pulls on Y here
+		// and the attachment frame tilts it with the marker. Particle_Gravity
 		// is an acceleration in model units per second: across the shipped
 		// effects it is either 0 or exactly 1, and a unit a second is gentle
 		// next to the launch speeds of several units a second the same files
 		// write. Reading it as a per frame step made a particle fall sixty
 		// times too fast, which is what put a plasma generator's core glow
 		// several body lengths below the building instead of inside it.
-		p.Vel[2] -= p.grav * dt
+		p.Vel[1] -= p.grav * dt
 		p.Pos[0] += p.Vel[0] * dt
 		p.Pos[1] += p.Vel[1] * dt
 		p.Pos[2] += p.Vel[2] * dt
 		kept = append(kept, *p)
 	}
 	s.Particles = kept
-}
-
-// FileVec turns a vector the FX files wrote into the renderer's own axes.
-//
-// These files are written Y up and this renderer is Z up, so the second
-// component is the vertical one. It is the same swap the reference importer
-// makes on a mesh vertex, where it reads the triple as (x, z, y): the stored
-// order is horizontal, up, horizontal.
-//
-// A ground cloud settles it. death_dust_02 writes Emitter_Volume as (6, 0, 6)
-// — the zero in the second component, a slab lying flat — and Emitter_Offset
-// rising -2 to +1 along that same second component. Flat along an axis and
-// climbing along it only reads as dust off the ground if that axis is up.
-// Left alone the volume stands on edge as a wall and the offset walks the
-// cloud sideways across the ground, which is what it did. This is only an axis
-// permutation: neither this conversion nor the reference Blender importer
-// applies a global unit multiplier, so FX dimensions stay in the model's
-// authored coordinate units.
-//
-// The signs carry through: an offset of -2 down the file's up axis is 2 below
-// its marker, and must stay below after the swap.
-func FileVec(v fauxgl.Vector) fauxgl.Vector {
-	return fauxgl.Vector{X: v.X, Y: v.Z, Z: v.Y}
 }
 
 // spawn births one particle inside the emitter's authored direction cone.
@@ -539,7 +521,10 @@ func (s *FxSim) Spawn(e *Emitter) {
 	dirZ := math.Cos(tilt)
 	axis := s.Axis
 	if axis.Length() < 1e-6 {
-		axis = fauxgl.Vector{Z: 1}
+		// The effects are authored Y up, so a spray that names no direction
+		// of its own emits up that axis, which the frame turns into the
+		// model's own up.
+		axis = fauxgl.Vector{Y: 1}
 	}
 	axis = axis.Normalize()
 	help := fauxgl.Vector{Z: 1}
@@ -551,16 +536,13 @@ func (s *FxSim) Spawn(e *Emitter) {
 	direction := right.MulScalar(dirX).Add(up.MulScalar(dirY)).Add(axis.MulScalar(dirZ))
 	// A particle is born inside the emitter's box, not at its centre: a
 	// ground cloud spread over Emitter_Volume is the whole difference
-	// between a puff and a volume of dust.
+	// between a puff and a volume of dust. Both vectors stay in the file's
+	// Y-up frame; the attachment frame is what lays them into the model, so
+	// converting them here as well would swap the vertical onto a
+	// horizontal axis and make a falling ring drift sideways.
 	phase := fxEmitterPhase(e)
 	vol, volOK := vec3Sample(e.Volume, phase)
 	off, offOK := vec3Sample(e.Offset, phase)
-	if volOK {
-		vol = FileVec(vol)
-	}
-	if offOK {
-		off = FileVec(off)
-	}
 	var px, py, pz float64
 	if volOK {
 		px += (rnd(22695477, 0xffff)*2 - 1) * vol.X
@@ -588,8 +570,9 @@ func (s *FxSim) Spawn(e *Emitter) {
 
 }
 
-// Sprite is one thing to draw this frame: a billboarded disc at a model
-// space position, with the size in model units.
+// Sprite is one thing to draw this frame: a billboarded disc at a position
+// in the effect's own Y-up frame, with the size in model units. The marker
+// frame the effect is attached to maps the position into model space.
 type Sprite struct {
 	Pos      [3]float64
 	Radius   float64

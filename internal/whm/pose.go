@@ -54,6 +54,58 @@ func (m *Model) PoseAt(anim *Animation, t float32) Pose {
 	return m.PoseAtWithFrame(anim, t, fauxgl.Identity())
 }
 
+// PoseAtAnimations evaluates several clips at the same normalized time. Tracks
+// for different bones are composed into one pose; when clips key the same bone,
+// the later clip takes precedence.
+func (m *Model) PoseAtAnimations(anims []*Animation, t float32) Pose {
+	times := make([]float32, len(anims))
+	for i := range times {
+		times[i] = t
+	}
+	return m.PoseAtAnimationTimes(anims, times)
+}
+
+// PoseAtAnimationTimes combines clips sampled at their own normalized times.
+// Tracks for different bones compose into one pose; if clips key the same bone,
+// the later clip takes precedence.
+func (m *Model) PoseAtAnimationTimes(anims []*Animation, times []float32) Pose {
+	if m == nil {
+		return Pose{}
+	}
+	if len(anims) == 0 {
+		return m.RestPose()
+	}
+	locals := make([]fauxgl.Matrix, len(m.Bones))
+	for i, bone := range m.Bones {
+		locals[i] = boneMatrix(bone.Pos, bone.Quat)
+	}
+	for clipIndex, anim := range anims {
+		if anim == nil {
+			continue
+		}
+		clipTime := float32(0)
+		if clipIndex < len(times) {
+			clipTime = clampFloat32(times[clipIndex], 0, 1)
+		}
+		for _, track := range anim.Bones {
+			if track.Bone < 0 || track.Bone >= len(m.Bones) {
+				continue
+			}
+			bone := m.Bones[track.Bone]
+			locals[track.Bone] = boneMatrix(
+				sampleVec3(track.PosKey, clipTime, bone.Pos),
+				sampleQuat(track.RotKey, clipTime, bone.Quat),
+			)
+		}
+	}
+	bind := m.accumulate(nil)
+	pose := Pose{Bones: m.accumulate(locals), BindInv: make([]fauxgl.Matrix, len(m.Bones))}
+	for i := range bind {
+		pose.BindInv[i] = safeInverse(bind[i])
+	}
+	return pose
+}
+
 // PoseAtWithFrame evaluates animation relative to a placement's world matrix.
 // Bind inverses are calculated before the frame is applied, preserving each
 // copy's bind pose while moving all animated bones with its placement.

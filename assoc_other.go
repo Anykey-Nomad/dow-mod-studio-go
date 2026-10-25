@@ -7,9 +7,15 @@ import (
 	"path/filepath"
 )
 
-func isModuleAssociated() (bool, string, error) { return false, "", nil }
-func registerModuleAssociation() error          { return nil }
-func unregisterModuleAssociation() error        { return nil }
+// File associations are a Windows feature here: the registry machinery lives
+// in assoc_windows.go, and these stubs keep the shared callers compiling. The
+// settings dialog hides its association section when supported() is false.
+
+func associationsSupported() bool { return false }
+
+func isExtAssociated(t assocType) (bool, string, error) { return false, "", nil }
+func registerExtAssociation(t assocType) error          { return nil }
+func unregisterExtAssociation(t assocType) error        { return nil }
 
 // getExePath returns the absolute path of the current executable.
 func getExePath() string {

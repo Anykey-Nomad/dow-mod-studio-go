@@ -17,6 +17,7 @@ import (
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/unit"
+	"gioui.org/widget"
 )
 
 // wheelNotchDelta is the magnitude of one click of a mouse wheel, which is
@@ -277,6 +278,10 @@ func (ui *uiState) openSettingsDialog() {
 	ui.settingsGameEditor.SetText(ui.gamePath)
 	ui.settingsFormatOriginal = formatTextFormats(ui.textEditorFormats)
 	ui.settingsFormatEditor.SetText(ui.settingsFormatOriginal)
+	// The association buttons are one per format, and what a click would do
+	// depends on the registry right now, so the rows are sized and read here.
+	ui.assocClicks = make([]widget.Clickable, len(assocTypes))
+	ui.refreshAssocStates()
 	ui.settingsDialog = true
 }
 
@@ -709,6 +714,11 @@ func (ui *uiState) handleInput(gtx layout.Context) {
 			ui.darkTheme = !ui.darkTheme
 			applyMaterialTheme(ui.th, ui.darkTheme)
 			ui.markStateDirty()
+		}
+		for i := range ui.assocClicks {
+			if ui.assocClicks[i].Clicked(gtx) {
+				ui.toggleAssociation(i)
+			}
 		}
 		if ui.settingsOk.Clicked(gtx) {
 			ui.gamePath = strings.TrimSpace(ui.settingsGameEditor.Text())

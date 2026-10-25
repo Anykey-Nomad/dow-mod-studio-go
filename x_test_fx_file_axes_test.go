@@ -13,7 +13,7 @@ import (
 // Emitter_Volume is (6, 0, 6) — the zero on the file's second component — and
 // its Emitter_Offset climbs -2 to +1 along that same component. Flat along an
 // axis and climbing along it only reads as a dust cloud off the ground if that
-// axis is the vertical one.
+// axis is up, and up is the effect's own Y.
 const deathDustFile = "necron/structures/summoning_core/death_dust_02.lua"
 
 // dustEmitter parses the reference effect and returns its root emitter.
@@ -30,10 +30,15 @@ func dustEmitter(t *testing.T) *fx.FxSim {
 	return sim
 }
 
-// The FX files are written Y up and this renderer is Z up, so a ground cloud
-// has to end up lying flat in the renderer's own ground plane with nothing
-// along Z. Reading the volume the other way stood it on edge as a wall and
-// sent the offset sideways, which is what the viewport showed.
+// FX vectors are authored in the effect's own Y-up frame and stay there
+// through the simulation; the frame the effect is attached to is what turns
+// them into model space. The marker-less effect uses fxFallbackFrame, whose
+// second axis is the world's up, so a ground cloud is flat along the file's Y
+// and, once mapped, flat in the renderer's ground plane as well.
+//
+// Converting the vectors inside the simulation instead was the double swap
+// that made a falling spray drift sideways: its vertical had already become
+// the model's Z, and the frame then turned that onto a horizontal axis.
 func TestShippedGroundDustLiesFlatInTheRenderersGroundPlane(t *testing.T) {
 	sim := dustEmitter(t)
 
@@ -43,58 +48,75 @@ func TestShippedGroundDustLiesFlatInTheRenderersGroundPlane(t *testing.T) {
 	for i := 0; i < batch; i++ {
 		sim.Spawn(&sim.Emitters[0])
 	}
-	var minZ, maxZ float64 = math.Inf(1), math.Inf(-1)
+	minLocal, maxLocal := math.Inf(1), math.Inf(-1)
+	minWorld, maxWorld := math.Inf(1), math.Inf(-1)
 	for _, p := range sim.Particles {
-		if p.Pos[2] < minZ {
-			minZ = p.Pos[2]
+		if p.Pos[1] < minLocal {
+			minLocal = p.Pos[1]
 		}
-		if p.Pos[2] > maxZ {
-			maxZ = p.Pos[2]
+		if p.Pos[1] > maxLocal {
+			maxLocal = p.Pos[1]
+		}
+		world := fxFallbackFrame[0].MulScalar(p.Pos[0]).
+			Add(fxFallbackFrame[1].MulScalar(p.Pos[1])).
+			Add(fxFallbackFrame[2].MulScalar(p.Pos[2]))
+		if world.Z < minWorld {
+			minWorld = world.Z
+		}
+		if world.Z > maxWorld {
+			maxWorld = world.Z
 		}
 	}
-	if thickness := maxZ - minZ; thickness > 1e-6 {
-		t.Errorf("dust cloud is %.3f thick along the renderer's up axis, want flat: "+
-			"the volume's zero extent must land on Z, not on Y", thickness)
+	if thickness := maxLocal - minLocal; thickness > 1e-6 {
+		t.Errorf("dust cloud is %.3f thick along the effect's up axis, want flat: "+
+			"the volume's zero extent must land on Y, not on X or Z", thickness)
+	}
+	if thickness := maxWorld - minWorld; thickness > 1e-6 {
+		t.Errorf("dust cloud is %.3f thick along the world's up axis, want flat: "+
+			"the fallback frame must carry the file's Y onto Z", thickness)
 	}
 }
 
-// The swap has to carry the offset's sign too: -2 down the file's up axis is
-// below the marker, not above it.
-func TestShippedDustOffsetKeepsItsSignAcrossTheAxisSwap(t *testing.T) {
-	keys := dustEmitter(t).Emitters[0].Offset
+// The offset's sign carries through the authored frame too: -2 down the file's
+// up axis is below the marker, not above it.
+func TestShippedDustOffsetKeepsItsSignOnTheUpAxis(t *testing.T) {
+	sim := dustEmitter(t)
+	keys := sim.Emitters[0].Offset
 	if len(keys) == 0 {
-		t.Fatal("the emitter carries no Emitter_Offset to convert")
+		t.Fatal("the emitter carries no Emitter_Offset to read")
 	}
-	got := fx.FileVec(fauxgl.Vector{X: keys[0].X, Y: keys[0].Y, Z: keys[0].Z})
-	if got.Z >= 0 {
-		t.Errorf("Emitter_Offset start (%.2f, %.2f, %.2f) converts to Z=%.2f, want the "+
-			"file's -2 down-axis to stay below the marker after the swap",
-			keys[0].X, keys[0].Y, keys[0].Z, got.Z)
+	if keys[0].Y >= 0 {
+		t.Errorf("Emitter_Offset start (%.2f, %.2f, %.2f) is not negative on the file's "+
+			"up axis, so the dust cannot start below its marker",
+			keys[0].X, keys[0].Y, keys[0].Z)
+	}
+	sim.Emitters[0].Age = 0
+	sim.Spawn(&sim.Emitters[0])
+	if got := sim.Particles[len(sim.Particles)-1].Pos[1]; got >= 0 {
+		t.Errorf("a particle was born at Y=%.2f, want the file's negative offset to put it "+
+			"below the emitter instead of above it", got)
 	}
 }
 
 // The volume is the cleanest statement of the convention: the shipped ground
-// effect writes its zero on the second component, and that zero has to arrive
-// on the renderer's up axis with both horizontal extents intact.
+// effect writes its zero on the second component, and that zero has to stay on
+// the effect's Y axis with both horizontal extents intact.
 func TestShippedDustVolumeZeroLandsOnTheUpAxis(t *testing.T) {
 	vol := dustEmitter(t).Emitters[0].Volume
 	if len(vol) == 0 {
 		t.Skip("death_dust_02 declares no Emitter_Volume")
 	}
-	got := fx.FileVec(fauxgl.Vector{X: vol[0].X, Y: vol[0].Y, Z: vol[0].Z})
-	if got.Z != 0 {
+	if vol[0].Y != 0 {
 		t.Errorf("Emitter_Volume (%.2f, %.2f, %.2f) has its zero on the file's second "+
-			"component, so after the swap the slab stands on edge at Z=%.2f, want Z=0",
-			vol[0].X, vol[0].Y, vol[0].Z, got.Z)
+			"component, so the slab has to stay flat along Y at %.2f",
+			vol[0].X, vol[0].Y, vol[0].Z, vol[0].Y)
 	}
-	if got.X == 0 || got.Y == 0 {
-		t.Errorf("converted volume (%.2f, %.2f, %.2f) lost its flat spread, want both "+
-			"horizontal extents kept", got.X, got.Y, got.Z)
+	if vol[0].X == 0 || vol[0].Z == 0 {
+		t.Errorf("volume (%.2f, %.2f, %.2f) lost its flat spread, want both horizontal "+
+			"extents kept", vol[0].X, vol[0].Y, vol[0].Z)
 	}
 }
 
-// fx.FileVec is a swap of the second and third components: the FX files keep
-// their vertical on the second one and the renderer keeps its own on the third.
 func TestFxGroundClassificationUsesEventAndPathHints(t *testing.T) {
 	cases := []struct {
 		name string
@@ -130,26 +152,19 @@ func TestGroundFXOriginKeepsHorizontalAttachment(t *testing.T) {
 	}
 }
 
-func TestFxFileVecMovesTheSecondComponentOntoUp(t *testing.T) {
-	got := fx.FileVec(fauxgl.Vector{X: 1, Y: 2, Z: 3})
-	want := fauxgl.Vector{X: 1, Y: 3, Z: 2}
-	if got != want {
-		t.Errorf("fx.FileVec((1,2,3)) = %+v, want %+v", got, want)
-	}
-}
-
 // A beam's Arc and Offset are written by the same files as the emitter's
-// volume and offset, so they are converted the same way. This one used to go
-// into the ribbon raw, on a note that said most beams write their arc on Y;
-// across the shipped effects no arc is written on a single axis at all, and
-// where one is written on all three the third is the largest every time.
-func TestShippedBeamArcIsConvertedIntoTheRenderersAxes(t *testing.T) {
+// volume and offset, so they are local vectors in the same Y-up frame. The
+// simulation leaves them as authored and the attachment frame maps them into
+// model space; converting them here as well is exactly the second swap that
+// laid a vertical spray along the ground.
+func TestShippedBeamArcIsMappedByTheAttachmentFrame(t *testing.T) {
 	// aspect_lightning_prod writes Arc (0.16866, 0.44179, 0.67612): its third
-	// component is the largest, which is the file's depth, so once converted
-	// it has to be the renderer's Y and the bow has to stay a real bow rather
-	// than collapsing onto the beam's own length. Its beam also sits under a
-	// spray, so this doubles as the check that the walk descends into one.
-	file := "aspect_lightning_prod.lua"
+	// component is the largest, which is the file's depth, so the frame has to
+	// carry it onto the world's Y and keep the bow across a vertical beam
+	// rather than collapsing it onto the beam's own length. Its beam also
+	// sits under a spray, so this doubles as the check that the walk
+	// descends into one.
+	const file = "aspect_lightning_prod.lua"
 	f, err := fx.ParseFxLua(readFxLua(t, file))
 	if err != nil {
 		t.Fatalf("%s does not parse: %v", file, err)
@@ -159,31 +174,27 @@ func TestShippedBeamArcIsConvertedIntoTheRenderersAxes(t *testing.T) {
 		t.Fatalf("%s carries a STYLE_BEAM node the simulation never collected", file)
 	}
 	b := &sim.BeamNodes[0]
+	if len(b.Arc) == 0 {
+		t.Fatalf("%s no longer writes an Arc to test", file)
+	}
 
 	from := fauxgl.Vector{X: 0, Y: 0, Z: 0}
 	to := fauxgl.Vector{X: 0, Y: 0, Z: 8}
 	rb := fx.NewBeamRibbon(*b, from, to, 0, true)
-	if rb.Arc.Length() < 1e-6 {
-		t.Fatal("the beam came out with no arc at all")
+	authored := b.Arc[0]
+	if got, want := rb.Arc, (fauxgl.Vector{X: authored.X, Y: authored.Y, Z: authored.Z}); got != want {
+		t.Errorf("the beam's arc came out as %+v, want the authored local vector %+v", got, want)
 	}
-	// A beam running straight up spends any arc written along the file's
-	// depth on its own length. The part across the span is what is left, and
-	// it is the whole of what the arc means.
+	// Mapped the way the overlay maps it, the arc has to keep a component
+	// across the span of a vertical beam.
+	mapped := fxFallbackFrame[0].MulScalar(rb.Arc.X).
+		Add(fxFallbackFrame[1].MulScalar(rb.Arc.Y)).
+		Add(fxFallbackFrame[2].MulScalar(rb.Arc.Z))
 	dir := to.Sub(from).Normalize()
-	bow := rb.Arc.Sub(dir.MulScalar(rb.Arc.Dot(dir)))
+	bow := mapped.Sub(dir.MulScalar(mapped.Dot(dir)))
 	if bow.Length() < 1e-6 {
-		t.Errorf("arc %+v lies entirely along the span of a vertical beam, so the "+
-			"ribbon draws straight: the file's axes were not converted", rb.Arc)
-	}
-
-	// And the offset, which shifts where the beam starts, converts with it.
-	off := sim.BeamNodes[0].Offset
-	if len(off) > 0 {
-		got := fx.FileVec(fauxgl.Vector{X: off[0].X, Y: off[0].Y, Z: off[0].Z})
-		if got.Z == 0 && off[0].Y != 0 {
-			t.Errorf("Emitter offset (%.2f, %.2f, %.2f) has its only vertical on the "+
-				"file's second axis and lost it: converted %+v", off[0].X, off[0].Y, off[0].Z, got)
-		}
+		t.Errorf("arc %+v lies entirely along the span of a vertical beam after mapping, so "+
+			"the ribbon draws straight: the attachment frame was not applied", rb.Arc)
 	}
 }
 

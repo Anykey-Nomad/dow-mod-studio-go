@@ -132,11 +132,34 @@ func (ui *uiState) unitModelSideControls(gtx layout.Context) layout.Dimensions {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Playback") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelTransport(gtx, t) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelToggles(gtx, t) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelSelectionToggle(gtx, v) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelListTabs(gtx, t) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Cameras") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitCameraList(gtx, v) }),
 	)
+}
+
+func (ui *uiState) unitModelSelectionToggle(gtx layout.Context, v *modelViewer) layout.Dimensions {
+	if v == nil {
+		return layout.Dimensions{}
+	}
+	ui.syncUnitSelectionIndicator(v)
+	if v.selectionIndicator == nil {
+		return layout.Dimensions{}
+	}
+	if ui.classicOESelectedUIVisible == nil {
+		ui.classicOESelectedUIVisible = &widget.Bool{Value: v.showSelection}
+	} else if ui.classicOESelectedUIVisible.Value != v.showSelection {
+		ui.classicOESelectedUIVisible.Value = v.showSelection
+	}
+	check := material.CheckBox(ui.th, ui.classicOESelectedUIVisible, "Show selection outline")
+	check.TextSize = unit.Sp(9)
+	if ui.classicOESelectedUIVisible.Update(gtx) {
+		v.showSelection = ui.classicOESelectedUIVisible.Value
+		v.invalidate()
+	}
+	return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, check.Layout)
 }
 
 // unitModelSideEmpty is what the controls area shows when no model is loaded.
@@ -184,7 +207,7 @@ func (ui *uiState) unitModelSideBody(gtx layout.Context) layout.Dimensions {
 			return ui.unitClipOrMarkerSection(gtx, v)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if ui.unitFXListMode {
+			if ui.unitFXListMode || ui.unitMeshListMode {
 				return layout.Dimensions{}
 			}
 			return ui.unitImportSection(gtx, v)
@@ -308,10 +331,13 @@ func (ui *uiState) unitModelFXRow(gtx layout.Context, t *fileTab) layout.Dimensi
 
 func (ui *uiState) unitModelListTabs(gtx layout.Context, t *fileTab) layout.Dimensions {
 	ui.handleUnitModelListTabClicks(gtx, t)
-	labels := []string{"Animations", "Markers", "Bones", "FX"}
+	labels := []string{"Animations", "Markers", "Bones", "FX", "Meshes"}
 	selected := ui.unitListMode
 	if ui.unitFXListMode {
 		selected = 3
+	}
+	if ui.unitMeshListMode {
+		selected = 4
 	}
 	return ui.modelListTabButtons(gtx, labels, ui.unitListTabClicks[:], selected)
 }
@@ -321,6 +347,7 @@ func (ui *uiState) handleUnitModelListTabClicks(gtx layout.Context, t *fileTab) 
 	for i := range ui.unitListTabClicks {
 		if ui.unitListTabClicks[i].Clicked(gtx) {
 			ui.unitFXListMode = i == 3
+			ui.unitMeshListMode = i == 4
 			if i < 3 {
 				ui.unitListMode = i
 			}
@@ -417,16 +444,37 @@ func (ui *uiState) unitAnimListWithClicks(gtx layout.Context, v *modelViewer, cl
 }
 
 // unitClipOrMarkerSection is the one section of the panel that holds the
-// clip list, marker list, bone list, or FX list. All four are lists of the
-// same model's contents, and all have to be reachable while looking at the
-// others: which clip plays an effect is a marker question, which marker a
-// beam leaves is a clip question, and a bone sits under both.
+// clip list, marker list, bone list, FX list, or mesh list. All five are
+// lists of the same model's contents, and all have to be reachable while
+// looking at the others: which clip plays an effect is a marker question,
+// which marker a beam leaves is a clip question, and a bone sits under both.
 //
 // The header says which list is on show; the button that swaps it lives in
 // the Playback strip above, which never scrolls away.
 func (ui *uiState) unitClipOrMarkerSection(gtx layout.Context, v *modelViewer) layout.Dimensions {
+	if ui.unitMeshListMode {
+		return ui.unitMeshListSection(gtx, v)
+	}
 	return ui.unitModelListSectionOrFX(gtx, v, ui.unitListMode, ui.unitFXListMode,
 		&ui.unitAnimClicks, &ui.unitMarkerClicks, &ui.unitBoneClicks, &ui.unitFXClicks)
+}
+
+// unitMeshListSection is the Meshes tab of the side panel: the count header
+// over the same eye-toggle rows the Events and Classic OE panels draw, so a
+// mesh hidden here is hidden in every viewer of this model. The rows carry no
+// scroller of their own — the side panel's body, which holds this section, is
+// already scrolled.
+func (ui *uiState) unitMeshListSection(gtx layout.Context, v *modelViewer) layout.Dimensions {
+	count := 0
+	if v != nil && v.model != nil {
+		count = len(modelMeshNames(v.model))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return sectionHeader(gtx, ui.th, fmt.Sprintf("Meshes (%d)", count))
+		}),
+		layout.Rigid(ui.unitMeshRows),
+	)
 }
 
 func (ui *uiState) unitModelListContent(gtx layout.Context, t *fileTab, mode int) layout.Dimensions {
@@ -2325,6 +2373,15 @@ func (ui *uiState) unitBoneKeyRow(gtx layout.Context, c *widget.Clickable, selec
 // unitViewportRow is one selectable line of the camera panel: the name, and a
 // dimmer note on the right that says what it is.
 func (ui *uiState) unitViewportRow(gtx layout.Context, c *widget.Clickable, selected bool, name, note string) layout.Dimensions {
+	return ui.unitViewportRowIcon(gtx, c, selected, name, note, nil, false)
+}
+
+// unitViewportRowIcon is unitViewportRow with an optional icon column before
+// the name. A list that shows an icon for every row — the Classic OE's
+// Actions folder — reserves the column whether or not a row's icon was found
+// (iconCol), so its names stay in one line; a list whose icons come and go
+// passes iconCol false and shows them as they come.
+func (ui *uiState) unitViewportRowIcon(gtx layout.Context, c *widget.Clickable, selected bool, name, note string, icon image.Image, iconCol bool) layout.Dimensions {
 	bg := cPanelBg
 	switch {
 	case selected:
@@ -2347,6 +2404,14 @@ func (ui *uiState) unitViewportRow(gtx layout.Context, c *widget.Clickable, sele
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if icon == nil && !iconCol {
+								return layout.Dimensions{}
+							}
+							return layout.Inset{Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								return unitIconLayout(gtx, icon, 24, 18)
+							})
+						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.th, unit.Sp(10), unitViewportRowText(name))
 							l.Color = cText

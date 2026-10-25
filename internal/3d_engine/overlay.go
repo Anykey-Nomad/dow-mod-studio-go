@@ -14,6 +14,16 @@ type OverlayOptions struct {
 	Skeleton   bool
 	Marker     *int
 	PickedBone *int
+	Selection  *SelectionIndicator
+}
+
+// SelectionIndicator is the DATASEUI selection circle/rectangle. Scale is its
+// X/Z half-extent on the ground plane and Offset is the X/Z displacement from
+// the model origin; renderer coordinates are Z-up, with the ground at Z=0.
+type SelectionIndicator struct {
+	DisplayType int32
+	Scale       [2]float32
+	Offset      [2]float32
 }
 
 // OverlayLine is a model-space segment shared by software and hardware renderers.
@@ -64,6 +74,9 @@ func OverlayLines(model *whm.Model, pose whm.Pose, opts OverlayOptions) []Overla
 		return nil
 	}
 	var out []OverlayLine
+	if opts.Selection != nil {
+		out = append(out, SelectionIndicatorLines(model, *opts.Selection, opts.Camera)...)
+	}
 	if opts.Skeleton && len(model.Bones) > 0 {
 		half := OverlayHalfWidth(opts, skeletonPixels)
 		for i, bone := range model.Bones {
@@ -98,6 +111,50 @@ func OverlayLines(model *whm.Model, pose whm.Pose, opts OverlayOptions) []Overla
 		}
 	}
 	return append(out, MarkerOverlayLines(model, pose, opts)...)
+}
+
+// SelectionIndicatorLines builds the DATASEUI ring or rectangle on the model's
+// ground plane. The stored scales are already half-extents: the NPC Necron
+// Monolith's 5.33 x 4.45 values match its model's 10.63 x 8.90 footprint.
+func SelectionIndicatorLines(model *whm.Model, selection SelectionIndicator, camera Camera) []OverlayLine {
+	if model == nil || selection.DisplayType < 0 || selection.DisplayType > 1 {
+		return nil
+	}
+	rx, ry := math.Abs(float64(selection.Scale[0])), math.Abs(float64(selection.Scale[1]))
+	cx, cy := float64(selection.Offset[0]), float64(selection.Offset[1])
+	if rx < 1e-4 || ry < 1e-4 || math.IsInf(rx, 0) || math.IsInf(ry, 0) || math.IsNaN(cx) || math.IsNaN(cy) {
+		return nil
+	}
+	const segments = 48
+	const lineWidthPixels = 1.25
+	cameraOptions := OverlayOptions{Camera: camera}
+	halfWidth := OverlayHalfWidth(cameraOptions, lineWidthPixels/2)
+	color := [4]float64{0.12, 0.95, 0.22, 0.95}
+	var out []OverlayLine
+	add := func(from, to fauxgl.Vector) {
+		out = append(out, OverlayLine{From: from, To: to, HalfWidth: halfWidth,
+			R: color[0], G: color[1], B: color[2], A: color[3]})
+	}
+	if selection.DisplayType == 1 {
+		corners := [...]fauxgl.Vector{
+			{X: cx - rx, Y: cy - ry, Z: 0}, {X: cx + rx, Y: cy - ry, Z: 0},
+			{X: cx + rx, Y: cy + ry, Z: 0}, {X: cx - rx, Y: cy + ry, Z: 0},
+		}
+		for i, p := range corners {
+			add(p, corners[(i+1)%len(corners)])
+		}
+		return out
+	}
+	var previous fauxgl.Vector
+	for i := 0; i <= segments; i++ {
+		a := 2 * math.Pi * float64(i) / segments
+		point := fauxgl.Vector{X: cx + math.Cos(a)*rx, Y: cy + math.Sin(a)*ry, Z: 0}
+		if i > 0 {
+			add(previous, point)
+		}
+		previous = point
+	}
+	return out
 }
 
 // MarkerOverlayLines builds the selected marker's axis frame and forward arrow.

@@ -583,9 +583,7 @@ func (ui *uiState) deleteSelectedSgbEntities(tab *fileTab) {
 		delete(tab.sgbEntityModelFiles, id)
 	}
 	clear(tab.sgbSelectedEntities)
-	if ui.modelGpu != nil {
-		ui.modelGpu.forget(tab.model.model)
-	}
+	ui.geometryChangedModelGpu(tab.model.model)
 	tab.model.invalidate()
 	tab.sgbDirty = true
 	ui.statusText = fmt.Sprintf("Deleted %d selected map object(s)", removed)
@@ -634,9 +632,7 @@ func (ui *uiState) appendSgbPlacement(tab *fileTab, request sgbPlacementRequest,
 	// The viewer keeps the same WhmModel pointer as the GPU mesh-cache key.
 	// Appending vertices does not change that pointer, so discard the cached
 	// buffers before the next frame or the newly placed object stays invisible.
-	if ui.modelGpu != nil {
-		ui.modelGpu.forget(tab.model.model)
-	}
+	ui.geometryChangedModelGpu(tab.model.model)
 	tab.sgbNextEntityID = id + 1
 	m.Entities = append(m.Entities, entity)
 	tab.sgbDirty = true

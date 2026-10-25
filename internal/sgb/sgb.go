@@ -33,6 +33,10 @@
 //	                     the entity records
 //	   FOLDENTL          entity list
 //	     FOLDENTY        one entity
+//	   DATASBPT          squad blueprint table
+//	   FOLDSQDL          squad list
+//	   FOLDPLLS          player lists / entity ownership
+//	   FOLDSCAR          scar data; preserve untouched
 //	       DATAENTI      u32 id, u32 blueprintIndex, 9×f32 transform
 //	                     columns, f32 x, f32 y, f32 z
 //	 FOLDMSTC            static world data
@@ -121,7 +125,7 @@ type Decal struct {
 type Entity struct {
 	ID      int
 	BP      int
-	Owner   int // 0 is neutral/world, 1–8 are player slots
+	Owner   int    // 0 is neutral/world, 1–8 are player slots
 	Name    string // resolved from Blueprints through BP
 	X, Y, Z float32
 	Heading float32
@@ -521,6 +525,10 @@ func (m *Map) MarshalBinary() ([]byte, error) {
 		meg = &chunky.Chunk{TypeID: "FOLDSMEG", Version: 1}
 		root.Children = append(root.Children, meg)
 	}
+	if m.entityChunks == nil {
+		m.entityChunks = make(map[int]*chunky.Chunk)
+	}
+	entityChunks := m.entityChunks
 	blueprints := meg.Child("DATAEBPT")
 	if blueprints == nil {
 		blueprints = &chunky.Chunk{TypeID: "DATAEBPT", Version: 2000}
@@ -570,7 +578,7 @@ func (m *Map) MarshalBinary() ([]byte, error) {
 		if !exists || saved[id] {
 			continue
 		}
-		chunk := chunky.Clone(m.entityChunks[id])
+		chunk := chunky.Clone(entityChunks[id])
 		if chunk == nil {
 			chunk = chunky.Clone(original)
 		}
@@ -589,10 +597,16 @@ func (m *Map) MarshalBinary() ([]byte, error) {
 		chunk := newEntityChunk()
 		find(chunk, "DATAENTI").Payload = marshalEntity(entity, nil)
 		entityChildren = append(entityChildren, chunk)
+		entityChunks[entity.ID] = chunky.Clone(chunk)
+		saved[entity.ID] = true
 	}
 	entl.Children = entityChildren
 	if err := updatePlayerLists(meg, m.Entities); err != nil {
 		return nil, err
+	}
+	meg.Version = 2002
+	if entl.Version < 2000 {
+		entl.Version = 2000
 	}
 
 	var output bytes.Buffer
@@ -631,7 +645,7 @@ func marshalBlueprints(blueprints []string) ([]byte, error) {
 func newEntityChunk() *chunky.Chunk {
 	return &chunky.Chunk{TypeID: "FOLDENTY", Version: 2000, Children: []*chunky.Chunk{
 		{TypeID: "DATAENTI", Version: 2001, Payload: make([]byte, 56)},
-		{TypeID: "DATAEBED", Version: 2000, Payload: []byte{0, 0, 0, 0}},
+		{TypeID: "DATAEBED", Version: 2000, Payload: chunky.I32(0)},
 		{TypeID: "DATASEBD", Version: 2000, Payload: []byte{0}},
 	}}
 }
@@ -776,6 +790,9 @@ func marshalPlayerList(original *chunky.Chunk, owner int, ids []int) *chunky.Chu
 	player := chunky.Clone(original)
 	info := player.Child("DATAINFO")
 	playerID, _ := playerIDForOwner(owner)
+	if len(info.Payload) < 4 {
+		info.Payload = append(info.Payload, make([]byte, 4-len(info.Payload))...)
+	}
 	binary.LittleEndian.PutUint32(info.Payload, uint32(playerID))
 	entities := player.Child("DATAEGRP")
 	if entities == nil {

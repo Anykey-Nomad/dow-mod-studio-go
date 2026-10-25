@@ -3,6 +3,7 @@
 package main
 
 import (
+	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/fx"
 	"math"
 	"testing"
@@ -136,6 +137,35 @@ func TestVulkanDrawsTheSkeletonOnTheGpu(t *testing.T) {
 	// pixels would mean it is being drawn but buried.
 	if changed < 50 {
 		t.Errorf("only %d pixels changed; the bones are mostly inside the mesh, which suggests the overlay is being depth tested against it", changed)
+	}
+}
+
+// DATASEUI's selection rectangle is part of the Vulkan overlay pass, not a
+// CPU-rendered decoration. This compares GPU readbacks with the indicator
+// disabled and enabled while the rectangle lies inside the cube's footprint.
+func TestVulkanDrawsSelectionIndicatorOnTheGpu(t *testing.T) {
+	model := gpuOverlayModel(t)
+	const w, h = 240, 200
+	_, r, readback, release := requireVulkanRenderer(t)
+	defer release()
+	opts := gpuOverlayOptions(model, w, h)
+	pose := model.RestPose()
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render without selection indicator: %v", err)
+	}
+	without := readback()
+
+	opts.SelectionIndicator = &engine.SelectionIndicator{
+		DisplayType: 1,
+		Scale:       [2]float32{1.4, 1.1},
+		Offset:      [2]float32{0.25, -0.2},
+	}
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render with selection indicator: %v", err)
+	}
+	with := readback()
+	if changed := overlayChangedPixels(without, with); changed == 0 {
+		t.Fatal("enabling the selection indicator changed no pixels: the Vulkan renderer did not draw it")
 	}
 }
 

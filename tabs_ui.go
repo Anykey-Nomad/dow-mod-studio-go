@@ -165,6 +165,8 @@ func tabLabelFor(t *fileTab) string {
 		return fmt.Sprintf("Model [%s]", filepath.Base(t.path))
 	case "image":
 		return fmt.Sprintf("Image [%s]", filepath.Base(t.path))
+	case "sga":
+		return fmt.Sprintf("SGA [%s]", filepath.Base(t.path))
 	case "sgb":
 		return fmt.Sprintf("Map [%s]", filepath.Base(t.path))
 	case "rgd":

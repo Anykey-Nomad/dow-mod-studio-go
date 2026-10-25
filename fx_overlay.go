@@ -536,7 +536,10 @@ func (v *modelViewer) fxOrigins() {
 		// offsets. Without one, a free beam follows its marker's forward axis.
 		if e.Sim != nil && e.Sim.Axis.Length() > 1e-6 {
 			e.Axis = e.fxMarkerVector(e.Sim.Axis)
-		} else if axis, ok := v.model.MarkerAxis(e.Marker, pose, true); ok {
+		} else if axis, ok := v.model.MarkerBeamAxis(e.Marker, pose, true); ok {
+			// A beam runs along the tube it plays at, which is the marker's
+			// second frame column, not the direction MarkerAxis scores the
+			// marker as facing: see MarkerBeamAxis.
 			e.Axis = axis
 		}
 
@@ -592,11 +595,14 @@ var (
 
 // fxFallbackFrame is the frame an effect with no marker of its own is laid out
 // in: the file's own axes, standing in for the marker matrix the effect would
-// have been played at. The third component of every vector in an effect file
-// is its vertical one, and fx.FileVec carries that over to the models' Z by
-// exchanging the last two components, so a marker's Y is the world's up and
-// its Z the world's Y. That is the frame here, for the same reason and with
-// the same swap.
+// have been played at. Every local vector an effect file writes - Offset,
+// Volume, Arc, the emission axis - keeps its authored Y-up frame all the way
+// through the simulation, and this frame is the one that turns it into model
+// space: the file's second axis is vertical, so it becomes the world's up,
+// and its third becomes the world's Y. That is exactly the frame a marker's
+// own columns give an attached effect, and it is why the vertical of a
+// descending spray stays vertical instead of being swapped onto a horizontal
+// axis a second time.
 //
 // Standing in the world's own axes instead is what made these effects arrive
 // sideways. A marker's X, Y and Z are its right, up and forward; leaving them
@@ -1263,7 +1269,13 @@ func (e *fxOverlayEffect) fxTurnSprite(sp fx.Sprite) fx.Sprite {
 // attached marker while leaving the marker origin fixed.
 func (e *fxOverlayEffect) fxMarkerVector(v fauxgl.Vector) fauxgl.Vector {
 	if e.Sim != nil && e.Sim.NoRotate {
-		return v
+		// No_Rotate drops the marker's rotation, not the coordinate swap:
+		// the simulation keeps every vector in the file's own Y-up frame,
+		// and this renderer is Z up, so the file axes are still carried
+		// over the way fxFallbackFrame carries them.
+		return fxFallbackFrame[0].MulScalar(v.X).
+			Add(fxFallbackFrame[1].MulScalar(v.Y)).
+			Add(fxFallbackFrame[2].MulScalar(v.Z))
 	}
 	if e.Frame == [3]fauxgl.Vector{} {
 		return v
@@ -1986,7 +1998,7 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 				e.Far = world
 			}
 		}
-		if axis, ok := model.MarkerAxis(marker, rest, true); ok {
+		if axis, ok := model.MarkerBeamAxis(marker, rest, true); ok {
 			e.Axis = axis
 		} else if sim != nil && sim.Axis.Length() > 1e-6 {
 			e.Axis = e.fxMarkerVector(sim.Axis)

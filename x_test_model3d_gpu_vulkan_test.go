@@ -63,6 +63,37 @@ func requireVulkanRenderer(t *testing.T) (*headless.Window, *modelGpuVkRenderer,
 // TestVulkanRendererDrawsTheSameShapeAsTheSoftwareRenderer frames a model
 // with more than one sub mesh on both renderers: a mesh that never reaches
 // the frame halves the coverage, which no amount of shading explains.
+func TestVulkanRendererRebuildsInPlaceEditedGeometry(t *testing.T) {
+	model := singleQuad(t, true)
+	const w, h = 120, 120
+	_, r, readback, release := requireVulkanRenderer(t)
+	defer release()
+	opts := gpuTestOptions(model, w, h)
+	renderCoverage := func() float64 {
+		t.Helper()
+		if _, err := r.Render(model, model.RestPose(), opts, nil, nil); err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		return coveredFraction(readback(), w, h)
+	}
+	before := renderCoverage()
+	if before <= 0.001 {
+		t.Fatalf("initial geometry only covered %.3f of the frame", before)
+	}
+
+	// Move the WHM geometry without changing the model pointer or mesh list,
+	// which matches SGB drag/rotate's in-place scene edits.
+	for i := range model.Vertices {
+		model.Vertices[i].Pos[0] += 1000
+	}
+	r.geometryChanged(model)
+	after := renderCoverage()
+	t.Logf("covered fraction before/after in-place vertex edit: %.4f / %.4f", before, after)
+	if after >= before*0.1 {
+		t.Fatalf("edited geometry still covers %.3f of the frame (before %.3f): stale GPU buffers were reused", after, before)
+	}
+}
+
 func TestVulkanRendererDrawsTheSameShapeAsTheSoftwareRenderer(t *testing.T) {
 	model := twoBoxModel(t)
 	center, distance := model.ModelCenter()

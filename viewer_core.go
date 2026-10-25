@@ -51,23 +51,27 @@ type modelMaterialResult struct {
 // modelViewer is the per tab state of the 3D preview. Everything here is
 // touched on the UI goroutine only; workers communicate through channels.
 type modelViewer struct {
-	model            *WhmModel
-	materials        map[string]WhmMaterial
-	materialAliases  map[string]string
-	anim             *WhmAnimation
-	animatedEntities []sgb.AnimatedEntity
-	sgbAnimLast      time.Time
+	model                *WhmModel
+	materials            map[string]WhmMaterial
+	materialAliases      map[string]string
+	anim                 *WhmAnimation
+	anims                []*WhmAnimation
+	animPlaybackDuration float64
+	animatedEntities     []sgb.AnimatedEntity
+	sgbAnimLast          time.Time
 	// poseCache is the pose at poseTime of poseAnim, kept so a frame that
 	// asks for the pose more than once walks the skeleton once.
-	poseCache    WhmPose
-	poseAnim     *WhmAnimation
-	poseTime     float32
-	poseValid    bool
-	animIndex    int
-	playing      bool
-	time         float32 // normalised 0..1 within the clip
-	showSkeleton bool
-	textured     bool
+	poseCache          WhmPose
+	poseAnim           *WhmAnimation
+	poseTime           float32
+	poseValid          bool
+	animIndex          int
+	playing            bool
+	time               float32 // normalised 0..1 within the clip
+	showSkeleton       bool
+	showSelection      bool
+	selectionIndicator *engine.SelectionIndicator
+	textured           bool
 	// frame is the last software render, painted by the canvas.
 	frame *image.RGBA
 	// frameCh delivers the render in flight; serial orders renders so a late
@@ -581,6 +585,15 @@ func (v *modelViewer) modelData() *whm.Model {
 	return &v.model.Model
 }
 
+// selectionIndicatorIfShown returns DATASEUI geometry only while its preview
+// toggle is on; the settings themselves remain editable while it is off.
+func (v *modelViewer) selectionIndicatorIfShown() *engine.SelectionIndicator {
+	if v == nil || !v.showSelection || v.selectionIndicator == nil {
+		return nil
+	}
+	return v.selectionIndicator
+}
+
 // options builds the render request for the current camera and pose.
 func (v *modelViewer) options(width, height int) RenderOptions {
 	var mats map[string]WhmMaterial
@@ -617,12 +630,13 @@ func (v *modelViewer) options(width, height int) RenderOptions {
 			UVPerMaterial: v.uvMaterials, MeshAlpha: v.meshAlphas(),
 			AnimatedEntities: v.animatedEntities,
 		},
-		MaterialOverrides: mats,
-		MaterialAliases:   v.materialAliases,
-		AnimatedEntities:  v.animatedEntities,
-		GroundImage:       v.groundImage,
-		Ground:            v.showGround && v.groundImage != nil,
-		FX:                v.fxScene,
+		MaterialOverrides:  mats,
+		MaterialAliases:    v.materialAliases,
+		AnimatedEntities:   v.animatedEntities,
+		GroundImage:        v.groundImage,
+		Ground:             v.showGround && v.groundImage != nil,
+		FX:                 v.fxScene,
+		SelectionIndicator: v.selectionIndicatorIfShown(),
 	}
 }
 

@@ -186,3 +186,36 @@ func unitIconLayout(gtx layout.Context, img image.Image, w, h unit.Dp) layout.Di
 	st.Pop()
 	return layout.Dimensions{Size: size}
 }
+
+// folderIconLayout paints a folder silhouette — a tab raised on the left of a
+// wider body — fitted in a w×h box, and reserves the box even when it is
+// tiny, so a column of tree rows stays aligned. It marks a row that opens
+// into a list, drawn rather than set in type so it looks the same on every
+// platform.
+func folderIconLayout(gtx layout.Context, w, h unit.Dp) layout.Dimensions {
+	bw, bh := gtx.Dp(w), gtx.Dp(h)
+	if bw < 3 || bh < 3 {
+		return layout.Dimensions{}
+	}
+	col := rgb(0xE8C14A)
+	fill := func(r image.Rectangle) {
+		st := clip.Rect(r).Push(gtx.Ops)
+		paint.ColorOp{Color: col}.Add(gtx.Ops)
+		paint.PaintOp{}.Add(gtx.Ops)
+		st.Pop()
+	}
+	tabW := (bw*2 + 2) / 5  // the tab runs about two fifths across
+	tabH := (bh*3 + 5) / 10 // and about a third of the height
+	if tabW < 2 {
+		tabW = 2
+	}
+	if tabH < 1 {
+		tabH = 1
+	}
+	// The body spans the full width below the tab; the tab sits above it on
+	// the left and overlaps by a pixel so the two read as one silhouette
+	// with no hairline between them.
+	fill(image.Rect(0, tabH, bw, bh))
+	fill(image.Rect(0, 0, tabW, tabH+1))
+	return layout.Dimensions{Size: image.Pt(bw, bh)}
+}

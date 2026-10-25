@@ -231,11 +231,15 @@ func NewBeamRibbon(b Beam, from, to fauxgl.Vector, u float64, spans bool) BeamRi
 	if st := sampleColour(b.Colour, u); st != nil {
 		r.R, r.G, r.B, r.Alpha = st.R, st.G, st.B, st.A
 	}
+	// Arc and Offset are written in the effect's own Y-up frame like every
+	// other local vector. They are left as authored here: the marker frame
+	// the effect is attached to maps them into model space, so converting
+	// them twice would swing the bow and the start point onto the wrong axes.
 	if a, ok := vec3Sample(b.Arc, u); ok {
-		r.Arc = FileVec(a)
+		r.Arc = a
 	}
 	if o, ok := vec3Sample(b.Offset, u); ok {
-		r.From = r.From.Add(FileVec(o))
+		r.From = r.From.Add(o)
 	}
 	return r
 }
@@ -330,12 +334,10 @@ func BeamQuads(r BeamRibbon, eye fauxgl.Vector) []BeamVert {
 	// leaves it straight. Only the part across the span is kept, which is the
 	// whole of what the arc means.
 	//
-	// The arc arrives already swapped into the renderer's axes by FileVec,
-	// like every other vector these files write. It used to go in raw, on a
-	// note that most beams write their arc on Y: across the 2002 shipped
-	// effects not one arc is written on a single axis at all, and where one
-	// is written on all three the third is the largest in every case, so that
-	// note had the convention backwards as well as the axes unconverted.
+	// The arc arrives in the effect's own Y-up frame and the attachment frame
+	// has already mapped it with the rest of the local geometry. Across the
+	// 2002 shipped effects not one arc is written on a single axis, and where
+	// one is written on all three its third component is the largest.
 	bow := r.Arc.Sub(dir.MulScalar(r.Arc.Dot(dir)))
 	if bow.Length() < 1e-6 && r.Arc.Length() > 1e-6 {
 		// The arc points exactly along the span, so there is nothing across
@@ -559,10 +561,9 @@ func RingRibbon(r Ring, centre, axX, axY, axZ fauxgl.Vector, camUp fauxgl.Vector
 	// ring knows to sit at the end of a barrel rather than at its base. The
 	// marker's three columns map it into model space.
 	if o, ok := vec3Sample(r.Offset, u); ok {
-		// STYLE_RING Offset is a vector in the marker's frame, not a world
-		// displacement. FileVec swaps its Y-up coordinates into the same
-		// model-space frame as the marker axes.
-		o = FileVec(o)
+		// STYLE_RING Offset is a vector in the marker's own Y-up frame, not
+		// a world displacement, so its three components go straight onto
+		// the marker's three columns.
 		centre = centre.
 			Add(axX.MulScalar(o.X)).
 			Add(axY.MulScalar(o.Y)).
@@ -577,7 +578,6 @@ func RingRibbon(r Ring, centre, axX, axY, axZ fauxgl.Vector, camUp fauxgl.Vector
 			Y: SampleCurve(r.OffsetY, u),
 			Z: SampleCurve(r.OffsetZ, u),
 		}
-		local = FileVec(local)
 		centre = centre.Add(axX.MulScalar(local.X)).Add(axY.MulScalar(local.Y)).Add(axZ.MulScalar(local.Z))
 		return ringSpriteRibbon(out, centre, axX, axY, axZ, r, u, spread)
 	}

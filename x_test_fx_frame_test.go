@@ -129,10 +129,12 @@ func TestFXSelfToOtherAlignsTheLocalFXForwardWithTheMarkerSpan(t *testing.T) {
 		t.Errorf("self_to_other frame is not orthogonal: %v", aligned)
 	}
 	// No_Rotate preserves the authored frame, even when the event carries
-	// self_to_other; it is the explicit FX-level rotation opt-out.
+	// self_to_other; it is the explicit FX-level rotation opt-out. The file
+	// is written Y up and the renderer is Z up, so the authored forward
+	// still arrives on the model's Y axis.
 	e := fxOverlayEffect{Sim: &fx.FxSim{NoRotate: true}, Frame: frame}
-	if got := e.fxMarkerVector(fauxgl.Vector{Z: 1}); got != (fauxgl.Vector{Z: 1}) {
-		t.Errorf("No_Rotate changed the authored forward axis to %v", got)
+	if got, want := e.fxMarkerVector(fauxgl.Vector{Z: 1}), (fauxgl.Vector{Y: 1}); got != want {
+		t.Errorf("No_Rotate forward axis = %v, want the file's own axis carried over as %v", got, want)
 	}
 }
 
@@ -175,15 +177,17 @@ func TestFXSelfToOtherAlignsGeneratedBeamWithTheMarkerSpan(t *testing.T) {
 	}
 }
 
-func TestFXNoRotateKeepsLocalParticleOffsetAndRingFrame(t *testing.T) {
+func TestFXNoRotateKeepsFileFrameAndDropsMarkerRotation(t *testing.T) {
 	frame := [3]fauxgl.Vector{{Y: 1}, {Z: 1}, {X: 1}}
 	e := fxOverlayEffect{
 		Sim:   &fx.FxSim{NoRotate: true},
 		Frame: frame,
 	}
+	// The marker rotation is ignored, but the effect file's Y-up frame is
+	// still carried over to the renderer's Z-up one.
 	local := fauxgl.Vector{X: 2, Y: 3, Z: 4}
-	if got := e.fxMarkerVector(local); got != local {
-		t.Errorf("No_Rotate transformed local displacement to %v, want %v", got, local)
+	if got, want := e.fxMarkerVector(local), (fauxgl.Vector{X: 2, Y: 4, Z: 3}); got != want {
+		t.Errorf("No_Rotate local displacement = %v, want the file's own frame carried over as %v", got, want)
 	}
 	if x, y, z := e.fxRingFrame(); x != fxFallbackFrame[0] || y != fxFallbackFrame[1] || z != fxFallbackFrame[2] {
 		t.Errorf("No_Rotate ring frame = (%v,%v,%v), want authored FX frame %v", x, y, z, fxFallbackFrame)

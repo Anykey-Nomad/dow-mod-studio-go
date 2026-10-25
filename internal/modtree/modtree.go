@@ -530,11 +530,59 @@ func (t *ModTree) tryAddFSFolder(fullPath, modName, sourceName string, kind Sour
 	}
 }
 
+// caseResolvedPath walks path one segment at a time and answers with the
+// spelling the filesystem actually holds, matching every segment
+// case-insensitively.
+//
+// A .module is written the way Windows reads it, where directory names fold;
+// on a case-sensitive filesystem the same spelling is a different path, and
+// a mod whose folder was installed under another case — or whose files were
+// written under a lowercase data beside the Data the .module declares — is
+// simply not there. A segment with no match keeps the spelling it was given,
+// so a path about to be created is returned unchanged.
+func caseResolvedPath(path string) string {
+	clean := filepath.Clean(path)
+	parent := filepath.Dir(clean)
+	if parent == clean {
+		// The root of the path: "/", a volume root, or ".".
+		return clean
+	}
+	resolvedParent := caseResolvedPath(parent)
+	entries, err := os.ReadDir(resolvedParent)
+	if err != nil {
+		return filepath.Join(resolvedParent, filepath.Base(clean))
+	}
+	base := filepath.Base(clean)
+	var folded string
+	for _, e := range entries {
+		name := e.Name()
+		if name == base {
+			// The exact spelling wins, so a directory that exists under
+			// both spellings is always picked the same way.
+			return filepath.Join(resolvedParent, name)
+		}
+		if folded == "" && strings.EqualFold(name, base) {
+			folded = name
+		}
+	}
+	if folded != "" {
+		return filepath.Join(resolvedParent, folded)
+	}
+	return filepath.Join(resolvedParent, base)
+}
+
 // fsFolderVariants lists fullPath and any sibling directory whose name matches
 // its base name case-insensitively, the exact spelling first.
+//
+// The parent is resolved first, because that is where the mod's own folder
+// sits: a .module that names UltimateApocalypse_THB while the folder was
+// installed as ultimateapocalypse_thb used to leave ReadDir on a parent that
+// was not there, so the mod contributed nothing at all to the tree and only
+// the required mods showed.
 func fsFolderVariants(fullPath string) []string {
-	out := []string{fullPath}
 	dir, base := filepath.Dir(fullPath), filepath.Base(fullPath)
+	dir = caseResolvedPath(dir)
+	out := []string{filepath.Join(dir, base)}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return out
@@ -900,7 +948,12 @@ func (t *ModTree) ResolveWritableRoot() (string, error) {
 			modFolder = mf.ModFolder
 		}
 	}
-	root := filepath.Clean(filepath.Join(t.AppPath, modFolder, moduleRelPath(rel)))
+	// The .module spells the folder the way Windows reads it. A filesystem
+	// that folds case may hold the mod under another spelling, and writing to
+	// the declared one would create a second Data beside the real data —
+	// saves the scan never sees, because it registered the folder that was
+	// already there.
+	root := caseResolvedPath(filepath.Join(t.AppPath, modFolder, moduleRelPath(rel)))
 	t.WritableOverlayRoot = root
 	return root, nil
 }

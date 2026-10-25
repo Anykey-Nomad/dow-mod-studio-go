@@ -270,7 +270,7 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				cardW := gtx.Dp(unit.Dp(360))
-				cardH := gtx.Dp(unit.Dp(300))
+				cardH := gtx.Dp(unit.Dp(410))
 				gtx.Constraints.Min.X, gtx.Constraints.Max.X = cardW, cardW
 				gtx.Constraints.Min.Y, gtx.Constraints.Max.Y = cardH, cardH
 				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -356,6 +356,8 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 											}),
 										)
 									}),
+									layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
+									layout.Rigid(ui.layoutAssocRows),
 									layout.Flexed(1, flexGap()),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
@@ -374,6 +376,45 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 			})
 		}),
 	)
+}
+
+// layoutAssocRows is the File associations section of the Settings dialog:
+// one row per format, whose button registers or removes that format's
+// double-click association for the current user. The rows come from the same
+// table the registration code uses, so a format added there appears here.
+func (ui *uiState) layoutAssocRows(gtx layout.Context) layout.Dimensions {
+	if !associationsSupported() || len(ui.assocClicks) != len(assocTypes) {
+		return layout.Dimensions{}
+	}
+	children := []layout.FlexChild{
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(11), "File associations (this user)")
+			l.Color = cText
+			return l.Layout(gtx)
+		}),
+		layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
+	}
+	for i := range assocTypes {
+		i, t := i, assocTypes[i]
+		on := i < len(ui.assocOn) && ui.assocOn[i]
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					l := material.Label(ui.th, unit.Sp(11), t.ext+" — "+t.label)
+					l.Color = cText
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				}),
+				layout.Flexed(1, rowGap()),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					// The same pill the Dark theme row uses: lit when the
+					// format is registered, and the click adds or removes.
+					return ui.toggleButton(gtx, &ui.assocClicks[i], "Associated", on, cMenuOpen)
+				}),
+			)
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
 func (ui *uiState) layoutClearRecycleDialog(gtx layout.Context) layout.Dimensions {

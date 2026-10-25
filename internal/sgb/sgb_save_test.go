@@ -24,6 +24,53 @@ func saveFixture(t *testing.T) *Map {
 	return m
 }
 
+func TestMarshalBinaryNewEntityUsesGameCompatibleChunkRecords(t *testing.T) {
+	m := saveFixture(t)
+	m.Blueprints = []string{"object.rgd"}
+	m.Entities = []Entity{{ID: 12, BP: 0, Owner: 1, X: 12.5, Y: 3.25, Z: -9.75, Heading: 0.73}}
+
+	data, err := m.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary: %v", err)
+	}
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse marshaled data: %v", err)
+	}
+	if len(got.Entities) != 1 || got.Entities[0].ID != 12 || got.Entities[0].Owner != 1 {
+		t.Fatalf("entity after round trip = %+v", got.Entities)
+	}
+	entityChunk := got.entityChunks[12]
+	if entityChunk == nil {
+		t.Fatal("new entity chunk was not retained after parsing")
+	}
+	for _, chunkID := range []string{"DATAENTI", "DATAEBED", "DATASEBD"} {
+		if find(entityChunk, chunkID) == nil {
+			t.Errorf("new entity is missing %s", chunkID)
+		}
+	}
+	if got.sourceRoot.Child("FOLDSMEG").Version != 2002 {
+		t.Errorf("FOLDSMEG version = %d, want 2002", got.sourceRoot.Child("FOLDSMEG").Version)
+	}
+	if gotEntity := find(entityChunk, "DATASEBD"); gotEntity == nil || len(gotEntity.Payload) != 1 {
+		t.Errorf("new entity DATASEBD = %v, want one-byte record matching existing SGB entities", gotEntity)
+	}
+
+	// A second save must retain the newly-created entity record, not append
+	// another FOLDENTY with the same ID.
+	data, err = got.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary second save: %v", err)
+	}
+	got, err = Parse(data)
+	if err != nil {
+		t.Fatalf("Parse second save: %v", err)
+	}
+	if len(got.Entities) != 1 || got.Entities[0].ID != 12 {
+		t.Fatalf("entities after second save = %+v", got.Entities)
+	}
+}
+
 func TestMarshalBinaryRoundTripsEditedEntityBlueprintAndPreservesChunks(t *testing.T) {
 	m := saveFixture(t)
 	m.Blueprints = []string{`data:attrib\ebps\environment\rocks\boulder.rgd`}

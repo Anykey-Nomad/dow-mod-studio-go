@@ -24,6 +24,7 @@ type RenderOptions struct {
 	Quality               int
 	Skeleton              bool
 	Marker, PickedBone    *int
+	Selection             *SelectionIndicator
 	UVDefault             UVMapping
 	UVPerMaterial         map[string]*UVMapping
 	MaterialOverrides     map[string]Material
@@ -47,7 +48,13 @@ func renderUVFor(opts RenderOptions, material string) UVMapping {
 }
 
 func overlayOptions(opts RenderOptions) OverlayOptions {
-	return OverlayOptions{Camera: Camera{Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch, Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov}, Skeleton: opts.Skeleton, Marker: opts.Marker, PickedBone: opts.PickedBone}
+	return OverlayOptions{
+		Camera: Camera{
+			Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch,
+			Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov,
+		},
+		Skeleton: opts.Skeleton, Marker: opts.Marker, PickedBone: opts.PickedBone,
+	}
 }
 
 func maxInt(a, b int) int {

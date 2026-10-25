@@ -4,6 +4,7 @@ import (
 	"dow-mod-studio/internal/whe"
 	"fmt"
 	"image"
+	"image/color"
 	"math"
 	"path"
 	"path/filepath"
@@ -14,9 +15,12 @@ import (
 
 	"dow-mod-studio/internal/modtree"
 
+	"gioui.org/f32"
 	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -208,6 +212,215 @@ func (ui *uiState) ensureUnitEventClicks(timelines, events int) {
 	}
 }
 
+func (ui *uiState) ensureUnitEventAnimClicks(animations int) {
+	if len(ui.unitEvtAnimClicks) != animations {
+		ui.unitEvtAnimClicks = make([]widget.Clickable, animations)
+	}
+}
+
+func (ui *uiState) ensureUnitMeshClicks(meshes int) {
+	if len(ui.unitMeshClicks) != meshes {
+		ui.unitMeshClicks = make([]widget.Clickable, meshes)
+	}
+}
+
+// ensureUnitMeshNameClicks sizes the name half of each mesh row to match the
+// list, so pressing a name always addresses the mesh that row shows.
+func (ui *uiState) ensureUnitMeshNameClicks(meshes int) {
+	if len(ui.unitMeshNameClicks) != meshes {
+		ui.unitMeshNameClicks = make([]widget.Clickable, meshes)
+	}
+}
+
+// handleUnitMeshToggles drains the eye buttons of the pinned mesh list and
+// flips the shared hidden set, redrawing the viewer so the change is on screen
+// at once. It runs whether or not a .whe is loaded, since the list acts on the
+// model rather than the document, and the order of names is the one the panel
+// lays out, so button i always belongs to mesh i.
+func (ui *uiState) handleUnitMeshToggles(gtx layout.Context) {
+	v := ui.unitModelViewer()
+	if v == nil || v.model == nil {
+		return
+	}
+	names := modelMeshNames(v.model)
+	ui.ensureUnitMeshClicks(len(names))
+	for i := range names {
+		if i >= len(ui.unitMeshClicks) {
+			break
+		}
+		if ui.unitMeshClicks[i].Clicked(gtx) {
+			setMeshHidden(names[i], !meshHidden(names[i]))
+			v.invalidate()
+		}
+	}
+}
+
+// unitMeshSectionMaxDp caps how tall the pinned mesh list may grow; past it
+// the list scrolls rather than pushing the panel's own content off the top.
+const unitMeshSectionMaxDp = 168
+
+// eyeToggleSizeDp is the tap box of one eye button.
+const eyeToggleSizeDp = 18
+
+// unitMeshVisibilitySection is the list at the bottom of the Events panel:
+// every mesh of the unit's model with an eye toggle, present whether a
+// timeline or an action is on show. The eye is open while the mesh draws and
+// closed while it is hidden, and the hidden set is the shared one every
+// viewer reads.
+// unitMeshRows is the eye-toggle list itself: one row per mesh of the
+// current unit's model, each with its open or closed eye. It carries no
+// header and no scroller of its own — the Events section wraps it in a
+// bounded scroller, and the Classic OE panel column scrolls it with the rest
+// — so both surfaces share exactly the same rows.
+func (ui *uiState) unitMeshRows(gtx layout.Context) layout.Dimensions {
+	v := ui.unitModelViewer()
+	if v == nil || v.model == nil {
+		return ui.meshRowsMessage(gtx, "No model is loaded for this unit.")
+	}
+	names := modelMeshNames(v.model)
+	if len(names) == 0 {
+		return ui.meshRowsMessage(gtx, "This model carries no meshes.")
+	}
+	ui.ensureUnitMeshClicks(len(names))
+	ui.ensureUnitMeshNameClicks(len(names))
+	var rc []layout.FlexChild
+	for i := range names {
+		i := i
+		name := names[i]
+		hidden := meshHidden(name)
+		nameC := &ui.unitMeshNameClicks[i]
+		// A second press on the name inside the window raises this mesh's
+		// material editor. The eye beside it stays a plain visibility toggle.
+		if nameC.Clicked(gtx) && ui.classicOEDoubleClick("mesh:"+strings.ToLower(name)) {
+			ui.openUnitMeshMaterialDialog(name)
+		}
+		rc = append(rc, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.eyeToggle(gtx, &ui.unitMeshClicks[i], !hidden)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Left: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return nameC.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							l := material.Label(ui.th, unit.Sp(10), name)
+							if hidden {
+								l.Color = cTextDim
+							} else {
+								l.Color = cText
+							}
+							if nameC.Hovered() {
+								l.Color = rgb(0x53B9FF)
+							}
+							l.MaxLines = 1
+							return l.Layout(gtx)
+						})
+					})
+				}),
+			)
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rc...)
+}
+
+// meshRowsMessage is the one dim line the mesh list shows when there is
+// nothing to list.
+func (ui *uiState) meshRowsMessage(gtx layout.Context, msg string) layout.Dimensions {
+	l := material.Label(ui.th, unit.Sp(9), msg)
+	l.Color = cTextDim
+	return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
+}
+
+// unitMeshVisibilitySection is the list at the bottom of the Events panel:
+// every mesh of the unit's model with an eye toggle, present whether a
+// timeline or an action is on show. The eye is open while the mesh draws and
+// closed while it is hidden, and the hidden set is the shared one every
+// viewer reads.
+func (ui *uiState) unitMeshVisibilitySection(gtx layout.Context) layout.Dimensions {
+	v := ui.unitModelViewer()
+	count := 0
+	if v != nil && v.model != nil {
+		count = len(modelMeshNames(v.model))
+	}
+	children := []layout.FlexChild{
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return sectionHeader(gtx, ui.th, fmt.Sprintf("Meshes (%d)", count))
+		}),
+	}
+	if count == 0 {
+		children = append(children, layout.Rigid(ui.unitMeshRows))
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	}
+	// Measure the rows unbounded, then hand the scroller at most the cap: a
+	// short list keeps its own height and a long one scrolls instead of
+	// taking the whole panel. The measure's operations are discarded.
+	macro := op.Record(gtx.Ops)
+	measureGTX := gtx.Disabled()
+	measureGTX.Constraints.Min.Y = 0
+	measureGTX.Constraints.Max.Y = panelScrollMeasureHeight
+	natural := ui.unitMeshRows(measureGTX).Size.Y
+	macro.Stop()
+	viewport := natural
+	if cap := gtx.Dp(unitMeshSectionMaxDp); viewport > cap {
+		viewport = cap
+	}
+	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Max.Y = viewport
+		return ui.panelScrollView(gtx, &ui.unitMeshScroll, ui.unitMeshRows)
+	}))
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+}
+
+// eyeToggle is one mesh's visibility button: an open eye while the mesh
+// draws, a closed eye while it is hidden. The glyph is drawn as vector shapes
+// rather than a font character, so it renders the same everywhere.
+func (ui *uiState) eyeToggle(gtx layout.Context, btn *widget.Clickable, visible bool) layout.Dimensions {
+	px := gtx.Dp(eyeToggleSizeDp)
+	col := cText
+	if !visible {
+		col = cTextDim
+	}
+	if btn.Hovered() {
+		col = rgb(0x53B9FF)
+	}
+	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		sz := image.Pt(px, px)
+		stack := clip.Rect{Max: sz}.Push(gtx.Ops)
+		drawEyeGlyph(gtx.Ops, sz, visible, col)
+		stack.Pop()
+		return layout.Dimensions{Size: sz}
+	})
+}
+
+// drawEyeGlyph paints an open or closed eye inside a sz box. Open is an
+// almond outline with a pupil; closed is the lid drawn as a single downward
+// curve — the pair reads as shown/hidden without needing a label.
+func drawEyeGlyph(ops *op.Ops, sz image.Point, open bool, col color.NRGBA) {
+	cx := float32(sz.X) / 2
+	cy := float32(sz.Y) / 2
+	w := float32(sz.X) * 0.40
+	h := float32(sz.Y) * 0.30
+	var path clip.Path
+	path.Begin(ops)
+	if open {
+		path.MoveTo(f32.Pt(cx-w, cy))
+		path.QuadTo(f32.Pt(cx, cy-h*2), f32.Pt(cx+w, cy))
+		path.QuadTo(f32.Pt(cx, cy+h*2), f32.Pt(cx-w, cy))
+		path.Close()
+	} else {
+		path.MoveTo(f32.Pt(cx-w, cy))
+		path.QuadTo(f32.Pt(cx, cy+h*1.8), f32.Pt(cx+w, cy))
+	}
+	spec := path.End()
+	paint.FillShape(ops, col, clip.Stroke{Path: spec, Width: 1.4}.Op())
+	if open {
+		pr := float32(sz.Y) * 0.17
+		paint.FillShape(ops, col, clip.Ellipse(image.Rectangle{
+			Min: image.Pt(int(cx-pr), int(cy-pr)),
+			Max: image.Pt(int(cx+pr), int(cy+pr)),
+		}).Op(ops))
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB: input — presses, typing, focus (run before layout)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -392,6 +605,9 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 			}
 			ui.unitEvtFocusAction = true
 			ui.unitEvtActionSel = i
+			// Selecting an action also plays it: every clip its graph
+			// resolves to, combined in the viewport beside the panel.
+			ui.activateUnitAction(acts[i].Name)
 		}
 	}
 	// While an action is the panel on screen, its conditions are the fields
@@ -469,6 +685,18 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 	if ui.unitEvtRemove.Clicked(gtx) {
 		ui.removeSelectedUnitEvent()
 		return
+	}
+	// The animation list's per-row Remove buttons each drop one blend entry
+	// from the selected timeline. They are only laid out for a selected
+	// timeline, so with none (or while an action is shown) no press can land.
+	if tl != nil {
+		ui.ensureUnitEventAnimClicks(len(tl.Animations))
+		for i := range ui.unitEvtAnimClicks {
+			if i < len(tl.Animations) && ui.unitEvtAnimClicks[i].Clicked(gtx) {
+				ui.removeUnitTimelineAnimation(i)
+				return
+			}
+		}
 	}
 	if ui.unitEvtSave.Clicked(gtx) {
 		ui.saveUnitEventsFromPanel()
@@ -781,6 +1009,34 @@ func (ui *uiState) removeSelectedUnitEvent() {
 	ui.unitEvtBound = ""
 	ui.reloadUnitModelFx()
 	ui.statusText = fmt.Sprintf("Removed %d event(s) from %s — save to write it into the mod", removed, ui.unitEvtTimeline)
+}
+
+// removeUnitTimelineAnimation drops one entry from the selected timeline's
+// animation blend list. It edits the in-memory document only — Save .whe
+// writes it into the mod, matching how every other timeline edit behaves.
+func (ui *uiState) removeUnitTimelineAnimation(index int) {
+	doc := ui.unitEvtDoc
+	tl := ui.selectedUnitEventTimeline()
+	if doc == nil || tl == nil {
+		ui.unitEvtFormErr = "Select a timeline's animation to remove."
+		ui.lastFormAction = ""
+		return
+	}
+	if index < 0 || index >= len(tl.Animations) {
+		ui.unitEvtFormErr = "Animation selection is no longer valid."
+		ui.lastFormAction = ""
+		return
+	}
+	if err := doc.RemoveTimelineAnimation(ui.unitEvtTimeline, index); err != nil {
+		ui.unitEvtFormErr = err.Error()
+		ui.lastFormAction = ""
+		return
+	}
+	ui.unitEvtFormErr = ""
+	ui.unitEvtDirty = true
+	ui.lastFormAction = "remove"
+	ui.reloadUnitModelFx()
+	ui.statusText = fmt.Sprintf("Removed an animation from %s — save to write it into the mod", ui.unitEvtTimeline)
 }
 
 // stepUnitClip moves the history position through the entries that fit the
@@ -2249,6 +2505,14 @@ func (ui *uiState) layoutUnitEventPanel(gtx layout.Context) layout.Dimensions {
 				}),
 			)
 		}
+		// The mesh list is pinned below both editors, so it stays on screen
+		// whether a timeline or an action is being worked on.
+		children = append(children,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.unitMeshVisibilitySection(gtx)
+			}),
+		)
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
 }
@@ -2278,9 +2542,6 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 		// Which file and timeline this is, and whether it has unsaved changes.
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			text := "Timeline  " + tl.Name
-			if len(tl.Animations) > 0 {
-				text += "  (" + strings.Join(tl.Animations, ", ") + ")"
-			}
 			if ui.unitEvtDirty {
 				text += "  • unsaved"
 			}
@@ -2289,6 +2550,43 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 			l.MaxLines = 2
 			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 		}))
+		// The clips this motion blends, one row each with its own Remove
+		// button — the leading strings of the DATAMTON payload, and the thing
+		// a reader most often wants to prune. Edited in memory only: Save .whe
+		// writes the change into the mod.
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return sectionHeader(gtx, ui.th, "Animations")
+			})
+		}))
+		ui.ensureUnitEventAnimClicks(len(tl.Animations))
+		if len(tl.Animations) == 0 {
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				l := material.Label(ui.th, unit.Sp(10), "This motion blends no animations — it chains to other motions instead.")
+				l.Color = cTextDim
+				l.MaxLines = 2
+				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
+			}))
+		} else {
+			for i := range tl.Animations {
+				i := i
+				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+								l := material.Label(ui.th, unit.Sp(10), tl.Animations[i])
+								l.Color = cText
+								l.MaxLines = 1
+								return l.Layout(gtx)
+							}),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								return ui.smallButton(gtx, &ui.unitEvtAnimClicks[i], "Remove")
+							}),
+						)
+					})
+				}))
+			}
+		}
 		// How the motion itself plays: the tail of the DATAMTON payload, which
 		// the game reads for looping, delays and transitions even though the
 		// events are what a reader edits most.

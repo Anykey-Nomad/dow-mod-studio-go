@@ -4,9 +4,13 @@ import (
 	viewer "dow-mod-studio/internal/3d_viewer"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/sgb"
+	"dow-mod-studio/internal/whe"
 	"errors"
+	"fmt"
 	"image"
 	"math"
+	"math/rand"
 	"path/filepath"
 	"strings"
 
@@ -230,6 +234,7 @@ func (ui *uiState) resetUnitModel() {
 	ui.unitMarkerClicks = nil
 	ui.unitBoneClicks = nil
 	ui.unitFXListMode = false
+	ui.unitMeshListMode = false
 	ui.unitViewportScroll = panelScrollState{}
 	// The typed bone key fields belong to the model that has gone with it:
 	// their bound key and any pending note are dropped so a later model
@@ -242,6 +247,84 @@ func (ui *uiState) resetUnitModel() {
 // pollUnitModel takes a finished decode and builds the viewer from it. The
 // frames and the textures it goes on to produce are polled by pollModelJobs,
 // like any other viewer's.
+// selectObjectAction reads the model's WHE graph and plays all clips
+// selected by the named action together. Weighted motion links choose one
+// variant independently for each motion; absent or unresolved WHE data leaves
+// the viewport's ordinary single-clip default in place. The idle action also
+// falls back to the pristine state's idle/stand clips when the graph has no
+// idle action of its own.
+func selectObjectAction(v *modelViewer, tree *modtree.ModTree, modelPath, actionName string) bool {
+	if v == nil || v.model == nil || tree == nil || modelPath == "" || strings.TrimSpace(actionName) == "" {
+		return false
+	}
+	base := strings.TrimSuffix(modelPath, filepath.Ext(modelPath))
+	data, err := tree.ReadFile(base + ".whe")
+	if err != nil {
+		if f := tree.FindByName(strings.ToLower(filepath.Base(base) + ".whe")); f != nil {
+			data, err = tree.ReadTreeFile(f)
+		}
+	}
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	doc, err := whe.ParseDocument(data)
+	if err != nil {
+		return false
+	}
+	seed := rand.Int63()
+	clipNames := doc.ActionAnimationNamesWithSeed(actionName, seed)
+	if len(clipNames) == 0 && strings.EqualFold(strings.TrimSpace(actionName), "idle") {
+		for _, name := range doc.RestClipNamesWithSeed(seed) {
+			lower := strings.ToLower(strings.TrimSpace(name))
+			if strings.HasPrefix(lower, "idle") || strings.HasPrefix(lower, "stand") {
+				clipNames = append(clipNames, name)
+			}
+		}
+	}
+	var clips []*WhmAnimation
+	seen := make(map[string]bool)
+	for _, name := range clipNames {
+		key := strings.ToLower(strings.TrimSpace(name))
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		animation, source := sgb.ResolveLinkedAnimation(tree, modelPath, &v.model.Model, name)
+		if animation == nil || source == nil {
+			continue
+		}
+		if source != &v.model.Model {
+			animation = sgb.BindAnimationToModel(&v.model.Model, animation)
+		}
+		if animation != nil {
+			clips = append(clips, animation)
+		}
+	}
+	if len(clips) == 0 {
+		return false
+	}
+	v.selectAnimations(clips, true)
+	v.playing = true
+	return true
+}
+
+// activateUnitAction plays every clip the named action of the loaded unit
+// model's .whe resolves to, combined in the viewport, and says so in the
+// status bar. It answers false when no model is on screen or the action
+// resolves to nothing, leaving the caller with its own fallback.
+func (ui *uiState) activateUnitAction(actionName string) bool {
+	v := ui.unitModelViewer()
+	if v == nil || v.model == nil {
+		return false
+	}
+	if !selectObjectAction(v, ui.modTree, ui.unitModelPath, actionName) {
+		return false
+	}
+	ui.statusText = fmt.Sprintf("Action %q — playing %d clip(s) together",
+		strings.TrimSpace(actionName), len(v.anims))
+	return true
+}
+
 func (ui *uiState) pollUnitModel() {
 	if ui.unitModelCh == nil {
 		return
@@ -259,6 +342,7 @@ func (ui *uiState) pollUnitModel() {
 		}
 		tab := &fileTab{path: res.path, kind: "whm"}
 		tab.model = newObjectModelViewer(res.model, res.path, res.groundImage)
+		selectObjectAction(tab.model, ui.modTree, res.path, "idle")
 		// The canvas is a third of the window wide here, so the playback strip
 		// is drawn in the panel beside it rather than under it.
 		tab.model.sideControls = true

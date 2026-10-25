@@ -212,6 +212,17 @@ func WheBindingsOverlay(bindings []FxEventBinding, doc *whe.Document) []FxEventB
 		}
 		out = append(out, b)
 	}
+	// Remove bindings for events that have been deleted from the live document.
+	// Events that were in the tree but are no longer in the live document should
+	// not appear in the overlay.
+	for _, b := range bindings {
+		if !present[strings.ToLower(b.Event.Name)] {
+			// This event was removed from the live document; skip it.
+			continue
+		}
+		out = append(out, b)
+	}
+	// Add any new events that exist only in the live document.
 	for name, ev := range live {
 		if !present[name] {
 			out = append(out, FxEventBinding{Ref: ev.Name, Event: ev, Source: "edited .whe"})

@@ -100,7 +100,7 @@ func TestFxSimSynthetic(t *testing.T) {
 	if p.Radius <= 0 {
 		t.Errorf("radius = %v", p.Radius)
 	}
-	if p.Pos[2] <= 0 {
+	if p.Pos[1] <= 0 {
 		t.Errorf("particle did not remain above the origin while moving: %+v", p.Pos)
 	}
 	if !p.Horizontal {
@@ -132,11 +132,13 @@ func TestFxSpraySamplesAnimatedOffsetAndStableRingSpin(t *testing.T) {
 	e.Age = e.Duration * 0.8
 	sim.Spawn(e)
 	late := sim.Particles[len(sim.Particles)-1]
-	if start.Pos[2] < 4.9 || start.Pos[2] > 5.1 {
-		t.Errorf("initial emitter offset Z = %.3f, want 5", start.Pos[2])
+	// The file writes the offset on its own up axis, which the simulation
+	// keeps: the attachment frame turns it into the model's up later.
+	if start.Pos[1] < 4.9 || start.Pos[1] > 5.1 {
+		t.Errorf("initial emitter offset Y = %.3f, want 5", start.Pos[1])
 	}
-	if late.Pos[2] < 1.7 || late.Pos[2] > 1.9 {
-		t.Errorf("late emitter offset Z = %.3f, want interpolated 1.8 at 80%% of its curve", late.Pos[2])
+	if late.Pos[1] < 1.7 || late.Pos[1] > 1.9 {
+		t.Errorf("late emitter offset Y = %.3f, want interpolated 1.8 at 80%% of its curve", late.Pos[1])
 	}
 	if start.SpriteID != first || late.SpriteID != first+1 {
 		t.Fatalf("particle ids = %d, %d; want monotonic %d, %d", start.SpriteID, late.SpriteID, first, first+1)
@@ -213,19 +215,20 @@ func TestFxStepSamplesEmitterOffsetForSuccessiveBirths(t *testing.T) {
 	if len(sim.Particles) == 0 {
 		t.Fatal("first step did not emit any particles")
 	}
-	firstBirth := sim.Particles[len(sim.Particles)-1].Pos[2]
+	firstBirth := sim.Particles[len(sim.Particles)-1].Pos[1]
 	firstCount := len(sim.Particles)
 	sim.Step(0.1)
 	if len(sim.Particles) <= firstCount {
 		t.Fatal("second step did not emit any particles")
 	}
-	secondBirth := sim.Particles[len(sim.Particles)-1].Pos[2]
+	secondBirth := sim.Particles[len(sim.Particles)-1].Pos[1]
 	if !(firstBirth > secondBirth) {
 		t.Errorf("successive emission heights = %.3f then %.3f; expected the animated emitter offset to descend", firstBirth, secondBirth)
 	}
-	// The authored curve runs from file Y=5 to Y=1; file Y maps to world Z.
+	// The authored curve runs from file Y=5 to Y=1, and the simulation keeps
+	// the file's own Y-up frame; the attachment frame maps Y to world Z.
 	if math.Abs(firstBirth-4.6) > 0.05 || math.Abs(secondBirth-4.2) > 0.05 {
-		t.Errorf("sampled emission heights = %.3f then %.3f, want approximately 4.6 then 4.2 world-Z units", firstBirth, secondBirth)
+		t.Errorf("sampled emission heights = %.3f then %.3f, want approximately 4.6 then 4.2 along the file's up axis", firstBirth, secondBirth)
 	}
 }
 

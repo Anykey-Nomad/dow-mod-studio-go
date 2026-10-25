@@ -387,10 +387,10 @@ func TestFxOverlaySizeFollowsTheCamera(t *testing.T) {
 }
 
 // TestFxMarkerlessEffectFallsBackToAnUprightFrame checks the frame an effect
-// with no marker of its own is laid out in. It is the file's own axes carried
-// over the same way fx.FileVec carries a vector over, so the marker's up is the
-// world's up: an effect that arrives from above says so in the frame it is
-// placed with, and one that lies on the ground lies on the ground.
+// with no marker of its own is laid out in. It is the file's own axes, so the
+// frame's second (vertical) axis is the world's up: an effect that arrives from
+// above says so in the frame it is placed with, and one that lies on the
+// ground lies on the ground.
 //
 // The three axes also have to be independent. Filling the frame in one axis
 // at a time leaves two of them the same direction, and the parts that measure
@@ -467,8 +467,11 @@ func TestMarkerLocalParticleOffsetAndPlaneFollowMarker(t *testing.T) {
 	if got, want := sp.Pos, [3]float64{4, 2, 3}; got != want {
 		t.Errorf("marker-local particle offset = %v, want %v", got, want)
 	}
-	if got, want := sp.PlaneNormal, [3]float64{1, 0, 0}; got != want {
-		t.Errorf("spray ring plane normal = %v, want marker forward %v", got, want)
+	// A ring particle's plane is authored across the effect's up axis, so an
+	// unset normal is the marker's own second (up) column. That is what keeps
+	// the ring lying flat instead of standing on the marker's forward axis.
+	if got, want := sp.PlaneNormal, [3]float64{0, 0, 1}; got != want {
+		t.Errorf("spray ring plane normal = %v, want marker up %v", got, want)
 	}
 	// The marker's placement remains the pivot; its world-space position is
 	// not rotated or replaced by the local particle displacement.
@@ -486,7 +489,9 @@ func TestFxRingOffsetIsMeasuredUpward(t *testing.T) {
 		Texture:  "",
 		Lifetime: 1,
 		Radius:   []fx.FxKey{{V: 0.5}},
-		Offset:   []fx.FxVec3Key{{X: 2, Y: 0, Z: 0}},
+		// The offset is written on the effect's own up axis, the second
+		// component of every vector these files write.
+		Offset: []fx.FxVec3Key{{X: 0, Y: 2, Z: 0}},
 	}}
 	centre := fauxgl.Vector{X: 1, Y: 1, Z: 1}
 	up := sim.Rings(centre, axX, axY, axZ, fauxgl.Vector{Z: 1})

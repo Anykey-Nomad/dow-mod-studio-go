@@ -439,6 +439,27 @@ func (d *Document) RemoveTimedEvent(timeline string, index int) error {
 	return nil
 }
 
+// RemoveTimelineAnimation drops one animation name from a motion timeline's
+// blend list. It uses the same ParseMton/MarshalBinary round trip as the
+// event edits, so only this timeline's DATAMTON payload is rewritten and the
+// save path stays byte-exact for the rest of the file.
+func (d *Document) RemoveTimelineAnimation(timeline string, index int) error {
+	chunk := d.findTimeline(timeline)
+	if chunk == nil {
+		return fmt.Errorf("timeline %q was not found", timeline)
+	}
+	tl, err := ParseMton(chunk.Name, chunk.Payload)
+	if err != nil {
+		return err
+	}
+	if index < 0 || index >= len(tl.Animations) {
+		return fmt.Errorf("animation selection is no longer valid")
+	}
+	tl.Animations = append(tl.Animations[:index], tl.Animations[index+1:]...)
+	chunk.Payload = tl.MarshalBinary()
+	return nil
+}
+
 // CopyWheCrystalEvents copies the marker-bound crystal set from phase_out to
 // phase_in, preserving its authored event times and definitions.
 func (d *Document) CopyWheCrystalEvents() (int, error) {

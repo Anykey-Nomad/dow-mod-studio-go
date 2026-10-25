@@ -267,6 +267,80 @@ func indexOfEvent(tl whe.FxTimeline, name string) int {
 	return -1
 }
 
+// TestRemoveTimelineAnimationRoundTrip drops one clip from a motion's blend
+// list: the rest of the list survives a marshal/reparse in order, the events
+// on the same timeline are untouched, the other timeline keeps its own
+// animation and event, and the out-of-range removals refuse without writing.
+// Animation removal is a document edit like an event removal — one Save .whe
+// away from the mod.
+func TestRemoveTimelineAnimationRoundTrip(t *testing.T) {
+	fx := &chunky.Chunk{TypeID: "FOLDEVCT", Version: 1}
+	fx.Children = append(fx.Children,
+		&chunky.Chunk{TypeID: "DATAEVNT", Version: 3, Name: "step", Payload: whe.FxPayload([]whe.FxEventEntry{
+			{Key: "fx", Value: `test\\step`},
+		})},
+		&chunky.Chunk{TypeID: "DATAEVNT", Version: 3, Name: "hum", Payload: whe.FxPayload([]whe.FxEventEntry{
+			{Key: "fx", Value: `test\\hum`},
+		})},
+	)
+	mton := func(name string, anims []string, events []whe.FxTimelineEvent) *chunky.Chunk {
+		payload := (&whe.Mton{Animations: anims, Events: events}).MarshalBinary()
+		return &chunky.Chunk{TypeID: "DATAMTON", Version: 1, Name: name, Payload: payload}
+	}
+	mt := &chunky.Chunk{TypeID: "FOLDMTRE", Version: 1}
+	mt.Children = append(mt.Children,
+		mton("walk", []string{"walk_01", "walk_02", "walk_03"}, []whe.FxTimelineEvent{
+			{Name: "step", Time: 0},
+		}),
+		mton("idle", []string{"idle_01"}, []whe.FxTimelineEvent{
+			{Name: "hum", Time: -1},
+		}),
+	)
+	root := &chunky.Chunk{TypeID: "FOLDREBP", Version: 4, Children: []*chunky.Chunk{fx, mt}}
+	var buf bytes.Buffer
+	buf.Write(chunky.Preamble())
+	buf.Write(chunky.Serialize(root))
+	doc, err := whe.ParseDocument(buf.Bytes())
+	if err != nil {
+		t.Fatalf("whe.ParseDocument: %v", err)
+	}
+
+	// The refusals: past the end of the list and a timeline not in the file.
+	if err := doc.RemoveTimelineAnimation("walk", 3); err == nil {
+		t.Error("removing past the end of the animation list was accepted")
+	}
+	if err := doc.RemoveTimelineAnimation("walk", -1); err == nil {
+		t.Error("removing a negative animation index was accepted")
+	}
+	if err := doc.RemoveTimelineAnimation("gone", 0); err == nil {
+		t.Error("removing from a timeline that is not in the file was accepted")
+	}
+
+	// Drop the middle clip of walk.
+	if err := doc.RemoveTimelineAnimation("walk", 1); err != nil {
+		t.Fatalf("RemoveTimelineAnimation(walk, 1): %v", err)
+	}
+	out, err := doc.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary: %v", err)
+	}
+	walk := timelineByName(t, whe.ParseFxTimelines(out), "walk")
+	if got := walk.Animations; len(got) != 2 || got[0] != "walk_01" || got[1] != "walk_03" {
+		t.Errorf("walk animations = %v, want [walk_01 walk_03] with walk_02 removed and order kept", got)
+	}
+	if len(walk.Events) != 1 || walk.Events[0].Name != "step" {
+		t.Errorf("walk events = %+v, want the original step event untouched", walk.Events)
+	}
+	// The other timeline is left exactly as it was.
+	idle := timelineByName(t, whe.ParseFxTimelines(out), "idle")
+	if got := idle.Animations; len(got) != 1 || got[0] != "idle_01" {
+		t.Errorf("idle animations = %v, want [idle_01] untouched", got)
+	}
+	if len(idle.Events) != 1 || idle.Events[0].Name != "hum" {
+		t.Errorf("idle events = %+v, want the original hum event untouched", idle.Events)
+	}
+}
+
 // TestCopyWheCrystalEventsPutsTheCrystalOnPhaseIn is the acceptance case: the
 // crystal set that phase_out plays becomes part of phase_in, on its markers,
 // and everything else in the file is left exactly as it was.

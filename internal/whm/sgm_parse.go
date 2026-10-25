@@ -311,7 +311,7 @@ func (m *Model) parseSgmAnimData(f *chunky.Chunk) (Animation, error) {
 				n := r.Count(4) - 1 // the count includes one forced key
 				r.Skip(4)
 				force := decodeFloat(r.Take(4))
-				track := MeshTrack{Name: tr.Name, ForceInvisible: force == 0}
+				track := MeshTrack{Name: tr.Name, ForceInvisible: force == 0, Force: force}
 				if n > 0 {
 					raw := r.Take(n * 8)
 					for j := 0; j < n; j++ {

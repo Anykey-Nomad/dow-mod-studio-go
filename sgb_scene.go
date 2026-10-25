@@ -411,27 +411,13 @@ func sgbMoveEntitiesOnSurface(m *sgb.Map, scene *whm.Model, entityMeshes map[str
 }
 
 func sgbNextPlacementID(entities []sgb.Entity, next int) int {
-	if next == 0 {
-		maxID := -1
-		for _, entity := range entities {
-			if entity.ID > maxID {
-				maxID = entity.ID
-			}
-		}
-		next = maxID + 1
-		if len(entities) > 0 {
-			for candidate := 0; candidate <= maxID; candidate++ {
-				used := false
-				for _, entity := range entities {
-					if entity.ID == candidate {
-						used = true
-						break
-					}
-				}
-				if !used {
-					return candidate
-				}
-			}
+	const reservedPlacementIDs = 2 // IDs 0 and 1 are reserved by the game.
+	if next < reservedPlacementIDs {
+		next = reservedPlacementIDs
+	}
+	for _, entity := range entities {
+		if entity.ID >= next {
+			next = entity.ID + 1
 		}
 	}
 	for {

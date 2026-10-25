@@ -162,16 +162,15 @@ func (ui *uiState) fdaExportWav() {
 }
 
 func (ui *uiState) openFda(virtualPath string) {
-	if ui.modTree == nil {
-		return
-	}
 	if idx := ui.findTabIndex(virtualPath); idx >= 0 {
 		ui.tabSel = idx + 1
 		ui.ensureTabClicks()
 		ui.statusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
-	data, err := ui.modTree.ReadFile(virtualPath)
+	// A virtual path comes from the open mod's tree; an absolute one is a
+	// file the OS handed the studio through a file association.
+	data, err := ui.readTabFile(virtualPath)
 	if err != nil {
 		tt := &fileTab{path: virtualPath, kind: "fda", fdaError: err.Error(), fdaVolumePct: 100}
 		tt.fdaVolFloat.Value = 0.5

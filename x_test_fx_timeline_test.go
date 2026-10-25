@@ -265,8 +265,9 @@ type fakeModelGpu struct{}
 func (fakeModelGpu) Render(*WhmModel, WhmPose, RenderOptions, map[string]WhmMaterial, func(string) ([]byte, bool)) (modelGpuFrame, error) {
 	return nil, nil
 }
-func (fakeModelGpu) forget(*WhmModel) {}
-func (fakeModelGpu) release()         {}
+func (fakeModelGpu) forget(*WhmModel)         {}
+func (fakeModelGpu) geometryChanged(*WhmModel) {}
+func (fakeModelGpu) release()                  {}
 
 // One list, one answer: the reason the renderer acts on is the reason the FX
 // step decides from, so neither can go quietly missing about a path that is

@@ -147,9 +147,6 @@ func loadWhmGroundImage(tree *modtree.ModTree) image.Image {
 // in this same viewer, with whm.IsSgm choosing the reader.
 
 func (ui *uiState) openWhm(virtualPath string) {
-	if ui.modTree == nil {
-		return
-	}
 	if idx := ui.findTabIndex(virtualPath); idx >= 0 {
 		ui.tabSel = idx + 1
 		ui.ensureTabClicks()
@@ -157,7 +154,9 @@ func (ui *uiState) openWhm(virtualPath string) {
 		return
 	}
 	t := &fileTab{path: virtualPath, kind: "whm"}
-	data, err := ui.modTree.ReadFile(virtualPath)
+	// A virtual path comes from the open mod's tree; an absolute one is a
+	// file the OS handed the studio through a file association.
+	data, err := ui.readTabFile(virtualPath)
 	if err != nil {
 		t.whmError = err.Error()
 	} else {

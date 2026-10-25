@@ -262,6 +262,28 @@ func (v *modelViewer) boneKeyFrameAt() (int, bool) {
 // that is the largest thing the preview allocates, and it is the same answer
 // every time.
 func (v *modelViewer) pose() WhmPose {
+	if v == nil || v.model == nil {
+		return WhmPose{}
+	}
+	if len(v.anims) > 0 {
+		if v.poseValid && v.poseAnim == v.anim && v.poseTime == v.time {
+			return v.poseCache
+		}
+		times := make([]float32, len(v.anims))
+		for i, anim := range v.anims {
+			duration := animClipSeconds(anim)
+			if duration > 0 && v.animPlaybackDuration > 0 {
+				clipTime := math.Mod(float64(v.time)*v.animPlaybackDuration, duration) / duration
+				if !v.playing && v.animPlaybackDuration > duration {
+					clipTime = float64(v.time)
+				}
+				times[i] = float32(clipTime)
+			}
+		}
+		p := v.model.PoseAtAnimationTimes(v.anims, times)
+		v.poseCache, v.poseAnim, v.poseTime, v.poseValid = p, v.anim, v.time, true
+		return p
+	}
 	if v.anim == nil {
 		return v.model.RestPose()
 	}
@@ -326,6 +348,8 @@ func (v *modelViewer) selectAnim(index int) {
 	if v == nil {
 		return
 	}
+	v.anims = nil
+	v.animPlaybackDuration = 0
 	if v.model == nil || len(v.model.Animations) == 0 {
 		v.anim = nil
 		v.animIndex = 0
@@ -342,7 +366,63 @@ func (v *modelViewer) selectAnim(index int) {
 	v.animIndex = index
 	v.anim = &v.model.Animations[index]
 	v.time = 0
+	v.poseValid = false
+	v.lastFrame = time.Time{}
 	v.invalidate()
+}
+
+// selectAnimations plays clips belonging to one action together on one model.
+// It uses the longest selected clip as the shared playback clock; individual
+// clip times are sampled against their own durations.
+func (v *modelViewer) selectAnimations(anims []*WhmAnimation, playback bool) {
+	if v == nil {
+		return
+	}
+	v.anims = nil
+	v.anims = make([]*WhmAnimation, 0, len(anims))
+	for _, anim := range anims {
+		if anim != nil {
+			v.anims = append(v.anims, anim)
+		}
+	}
+	if len(v.anims) == 0 {
+		v.anim = nil
+		v.animPlaybackDuration = 0
+		v.poseValid = false
+		v.invalidate()
+		return
+	}
+	v.anim = longestAnimation(v.anims)
+	v.animIndex = animationIndex(v.model, v.anim)
+	v.animPlaybackDuration = animClipSeconds(v.anim)
+	if !playback {
+		v.playing = false
+	}
+	v.time = 0
+	v.poseValid = false
+	v.lastFrame = time.Time{}
+	v.invalidate()
+}
+
+func animationIndex(model *WhmModel, anim *WhmAnimation) int {
+	if model != nil && anim != nil {
+		for i := range model.Animations {
+			if &model.Animations[i] == anim {
+				return i
+			}
+		}
+	}
+	return 0
+}
+
+func longestAnimation(anims []*WhmAnimation) *WhmAnimation {
+	var longest *WhmAnimation
+	for _, anim := range anims {
+		if anim != nil && (longest == nil || animClipSeconds(anim) > animClipSeconds(longest)) {
+			longest = anim
+		}
+	}
+	return longest
 }
 
 // animFramesPerSecond derives a playback rate from a clip. Dawn of War stores a

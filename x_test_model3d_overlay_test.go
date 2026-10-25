@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	engine "dow-mod-studio/internal/3d_engine"
 	"github.com/fogleman/fauxgl"
 )
 
@@ -147,6 +148,59 @@ func TestOverlayMarkerArrowPointsAlongItsAxis(t *testing.T) {
 	}
 	if dot < 0.999 {
 		t.Errorf("the arrow points %v but the marker's forward is %v (dot=%.4f)", dir.Normalize(), axis, dot)
+	}
+}
+
+// DATASEUI's scale values are already the ground-plane half-extents, not a
+// multiplier for the mesh bounds. The NPC monolith's measured rectangle uses
+// this same convention: its half-extents span almost the model's whole base.
+func TestSelectionIndicatorUsesDATASEUIHalfExtentsOnGround(t *testing.T) {
+	m := overlayTestModel()
+	opts := overlayTestOptions()
+	selection := &engine.SelectionIndicator{
+		DisplayType: 1,
+		Scale:       [2]float32{5.334, 4.452},
+		Offset:      [2]float32{0.25, -0.5},
+	}
+	opts.SelectionIndicator = selection
+	lines := modelOverlayLines(m, m.RestPose(), opts)
+	if len(lines) != 4 {
+		t.Fatalf("square indicator has %d segments, want four sides", len(lines))
+	}
+	minX, maxX := math.Inf(1), math.Inf(-1)
+	minY, maxY := math.Inf(1), math.Inf(-1)
+	for _, line := range lines {
+		for _, point := range []fauxgl.Vector{line.From, line.To} {
+			minX, maxX = math.Min(minX, point.X), math.Max(maxX, point.X)
+			minY, maxY = math.Min(minY, point.Y), math.Max(maxY, point.Y)
+			if point.Z != 0 {
+				t.Errorf("selection line is at Z=%v, want the ground plane Z=0", point.Z)
+			}
+		}
+		if line.HalfWidth <= 0 || line.G <= line.R {
+			t.Errorf("selection line has invalid width or is not green: %+v", line)
+		}
+	}
+	if want := float64(selection.Offset[0] - selection.Scale[0]); math.Abs(minX-want) > 1e-6 {
+		t.Errorf("left edge x=%v, want offset-scale %v", minX, want)
+	}
+	if want := float64(selection.Offset[0] + selection.Scale[0]); math.Abs(maxX-want) > 1e-6 {
+		t.Errorf("right edge x=%v, want offset+scale %v", maxX, want)
+	}
+	if want := float64(selection.Offset[1] - selection.Scale[1]); math.Abs(minY-want) > 1e-6 {
+		t.Errorf("near edge y=%v, want offset-scale %v", minY, want)
+	}
+	if want := float64(selection.Offset[1] + selection.Scale[1]); math.Abs(maxY-want) > 1e-6 {
+		t.Errorf("far edge y=%v, want offset+scale %v", maxY, want)
+	}
+
+	selection.DisplayType = 0
+	circle := modelOverlayLines(m, m.RestPose(), opts)
+	if len(circle) != 48 {
+		t.Fatalf("circle indicator has %d segments, want 48", len(circle))
+	}
+	if gap := circle[0].From.Sub(circle[len(circle)-1].To).Length(); gap > 1e-6 {
+		t.Errorf("circle indicator is not closed: end gap %v", gap)
 	}
 }
 
