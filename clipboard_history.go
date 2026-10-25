@@ -22,6 +22,9 @@ const (
 	clipBoneKeys
 	// clipImportKeys is keys of one bone read from an imported .whm.
 	clipImportKeys
+	// clipActions is one action of a .whe's DATAACTS section: the chain of
+	// motions it plays and the other actions it calls.
+	clipActions
 )
 
 // String is the tag shown beside an entry in the history.
@@ -33,6 +36,8 @@ func (k clipKind) String() string {
 		return "Bone keys"
 	case clipImportKeys:
 		return "Import keys"
+	case clipActions:
+		return "Actions"
 	}
 	return "Unknown"
 }
@@ -51,8 +56,9 @@ type clipEntry struct {
 	label string
 	at    time.Time
 
-	events *wheEventClip
-	keys   *boneKeyClip
+	events  *wheEventClip
+	keys    *boneKeyClip
+	actions *wheActionClip
 }
 
 // fits reports whether the entry may be pasted into a field that takes the

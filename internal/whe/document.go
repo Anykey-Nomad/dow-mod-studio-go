@@ -460,6 +460,106 @@ func (d *Document) RemoveTimelineAnimation(timeline string, index int) error {
 	return nil
 }
 
+// TimelinePayload is the raw DATAMTON payload of one timeline. Keeping the
+// bytes and not just the parsed fields is what lets a timeline copied in one
+// unit's .whe be written into another's unchanged: the motion tail, the random
+// motions and the blend list all survive the trip.
+func (d *Document) TimelinePayload(name string) ([]byte, bool) {
+	want := strings.TrimSpace(name)
+	if want == "" {
+		return nil, false
+	}
+	for _, c := range d.timelineChunks() {
+		if strings.EqualFold(strings.TrimSpace(strings.TrimRight(c.Name, "\x00")), want) {
+			return append([]byte(nil), c.Payload...), true
+		}
+	}
+	return nil, false
+}
+
+// motionFolder is the FOLDMTRE chunk holding this file's DATAMTON timelines.
+func (d *Document) motionFolder() *chunky.Chunk {
+	var folder *chunky.Chunk
+	d.walk(func(c *chunky.Chunk) {
+		if folder == nil && c.TypeID == "FOLDMTRE" {
+			folder = c
+		}
+	})
+	return folder
+}
+
+// AddTimeline writes a timeline into this .whe under the given name, from a
+// payload copied out of another file's DATAMTON chunk. It is how the timeline
+// of one unit's model is re-created on another unit's model, and it only ever
+// adds: a name this file already carries is refused rather than replaced.
+func (d *Document) AddTimeline(name string, payload []byte) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("timeline name is required")
+	}
+	if _, exists := d.TimelinePayload(name); exists {
+		return fmt.Errorf("timeline %q already exists in this .whe", name)
+	}
+	if len(payload) == 0 {
+		return fmt.Errorf("timeline %q carries nothing to copy", name)
+	}
+	folder := d.motionFolder()
+	if folder == nil {
+		return fmt.Errorf(".whe has no FOLDMTRE motion folder")
+	}
+	// The new chunk wears the version the folder's own timelines do, so the
+	// copy reads like the entries around it instead of like a guess.
+	version := int32(4)
+	for _, c := range folder.Children {
+		if c.TypeID == "DATAMTON" {
+			version = c.Version
+			break
+		}
+	}
+	folder.Children = append(folder.Children, &chunky.Chunk{
+		TypeID: "DATAMTON", Version: version, Name: name,
+		Payload: append([]byte(nil), payload...),
+	})
+	return nil
+}
+
+// AddTimelineAnimation appends a clip to a timeline's blend list when it is
+// not already there, reporting whether it wrote. Merging a copied timeline
+// into one this .whe already has is what brings its clips along.
+func (d *Document) AddTimelineAnimation(timeline, animation string) (bool, error) {
+	animation = strings.TrimSpace(animation)
+	if animation == "" {
+		return false, nil
+	}
+	chunk := d.findTimeline(timeline)
+	if chunk == nil {
+		return false, fmt.Errorf("timeline %q was not found", timeline)
+	}
+	m, err := ParseMton(chunk.Name, chunk.Payload)
+	if err != nil {
+		return false, err
+	}
+	for _, a := range m.Animations {
+		if strings.EqualFold(a, animation) {
+			return false, nil
+		}
+	}
+	m.Animations = append(m.Animations, animation)
+	chunk.Payload = m.MarshalBinary()
+	return true, nil
+}
+
+// AddEventDefinition writes one event definition into the file's FOLDEVCT
+// event folder: the definition a copied timeline needs in a .whe that has
+// never heard of it. Every entry is written as it was — a definition that
+// names a sound and an FX path at once is one event, and keeping only its
+// sound would silently drop the effect. A name the file already defines is
+// refused rather than overwritten — reconciling two authored effects is the
+// reader's call.
+func (d *Document) AddEventDefinition(ev FxEvent) error {
+	return d.addDefinition(ev, "")
+}
+
 // CopyWheCrystalEvents copies the marker-bound crystal set from phase_out to
 // phase_in, preserving its authored event times and definitions.
 func (d *Document) CopyWheCrystalEvents() (int, error) {

@@ -107,6 +107,15 @@ func (ui *uiState) ensureUnitEvents() {
 	if ui.unitEvtTree == ui.modTree && ui.unitEvtTried && strings.EqualFold(ui.unitEvtFor, u.path) {
 		return
 	}
+	// Only another module invalidates the clipboard. Another unit does not:
+	// every copy carries a snapshot of the definitions it needs, so the events
+	// copied in one unit pastes into the next one. That is the whole point of
+	// the snapshot, and dropping the entries here quietly emptied the buffer
+	// exactly when it was about to be used.
+	if ui.unitEvtTree != nil && ui.unitEvtTree != ui.modTree {
+		ui.unitClips.dropKind(clipEvents)
+		ui.unitClipCur = -1
+	}
 	ui.unitEvtTree = ui.modTree
 	ui.unitEvtFor = u.path
 	ui.unitEvtTried = true
@@ -115,10 +124,6 @@ func (ui *uiState) ensureUnitEvents() {
 	ui.unitEvtSel = 0
 	ui.unitEvtSelSet = map[int]bool{0: true}
 	ui.unitEvtSelAnchor = 0
-	// Another unit means another .whe almost always, and the definitions in
-	// the buffer are only good for the file they were snapshotted from.
-	ui.unitClips.dropKind(clipEvents)
-	ui.unitClipCur = -1
 	ui.unitEvtBound = ""
 	ui.unitEvtEntryBound = ""
 	ui.unitActCondBound = ""
@@ -429,10 +434,55 @@ func drawEyeGlyph(ops *op.Ops, sz image.Point, open bool, col color.NRGBA) {
 // the moment it fires at, and a snapshot of the DATAEVNT definitions they
 // name. The snapshot is what lets a Paste into a timeline that lacks those
 // definitions bring the marker and path settings along — while a name this
-// .whe already defines differently is refused rather than overwritten.
+// .whe already defines differently is refused rather than overwritten. That is
+// also why a copy outlives the unit it was taken from: it carries everything it
+// needs rather than borrowing the .whe it was read from.
+//
+// timeline, animations and payload are set only when a whole timeline was
+// copied. Paste then lands on the timeline of that name — merged into the one
+// this .whe carries, or re-created from the payload — instead of on whichever
+// timeline happens to be selected.
 type wheEventClip struct {
-	events []whe.FxTimelineEvent
-	defs   map[string]whe.FxEvent
+	timeline   string
+	animations []string
+	payload    []byte
+	events     []whe.FxTimelineEvent
+	defs       map[string]whe.FxEvent
+}
+
+// wheActionClip is one copied action of a .whe's DATAACTS section. The action
+// travels on its own: the motions and sub-actions it names are timelines and
+// actions of the file it came from, and whether the target has them — under
+// the same names, guarding the same clips — is the reader's call, not
+// something a paste should decide.
+type wheActionClip struct {
+	action whe.FxAction
+}
+
+// clipEventKey normalizes an event name for the definition snapshot: the keys
+// Events() carries are lower case and trimmed, and a timeline may store the
+// name with padding bytes around it.
+func clipEventKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// clipEventDefinition is the definition a copied event names, for
+// AddTimedEvent to write where the .whe has never had it. The snapshot goes
+// over whole, sound entry and all: a definition that names both a sound and an
+// FX path is one event, and handing AddTimedEvent its sound path alone made a
+// mixed event fail the "sound names start with sound_" guard, which is how a
+// copied timeline lost its main effect. A name the copy has no snapshot of
+// returns nil, which leaves the .whe's own definition to be used.
+func clipEventDefinition(clip *wheEventClip, name string) *whe.FxEvent {
+	if clip == nil {
+		return nil
+	}
+	d, ok := clip.defs[clipEventKey(name)]
+	if !ok || len(d.Entries) == 0 {
+		return nil
+	}
+	snapshot := d
+	return &snapshot
 }
 
 // unitEvtSelectedIndices is the selected rows of the current timeline in
@@ -513,7 +563,7 @@ func (ui *uiState) unitEvtFieldFocused(gtx layout.Context) bool {
 			return true
 		}
 	}
-	for _, ed := range []*widget.Editor{&ui.unitEvtNameEd, &ui.unitEvtTimeEd, &ui.unitEvtFxEd, &ui.unitEvtSndEd, &ui.unitEvtMarkerEd} {
+	for _, ed := range []*widget.Editor{&ui.unitEvtNameEd, &ui.unitEvtTimeEd, &ui.unitEvtFxEd, &ui.unitEvtSndEd, &ui.unitEvtMarkerEd, &ui.unitEvtShiftEd} {
 		if ed.Focused(gtx) {
 			return true
 		}
@@ -534,7 +584,7 @@ func (ui *uiState) unitEvtBlurFields(gtx layout.Context) {
 	for i := range ui.unitActNameEds {
 		ui.unitActNameEds[i].Blur(gtx)
 	}
-	for _, ed := range []*widget.Editor{&ui.unitEvtNameEd, &ui.unitEvtTimeEd, &ui.unitEvtFxEd, &ui.unitEvtSndEd, &ui.unitEvtMarkerEd} {
+	for _, ed := range []*widget.Editor{&ui.unitEvtNameEd, &ui.unitEvtTimeEd, &ui.unitEvtFxEd, &ui.unitEvtSndEd, &ui.unitEvtMarkerEd, &ui.unitEvtShiftEd} {
 		ed.Blur(gtx)
 	}
 }
@@ -560,11 +610,12 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 	// The modifiers first: the clicks below are read in this same pass, and a
 	// Ctrl held down for a click arrives as key events of its own.
 	ui.unitEvtTrackModifiers(gtx)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtNameEd, evtPickName)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtTimeEd, evtPickNone)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtFxEd, evtPickFX)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtSndEd, evtPickSound)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtMarkerEd, evtPickMarker)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtNameEd, evtPickName, false)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtTimeEd, evtPickNone, true)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtFxEd, evtPickFX, false)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtSndEd, evtPickSound, false)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtMarkerEd, evtPickMarker, false)
+	ui.unitEvtUpdateShiftEditor(gtx)
 	if ui.unitEvtDoc == nil {
 		return
 	}
@@ -710,8 +761,24 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 		ui.applySelectedEventForm()
 		return
 	}
+	if ui.unitEvtShift.Clicked(gtx) {
+		ui.shiftSelectedUnitEventTimes()
+		return
+	}
+	if ui.unitEvtCopyAct.Clicked(gtx) {
+		ui.copySelectedUnitAction()
+		return
+	}
+	if ui.unitEvtPasteAct.Clicked(gtx) {
+		ui.pasteUnitAction()
+		return
+	}
 	if ui.unitEvtCopy.Clicked(gtx) {
 		ui.copySelectedUnitEvents()
+		return
+	}
+	if ui.unitEvtCopyTl.Clicked(gtx) {
+		ui.copySelectedUnitTimeline()
 		return
 	}
 	if ui.unitEvtPaste.Clicked(gtx) {
@@ -747,18 +814,24 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 			}
 		}
 	}
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtNameEd, evtPickName)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtTimeEd, evtPickNone)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtFxEd, evtPickFX)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtSndEd, evtPickSound)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtMarkerEd, evtPickMarker)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtNameEd, evtPickName, false)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtTimeEd, evtPickNone, true)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtFxEd, evtPickFX, false)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtSndEd, evtPickSound, false)
+	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtMarkerEd, evtPickMarker, false)
+	ui.unitEvtUpdateShiftEditor(gtx)
 }
 
 // unitEvtUpdateEditor processes one form field's typing. A press into the row
 // focuses it, the same way the attribute editor's value field does. Enter
 // submits: it applies the fields the way Set does and never drops a line
 // break into the value.
-func (ui *uiState) unitEvtUpdateEditor(gtx layout.Context, ed *widget.Editor, pick evtPickTarget) {
+//
+// batchTime says the field belongs to the whole selection rather than to the
+// one row the form shows. Only the moment does: Enter in the path or marker
+// field while several rows are selected must not quietly move all of their
+// times to whichever moment the primary row happened to have.
+func (ui *uiState) unitEvtUpdateEditor(gtx layout.Context, ed *widget.Editor, pick evtPickTarget, batchTime bool) {
 	ed.SingleLine = true
 	ed.Submit = true
 	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
@@ -776,7 +849,34 @@ func (ui *uiState) unitEvtUpdateEditor(gtx layout.Context, ed *widget.Editor, pi
 			break
 		}
 		if _, submit := ev.(widget.SubmitEvent); submit {
-			ui.applySelectedEventForm()
+			if batchTime {
+				ui.applySelectedEventForm()
+			} else {
+				ui.applySelectedEventFormSingle()
+			}
+			ed.Blur(gtx)
+		}
+	}
+}
+
+// unitEvtUpdateShiftEditor owns the batch shift field: a click takes the
+// caret, Enter shifts the selection and consumes the number. It is kept out of
+// unitEvtUpdateEditor because submitting it is not an apply of the form — the
+// name, path and marker fields have nothing to do with a shift.
+func (ui *uiState) unitEvtUpdateShiftEditor(gtx layout.Context) {
+	ed := &ui.unitEvtShiftEd
+	ed.SingleLine = true
+	ed.Submit = true
+	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
+		gtx.Execute(key.FocusCmd{Tag: ed})
+	}
+	for {
+		ev, ok := ed.Update(gtx)
+		if !ok {
+			break
+		}
+		if _, submit := ev.(widget.SubmitEvent); submit {
+			ui.shiftSelectedUnitEventTimes()
 			ed.Blur(gtx)
 		}
 	}
@@ -1052,9 +1152,9 @@ func (ui *uiState) stepUnitClip(dir int) {
 }
 
 // copySelectedUnitEvents puts the selected rows and a snapshot of their
-// definitions into the section's buffer, from where Paste carries them into
-// any timeline of this .whe. The buffer dies with the section's .whe — the
-// definitions snapshotted here are only good for the file they came from.
+// definitions into the shared buffer, from where Paste carries them into any
+// timeline — of this unit or of the next one, since the snapshot travels with
+// the copy rather than pointing back at the .whe it was read from.
 func (ui *uiState) copySelectedUnitEvents() {
 	tl := ui.selectedUnitEventTimeline()
 	if tl == nil {
@@ -1074,8 +1174,8 @@ func (ui *uiState) copySelectedUnitEvents() {
 		}
 		ev := tl.Events[i]
 		clip.events = append(clip.events, ev)
-		if d, ok := defs[strings.ToLower(ev.Name)]; ok {
-			clip.defs[strings.ToLower(ev.Name)] = d
+		if d, ok := defs[clipEventKey(ev.Name)]; ok {
+			clip.defs[clipEventKey(ev.Name)] = d
 		}
 	}
 	if len(clip.events) == 0 {
@@ -1093,51 +1193,172 @@ func (ui *uiState) copySelectedUnitEvents() {
 	ui.statusText = fmt.Sprintf("Copied %d event(s) — Paste into any timeline", len(clip.events))
 }
 
-// pasteUnitEvents writes the buffer's events into the selected timeline at
-// their original moments, bringing the definitions Copy snapshotted along. A
-// name this .whe already defines differently is not overwritten —
-// AddTimedEvent says so — and that event is skipped and reported instead.
+// copySelectedUnitTimeline puts the whole selected timeline into the shared
+// buffer: its events, the clips it blends and the definitions those events
+// name. Copying a few rows is a paste of those rows; this is a paste of the
+// timeline itself, so it lands on the timeline of its own name — in this unit
+// or in the next one, where it is merged in or created from the copied bytes.
+func (ui *uiState) copySelectedUnitTimeline() {
+	doc := ui.unitEvtDoc
+	tl := ui.selectedUnitEventTimeline()
+	if doc == nil || tl == nil {
+		ui.statusText = "Select a timeline first"
+		return
+	}
+	payload, _ := doc.TimelinePayload(tl.Name)
+	clip := &wheEventClip{
+		timeline:   tl.Name,
+		animations: append([]string(nil), tl.Animations...),
+		payload:    payload,
+		defs:       map[string]whe.FxEvent{},
+	}
+	defs := doc.Events()
+	for _, ev := range tl.Events {
+		clip.events = append(clip.events, ev)
+		if d, ok := defs[clipEventKey(ev.Name)]; ok {
+			clip.defs[clipEventKey(ev.Name)] = d
+		}
+	}
+	ui.unitClips.push(clipEntry{
+		kind:   clipEvents,
+		label:  fmt.Sprintf("timeline %s (%d event(s))", tl.Name, len(clip.events)),
+		at:     time.Now(),
+		events: clip,
+	})
+	ui.unitClipCur = len(ui.unitClips.entries) - 1
+	ui.statusText = fmt.Sprintf("Copied timeline %s (%d event(s), %d animation(s)) — Paste in any unit",
+		tl.Name, len(clip.events), len(clip.animations))
+}
+
+// pasteUnitEvents writes the buffer's events into a timeline at their original
+// moments, bringing the definitions Copy snapshotted along. A name the .whe
+// already defines differently is not overwritten — AddTimedEvent says so — and
+// that event is skipped and reported instead, so reconciling two authored
+// markers stays the reader's call.
+//
+// A copy of a few rows goes into the timeline that is selected. A copy of a
+// whole timeline goes to the timeline of its own name: merged into the one
+// this .whe already carries, or created here from the copied payload when the
+// file has never had one — its name is the clip it drives, so that is where it
+// belongs. The copied name is never silently written under another one.
 func (ui *uiState) pasteUnitEvents() {
 	entry, _, ok := ui.unitClips.pick(clipEvents, ui.unitClipCur)
 	if !ok || entry.events == nil || len(entry.events.events) == 0 {
 		ui.statusText = "The event clipboard is empty — Copy first"
 		return
 	}
+	doc := ui.unitEvtDoc
+	if doc == nil {
+		ui.statusText = "No .whe is loaded — select a unit whose model has one first"
+		return
+	}
 	clip := entry.events
-	if ui.unitEvtDoc == nil || ui.unitEvtTimeline == "" {
+	target := ui.unitEvtTimeline
+	created := false
+	if clip.timeline != "" {
+		target = clip.timeline
+		if _, exists := doc.TimelinePayload(target); !exists {
+			if err := doc.AddTimeline(target, clip.payload); err != nil {
+				ui.statusText = "Paste failed: " + err.Error()
+				return
+			}
+			created = true
+		}
+	}
+	if target == "" {
 		ui.statusText = "Select a timeline first"
 		return
 	}
-	added, skipped := 0, 0
+	addedAnims := 0
+	for _, anim := range clip.animations {
+		wrote, err := doc.AddTimelineAnimation(target, anim)
+		if err != nil {
+			ui.statusText = "Paste failed: " + err.Error()
+			return
+		}
+		if wrote {
+			addedAnims++
+		}
+	}
+	added, skipped, present := 0, 0, 0
 	firstSkip := ""
 	var pasted []whe.FxTimelineEvent
-	for _, ev := range clip.events {
-		var definition *whe.FxEvent
-		soundPath := ""
-		if d, ok := clip.defs[strings.ToLower(ev.Name)]; ok {
-			if p, isSound := d.First("sound"); isSound {
-				soundPath = p
-			} else {
-				snapshot := d
-				definition = &snapshot
-			}
+	// The definitions this .whe already carries, kept up to date as the paste
+	// writes more of them; only the created path needs the set.
+	known := map[string]bool{}
+	if created {
+		for name := range doc.Events() {
+			known[name] = true
 		}
-		if err := ui.unitEvtDoc.AddTimedEvent(ui.unitEvtTimeline, ev, definition, soundPath); err != nil {
+	} else {
+		// An event the destination already fires at the same moment is not a
+		// conflict to report, it is already there: pasting a copied timeline
+		// into one that half carries it must not double every row. The rows
+		// read are the destination's, which is not always the selected one —
+		// a copied timeline is addressed by its own name.
+		for _, tl := range doc.Timelines() {
+			if !strings.EqualFold(tl.Name, target) {
+				continue
+			}
+			for _, ev := range tl.Events {
+				known[fxEventSlot(ev)] = true
+			}
+			break
+		}
+	}
+	for _, ev := range clip.events {
+		if created {
+			// The timeline was written from the copied payload, so its events
+			// are already listed; only the definitions behind them still have
+			// to come over. One this .whe already has is left exactly as it is.
+			key := clipEventKey(ev.Name)
+			if d, have := clip.defs[key]; have && !known[key] {
+				if err := doc.AddEventDefinition(d); err != nil {
+					skipped++
+					if firstSkip == "" {
+						firstSkip = err.Error()
+					}
+					continue
+				}
+				known[key] = true
+			}
+			added++
+			pasted = append(pasted, ev)
+			continue
+		}
+		if known[fxEventSlot(ev)] {
+			present++
+			continue
+		}
+		if err := doc.AddTimedEvent(target, ev, clipEventDefinition(clip, ev.Name), ""); err != nil {
 			skipped++
 			if firstSkip == "" {
 				firstSkip = err.Error()
 			}
 			continue
 		}
+		known[fxEventSlot(ev)] = true
 		added++
 		pasted = append(pasted, ev)
 	}
 	if added == 0 {
+		if present > 0 {
+			ui.statusText = fmt.Sprintf("Nothing to paste — %d event(s) are already in %s", present, target)
+			return
+		}
 		ui.statusText = "Paste failed: " + firstSkip
 		return
 	}
 	ui.unitEvtDirty = true
 	ui.unitEvtBound = ""
+	// A .whe read as carrying no timelines may have just gained one.
+	ui.unitEvtErr = ""
+	if created {
+		ui.unitEvtTimeline = target
+		ui.unitEvtSel = 0
+		ui.unitEvtSelSet = map[int]bool{0: true}
+		ui.unitEvtSelAnchor = 0
+	}
 	// Pasted rows land at the end of the timeline; the selection follows them
 	// so what was just pasted is what the panels below show.
 	ui.unitEvtSelSet = map[int]bool{}
@@ -1153,25 +1374,55 @@ func (ui *uiState) pasteUnitEvents() {
 		}
 	}
 	ui.reloadUnitModelFx()
-	msg := fmt.Sprintf("Pasted %d event(s) into %s", added, ui.unitEvtTimeline)
+	msg := fmt.Sprintf("Pasted %d event(s) into %s", added, target)
+	if created {
+		msg = fmt.Sprintf("Created timeline %s with %d event(s)", target, added)
+	}
+	if addedAnims > 0 {
+		msg += fmt.Sprintf(", %d animation(s)", addedAnims)
+	}
+	if present > 0 {
+		msg += fmt.Sprintf(", %d already there", present)
+	}
 	if skipped > 0 {
 		msg += fmt.Sprintf(", %d skipped: %s", skipped, firstSkip)
 	}
 	ui.statusText = msg
 }
 
+// fxEventSlot is what makes two rows of a timeline the same event: the name
+// the game fires and the moment it fires at. The comparison is case
+// insensitive for the name and exact for the time, the way the .whe stores
+// them.
+func fxEventSlot(ev whe.FxTimelineEvent) string {
+	return clipEventKey(ev.Name) + "|" + strconv.FormatFloat(ev.Time, 'g', -1, 64)
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB: apply — commit the form's edited fields to the selected event
 // ═══════════════════════════════════════════════════════════════════════════
 
-// applySelectedEventForm writes the form's typed fields into the selected
-// event of the in-memory document: the moment it fires at on the timeline and
-// the path and marker its definition carries. Nothing touches the file —
-// Save .whe does that — and the viewport re-resolves from the document, so
-// the edited event shows on the model before it is written out. The event's
-// name is its identity across the file, so a changed name is refused rather
-// than half-renamed.
+// applySelectedEventForm is the panel's Apply and Set: with a group selected
+// it writes the typed moment into every selected row, and with a single row
+// selected it writes the whole form — time, path and marker — into that row.
 func (ui *uiState) applySelectedEventForm() {
+	ui.applyEventForm(true)
+}
+
+// applySelectedEventFormSingle is the path, marker and name fields' own Enter:
+// those describe the one row the form shows, so they never fan out over the
+// selection.
+func (ui *uiState) applySelectedEventFormSingle() {
+	ui.applyEventForm(false)
+}
+
+// applyEventForm writes the form's typed fields into the selected event of the
+// in-memory document: the moment it fires at on the timeline and the path and
+// marker its definition carries. Nothing touches the file — Save .whe does
+// that — and the viewport re-resolves from the document, so the edited event
+// shows on the model before it is written out. The event's name is its identity
+// across the file, so a changed name is refused rather than half-renamed.
+func (ui *uiState) applyEventForm(allowBatchTime bool) {
 	if ui.unitEvtDoc == nil {
 		ui.unitEvtFormErr = "No .whe is loaded."
 		return
@@ -1179,6 +1430,21 @@ func (ui *uiState) applySelectedEventForm() {
 	tl := ui.selectedUnitEventTimeline()
 	if tl == nil || ui.unitEvtSel < 0 || ui.unitEvtSel >= len(tl.Events) {
 		ui.unitEvtFormErr = "Select an event to apply the fields to."
+		return
+	}
+	// A group selection is the batch form of this button. The moment an event
+	// fires at is the one field that means the same thing for every row — a
+	// name is each row's own identity, and a path and marker belong to the
+	// definition they came from — so a multi-row Apply writes the typed time
+	// to all selected rows and leaves the rest of the form to the one row it
+	// shows.
+	if indices := ui.unitEvtSelectedIndices(); allowBatchTime && len(indices) > 1 {
+		at, err := unitEventTime(ui.unitEvtTimeEd.Text())
+		if err != nil {
+			ui.unitEvtFormErr = err.Error()
+			return
+		}
+		ui.applyUnitEventTimes(indices, at)
 		return
 	}
 	ev := tl.Events[ui.unitEvtSel]
@@ -1259,6 +1525,176 @@ func (ui *uiState) applySelectedEventForm() {
 	ui.unitActCondBound = ""
 	ui.reloadUnitModelFx()
 	ui.statusText = "Applied to " + ev.Name + " — Save .whe to write it into the mod"
+}
+
+// unitEventShift parses the batch shift field: seconds added to every selected
+// row, negative to move them earlier. A typed plus sign is accepted the way a
+// person writes a delta.
+func unitEventShift(text string) (float64, error) {
+	s := strings.TrimSpace(text)
+	s = strings.TrimPrefix(s, "+")
+	if s == "" {
+		return 0, fmt.Errorf("type the seconds to add, e.g. 0.1 or -0.1")
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > math.MaxFloat32 {
+		return 0, fmt.Errorf("the shift must be a number of seconds, e.g. 0.1 or -0.1")
+	}
+	return v, nil
+}
+
+// unitEventShiftLabel reads a shift back the way it was typed, with its sign.
+func unitEventShiftLabel(d float64) string {
+	if d < 0 {
+		return "-" + strconv.FormatFloat(-d, 'f', -1, 64) + "s"
+	}
+	return "+" + strconv.FormatFloat(d, 'f', -1, 64) + "s"
+}
+
+// shiftSelectedUnitEventTimes moves every selected row of the timeline by the
+// typed number of seconds. Everything the selection holds moves together — an
+// FX, a sound, an FX bound to a marker — because the shift acts on when a row
+// fires, not on what it fires.
+//
+// The entry and exit sentinels stay where they are: "on enter" and "on leave"
+// are not moments a shift can move. A row that would land before the clip
+// starts stops at 0s instead of firing at a negative time. The field is
+// emptied by a shift that moved anything, so a second press cannot move the
+// same rows again.
+func (ui *uiState) shiftSelectedUnitEventTimes() {
+	if ui.unitEvtDoc == nil {
+		ui.unitEvtFormErr = "No .whe is loaded."
+		return
+	}
+	delta, err := unitEventShift(ui.unitEvtShiftEd.Text())
+	if err != nil {
+		ui.unitEvtFormErr = err.Error()
+		return
+	}
+	tl := ui.selectedUnitEventTimeline()
+	indices := ui.unitEvtSelectedIndices()
+	if len(indices) == 0 && ui.unitEvtSel >= 0 {
+		// A single row is a selection of one: the shift works without the
+		// Ctrl+click ritual the batch tools otherwise need.
+		indices = []int{ui.unitEvtSel}
+	}
+	if tl == nil || len(indices) == 0 {
+		ui.unitEvtFormErr = "Select the events to shift."
+		return
+	}
+	if delta == 0 {
+		ui.unitEvtFormErr = ""
+		ui.statusText = "A shift of 0s moves nothing"
+		return
+	}
+	moved, sentinel, clamped := 0, 0, 0
+	firstErr := ""
+	for _, i := range indices {
+		if i < 0 || i >= len(tl.Events) {
+			continue
+		}
+		cur := tl.Events[i].Time
+		if cur < 0 || math.IsInf(cur, 1) || cur > 1e30 {
+			sentinel++
+			continue
+		}
+		at := cur + delta
+		if at < 0 {
+			at = 0
+			clamped++
+		}
+		if err := ui.unitEvtDoc.SetTimedEventTime(ui.unitEvtTimeline, i, at); err != nil {
+			if firstErr == "" {
+				firstErr = err.Error()
+			}
+			continue
+		}
+		moved++
+	}
+	if moved == 0 {
+		if firstErr != "" {
+			ui.unitEvtFormErr = firstErr
+			return
+		}
+		ui.unitEvtFormErr = ""
+		if sentinel > 0 {
+			ui.statusText = fmt.Sprintf("Nothing shifted — %d event(s) fire on enter/leave, which have no moment to move", sentinel)
+			return
+		}
+		ui.statusText = "Nothing shifted"
+		return
+	}
+	ui.unitEvtFormErr = ""
+	ui.unitEvtDirty = true
+	// The form refills from the row it shows, whose moment has just moved.
+	ui.unitEvtBound = ""
+	ui.unitEvtShiftEd.SetText("")
+	ui.reloadUnitModelFx()
+	msg := fmt.Sprintf("Shifted %d event(s) by %s", moved, unitEventShiftLabel(delta))
+	if sentinel > 0 {
+		msg += fmt.Sprintf(", %d on enter/leave left as they were", sentinel)
+	}
+	if clamped > 0 {
+		msg += fmt.Sprintf(", %d stopped at 0s", clamped)
+	}
+	if firstErr != "" {
+		msg += ", some refused: " + firstErr
+	}
+	ui.statusText = msg + " — Save .whe to write it into the mod"
+}
+
+// applyUnitEventTimes writes one moment into every selected row of the
+// timeline — the batch edit behind Apply while a group is selected. Events
+// that already fire at that moment are counted rather than rewritten, and a
+// row the document refuses is reported without stopping the rest: one damaged
+// row must not leave the group half-moved with no word about it.
+func (ui *uiState) applyUnitEventTimes(indices []int, at float64) {
+	doc := ui.unitEvtDoc
+	tl := ui.selectedUnitEventTimeline()
+	if doc == nil || tl == nil {
+		ui.unitEvtFormErr = "Select an event to apply the fields to."
+		return
+	}
+	moved, same := 0, 0
+	firstErr := ""
+	for _, i := range indices {
+		if i < 0 || i >= len(tl.Events) {
+			continue
+		}
+		if tl.Events[i].Time == at {
+			same++
+			continue
+		}
+		if err := doc.SetTimedEventTime(ui.unitEvtTimeline, i, at); err != nil {
+			if firstErr == "" {
+				firstErr = err.Error()
+			}
+			continue
+		}
+		moved++
+	}
+	if moved == 0 {
+		if firstErr != "" {
+			ui.unitEvtFormErr = firstErr
+			return
+		}
+		ui.unitEvtFormErr = ""
+		ui.statusText = fmt.Sprintf("All %d selected event(s) already start at %s", same, unitEventTimeLabel(at))
+		return
+	}
+	ui.unitEvtFormErr = ""
+	ui.unitEvtDirty = true
+	// The time field refills from the row the form shows, which has just moved.
+	ui.unitEvtBound = ""
+	ui.reloadUnitModelFx()
+	msg := fmt.Sprintf("Set %s on %d event(s)", unitEventTimeLabel(at), moved)
+	if same > 0 {
+		msg += fmt.Sprintf(", %d already there", same)
+	}
+	if firstErr != "" {
+		msg += ", some refused: " + firstErr
+	}
+	ui.statusText = msg + " — Save .whe to write it into the mod"
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1373,7 +1809,12 @@ func (ui *uiState) layoutUnitEventTimelines(gtx layout.Context) layout.Dimension
 			layout.Flexed(1, ui.layoutUnitEventTimelineList),
 		}
 		if ui.unitEvtDoc != nil {
-			if acts := ui.unitEvtDoc.Actions(); len(acts) > 0 {
+			acts := ui.unitEvtDoc.Actions()
+			// The block also shows for a .whe that has no actions of its own
+			// while one is on the clipboard: a copied action is the only way to
+			// give such a unit its first one.
+			_, _, hasClip := ui.unitClips.pick(clipActions, ui.unitClipCur)
+			if len(acts) > 0 || hasClip {
 				children = append(children,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -1404,6 +1845,22 @@ func (ui *uiState) layoutUnitEvtActions(gtx layout.Context, acts []whe.FxAction)
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return sectionHeader(gtx, ui.th, "Actions")
+				})
+			}),
+			// An action moves between units the way a timeline does: one is
+			// copied whole here and pastes into another unit's list.
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &ui.unitEvtCopyAct, "Copy action", len(acts) == 0)
+						}),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							_, _, has := ui.unitClips.pick(clipActions, ui.unitClipCur)
+							return ui.smallButtonDisabled(gtx, &ui.unitEvtPasteAct, "Paste action", !has)
+						}),
+					)
 				})
 			}),
 		}
@@ -1509,6 +1966,68 @@ func (ui *uiState) layoutUnitEvtActionRow(gtx layout.Context, i int, a whe.FxAct
 			}),
 		)
 	})
+}
+
+// copySelectedUnitAction puts the picked action into the shared buffer. It is
+// the action itself that travels — its guarded chain of motions and
+// sub-actions — so a unit's idle / build / death chain can be set up once and
+// pasted onto another unit.
+func (ui *uiState) copySelectedUnitAction() {
+	doc := ui.unitEvtDoc
+	if doc == nil {
+		ui.statusText = "No .whe is loaded"
+		return
+	}
+	acts := doc.Actions()
+	a := ui.selectedUnitEvtAction(acts)
+	if a == nil {
+		ui.statusText = "Select an action to copy"
+		return
+	}
+	ui.unitClips.push(clipEntry{
+		kind:    clipActions,
+		label:   fmt.Sprintf("action %s (%d choice(s))", a.Name, len(unitActLinks(*a))),
+		at:      time.Now(),
+		actions: &wheActionClip{action: *a},
+	})
+	ui.unitClipCur = len(ui.unitClips.entries) - 1
+	ui.statusText = fmt.Sprintf("Copied action %s — Paste in any unit", a.Name)
+}
+
+// pasteUnitAction writes the copied action into this unit's .whe, under its own
+// name. An action of that name here is refused rather than merged: an action's
+// choices are an if / else chain in file order, and splicing one into another
+// would change what this unit plays. The motions the action names have to
+// exist in this file, which is what Save .whe writes once they do.
+func (ui *uiState) pasteUnitAction() {
+	entry, _, ok := ui.unitClips.pick(clipActions, ui.unitClipCur)
+	if !ok || entry.actions == nil {
+		ui.statusText = "The action clipboard is empty — Copy an action first"
+		return
+	}
+	doc := ui.unitEvtDoc
+	if doc == nil {
+		ui.statusText = "No .whe is loaded — select a unit whose model has one first"
+		return
+	}
+	if err := doc.AddAction(entry.actions.action); err != nil {
+		ui.statusText = "Paste failed: " + err.Error()
+		return
+	}
+	ui.unitEvtDirty = true
+	ui.unitActCondBound = ""
+	// The pasted action is what the list should show as picked, so the panel
+	// below it describes the thing that just landed.
+	acts := doc.Actions()
+	for i := range acts {
+		if strings.EqualFold(acts[i].Name, entry.actions.action.Name) {
+			ui.unitEvtActionSel = i
+			break
+		}
+	}
+	ui.reloadUnitModelFx()
+	ui.statusText = fmt.Sprintf("Pasted action %s — its motions and sub-actions must exist here; Save .whe to write it in",
+		entry.actions.action.Name)
 }
 
 // unitActLinks is one action's choices in file order: the motions it plays,
@@ -2451,6 +2970,26 @@ func (ui *uiState) layoutUnitEventTimelineList(gtx layout.Context) layout.Dimens
 			l.MaxLines = 2
 			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 		}),
+		// A timeline is copied whole from here — its events, its clips and the
+		// definitions they name — and pastes into the timeline of the same name
+		// in any unit, which is what carries one unit's effects onto another.
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return ui.smallButtonDisabled(gtx, &ui.unitEvtCopyTl, "Copy timeline", selected == nil)
+					}),
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							l := material.Label(ui.th, unit.Sp(9), "copies it whole, for another unit")
+							l.Color = cTextDim
+							l.MaxLines = 1
+							return l.Layout(gtx)
+						})
+					}),
+				)
+			})
+		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return ui.layoutListWithScrollbar(gtx, &ui.unitEvtScroll, &ui.unitEvtList, unitRowHeightDp-4, len(tls), func(gtx layout.Context, i int) layout.Dimensions {
 				return ui.layoutUnitEventTimelineRow(gtx, i, tls[i])
@@ -2532,9 +3071,23 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 	if ui.unitEvtFocusAction {
 		children = ui.unitEvtActionPanelBody(gtx)
 	} else if tl == nil {
+		msg := ui.unitEvtErr
+		if msg == "" {
+			msg = "Select a timeline in the middle column."
+		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitEventsMessage(gtx, "Select a timeline in the middle column.")
+			return ui.unitEventsMessage(gtx, msg)
 		}))
+		// A copied timeline needs no target picked: it carries its own name, so
+		// a .whe whose timelines do not include it can still receive it whole.
+		if entry, _, ok := ui.unitClips.pick(clipEvents, ui.unitClipCur); ok && entry.events != nil && entry.events.timeline != "" {
+			name := entry.events.timeline
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButton(gtx, &ui.unitEvtPaste, "Paste timeline "+name)
+				})
+			}))
+		}
 	} else {
 		// The body below this point belongs to the selected timeline: its header,
 		// the motion's own properties, its event rows and the selected event's
@@ -2829,6 +3382,37 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.tableRowEditor(gtx, "Time (s / enter / leave)", &ui.unitEvtTimeEd, true, "")
 		}),
+		// The same moment, moved rather than set: a number of seconds added to
+		// every selected row, with the button beside the field that reads it.
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Max.X = gtx.Dp(112)
+					l := material.Label(ui.th, unit.Sp(9), "Shift (s)")
+					l.Color = cTextDim
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.Y = gtx.Dp(20)
+					gtx.Constraints.Max.Y = gtx.Dp(22)
+					b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+					return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							w := material.Editor(ui.th, &ui.unitEvtShiftEd, "e.g. 0.1 or -0.1")
+							w.TextSize = unit.Sp(10)
+							w.HintColor = cTextDim
+							return w.Layout(gtx)
+						})
+					})
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButtonDisabled(gtx, &ui.unitEvtShift, "Shift", len(ui.unitEvtSelSet) == 0)
+				}),
+			)
+		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.tableRowEditor(gtx, "FX path", &ui.unitEvtFxEd, false, "")
 		}),
@@ -2855,6 +3439,15 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 			)
 		}),
 	)
+	// While several rows are selected the moment field is a batch edit, so the
+	// panel says so where the button that does it sits.
+	if n := len(ui.unitEvtSelectedIndices()); n > 1 {
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return unitFieldNote(gtx, ui.th, fmt.Sprintf("%d rows selected — Apply sets the typed time on all of them, Shift moves it.", n))
+			})
+		}))
+	}
 	if ui.unitEvtFormErr != "" {
 		err := ui.unitEvtFormErr
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {

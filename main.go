@@ -790,6 +790,10 @@ type uiState struct {
 	unitEvtActionsScroll panelScrollState
 	unitEvtActionSel     int // selected action of the DATAACTS list
 	unitEvtActionClicks  []widget.Clickable
+	// unitEvtCopyAct and unitEvtPasteAct move one action of the DATAACTS
+	// section between units, the way unitEvtCopyTl moves a whole timeline.
+	unitEvtCopyAct  widget.Clickable
+	unitEvtPasteAct widget.Clickable
 	// unitEvtFocusAction says the reader is working on an action rather than a
 	// timeline: the panel then shows the picked action's conditions and none of
 	// the timeline's events, since the two are one panel and not two stacked.
@@ -862,6 +866,11 @@ type uiState struct {
 	unitEvtFxEd     widget.Editor
 	unitEvtSndEd    widget.Editor
 	unitEvtMarkerEd widget.Editor
+	// unitEvtShiftEd is the batch time shift: seconds added to every selected
+	// row, negative to move them earlier. unitEvtShift applies it, and so does
+	// Enter in the field; the value is consumed by the press so a second one
+	// cannot move the same rows twice.
+	unitEvtShiftEd widget.Editor
 	// evtPick is the list dialog an event field opens on a click.
 	evtPick evtPicker
 	// unitEvtBound is which timeline/row the editors were last filled from,
@@ -877,6 +886,7 @@ type uiState struct {
 	// writes that to the file.
 	unitEvtSet    widget.Clickable
 	unitEvtApply  widget.Clickable
+	unitEvtShift  widget.Clickable
 	unitEvtSave   widget.Clickable
 	unitEvtRevert widget.Clickable
 	// unitEvtSelSet is the whole selected group of event rows — Ctrl+click
@@ -888,9 +898,12 @@ type uiState struct {
 	// unitClips is the typed copy history shared by the copy buffers. Each
 	// Copy adds an entry tagged with what it holds, and Paste takes the newest
 	// entry that fits the field it is pressed in.
-	unitClips    clipHistory
-	unitEvtCopy  widget.Clickable
-	unitEvtPaste widget.Clickable
+	unitClips   clipHistory
+	unitEvtCopy widget.Clickable
+	// unitEvtCopyTl copies the whole selected timeline — its events, its clips
+	// and their definitions — rather than just the rows picked in it.
+	unitEvtCopyTl widget.Clickable
+	unitEvtPaste  widget.Clickable
 	// unitClipCur is the history entry Paste takes when it fits the field; -1
 	// when none is chosen. unitClipPrev and unitClipNext step it through the
 	// entries that fit the events field.

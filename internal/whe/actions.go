@@ -172,6 +172,75 @@ func MarshalActs(acts []FxAction) []byte {
 	return b.Bytes()
 }
 
+// AddAction appends an action to the file's DATAACTS section: an action copied
+// out of another unit's .whe, put on this model's own. A name the file already
+// carries is refused rather than merged or replaced — an action's choices are
+// an if / else if / else chain in file order, so splicing one into another
+// would change what the target plays.
+func (d *Document) AddAction(a FxAction) error {
+	if d == nil {
+		return fmt.Errorf("no .whe document is loaded")
+	}
+	name := strings.TrimSpace(a.Name)
+	if name == "" {
+		return fmt.Errorf("an action needs a name")
+	}
+	chunk := d.actionsChunk()
+	if chunk == nil {
+		// A model whose file never carried the section gets one: the action
+		// has nowhere else to live, and the game reads the chunk by type.
+		chunk = d.newActionsChunk()
+		if chunk == nil {
+			return fmt.Errorf(".whe has no root folder to add the action to")
+		}
+	}
+	acts, err := parseActs(chunk.Payload)
+	if err != nil {
+		return err
+	}
+	for _, have := range acts {
+		if strings.EqualFold(strings.TrimSpace(have.Name), name) {
+			return fmt.Errorf("action %q already exists in this .whe", name)
+		}
+	}
+	copied := a
+	copied.Name = name
+	chunk.Payload = MarshalActs(append(acts, copied))
+	return nil
+}
+
+// actionsChunk is the DATAACTS chunk the section is read from and written to.
+func (d *Document) actionsChunk() *chunky.Chunk {
+	var found *chunky.Chunk
+	d.walk(func(c *chunky.Chunk) {
+		if found == nil && c.TypeID == "DATAACTS" {
+			found = c
+		}
+	})
+	return found
+}
+
+// newActionsChunk adds an empty DATAACTS chunk beside the model's other folders
+// and returns it.
+func (d *Document) newActionsChunk() *chunky.Chunk {
+	chunk := &chunky.Chunk{TypeID: "DATAACTS", Version: 1, Payload: MarshalActs(nil)}
+	var root *chunky.Chunk
+	d.walk(func(c *chunky.Chunk) {
+		if root == nil && c.TypeID == "FOLDREBP" {
+			root = c
+		}
+	})
+	switch {
+	case root != nil:
+		root.Children = append(root.Children, chunk)
+	case len(d.chunks) > 0:
+		d.chunks = append(d.chunks, chunk)
+	default:
+		return nil
+	}
+	return chunk
+}
+
 // SetAction writes one action back into the DATAACTS chunk it was read from,
 // rebuilding that chunk's payload the way SetEventEntry rebuilds a
 // definition. Actions are numbered across every DATAACTS chunk of the file,
