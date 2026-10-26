@@ -1,8 +1,9 @@
 //go:build windows || linux
 
-package app
+package render
 
 import (
+	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/fx"
 	_ "embed"
 	"encoding/binary"
@@ -234,7 +235,7 @@ func fxFallbackSpriteBytes() []byte {
 			out[i] = 0xff
 			out[i+1] = 0xff
 			out[i+2] = 0xff
-			out[i+3] = clampByte(a * 255)
+			out[i+3] = engine.ClampByte(a * 255)
 		}
 	}
 	return out
@@ -611,7 +612,7 @@ func fxTextureBytes(img *image.RGBA) []byte {
 // Nothing here waits for the GPU: every upload retires only the submission that
 // last read the buffer being written, and a rotated frame resource whose reader
 // has already finished does not wait at all.
-func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay []modelOverlayLine, view fauxgl.Matrix, opts RenderOptions) ([]fxVkGroup, error) {
+func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay []ModelOverlayLine, view fauxgl.Matrix, opts RenderOptions) ([]fxVkGroup, error) {
 	nGroups := 0
 	if scene != nil {
 		nGroups = len(scene.Groups)
@@ -659,7 +660,7 @@ func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay 
 
 	// Frame-wide light data is uploaded once; each particle and ribbon is
 	// shaded by the vertex shader instead of multiplying its colour on CPU.
-	right, up := fxCameraBasis(opts)
+	right, up := FxCameraBasis(opts)
 	light := fxSceneLightOf(opts)
 	hslslMatrix(r.frameFloats[0:16], view)
 	for i := 1; i <= 13; i += 4 {
@@ -759,7 +760,7 @@ func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay 
 					Alpha:    line.A,
 					SelfLit:  true,
 					Segments: 1,
-				}, fxEyePosition(opts), ribbonCount, ribbonVerts)
+				}, FxEyePosition(opts), ribbonCount, ribbonVerts)
 				if n > 0 {
 					ribbonVerts += n
 					ribbonCount++
@@ -774,7 +775,7 @@ func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay 
 				if len(r.vertsData)/fxVertexStride+fxVertsPerQuad > fxMaxVerts {
 					break
 				}
-				r.appendOverlayLine(line, fxEyePosition(opts))
+				r.appendOverlayLine(line, FxEyePosition(opts))
 			}
 			if n := len(r.vertsData)/fxVertexStride - start; n > 0 {
 				groups = append(groups, fxVkGroup{tex: r.solid, at: start, verts: n, overlay: true})
@@ -847,13 +848,13 @@ func (r *fxVkRenderer) appendSprite(origin [3]float64, sp fx.Sprite) {
 	}
 	radius := float32(sp.Radius)
 	if radius <= 0 {
-		radius = fxSpriteFallbackRadius
+		radius = SpriteFallbackRadius
 	}
-	a := float32(clampFloat64(sp.A, 0, 1))
+	a := float32(engine.ClampFloat64(sp.A, 0, 1))
 	tint := [4]float32{
-		float32(clampFloat64(sp.R, 0, 1)),
-		float32(clampFloat64(sp.G, 0, 1)),
-		float32(clampFloat64(sp.B, 0, 1)),
+		float32(engine.ClampFloat64(sp.R, 0, 1)),
+		float32(engine.ClampFloat64(sp.G, 0, 1)),
+		float32(engine.ClampFloat64(sp.B, 0, 1)),
 		a,
 	}
 	orientationMode := float32(0)
@@ -911,13 +912,13 @@ func (r *fxVkRenderer) appendSpriteInput(origin [3]float64, sp fx.Sprite, idx in
 	}
 	radius := float32(sp.Radius)
 	if radius <= 0 {
-		radius = fxSpriteFallbackRadius
+		radius = SpriteFallbackRadius
 	}
-	a := float32(clampFloat64(sp.A, 0, 1))
+	a := float32(engine.ClampFloat64(sp.A, 0, 1))
 	tint := [4]float32{
-		float32(clampFloat64(sp.R, 0, 1)),
-		float32(clampFloat64(sp.G, 0, 1)),
-		float32(clampFloat64(sp.B, 0, 1)),
+		float32(engine.ClampFloat64(sp.R, 0, 1)),
+		float32(engine.ClampFloat64(sp.G, 0, 1)),
+		float32(engine.ClampFloat64(sp.B, 0, 1)),
 		a,
 	}
 	// The std430 runtime array starts after a 16-byte count header. Each Sprite
@@ -1047,10 +1048,10 @@ func (r *fxVkRenderer) appendRibbonInput(rb fx.BeamRibbon, eye fauxgl.Vector, id
 		fixed = 1
 	}
 	put(60, fixed) // across.w: the shader's flag for a self-pinned plane
-	put(64, float32(clampFloat64(rb.R, 0, 1)))
-	put(68, float32(clampFloat64(rb.G, 0, 1)))
-	put(72, float32(clampFloat64(rb.B, 0, 1)))
-	put(76, float32(clampFloat64(rb.Alpha, 0, 1)))
+	put(64, float32(engine.ClampFloat64(rb.R, 0, 1)))
+	put(68, float32(engine.ClampFloat64(rb.G, 0, 1)))
+	put(72, float32(engine.ClampFloat64(rb.B, 0, 1)))
+	put(76, float32(engine.ClampFloat64(rb.Alpha, 0, 1)))
 	put(80, float32(rb.Width))
 	put(84, float32(rb.Noise))
 	put(88, float32(rb.U0))
@@ -1102,11 +1103,11 @@ func (r *fxVkRenderer) appendBeam(bm fxGpuBeam) {
 	if len(idx) == 0 {
 		return
 	}
-	alpha := float32(clampFloat64(bm.Ribbon.Alpha, 0, 1))
+	alpha := float32(engine.ClampFloat64(bm.Ribbon.Alpha, 0, 1))
 	tint := [4]float32{
-		float32(clampFloat64(bm.Ribbon.R, 0, 1)),
-		float32(clampFloat64(bm.Ribbon.G, 0, 1)),
-		float32(clampFloat64(bm.Ribbon.B, 0, 1)),
+		float32(engine.ClampFloat64(bm.Ribbon.R, 0, 1)),
+		float32(engine.ClampFloat64(bm.Ribbon.G, 0, 1)),
+		float32(engine.ClampFloat64(bm.Ribbon.B, 0, 1)),
 		alpha,
 	}
 	dir := bm.Ribbon.To.Sub(bm.Ribbon.From).Normalize()
@@ -1157,7 +1158,7 @@ func (r *fxVkRenderer) appendBeam(bm fxGpuBeam) {
 // What differs from a beam is the map. An overlay has no texture of its own,
 // so every corner reads the middle of the one texel the overlay map holds,
 // which is what keeps a bone the flat colour it asks for.
-func (r *fxVkRenderer) appendOverlayLine(s modelOverlayLine, eye fauxgl.Vector) {
+func (r *fxVkRenderer) appendOverlayLine(s ModelOverlayLine, eye fauxgl.Vector) {
 	verts := fx.BeamQuads(fx.BeamRibbon{
 		From:     s.From,
 		To:       s.To,
@@ -1176,10 +1177,10 @@ func (r *fxVkRenderer) appendOverlayLine(s modelOverlayLine, eye fauxgl.Vector) 
 		return
 	}
 	tint := [4]float32{
-		float32(clampFloat64(s.R, 0, 1)),
-		float32(clampFloat64(s.G, 0, 1)),
-		float32(clampFloat64(s.B, 0, 1)),
-		float32(clampFloat64(s.A, 0, 1)),
+		float32(engine.ClampFloat64(s.R, 0, 1)),
+		float32(engine.ClampFloat64(s.G, 0, 1)),
+		float32(engine.ClampFloat64(s.B, 0, 1)),
+		float32(engine.ClampFloat64(s.A, 0, 1)),
 	}
 	for i := range idx {
 		v := verts[idx[i]]

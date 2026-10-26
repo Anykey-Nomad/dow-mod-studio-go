@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/raster"
 	"dow-mod-studio/internal/sgb"
@@ -300,16 +301,16 @@ func (ui *uiState) startSgbSceneLoad(t *fileTab, material string) {
 	go func() {
 		// Phase one: the ground. Its diffuse is the only material the
 		// terrain-only model the tab opened with can show.
-		ground := modelMaterialResult{materials: map[string]WhmMaterial{}, more: true}
+		ground := modelMaterialResult{materials: map[string]render.WhmMaterial{}, more: true}
 		if img := sgbBuildTerrainTexture(tree, path, m); img != nil {
-			ground.materials[material] = WhmMaterial{Texture: newModelTexture(img), Color: rgbaWhite}
+			ground.materials[material] = render.WhmMaterial{Texture: render.NewModelTexture(img), Color: render.RgbaWhite}
 		} else {
 			ground.missing = 1
 		}
 		ch <- ground
 		// Phase two: the scene — terrain plus every resolvable object —
 		// with the entity .rsh materials alongside the ground's.
-		res := modelMaterialResult{materials: map[string]WhmMaterial{}, missing: ground.missing,
+		res := modelMaterialResult{materials: map[string]render.WhmMaterial{}, missing: ground.missing,
 			diagnostics: map[string]modelMaterialDiagnostic{},
 		}
 		for name, mat := range ground.materials {
@@ -334,9 +335,9 @@ func (ui *uiState) startSgbSceneLoad(t *fileTab, material string) {
 // scene's object meshes name, keeping the materials already resolved (the
 // terrain's own diffuse). It returns raw bytes for Vulkan, the merged material
 // map, the count of missing textures, and source/format diagnostics.
-func sgbEntityMaterials(tree *modtree.ModTree, sceneFile string, scene *whm.Model, keep string, base map[string]WhmMaterial) (map[string][]byte, map[string]WhmMaterial, int, map[string]modelMaterialDiagnostic) {
+func sgbEntityMaterials(tree *modtree.ModTree, sceneFile string, scene *whm.Model, keep string, base map[string]render.WhmMaterial) (map[string][]byte, map[string]render.WhmMaterial, int, map[string]modelMaterialDiagnostic) {
 	if base == nil {
-		base = make(map[string]WhmMaterial)
+		base = make(map[string]render.WhmMaterial)
 	}
 	needed := map[string]bool{}
 	for _, mesh := range scene.Meshes {

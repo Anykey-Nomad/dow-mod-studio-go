@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/sgb"
@@ -364,8 +365,8 @@ func sgbMoveEntitiesOnSurface(m *sgb.Map, scene *whm.Model, entityMeshes map[str
 	if math.IsInf(minDX, 0) || minDX > maxDX || minDY > maxDY {
 		return animated, 0
 	}
-	dx = clampFloat64(dx, minDX, maxDX)
-	dy = clampFloat64(dy, minDY, maxDY)
+	dx = engine.ClampFloat64(dx, minDX, maxDX)
+	dy = engine.ClampFloat64(dy, minDY, maxDY)
 	if dx == 0 && dy == 0 {
 		return animated, 0
 	}
@@ -502,9 +503,9 @@ func sgbPickTerrainPoint(model *whm.Model, camera engine.Camera, pixelX, pixelY 
 			if int(a) >= len(model.Vertices) || int(b) >= len(model.Vertices) || int(c) >= len(model.Vertices) {
 				continue
 			}
-			v0 := vectorFromWhm(model.Vertices[a].Pos)
-			v1 := vectorFromWhm(model.Vertices[b].Pos)
-			v2 := vectorFromWhm(model.Vertices[c].Pos)
+			v0 := render.VecFromWhm(model.Vertices[a].Pos)
+			v1 := render.VecFromWhm(model.Vertices[b].Pos)
+			v2 := render.VecFromWhm(model.Vertices[c].Pos)
 			distance, ok := sgbRayTriangle(origin, direction, v0, v1, v2)
 			if ok && distance < closest {
 				closest = distance
@@ -515,9 +516,7 @@ func sgbPickTerrainPoint(model *whm.Model, camera engine.Camera, pixelX, pixelY 
 	return hitPoint, !math.IsInf(closest, 1)
 }
 
-func vectorFromWhm(position [3]float32) fauxgl.Vector {
-	return fauxgl.Vector{X: float64(position[0]), Y: float64(position[1]), Z: float64(position[2])}
-}
+// render.VecFromWhm lives in internal/app/render as render.VecFromWhm.
 
 func sgbRayTriangle(origin, direction, a, b, c fauxgl.Vector) (float64, bool) {
 	edge1, edge2 := b.Sub(a), c.Sub(a)
@@ -664,7 +663,7 @@ type sgbObjectMaterialRequest struct {
 
 type sgbObjectMaterialsResult struct {
 	request     sgbObjectMaterialRequest
-	materials   map[string]WhmMaterial
+	materials   map[string]render.WhmMaterial
 	rsh         map[string][]byte
 	diagnostics map[string]modelMaterialDiagnostic
 	missing     int
@@ -1137,7 +1136,7 @@ func (ui *uiState) applySgbObjectMaterials(tab *fileTab, result sgbObjectMateria
 		return
 	}
 	if tab.model.materials == nil {
-		tab.model.materials = make(map[string]WhmMaterial)
+		tab.model.materials = make(map[string]render.WhmMaterial)
 	}
 	if tab.model.rshData == nil {
 		tab.model.rshData = make(map[string][]byte)

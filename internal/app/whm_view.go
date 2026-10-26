@@ -8,12 +8,14 @@ import (
 	"strings"
 	"time"
 
+	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/raster"
 	"dow-mod-studio/internal/whm"
 	"gioui.org/layout"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
+	"github.com/fogleman/fauxgl"
 )
 
 const whmGroundTexture = unitGroundTexture
@@ -455,4 +457,13 @@ func ParseSgmModel(data []byte) (*WhmModel, error) {
 		return nil, err
 	}
 	return &WhmModel{Model: *m}, nil
+}
+
+// ModelCenter returns the midpoint of the model bounds and a distance that
+// frames the whole model, which is what the viewer needs to frame a new model.
+func (m *WhmModel) ModelCenter() (fauxgl.Vector, float64) {
+	if m == nil {
+		return engine.ModelCenter(nil)
+	}
+	return engine.ModelCenter(&m.Model)
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/applog"
 	"dow-mod-studio/internal/audioplayer"
 	"dow-mod-studio/internal/fda"
@@ -203,7 +204,7 @@ type uiState struct {
 	// window's backend cannot provide one and the software renderer is used.
 	// It is opened on first use because Gio creates the window's GPU with the
 	// first frame.
-	modelGpu      modelGpuHandle
+	modelGpu      render.Handle
 	modelGpuTried bool
 
 	// mod tree
@@ -1218,7 +1219,7 @@ func newPointerTag(name string) event.Tag {
 }
 
 func newUI(th *material.Theme) *uiState {
-	s := &uiState{th: th, menuOpen: -1, tabSel: 0, darkTheme: true, gpuAPI: defaultGPUAPI, keyboardArea: "files", imageCache: make(map[string]imageCacheEntry), modRefreshCh: make(chan modCatalogRefreshResult, 1), modFileWatchSignal: make(chan struct{}, 1), stateDirty: true, leftTreePointerTag: newPointerTag("left-tree"), tabBarPointerTag: newPointerTag("tab-bar"), locale: localeDefault}
+	s := &uiState{th: th, menuOpen: -1, tabSel: 0, darkTheme: true, gpuAPI: render.DefaultGPUAPI, keyboardArea: "files", imageCache: make(map[string]imageCacheEntry), modRefreshCh: make(chan modCatalogRefreshResult, 1), modFileWatchSignal: make(chan struct{}, 1), stateDirty: true, leftTreePointerTag: newPointerTag("left-tree"), tabBarPointerTag: newPointerTag("tab-bar"), locale: localeDefault}
 	applyMaterialTheme(th, true)
 	s.menuClicks = make([]widget.Clickable, len(menus))
 	s.menuItemClicks = make([][]widget.Clickable, len(menus))
@@ -1339,7 +1340,7 @@ func (ui *uiState) releaseTabResources(t *fileTab) {
 		// the driver along with the tab. Only an existing handle is asked, so
 		// closing a tab never brings one up.
 		if ui.modelGpu != nil && t.model.model != nil {
-			ui.modelGpu.forget(t.model.model)
+			ui.modelGpu.Forget(&t.model.model.Model)
 		}
 		t.model = nil
 	}
@@ -1550,7 +1551,7 @@ func run(w *app.Window) error {
 	// Gio creates its window GPU on the first frame. Install the persisted
 	// choice before receiving that frame; otherwise Windows' Vulkan driver
 	// sees an empty DOW_GPU_API and falls through to EGL.
-	if err := setGPUAPI(ui.gpuAPI); err != nil {
+	if err := render.SetGPUAPI(ui.gpuAPI); err != nil {
 		return err
 	}
 

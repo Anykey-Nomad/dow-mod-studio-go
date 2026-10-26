@@ -1,7 +1,8 @@
-package app
+package render
 
 import (
 	engine "dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/fxscene"
 	"dow-mod-studio/internal/sgb"
 	"dow-mod-studio/internal/whm"
 	"image"
@@ -15,65 +16,104 @@ import (
 
 // Software rendering of a decoded .whm model.
 
-// modelOverlayLine and the colour names preserve the root-level interface used
-// by the GPU renderer and viewer diagnostics.
-type modelOverlayLine = engine.OverlayLine
-
-var (
-	modelSkeletonColor  = engine.SkeletonColor
-	modelBonePickColor  = engine.BonePickColor
-	modelMarkerXColor   = engine.MarkerXColor
-	modelMarkerYColor   = engine.MarkerYColor
-	modelMarkerZColor   = engine.MarkerZColor
-	modelMarkerFwdColor = engine.MarkerForwardColor
+// The FX scene types belong to the leaf fxscene package the overlay builds
+// them for and both renderers read from; the names below keep this file's
+// original wording.
+type (
+	fxGpuScene   = fxscene.Scene
+	fxGpuGroup   = fxscene.Group
+	fxGpuBeam    = fxscene.Beam
+	fxSceneLight = fxscene.Light
 )
 
-func pickedMarker(index int) *int {
+// WhmPose is the animation pose a render is taken at.
+type WhmPose = whm.Pose
+
+// DefaultFov is the vertical field of view the orbit camera opens with,
+// shared by the viewer that frames a model and the renderers that draw it.
+// It matches what a .whm camera stores, so a model that has one of its own
+// and is put on it does not jump in size.
+const DefaultFov = 45.0
+
+// fxSceneLightOf is the light a render request asks for, with the same
+// defaults the model shader falls back on.
+func fxSceneLightOf(opts RenderOptions) fxSceneLight {
+	l := fxSceneLight{
+		Dir:     opts.Light,
+		Ambient: opts.Ambient,
+		Diffuse: opts.Diffuse,
+	}
+	if l.Dir == (fauxgl.Vector{}) {
+		l.Dir = fauxgl.Vector{X: 0.35, Y: -0.5, Z: 0.78}
+	}
+	if n := l.Dir.Length(); n > 0 {
+		l.Dir = l.Dir.Normalize()
+	}
+	if l.Ambient == 0 && l.Diffuse == 0 {
+		l.Ambient, l.Diffuse = 0.28, 0.72
+	}
+	return l
+}
+
+// ModelOverlayLine and the colour names preserve the root-level interface used
+// by the GPU renderer and viewer diagnostics.
+type ModelOverlayLine = engine.OverlayLine
+
+var (
+	ModelSkeletonColor  = engine.SkeletonColor
+	ModelBonePickColor  = engine.BonePickColor
+	ModelMarkerXColor   = engine.MarkerXColor
+	ModelMarkerYColor   = engine.MarkerYColor
+	ModelMarkerZColor   = engine.MarkerZColor
+	ModelMarkerFwdColor = engine.MarkerForwardColor
+)
+
+func PickedMarker(index int) *int {
 	if index < 0 {
 		return nil
 	}
 	return &index
 }
 
-func pickedBone(index int) *int {
+func PickedBone(index int) *int {
 	if index < 0 {
 		return nil
 	}
 	return &index
 }
 
-var cameraAxisColor = [3][4]float64{
-	modelMarkerXColor, modelMarkerYColor, modelMarkerZColor,
+var CameraAxisColor = [3][4]float64{
+	ModelMarkerXColor, ModelMarkerYColor, ModelMarkerZColor,
 }
 
-func cameraAxesAngles(opts RenderOptions) [3]float64 {
+func CameraAxesAngles(opts RenderOptions) [3]float64 {
 	return engine.AxisAngles(engine.Camera{Yaw: opts.Yaw, Pitch: opts.Pitch})
 }
 
-func cameraOrbitDirection(opts RenderOptions) fauxgl.Vector {
+func CameraOrbitDirection(opts RenderOptions) fauxgl.Vector {
 	return engine.OrbitDirection(engine.Camera{Yaw: opts.Yaw, Pitch: opts.Pitch})
 }
 
-func cameraViewDirection(opts RenderOptions) fauxgl.Vector {
+func CameraViewDirection(opts RenderOptions) fauxgl.Vector {
 	return engine.ViewDirection(engine.Camera{Yaw: opts.Yaw, Pitch: opts.Pitch})
 }
 
-func cameraAxesLayout(th *material.Theme, opts RenderOptions, draw bool) layout.Widget {
+func CameraAxesLayout(th *material.Theme, opts RenderOptions, draw bool) layout.Widget {
 	camera := engine.Camera{
 		Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch,
 		Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov,
 	}
-	return viewer.CameraAxesLayout(th, camera, cameraAxisColor, modelMarkerFwdColor, draw)
+	return viewer.CameraAxesLayout(th, camera, CameraAxisColor, ModelMarkerFwdColor, draw)
 }
 
-func modelOverlayHalfWidth(opts RenderOptions, pixels float64) float64 {
+func ModelOverlayHalfWidth(opts RenderOptions, pixels float64) float64 {
 	return engine.OverlayHalfWidth(engine.OverlayOptions{Camera: engine.Camera{
 		Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch,
 		Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov,
 	}}, pixels)
 }
 
-func modelOverlayLines(model *WhmModel, pose WhmPose, opts RenderOptions) []modelOverlayLine {
+func ModelOverlayLines(model *whm.Model, pose WhmPose, opts RenderOptions) []ModelOverlayLine {
 	if model == nil {
 		return nil
 	}
@@ -81,10 +121,10 @@ func modelOverlayLines(model *WhmModel, pose WhmPose, opts RenderOptions) []mode
 		Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch,
 		Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov,
 	}, Skeleton: opts.Skeleton, Marker: opts.Marker, PickedBone: opts.PickedBone, Selection: opts.SelectionIndicator}
-	return engine.OverlayLines(&model.Model, pose, eo)
+	return engine.OverlayLines(model, pose, eo)
 }
 
-func modelMarkerOverlayLines(model *WhmModel, pose WhmPose, opts RenderOptions) []modelOverlayLine {
+func ModelMarkerOverlayLines(model *whm.Model, pose WhmPose, opts RenderOptions) []ModelOverlayLine {
 	if model == nil {
 		return nil
 	}
@@ -92,39 +132,39 @@ func modelMarkerOverlayLines(model *WhmModel, pose WhmPose, opts RenderOptions) 
 		Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch,
 		Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov,
 	}, Marker: opts.Marker}
-	return engine.MarkerOverlayLines(&model.Model, pose, eo)
+	return engine.MarkerOverlayLines(model, pose, eo)
 }
 
-// vec3From converts the format's float array to the renderer's vector type.
+// Vec3From converts the format's float array to the renderer's vector type.
 //
 // The texture bridge also lives here: callers keep using the root helper while
 // image sampling itself belongs to internal/3d_engine.
-type modelTexture = engine.Texture
+type ModelTexture = engine.Texture
 
-func newModelTexture(img image.Image) fauxgl.Texture { return engine.NewTexture(img) }
+func NewModelTexture(img image.Image) fauxgl.Texture { return engine.NewTexture(img) }
 
-func vec3From(v [3]float32) fauxgl.Vector {
+func Vec3From(v [3]float32) fauxgl.Vector {
 	return fauxgl.Vector{X: float64(v[0]), Y: float64(v[1]), Z: float64(v[2])}
 }
 
-// boneInRange is retained for the root's renderer diagnostics; the WHM
+// BoneInRange is retained for the root's renderer diagnostics; the WHM
 // implementation lives with the model package.
-func boneInRange(bone int32, count int) bool {
+func BoneInRange(bone int32, count int) bool {
 	return whm.BoneInRange(bone, count)
 }
 
 // SkinnedVertex keeps the renderer-facing WhmModel API while skinning is
 // implemented next to whm.Model.
-func SkinnedVertex(m *WhmModel, pose WhmPose, v *WhmVertex) (fauxgl.Vector, fauxgl.Vector) {
+func SkinnedVertex(m *whm.Model, pose WhmPose, v *whm.Vertex) (fauxgl.Vector, fauxgl.Vector) {
 	if m == nil {
 		return fauxgl.Vector{}, fauxgl.Vector{}
 	}
-	return whm.SkinnedVertex(&m.Model, pose, v)
+	return whm.SkinnedVertex(m, pose, v)
 }
 
-// quatMatrix is shared by the viewer's key editor and delegates the actual
+// QuatMatrix is shared by the viewer's key editor and delegates the actual
 // conversion to the WHM package.
-func quatMatrix(q [4]float32) fauxgl.Matrix { return whm.QuatMatrix(q) }
+func QuatMatrix(q [4]float32) fauxgl.Matrix { return whm.QuatMatrix(q) }
 
 // RenderOptions is the app-side render request. The engine owns the common
 // render state; only the FX scene and material types remain app-specific.
@@ -143,62 +183,62 @@ type RenderOptions struct {
 }
 
 const (
-	modelQualityDraft          = 0
-	modelQualityFinal          = 1
-	modelMarkerAxisWorldLength = engine.MarkerAxisWorldLength
+	ModelQualityDraft          = 0
+	ModelQualityFinal          = 1
+	ModelMarkerAxisWorldLength = engine.MarkerAxisWorldLength
 )
 
-// meshAlphaFor is how much of the named mesh this frame draws, 1 for a mesh
+// MeshAlphaFor is how much of the named mesh this frame draws, 1 for a mesh
 // the clip says nothing about.
-func meshAlphaFor(opts RenderOptions, name string) float32 {
+func MeshAlphaFor(opts RenderOptions, name string) float32 {
 	return engine.MeshAlpha(opts.MeshAlpha, name)
 }
 
-// meshAlphaByte is an alpha as the byte a tint carries. It is rounded to
+// MeshAlphaByte is an alpha as the byte a tint carries. It is rounded to
 // nearest rather than truncated, which is what keeps a fully faded mesh fully
 // invisible and a whole one exactly whole: a hardware premultiply of 254/255
 // leaves a mesh one step short of opaque, and a truncated 0.999 is 0.9978,
 // which shows up as a mesh that never quite reaches full colour.
-func meshAlphaByte(alpha float32) uint8 { return engine.MeshAlphaByte(alpha) }
+func MeshAlphaByte(alpha float32) uint8 { return engine.MeshAlphaByte(alpha) }
 
-// uvMapping preserves the app's established UV settings interface while the
+// UVMapping preserves the app's established UV settings interface while the
 // shared mapping implementation lives in internal/3d_engine.
-type uvMapping = engine.UVMapping
+type UVMapping = engine.UVMapping
 
-func uvIdentityMapping() uvMapping { return uvMapping{Scale: 1} }
+func UVIdentityMapping() UVMapping { return UVMapping{Scale: 1} }
 
-func renderUVFor(opts RenderOptions, material string) uvMapping {
+func RenderUVFor(opts RenderOptions, material string) UVMapping {
 	if m, ok := opts.UVPerMaterial[material]; ok && m != nil {
 		return *m
 	}
 	return opts.UVDefault
 }
 
-// uvTransform delegates the renderer's UV mapping to the 3D engine package.
-func buildViewMatrix(opts RenderOptions) fauxgl.Matrix {
+// UVTransform delegates the renderer's UV mapping to the 3D engine package.
+func BuildViewMatrix(opts RenderOptions) fauxgl.Matrix {
 	return engine.ViewMatrix(engine.Camera{Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch, Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov})
 }
 
-func uvTransform(u, v float32, m uvMapping) (float32, float32) {
+func UVTransform(u, v float32, m UVMapping) (float32, float32) {
 	return engine.TransformUV(u, v, m)
 }
 
-// uvExtentOf and modelHasUVs are the viewer's side of modelUVExtent: the range
+// UVExtentOf and ModelHasUVs are the viewer's side of ModelUVExtent: the range
 // as the four floats the panel prints, and whether there was one to print.
-func uvExtentOf(model *WhmModel) [4]float32 {
-	minU, minV, maxU, maxV, ok := modelUVExtent(model)
+func UVExtentOf(model *whm.Model) [4]float32 {
+	minU, minV, maxU, maxV, ok := ModelUVExtent(model)
 	if !ok {
 		return [4]float32{}
 	}
 	return [4]float32{minU, minV, maxU, maxV}
 }
 
-func modelHasUVs(model *WhmModel) bool {
-	_, _, _, _, ok := modelUVExtent(model)
+func ModelHasUVs(model *whm.Model) bool {
+	_, _, _, _, ok := ModelUVExtent(model)
 	return ok
 }
 
-// modelUVExtent is the range the model's own texture coordinates cover, which
+// ModelUVExtent is the range the model's own texture coordinates cover, which
 // is the first thing worth knowing about a map that is landing in the wrong
 // place. A model whose coordinates run from 0 to 1 uses its map once; one whose
 // V runs from −1.4 to 1 tiles it about two and a half times, and an offset
@@ -208,11 +248,11 @@ func modelHasUVs(model *WhmModel) bool {
 // It is measured rather than read out of a field because there is no such
 // field: a .whm stores a coordinate per vertex and nothing about what those
 // coordinates were meant to span.
-func modelUVExtent(model *WhmModel) (minU, minV, maxU, maxV float32, ok bool) {
+func ModelUVExtent(model *whm.Model) (minU, minV, maxU, maxV float32, ok bool) {
 	if model == nil {
 		return engine.UVBounds(nil)
 	}
-	return engine.UVBounds(&model.Model)
+	return engine.UVBounds(model)
 }
 
 // WhmMaterial is the resolved material of one mesh: a diffuse map and a tint
@@ -221,14 +261,14 @@ type WhmMaterial = engine.Material
 
 // RenderWhmModel adapts the main package's combined UI/GPU options to the
 // standalone software renderer in internal/3d_engine.
-func RenderWhmModel(model *WhmModel, pose WhmPose, opts RenderOptions) *image.RGBA {
+func RenderWhmModel(model *whm.Model, pose WhmPose, opts RenderOptions) *image.RGBA {
 	var modelData *whm.Model
 	if model != nil {
-		modelData = &model.Model
+		modelData = model
 	}
 	engineOpts := opts.RenderOptions
 	if opts.Ground && opts.GroundImage != nil {
-		engineOpts.Texture = newModelTexture(opts.GroundImage)
+		engineOpts.Texture = NewModelTexture(opts.GroundImage)
 		engineOpts.Ground = true
 	}
 	engineOpts.MaterialOverrides = opts.MaterialOverrides
@@ -238,21 +278,12 @@ func RenderWhmModel(model *WhmModel, pose WhmPose, opts RenderOptions) *image.RG
 	return engine.Render(modelData, pose, engineOpts)
 }
 
-// ModelCenter returns the midpoint of the model bounds and a distance that
-// frames the whole model, which is what the viewer needs to frame a new model.
-func (m *WhmModel) ModelCenter() (fauxgl.Vector, float64) {
-	if m == nil {
-		return engine.ModelCenter(nil)
-	}
-	return engine.ModelCenter(&m.Model)
-}
-
 // NewCameraState creates the initial orbit-camera frame for a model without
 // exposing any application UI state to the viewer package.
-func NewCameraState(m *WhmModel, yaw, pitch, fov float64) viewer.CameraState {
+func NewCameraState(m *whm.Model, yaw, pitch, fov float64) viewer.CameraState {
 	var modelData *whm.Model
 	if m != nil {
-		modelData = &m.Model
+		modelData = m
 	}
 	center, distance := engine.ModelCenter(modelData)
 	return viewer.CameraState{
@@ -261,5 +292,5 @@ func NewCameraState(m *WhmModel, yaw, pitch, fov float64) viewer.CameraState {
 	}
 }
 
-// rgbaWhite is the default tint for a textured material.
-var rgbaWhite = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+// RgbaWhite is the default tint for a textured material.
+var RgbaWhite = color.RGBA{R: 255, G: 255, B: 255, A: 255}

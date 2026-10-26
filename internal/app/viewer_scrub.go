@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/sgb"
 	"dow-mod-studio/internal/whe"
 	"gioui.org/f32"
@@ -644,7 +645,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 		if ui.renderModelOnGpu(gtx, t, w, h) {
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		} else {
-			v.requestRender(w, h, modelQualityFinal)
+			v.requestRender(w, h, render.ModelQualityFinal)
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		}
 	}
@@ -859,7 +860,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 				dy := float64(e.Position.Y - v.lastY)
 				v.lastX, v.lastY = e.Position.X, e.Position.Y
 				v.Yaw -= dx * 0.01
-				v.Pitch = clampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
+				v.Pitch = engine.ClampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
 				v.redraw = true
 				gtx.Execute(op.InvalidateCmd{})
 				continue
@@ -899,7 +900,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			dy := float64(e.Position.Y - v.lastY)
 			v.lastX, v.lastY = e.Position.X, e.Position.Y
 			v.Yaw -= dx * 0.01
-			v.Pitch = clampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
+			v.Pitch = engine.ClampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
 			v.redraw = true
 		case pointer.Scroll:
 			v.zoomBy(modelZoomByDelta(e.Scroll.Y))
@@ -939,7 +940,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 				if e.Kind == pointer.Release {
 					if t.sgbSelectionDrag {
 						opts := v.options(w, h)
-						selection := sgbRectangleEntities(v.modelData(), t.sgbEntityMeshIDs, buildViewMatrix(opts), w, h, sgbSelectionRect(t.sgbSelectionAnchor, t.sgbSelectionCurrent))
+						selection := sgbRectangleEntities(v.modelData(), t.sgbEntityMeshIDs, render.BuildViewMatrix(opts), w, h, sgbSelectionRect(t.sgbSelectionAnchor, t.sgbSelectionCurrent))
 						t.sgbSelectedEntities = selection
 					} else if id, hit := sgbPickEntity(v.modelData(), t.sgbEntityMeshIDs, engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.sgbSelectionCurrent.X), float64(t.sgbSelectionCurrent.Y)); hit {
 						t.sgbSelectedEntities = map[int]bool{id: true}
@@ -1053,7 +1054,7 @@ func (ui *uiState) modelGizmoOverlay(gtx layout.Context, t *fileTab) layout.Dime
 		return layout.Dimensions{}
 	}
 	opts := v.options(w, h)
-	measure := cameraAxesLayout(ui.th, opts, false)
+	measure := render.CameraAxesLayout(ui.th, opts, false)
 	gtx.Constraints.Min = image.Point{}
 	d := measure(gtx)
 	if d.Size.X == 0 || d.Size.Y == 0 {
@@ -1069,7 +1070,7 @@ func (ui *uiState) modelGizmoOverlay(gtx layout.Context, t *fileTab) layout.Dime
 	macro := op.Offset(at).Push(gtx.Ops)
 	gtx.Constraints.Min = image.Point{}
 	gtx.Constraints.Max = d.Size
-	cameraAxesLayout(ui.th, opts, true)(gtx)
+	render.CameraAxesLayout(ui.th, opts, true)(gtx)
 	macro.Pop()
 	return d
 }

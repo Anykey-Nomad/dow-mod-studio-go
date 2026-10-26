@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/chunky"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/raster"
@@ -718,11 +719,11 @@ func TestWhmViewerConstrainsScrollMeasurementHeight(t *testing.T) {
 func TestViewerMarksEmptyMaterialLoadComplete(t *testing.T) {
 	v := &modelViewer{
 		loading:   true,
-		materials: map[string]WhmMaterial{},
+		materials: map[string]render.WhmMaterial{},
 		redraw:    false,
 	}
 	tab := &fileTab{model: v, modelMaterialCh: make(chan modelMaterialResult, 1)}
-	tab.modelMaterialCh <- modelMaterialResult{materials: map[string]WhmMaterial{}}
+	tab.modelMaterialCh <- modelMaterialResult{materials: map[string]render.WhmMaterial{}}
 	ui := &uiState{}
 	ui.pollViewerJobs(tab)
 
@@ -752,7 +753,7 @@ func TestRightDragPansCameraParallelToViewPlane(t *testing.T) {
 	v := newModelViewer(model, "")
 	v.Yaw, v.Pitch = 0, 0
 	v.Distance = 10
-	v.FOV = modelDefaultFov
+	v.FOV = render.DefaultFov
 	start := v.Center
 	v.panCamera(20, 10, 100)
 
@@ -789,7 +790,7 @@ func TestModelViewerProducesFirstFrame(t *testing.T) {
 	// Drive it the way modelCanvas does: a layout clears the flag and starts a
 	// background render, then the result arrives through the channel.
 	v.redraw = false
-	v.requestRender(64, 48, modelQualityFinal)
+	v.requestRender(64, 48, render.ModelQualityFinal)
 	if !v.rendering {
 		t.Fatal("requestRender did not start a render")
 	}
@@ -813,10 +814,10 @@ func TestModelViewerProducesFirstFrame(t *testing.T) {
 func TestModelViewerCoalescesRenders(t *testing.T) {
 	model := renderTestModel(t)
 	v := newModelViewer(model, "")
-	v.requestRender(32, 32, modelQualityFinal)
+	v.requestRender(32, 32, render.ModelQualityFinal)
 	first := v.frameCh
 	for i := 0; i < 5; i++ {
-		v.requestRender(32, 32, modelQualityFinal)
+		v.requestRender(32, 32, render.ModelQualityFinal)
 	}
 	if v.frameCh != first {
 		t.Fatal("a second render was started while one was still running")
@@ -968,7 +969,7 @@ func TestModelTextureReadsRowsAsStored(t *testing.T) {
 		src.SetNRGBA(x, 0, color.NRGBA{R: 255, A: 255})
 		src.SetNRGBA(x, 3, color.NRGBA{B: 255, A: 255})
 	}
-	tex := newModelTexture(src)
+	tex := render.NewModelTexture(src)
 	if got := tex.Sample(0.1, 0); got.R < 0.9 || got.B > 0.1 {
 		t.Errorf("v = 0 does not read the first stored row: %+v", got)
 	}
@@ -1008,14 +1009,14 @@ func TestRenderWhmModelGroundPlaneUsesTexture(t *testing.T) {
 	texture.SetRGBA(0, 1, color.RGBA{B: 255, A: 255})
 	texture.SetRGBA(1, 1, color.RGBA{R: 255, G: 255, A: 255})
 	model := &WhmModel{}
-	opts := RenderOptions{
+	opts := render.RenderOptions{
 		Width: 100, Height: 100, Pitch: 0.65, Distance: 8,
-		Target: fauxgl.Vector{Z: 3}, Quality: modelQualityFinal,
-		Texture: newModelTexture(texture), Ground: true,
+		Target: fauxgl.Vector{Z: 3}, Quality: render.ModelQualityFinal,
+		Texture: render.NewModelTexture(texture), Ground: true,
 	}
-	withGround := RenderWhmModel(model, model.RestPose(), opts)
+	withGround := render.RenderWhmModel(&model.Model, model.RestPose(), opts)
 	opts.Ground = false
-	withoutGround := RenderWhmModel(model, model.RestPose(), opts)
+	withoutGround := render.RenderWhmModel(&model.Model, model.RestPose(), opts)
 	if imagesEqual(withGround, withoutGround) {
 		t.Fatal("ground plane did not contribute any pixels to the rendered frame")
 	}
@@ -1035,17 +1036,17 @@ func TestRenderWhmModelGroundPlaneUsesTexture(t *testing.T) {
 func TestRenderWhmModelProducesGeometry(t *testing.T) {
 	model := renderTestModel(t)
 	center, distance := model.ModelCenter()
-	img := RenderWhmModel(model, model.RestPose(), RenderOptions{
+	img := render.RenderWhmModel(&model.Model, model.RestPose(), render.RenderOptions{
 		Width:    160,
 		Height:   120,
 		Yaw:      0.6,
 		Pitch:    0.2,
 		Distance: distance,
 		Target:   center,
-		Quality:  modelQualityFinal,
+		Quality:  render.ModelQualityFinal,
 	})
 	if img == nil {
-		t.Fatal("RenderWhmModel returned nil")
+		t.Fatal("render.RenderWhmModel returned nil")
 	}
 	if img.Bounds().Dx() != 160 || img.Bounds().Dy() != 120 {
 		t.Fatalf("size = %v, want 160x120", img.Bounds())
@@ -1075,15 +1076,15 @@ func TestRenderWhmModelProducesGeometry(t *testing.T) {
 func TestRenderWhmModelDraftAndFinalDiffer(t *testing.T) {
 	model := renderTestModel(t)
 	center, distance := model.ModelCenter()
-	opts := RenderOptions{
+	opts := render.RenderOptions{
 		Width:    64,
 		Height:   48,
 		Yaw:      0.3,
 		Distance: distance,
 		Target:   center,
 	}
-	draft := RenderWhmModel(model, model.RestPose(), withQuality(opts, modelQualityDraft))
-	final := RenderWhmModel(model, model.RestPose(), withQuality(opts, modelQualityFinal))
+	draft := render.RenderWhmModel(&model.Model, model.RestPose(), withQuality(opts, render.ModelQualityDraft))
+	final := render.RenderWhmModel(&model.Model, model.RestPose(), withQuality(opts, render.ModelQualityFinal))
 	if imagesEqual(draft, final) {
 		t.Error("draft and final frames are identical; shading is not applied")
 	}
@@ -1092,38 +1093,38 @@ func TestRenderWhmModelDraftAndFinalDiffer(t *testing.T) {
 func TestRenderWhmModelWithSkeleton(t *testing.T) {
 	model := renderTestModel(t)
 	center, distance := model.ModelCenter()
-	img := RenderWhmModel(model, model.RestPose(), RenderOptions{
+	img := render.RenderWhmModel(&model.Model, model.RestPose(), render.RenderOptions{
 		Width:    64,
 		Height:   48,
 		Yaw:      0.2,
 		Distance: distance,
 		Target:   center,
-		Quality:  modelQualityFinal,
+		Quality:  render.ModelQualityFinal,
 		Skeleton: true,
 	})
 	if img == nil {
-		t.Fatal("RenderWhmModel returned nil")
+		t.Fatal("render.RenderWhmModel returned nil")
 	}
 }
 
 func TestRenderWhmModelAnimationMovesGeometry(t *testing.T) {
 	model, anim := renderTestModelWithAnimation(t)
 	center, distance := model.ModelCenter()
-	opts := RenderOptions{
+	opts := render.RenderOptions{
 		Width:    96,
 		Height:   72,
 		Yaw:      0.4,
 		Distance: distance,
 		Target:   center,
-		Quality:  modelQualityFinal,
+		Quality:  render.ModelQualityFinal,
 	}
-	first := RenderWhmModel(model, model.PoseAt(anim, 0), opts)
+	first := render.RenderWhmModel(&model.Model, model.PoseAt(anim, 0), opts)
 	// A still frame is not proof that playback works, so sample a few points
 	// and require at least one of them to differ from the first frame.
 	changed := false
 	for i := 1; i <= 4 && !changed; i++ {
 		tNorm := float32(i) / 4
-		frame := RenderWhmModel(model, model.PoseAt(anim, tNorm), opts)
+		frame := render.RenderWhmModel(&model.Model, model.PoseAt(anim, tNorm), opts)
 		if !imagesEqual(first, frame) {
 			changed = true
 		}
@@ -1135,7 +1136,7 @@ func TestRenderWhmModelAnimationMovesGeometry(t *testing.T) {
 
 func TestRenderWhmModelRejectsEmptyOptions(t *testing.T) {
 	model := renderTestModel(t)
-	img := RenderWhmModel(model, model.RestPose(), RenderOptions{Width: 0, Height: 0})
+	img := render.RenderWhmModel(&model.Model, model.RestPose(), render.RenderOptions{Width: 0, Height: 0})
 	if img == nil {
 		t.Fatal("expected an empty image, got nil")
 	}
@@ -1179,7 +1180,7 @@ func TestSkinnedVertexNormalisesWeights(t *testing.T) {
 	for i := range model.Vertices {
 		v := &model.Vertices[i]
 		// A doubled weight set must land on the same place as a halved one.
-		pos, _ := SkinnedVertex(model, pose, v)
+		pos, _ := render.SkinnedVertex(&model.Model, pose, v)
 		if math.IsNaN(pos.X) || math.IsNaN(pos.Y) || math.IsNaN(pos.Z) {
 			t.Fatalf("vertex %d skinned to NaN", i)
 		}
@@ -1257,15 +1258,15 @@ func animMovesGeometry(model *WhmModel, anim *WhmAnimation) bool {
 		v := &model.Vertices[i]
 		bound := false
 		for s := 0; s < 4; s++ {
-			if boneInRange(v.Bones[s], len(model.Bones)) && v.Weights[s] > 0 {
+			if render.BoneInRange(v.Bones[s], len(model.Bones)) && v.Weights[s] > 0 {
 				bound = true
 			}
 		}
 		if !bound {
 			continue
 		}
-		p0, _ := SkinnedVertex(model, rest, v)
-		p1, _ := SkinnedVertex(model, posed, v)
+		p0, _ := render.SkinnedVertex(&model.Model, rest, v)
+		p1, _ := render.SkinnedVertex(&model.Model, posed, v)
 		if p0.Sub(p1).Length() > 1e-3 {
 			moved++
 		}
@@ -1293,7 +1294,7 @@ func animMovesBones(model *WhmModel, anim *WhmAnimation) bool {
 	return false
 }
 
-func withQuality(opts RenderOptions, q int) RenderOptions {
+func withQuality(opts render.RenderOptions, q int) render.RenderOptions {
 	opts.Quality = q
 	return opts
 }
@@ -1349,11 +1350,11 @@ func overlayTestModel() *WhmModel {
 
 // overlayTestOptions is a camera that frames the box: without a field of view
 // and a distance every overlay width works out to zero or to nonsense.
-func overlayTestOptions() RenderOptions {
-	return RenderOptions{
+func overlayTestOptions() render.RenderOptions {
+	return render.RenderOptions{
 		Width: 400, Height: 300,
 		Yaw: 0.6, Pitch: 0.3, Distance: 6,
-		Fov: modelDefaultFov, Quality: modelQualityFinal,
+		Fov: render.DefaultFov, Quality: render.ModelQualityFinal,
 	}
 }
 
@@ -1365,7 +1366,7 @@ func TestOverlayBonesJoinTheParentToTheBone(t *testing.T) {
 	pose := m.RestPose()
 	opts := overlayTestOptions()
 	opts.Skeleton = true
-	got := modelOverlayLines(m, pose, opts)
+	got := render.ModelOverlayLines(&m.Model, pose, opts)
 	if len(got) == 0 {
 		t.Fatal("no bone lines were built for a two bone skeleton")
 	}
@@ -1394,14 +1395,14 @@ func TestOverlayBonesJoinTheParentToTheBone(t *testing.T) {
 // exists to prevent.
 func TestOverlayWidthIsInScreenPixels(t *testing.T) {
 	opts := overlayTestOptions()
-	near := modelOverlayHalfWidth(opts, 2)
+	near := render.ModelOverlayHalfWidth(opts, 2)
 	opts.Distance *= 4
-	far := modelOverlayHalfWidth(opts, 2)
+	far := render.ModelOverlayHalfWidth(opts, 2)
 	if math.Abs(near*4-far) > 1e-9 {
 		t.Errorf("four times the distance gave a half width of %v against %v, which is not four times %v", far, near, near)
 	}
 	// Half the pixels is half the width, at the same camera.
-	if half := modelOverlayHalfWidth(opts, 1); math.Abs(half*2-far) > 1e-9 {
+	if half := render.ModelOverlayHalfWidth(opts, 1); math.Abs(half*2-far) > 1e-9 {
 		t.Errorf("two pixels gave %v and one gave %v, which are not in step", far, half)
 	}
 }
@@ -1414,8 +1415,8 @@ func TestOverlayMarkerArrowPointsAlongItsAxis(t *testing.T) {
 	m := overlayTestModel()
 	pose := m.RestPose()
 	opts := overlayTestOptions()
-	opts.Marker = pickedMarker(0)
-	segments := modelOverlayLines(m, pose, opts)
+	opts.Marker = render.PickedMarker(0)
+	segments := render.ModelOverlayLines(&m.Model, pose, opts)
 	if len(segments) == 0 {
 		t.Fatal("no overlay was built for a picked marker")
 	}
@@ -1427,10 +1428,10 @@ func TestOverlayMarkerArrowPointsAlongItsAxis(t *testing.T) {
 
 	// The arrow is the yellow segment that leaves the marker; the axes are
 	// the six shorter ones around it.
-	var shaft *modelOverlayLine
+	var shaft *render.ModelOverlayLine
 	for i := range segments {
 		s := &segments[i]
-		if s.From.Sub(at).Length() > 1e-9 || s.R != modelMarkerFwdColor[0] {
+		if s.From.Sub(at).Length() > 1e-9 || s.R != render.ModelMarkerFwdColor[0] {
 			continue
 		}
 		if dir := s.To.Sub(s.From); dir.Dot(axis) > 0.99*dir.Length() {
@@ -1442,7 +1443,7 @@ func TestOverlayMarkerArrowPointsAlongItsAxis(t *testing.T) {
 		t.Fatalf("none of the %d overlay segments runs from the marker along its forward %v", len(segments), axis)
 	}
 	dir := shaft.To.Sub(shaft.From)
-	want := axis.MulScalar(modelMarkerAxisWorldLength)
+	want := axis.MulScalar(render.ModelMarkerAxisWorldLength)
 	if math.Abs(dir.Length()-want.Length()) > 1e-9 {
 		t.Errorf("the arrow is %v long, the frame reaches %v", dir.Length(), want.Length())
 	}
@@ -1467,7 +1468,7 @@ func TestSelectionIndicatorUsesDATASEUIHalfExtentsOnGround(t *testing.T) {
 		Offset:      [2]float32{0.25, -0.5},
 	}
 	opts.SelectionIndicator = selection
-	lines := modelOverlayLines(m, m.RestPose(), opts)
+	lines := render.ModelOverlayLines(&m.Model, m.RestPose(), opts)
 	if len(lines) != 4 {
 		t.Fatalf("square indicator has %d segments, want four sides", len(lines))
 	}
@@ -1499,7 +1500,7 @@ func TestSelectionIndicatorUsesDATASEUIHalfExtentsOnGround(t *testing.T) {
 	}
 
 	selection.DisplayType = 0
-	circle := modelOverlayLines(m, m.RestPose(), opts)
+	circle := render.ModelOverlayLines(&m.Model, m.RestPose(), opts)
 	if len(circle) != 48 {
 		t.Fatalf("circle indicator has %d segments, want 48", len(circle))
 	}
@@ -1517,17 +1518,17 @@ func TestOverlayIsEmptyWhenNothingIsAskedFor(t *testing.T) {
 	opts := overlayTestOptions()
 	opts.Skeleton = false
 	opts.Marker = nil
-	if got := modelOverlayLines(m, pose, opts); len(got) != 0 {
+	if got := render.ModelOverlayLines(&m.Model, pose, opts); len(got) != 0 {
 		t.Errorf("built %d overlay segments for a frame that asked for none", len(got))
 	}
 	// A stale marker index, which is what a model replaced under a viewer
 	// that still remembers the old one looks like, must not read past the end.
 	stale := len(m.Markers) + 3
 	opts.Marker = &stale
-	if got := modelOverlayLines(m, pose, opts); len(got) != 0 {
+	if got := render.ModelOverlayLines(&m.Model, pose, opts); len(got) != 0 {
 		t.Errorf("built %d overlay segments for marker %d of a model with %d", len(got), stale, len(m.Markers))
 	}
-	if got := modelOverlayLines(nil, pose, opts); len(got) != 0 {
+	if got := render.ModelOverlayLines(nil, pose, opts); len(got) != 0 {
 		t.Errorf("built %d overlay segments for no model at all", len(got))
 	}
 }
@@ -1541,10 +1542,10 @@ func TestSoftwareFrameStillDrawsTheSkeleton(t *testing.T) {
 	m := overlayTestModel()
 	pose := m.RestPose()
 	opts := overlayTestOptions()
-	opts.Target = vec3From(m.BoundMin).Add(vec3From(m.BoundMax)).MulScalar(0.5)
-	without := RenderWhmModel(m, pose, opts)
+	opts.Target = render.Vec3From(m.BoundMin).Add(render.Vec3From(m.BoundMax)).MulScalar(0.5)
+	without := render.RenderWhmModel(&m.Model, pose, opts)
 	opts.Skeleton = true
-	with := RenderWhmModel(m, pose, opts)
+	with := render.RenderWhmModel(&m.Model, pose, opts)
 	changed := 0
 	for i := 0; i+3 < len(without.Pix) && i+3 < len(with.Pix); i += 4 {
 		if without.Pix[i] != with.Pix[i] || without.Pix[i+1] != with.Pix[i+1] || without.Pix[i+2] != with.Pix[i+2] {
@@ -1827,7 +1828,7 @@ func TestBonesStayNearTheirGeometry(t *testing.T) {
 			if b < 0 || int(b) >= len(pose.Bones) {
 				continue
 			}
-			pos, _ := SkinnedVertex(model, pose, v)
+			pos, _ := render.SkinnedVertex(&model.Model, pose, v)
 			origin := pose.Bones[b].MulPosition(fauxgl.Vector{})
 			total += origin.Sub(pos).Length() / size
 			n++
@@ -2110,15 +2111,15 @@ func TestOverlayDrawsThePickedBone(t *testing.T) {
 	m := overlayTestModel()
 	pose := m.RestPose()
 	opts := overlayTestOptions()
-	opts.PickedBone = pickedBone(1)
+	opts.PickedBone = render.PickedBone(1)
 
-	segments := modelOverlayLines(m, pose, opts)
+	segments := render.ModelOverlayLines(&m.Model, pose, opts)
 	if len(segments) == 0 {
 		t.Fatal("picking a bone built no overlay at all")
 	}
 	found := false
 	for _, s := range segments {
-		if s.R == modelBonePickColor[0] && s.G == modelBonePickColor[1] && s.B == modelBonePickColor[2] {
+		if s.R == render.ModelBonePickColor[0] && s.G == render.ModelBonePickColor[1] && s.B == render.ModelBonePickColor[2] {
 			found = true
 			if s.HalfWidth <= 0 {
 				t.Error("the picked bone's segment draws nothing: zero width")
@@ -2126,16 +2127,16 @@ func TestOverlayDrawsThePickedBone(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("none of the %d segments is in the pick colour %v", len(segments), modelBonePickColor)
+		t.Fatalf("none of the %d segments is in the pick colour %v", len(segments), render.ModelBonePickColor)
 	}
 
 	// The root bone has no parent-to-self segment, so it gets a cross at
 	// its joint instead — three segments, all through the origin.
-	opts.PickedBone = pickedBone(0)
+	opts.PickedBone = render.PickedBone(0)
 	cross := 0
 	origin := pose.Bones[0].MulPosition(fauxgl.Vector{})
-	for _, s := range modelOverlayLines(m, pose, opts) {
-		if s.R != modelBonePickColor[0] {
+	for _, s := range render.ModelOverlayLines(&m.Model, pose, opts) {
+		if s.R != render.ModelBonePickColor[0] {
 			continue
 		}
 		cross++
@@ -2158,20 +2159,20 @@ func TestOverlayPickedBoneStaleIndexDrawsNothing(t *testing.T) {
 	pose := m.RestPose()
 	opts := overlayTestOptions()
 	stale := len(m.Bones) + 3
-	opts.PickedBone = pickedBone(stale)
-	if got := modelOverlayLines(m, pose, opts); len(got) != 0 {
+	opts.PickedBone = render.PickedBone(stale)
+	if got := render.ModelOverlayLines(&m.Model, pose, opts); len(got) != 0 {
 		t.Errorf("bone %d of a model with %d built %d segments", stale, len(m.Bones), len(got))
 	}
-	opts.PickedBone = pickedBone(-1)
-	if got := modelOverlayLines(m, pose, opts); len(got) != 0 {
+	opts.PickedBone = render.PickedBone(-1)
+	if got := render.ModelOverlayLines(&m.Model, pose, opts); len(got) != 0 {
 		t.Errorf("\"nothing picked\" built %d segments", len(got))
 	}
 }
 
 // ─── merged from x_test_model3d_camera_overlay_test.go ────────────────────────────────────────
 
-func optsAt(yaw, pitch float64) RenderOptions {
-	return RenderOptions{Yaw: yaw, Pitch: pitch}
+func optsAt(yaw, pitch float64) render.RenderOptions {
+	return render.RenderOptions{Yaw: yaw, Pitch: pitch}
 }
 
 // The level views are the ones whose angles are exact, and they are the ones a
@@ -2192,7 +2193,7 @@ func TestCameraAxisAnglesOnTheLevelViews(t *testing.T) {
 		{"looking along +Y", -math.Pi / 2, "+Y", [3]float64{90, 0, 90}},
 	}
 	for _, c := range cases {
-		got := cameraAxesAngles(optsAt(c.yaw, 0))
+		got := render.CameraAxesAngles(optsAt(c.yaw, 0))
 		for i := 0; i < 3; i++ {
 			if math.Abs(got[i]-c.angles[i]) > 0.5 {
 				t.Errorf("%s: axis %d angle is %.1f degrees, want %.1f", c.name, i, got[i], c.angles[i])
@@ -2209,7 +2210,7 @@ func TestCameraAxisAnglesOnTheLevelViews(t *testing.T) {
 func TestCameraAxisAnglesAreDirectionCosines(t *testing.T) {
 	for _, yaw := range []float64{0, 0.7, 1.9, 3.4, 5.1} {
 		for _, pitch := range []float64{-1.4, -0.6, 0, 0.4, 1.4} {
-			a := cameraAxesAngles(optsAt(yaw, pitch))
+			a := render.CameraAxesAngles(optsAt(yaw, pitch))
 			sum := 0.0
 			for _, v := range a {
 				r := v * math.Pi / 180
@@ -2228,8 +2229,8 @@ func TestCameraAxisAnglesAreDirectionCosines(t *testing.T) {
 func TestCameraLooksOppositeTheOrbit(t *testing.T) {
 	for _, yaw := range []float64{0, 1.2, 2.8, 4.5} {
 		for _, pitch := range []float64{-0.9, 0, 0.7} {
-			orbit := cameraOrbitDirection(optsAt(yaw, pitch))
-			view := cameraViewDirection(optsAt(yaw, pitch))
+			orbit := render.CameraOrbitDirection(optsAt(yaw, pitch))
+			view := render.CameraViewDirection(optsAt(yaw, pitch))
 			dot := orbit.X*view.X + orbit.Y*view.Y + orbit.Z*view.Z
 			if math.Abs(dot+1) > 1e-6 {
 				t.Errorf("yaw %.2f pitch %.2f: view direction dot orbit is %.6f, want -1",
@@ -2244,15 +2245,15 @@ func TestCameraLooksOppositeTheOrbit(t *testing.T) {
 // rather than reporting a pole the picture cannot show.
 func TestCameraAxisAnglesRespectThePitchClamp(t *testing.T) {
 	const pole = math.Pi / 2
-	a := cameraAxesAngles(optsAt(0, pole*10))
+	a := render.CameraAxesAngles(optsAt(0, pole*10))
 	for i, v := range a {
 		if math.IsNaN(v) || v < 0 || v > 180 {
 			t.Errorf("axis %d angle is %v, which is not a real angle", i, v)
 		}
 	}
 	// A pitch far past the pole clamps to the same view as the clamp itself.
-	clamped := cameraAxesAngles(optsAt(0, 1.5))
-	past := cameraAxesAngles(optsAt(0, 4.0))
+	clamped := render.CameraAxesAngles(optsAt(0, 1.5))
+	past := render.CameraAxesAngles(optsAt(0, 4.0))
 	for i := range clamped {
 		if math.Abs(clamped[i]-past[i]) > 0.5 {
 			t.Errorf("axis %d: a pitch past the clamp is %.1f, the clamp gives %.1f",
@@ -2263,7 +2264,7 @@ func TestCameraAxisAnglesRespectThePitchClamp(t *testing.T) {
 
 // A default view must produce something worth reading.
 func TestCameraAxisAnglesAreSane(t *testing.T) {
-	a := cameraAxesAngles(RenderOptions{})
+	a := render.CameraAxesAngles(render.RenderOptions{})
 	for i, v := range a {
 		if math.IsNaN(v) || v < 0 || v > 180 {
 			t.Errorf("axis %d angle is %v, which is not a real angle", i, v)

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 	"gioui.org/gpu/headless"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -194,7 +195,7 @@ func renderTo(t *testing.T, w, h int, draw func(gtx layout.Context)) *image.RGBA
 	}
 	defer win.Release()
 	var ops op.Ops
-	draw(newLayoutContextForTest(&ops, w, h))
+	draw(testutil.NewLayoutContext(&ops, w, h))
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	if err := win.Frame(&ops); err != nil {
 		t.Fatalf("Frame: %v", err)

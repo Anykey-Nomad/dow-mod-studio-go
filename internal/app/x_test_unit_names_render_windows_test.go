@@ -3,6 +3,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"fmt"
 	"image"
 	"image/color"
@@ -22,7 +23,7 @@ func renderUnitDropdown(t *testing.T, ui *uiState, w, h int) (*image.RGBA, image
 	defer win.Release()
 
 	var ops op.Ops
-	gtx := newLayoutContextForTest(&ops, w, h)
+	gtx := testutil.NewLayoutContext(&ops, w, h)
 	ui.layoutUnitTabBody(gtx)
 
 	img := image.NewRGBA(image.Rect(0, 0, w, h))

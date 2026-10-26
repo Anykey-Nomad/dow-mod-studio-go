@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"dow-mod-studio/internal/3d_viewer"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/sgb"
@@ -2915,7 +2916,7 @@ func (ui *uiState) resetUnitModel() {
 		// The hardware renderer caches the model's buffers, and the goroutine
 		// that may be mid render holds the same pointer, so both go back.
 		if ui.modelGpu != nil && ui.unitModel.model.model != nil {
-			ui.modelGpu.forget(ui.unitModel.model.model)
+			ui.modelGpu.Forget(&ui.unitModel.model.model.Model)
 		}
 		ui.unitModel.model.close()
 	}
@@ -3103,14 +3104,14 @@ func (ui *uiState) unitModelViewer() *modelViewer {
 // is a local transform in the exporter's frame, so it is put into model space
 // by the same rotation the skeleton's root bones get, and it looks down its own
 // -Z at its focus point. The direction is turned into the orbit camera's pair
-// the way buildViewMatrix takes it apart: the yaw around the up axis, which is
+// the way render.BuildViewMatrix takes it apart: the yaw around the up axis, which is
 // Z, and the height off the horizon.
 func (v *modelViewer) lookThroughCamera(cam WhmCamera) {
 	if v == nil || v.model == nil {
 		return
 	}
-	eye := boneRootFrame.MulPosition(vec3From(cam.Pos))
-	focus := boneRootFrame.MulPosition(vec3From(cam.FocusPoint))
+	eye := boneRootFrame.MulPosition(render.Vec3From(cam.Pos))
+	focus := boneRootFrame.MulPosition(render.Vec3From(cam.FocusPoint))
 	v.CameraState = viewer.LookThroughCamera(v.CameraState, eye, focus, cam.Fov, cam.Name)
 	v.invalidate()
 }

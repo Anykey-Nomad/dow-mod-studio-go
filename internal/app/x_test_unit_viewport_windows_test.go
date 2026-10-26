@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"image"
 	"image/color"
 	"strings"
@@ -640,7 +641,7 @@ func renderUnitSection(t *testing.T, ui *uiState, section, raceSel, unitSel, w, 
 	ui.unitRaceSel = raceSel
 	ui.unitSel = unitSel
 	var ops op.Ops
-	gtx := newLayoutContextForTest(&ops, w, h)
+	gtx := testutil.NewLayoutContext(&ops, w, h)
 	ui.layoutContent(gtx)
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	if err := win.Frame(&ops); err != nil {
@@ -873,7 +874,7 @@ func TestUnitTabRendersWithRealMod(t *testing.T) {
 				ui.unitRaceOpen = section == 2
 
 				var ops op.Ops
-				gtx := newLayoutContextForTest(&ops, size.X, size.Y)
+				gtx := testutil.NewLayoutContext(&ops, size.X, size.Y)
 				ui.layoutContent(gtx)
 
 				img := image.NewRGBA(image.Rect(0, 0, size.X, size.Y))
@@ -959,7 +960,7 @@ func unitPickerTestUI(t *testing.T) *uiState {
 // pickerGTX is a layout context with a working but empty event source, so the
 // clickables can be polled without a window behind them.
 func pickerGTX(ops *op.Ops, r *input.Router) layout.Context {
-	gtx := newLayoutContextForTest(ops, 800, 600)
+	gtx := testutil.NewLayoutContext(ops, 800, 600)
 	gtx.Source = r.Source()
 	return gtx
 }
@@ -1059,7 +1060,7 @@ func TestUnitDropdownRendersItsRows(t *testing.T) {
 	ui.unitListOpen = true
 
 	var ops op.Ops
-	gtx := newLayoutContextForTest(&ops, w, h)
+	gtx := testutil.NewLayoutContext(&ops, w, h)
 	ui.layoutUnitTabBody(gtx)
 
 	img := image.NewRGBA(image.Rect(0, 0, w, h))

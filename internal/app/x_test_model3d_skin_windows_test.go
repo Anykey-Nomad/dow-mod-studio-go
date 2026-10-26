@@ -3,6 +3,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"math"
 	"testing"
 )
@@ -13,7 +14,7 @@ import (
 // left a fifth of every mesh unweighted.
 func TestSkinWeightsAreComplete(t *testing.T) {
 	for _, name := range []string{"lychguard.whm", "necron_lord_tgd.whm", "builder_scarab.whm", "necron_energy_core.whm"} {
-		model := requireGpuTestModel(t, name)
+		model := testutil.RequireGpuTestModel(t, name)
 		var unweighted, partial, outOfRange int
 		for i := range model.Vertices {
 			v := &model.Vertices[i]
@@ -50,7 +51,7 @@ func TestSkinWeightsAreComplete(t *testing.T) {
 // parses but carries no triangles is invisible in the preview.
 func TestEveryMeshHasGeometry(t *testing.T) {
 	for _, name := range []string{"lychguard.whm", "necron_lord_tgd.whm", "builder_scarab.whm", "necron_energy_core.whm"} {
-		model := requireGpuTestModel(t, name)
+		model := testutil.RequireGpuTestModel(t, name)
 		for _, m := range model.Meshes {
 			if len(m.Indices) < 3 {
 				t.Errorf("%s: mesh %q has %d indices, it cannot draw anything", name, m.Name, len(m.Indices))

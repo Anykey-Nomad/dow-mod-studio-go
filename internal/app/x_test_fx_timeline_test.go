@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/audioplayer"
 	"dow-mod-studio/internal/chunky"
 	"dow-mod-studio/internal/fda"
@@ -274,12 +275,12 @@ func TestPortalVortexIsNotLostToATimelineNamingGap(t *testing.T) {
 // hardware path draw this frame" question asks of it.
 type fakeModelGpu struct{}
 
-func (fakeModelGpu) Render(*WhmModel, WhmPose, RenderOptions, map[string]WhmMaterial, func(string) ([]byte, bool)) (modelGpuFrame, error) {
+func (fakeModelGpu) Render(*whm.Model, WhmPose, render.RenderOptions, map[string]render.WhmMaterial, func(string) ([]byte, bool)) (render.Frame, error) {
 	return nil, nil
 }
-func (fakeModelGpu) forget(*WhmModel)          {}
-func (fakeModelGpu) geometryChanged(*WhmModel) {}
-func (fakeModelGpu) release()                  {}
+func (fakeModelGpu) Forget(*whm.Model)          {}
+func (fakeModelGpu) GeometryChanged(*whm.Model) {}
+func (fakeModelGpu) Release()                   {}
 
 // One list, one answer: the reason the renderer acts on is the reason the FX
 // step decides from, so neither can go quietly missing about a path that is
@@ -331,7 +332,7 @@ func TestFxAdvanceBuildsTheSoftwarePictureOnlyForTheSoftwarePath(t *testing.T) {
 			}}},
 		}},
 	}
-	opts := RenderOptions{Width: 64, Height: 64, Fov: 45, Distance: 6}
+	opts := render.RenderOptions{Width: 64, Height: 64, Fov: 45, Distance: 6}
 	now := time.Now()
 
 	if reason := ui.modelGpuUnavailable(v); reason != "" {
@@ -2068,7 +2069,7 @@ func TestRingPanelLeavesItsTransparentMarginEmpty(t *testing.T) {
 		Radius:   []fx.FxKey{{T: 0, V: 1.2}, {T: 1, V: 1.2}},
 		Colour:   []fx.FxColourStop{{R: 1, G: 1, B: 1, A: 1}},
 	}}
-	opts := RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 6, Fov: 45}
+	opts := render.RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 6, Fov: 45}
 	// The marker's own frame: up, outward and the way round the ring. All
 	// three are needed - a ring laid out with its span and its width on the
 	// same axis has no quad to draw at all.
@@ -2127,7 +2128,7 @@ func TestOpaqueRingMapStillFillsItsQuad(t *testing.T) {
 		Radius:   []fx.FxKey{{T: 0, V: 1.2}, {T: 1, V: 1.2}},
 		Colour:   []fx.FxColourStop{{R: 1, G: 1, B: 1, A: 1}},
 	}}
-	opts := RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 6, Fov: 45}
+	opts := render.RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 6, Fov: 45}
 	effects := []fxOverlayEffect{{Sim: sim,
 		Right: fauxgl.Vector{X: 1},
 		Up:    fauxgl.Vector{Y: 1},
@@ -2224,8 +2225,8 @@ func TestFxScaleSpriteScalesRadiusAndLocalOffsetTogether(t *testing.T) {
 	}
 
 	fallback := fxScaleSprite(fx.Sprite{}, 2)
-	if fallback.Radius != 2*fxSpriteFallbackRadius {
-		t.Errorf("missing-radius fallback = %v, want %v in model units", fallback.Radius, 2*fxSpriteFallbackRadius)
+	if fallback.Radius != 2*render.SpriteFallbackRadius {
+		t.Errorf("missing-radius fallback = %v, want %v in model units", fallback.Radius, 2*render.SpriteFallbackRadius)
 	}
 }
 

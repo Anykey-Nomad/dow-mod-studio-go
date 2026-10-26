@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	engine "dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/chunky"
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/modtree"
@@ -202,7 +204,7 @@ func decodedMaterialFormat(format string, data []byte) string {
 // for the software renderer used by diagnostic/fallback paths.
 func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult {
 	res := modelMaterialResult{
-		materials:   map[string]WhmMaterial{},
+		materials:   map[string]render.WhmMaterial{},
 		rsh:         map[string][]byte{},
 		diagnostics: map[string]modelMaterialDiagnostic{},
 	}
@@ -231,7 +233,7 @@ func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult
 		}
 		if err == nil && img != nil {
 			diag.Status = "decoded"
-			res.materials[name] = WhmMaterial{Texture: newModelTexture(img), Color: rgbaWhite}
+			res.materials[name] = render.WhmMaterial{Texture: render.NewModelTexture(img), Color: render.RgbaWhite}
 		} else if rshErr != nil {
 			diag.Status = "decode failed"
 		}
@@ -547,7 +549,7 @@ func (v *modelViewer) uvSelectionList() []string {
 // material's own, or the one they all share. The pointer is what lets a
 // button change the mapping without every reader of it having to know which
 // one is selected.
-func (v *modelViewer) uvCurrent() *uvMapping {
+func (v *modelViewer) uvCurrent() *render.UVMapping {
 	if v == nil {
 		return nil
 	}
@@ -555,7 +557,7 @@ func (v *modelViewer) uvCurrent() *uvMapping {
 		return &v.uv
 	}
 	if v.uvMaterials == nil {
-		v.uvMaterials = make(map[string]*uvMapping)
+		v.uvMaterials = make(map[string]*render.UVMapping)
 	}
 	m, ok := v.uvMaterials[v.uvSelection]
 	if !ok {
@@ -617,9 +619,9 @@ func (v *modelViewer) uvPush() {
 	if scale <= 0 {
 		scale = 1
 	}
-	v.uvU.Value = float32(clampFloat64(float64((m.Offset[0]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
-	v.uvV.Value = float32(clampFloat64(float64((m.Offset[1]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
-	v.uvScale.Value = float32(clampFloat64(float64((scale-modelUVMinScale)/(modelUVMaxScale-modelUVMinScale)), 0, 1))
+	v.uvU.Value = float32(engine.ClampFloat64(float64((m.Offset[0]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
+	v.uvV.Value = float32(engine.ClampFloat64(float64((m.Offset[1]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
+	v.uvScale.Value = float32(engine.ClampFloat64(float64((scale-modelUVMinScale)/(modelUVMaxScale-modelUVMinScale)), 0, 1))
 }
 
 // uvPull writes the sliders back into the mapping they are editing. It runs
@@ -642,7 +644,7 @@ func (v *modelViewer) resetUVMapping() {
 		return
 	}
 	if m := v.uvCurrent(); m != nil {
-		*m = uvIdentityMapping()
+		*m = render.UVIdentityMapping()
 	}
 	v.uvSelectionDirty = true
 	v.invalidate()
@@ -675,7 +677,7 @@ func uvMappingNet(mirror bool, turns int, scale float32, off [2]float32) uvNet {
 
 // net is the viewer's own mapping in that form.
 func (v *modelViewer) net() uvNet {
-	m := uvMapping{}
+	m := render.UVMapping{}
 	if cur := v.uvCurrent(); cur != nil {
 		m = *cur
 	}
@@ -718,7 +720,7 @@ func uvNetTerm(coef [2]float32, off float32) string {
 // swap to the other, and seeing the steps beside the result is what makes that
 // obvious rather than surprising.
 func (v *modelViewer) uvMappingSequence() string {
-	m := uvMapping{}
+	m := render.UVMapping{}
 	if cur := v.uvCurrent(); cur != nil {
 		m = *cur
 	}
@@ -846,13 +848,7 @@ func modelUVAdd(v float32) string {
 
 // ─── merged from viewer_anim.go ───────────────────────────────────────────────
 
-// absInt returns the absolute value of v.
-func absInt(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
+// absInt moved to internal/3d_engine as engine.AbsInt.
 
 // boneTrack returns the animation track that belongs to the picked bone, or nil
 // when the picked bone has no track in the current clip.
@@ -985,7 +981,7 @@ func (v *modelViewer) setBoneKeyRotationFromPose() {
 }
 
 // matrixQuat extracts a quaternion (x, y, z, w) from the rotation part of a
-// 4x4 matrix. It is the inverse of quatMatrix, which builds the matrix from
+// 4x4 matrix. It is the inverse of render.QuatMatrix, which builds the matrix from
 // that same [4]float32 layout, so a "Set rot from pose" write round-trips
 // through the pose unchanged.
 //
@@ -1045,7 +1041,7 @@ func (v *modelViewer) boneKeyFrame(frame int) (int, int, bool) {
 	bestDist := int(1e9)
 	for i := range t.PosKey {
 		f := frameAt(float64(t.PosKey[i].Time), v.anim.NumFrames)
-		d := absInt(f - frame)
+		d := engine.AbsInt(f - frame)
 		if d < bestDist {
 			bestDist = d
 			bestIdx = i
@@ -1054,14 +1050,14 @@ func (v *modelViewer) boneKeyFrame(frame int) (int, int, bool) {
 	}
 	for i := range t.RotKey {
 		f := frameAt(float64(t.RotKey[i].Time), v.anim.NumFrames)
-		d := absInt(f - frame)
+		d := engine.AbsInt(f - frame)
 		if d < bestDist {
 			bestDist = d
 			bestIdx = i
 			bestMode = 1
 		}
 	}
-	if bestDist > absInt(v.anim.NumFrames) {
+	if bestDist > engine.AbsInt(v.anim.NumFrames) {
 		return -1, -1, false
 	}
 	return bestIdx, bestMode, true

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/render"
 	"encoding/json"
 	"os"
 	"testing"
@@ -8,11 +9,11 @@ import (
 
 func TestGPUAPIDefaultsToVulkanAndOverridesEnvironment(t *testing.T) {
 	t.Setenv("DOW_GPU_API", "egl")
-	if err := setGPUAPI(""); err != nil {
-		t.Fatalf("setGPUAPI: %v", err)
+	if err := render.SetGPUAPI(""); err != nil {
+		t.Fatalf("render.SetGPUAPI: %v", err)
 	}
-	if got := os.Getenv("DOW_GPU_API"); got != defaultGPUAPI {
-		t.Fatalf("DOW_GPU_API = %q, want %q", got, defaultGPUAPI)
+	if got := os.Getenv("DOW_GPU_API"); got != render.DefaultGPUAPI {
+		t.Fatalf("DOW_GPU_API = %q, want %q", got, render.DefaultGPUAPI)
 	}
 }
 
@@ -23,8 +24,8 @@ func TestPersistedGPUAPIDefaultsToVulkan(t *testing.T) {
 	}
 	ui := newLocaleTestUI()
 	ui.applyPersistedSettings(old)
-	if got := ui.gpuAPI; got != defaultGPUAPI {
-		t.Fatalf("legacy config selected GPU API %q, want %q", got, defaultGPUAPI)
+	if got := ui.gpuAPI; got != render.DefaultGPUAPI {
+		t.Fatalf("legacy config selected GPU API %q, want %q", got, render.DefaultGPUAPI)
 	}
 
 	configDir := t.TempDir()
@@ -38,7 +39,7 @@ func TestPersistedGPUAPIDefaultsToVulkan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load state: %v", err)
 	}
-	if got := back.GPUAPI; got != defaultGPUAPI {
-		t.Fatalf("saved gpuAPI = %q, want %q", got, defaultGPUAPI)
+	if got := back.GPUAPI; got != render.DefaultGPUAPI {
+		t.Fatalf("saved gpuAPI = %q, want %q", got, render.DefaultGPUAPI)
 	}
 }

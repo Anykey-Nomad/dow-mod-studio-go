@@ -1,8 +1,11 @@
 //go:build windows || linux
 
-package app
+package render
 
 import (
+	engine "dow-mod-studio/internal/3d_engine"
+
+	"errors"
 	"image/color"
 	"log"
 	"math"
@@ -26,7 +29,7 @@ func srgbToLinear(v uint8) float32 {
 	return float32(math.Pow((c+0.055)/1.055, 2.4))
 }
 
-func fadeTintToBackground(tint color.RGBA, alpha float32) color.RGBA {
+func FadeTintToBackground(tint color.RGBA, alpha float32) color.RGBA {
 	if alpha >= 1 {
 		return tint
 	}
@@ -82,18 +85,58 @@ func hslslMatrix(dst []float32, m fauxgl.Matrix) {
 	}
 }
 
-func probeGpuFrame(f modelGpuFrame, context string) (ok bool) {
+// Readback returns the current render target as raw RGBA pixels. It is the
+// test-side counterpart of ProbeFrame: the pass the renderer just drew,
+// without waiting for anything to paint it.
+func Readback(h Handle) ([]byte, error) {
+	r, ok := h.(*modelGpuVkRenderer)
+	if !ok || r == nil || r.offscreen == nil || r.offscreen.color == nil {
+		return nil, errors.New("render: no Vulkan render target to read back")
+	}
+	return r.offscreen.color.ReadPixels()
+}
+
+// FxGroupInfo reports how the last frame drew its FX groups: how many there
+// were, whether the first one took the compute or the overlay pipeline, and
+// whether the ribbon compute pipeline exists at all. It is the diagnostic the
+// FX tests read instead of reaching into the renderer's fields.
+type FxGroupInfo struct {
+	Groups         int
+	Compute        bool
+	Overlay        bool
+	RibbonPipeline bool
+}
+
+// FxGroups returns the state of the last frame's FX draws.
+func FxGroups(h Handle) FxGroupInfo {
+	var info FxGroupInfo
+	r, isVK := h.(*modelGpuVkRenderer)
+	if !isVK || r == nil {
+		return info
+	}
+	info.Groups = len(r.fxGroups)
+	if info.Groups > 0 {
+		info.Compute = r.fxGroups[0].compute
+		info.Overlay = r.fxGroups[0].overlay
+	}
+	if r.fx != nil {
+		info.RibbonPipeline = r.fx.ribbonExpand != nil
+	}
+	return info
+}
+
+func ProbeFrame(f Frame, context string) (ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("3D preview: probe %s: GPU readback failed, not fatal: %v", context, r)
 			ok = false
 		}
 	}()
-	probeGpuFrameRead(f, context)
+	ProbeFrameRead(f, context)
 	return true
 }
 
-func probeGpuFrameRead(f modelGpuFrame, context string) {
+func ProbeFrameRead(f Frame, context string) {
 	if os.Getenv("DOW_NO_GPU_PROBE") != "" {
 		return
 	}
@@ -121,7 +164,7 @@ func probeGpuFrameRead(f modelGpuFrame, context string) {
 		for x := 0; x+3 < len(row); x += 4 {
 			r, g, b := int(row[x]), int(row[x+1]), int(row[x+2])
 			total++
-			if absInt(r-bgR) <= 2 && absInt(g-bgG) <= 2 && absInt(b-bgB) <= 2 {
+			if engine.AbsInt(r-bgR) <= 2 && engine.AbsInt(g-bgG) <= 2 && engine.AbsInt(b-bgB) <= 2 {
 				clearPix++
 				continue
 			}

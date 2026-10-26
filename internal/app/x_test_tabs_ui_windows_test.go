@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"fmt"
 	"image"
 	"image/color"
@@ -65,7 +66,7 @@ func renderFrame(t *testing.T, w, h int, draw func(gtx layout.Context)) *image.R
 	defer win.Release()
 
 	var ops op.Ops
-	gtx := newLayoutContextForTest(&ops, w, h)
+	gtx := testutil.NewLayoutContext(&ops, w, h)
 	draw(gtx)
 
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -123,7 +124,7 @@ func tabContextMenuSizePx() (int, int) {
 func TestTabsAreAsWideAsTheirLabels(t *testing.T) {
 	ui := tabBarTestUI(t, 3)
 
-	gtx := asTabBar(newLayoutContextForTest(new(op.Ops), 1400, tabBarHeightDp), 1400, tabBarHeightDp)
+	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), 1400, tabBarHeightDp), 1400, tabBarHeightDp)
 	ui.layoutTabRow(gtx)
 
 	if len(ui.tabRects) != 3 {
@@ -147,7 +148,7 @@ func TestTabBarMeasuresTheRowAndOffersToScroll(t *testing.T) {
 	const w, h = 700, 300
 	ui := tabBarTestUI(t, 12)
 
-	gtx := asTabBar(newLayoutContextForTest(new(op.Ops), w, h), w, h)
+	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), w, h), w, h)
 	ui.layoutTabBar(gtx)
 
 	if ui.tabRowWidth <= ui.tabBarWidth {
@@ -180,7 +181,7 @@ func TestTabBarActuallyScrollsSideways(t *testing.T) {
 	const w, h = 700, 300
 	ui := tabBarTestUI(t, 12)
 
-	gtx := asTabBar(newLayoutContextForTest(new(op.Ops), w, h), w, h)
+	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), w, h), w, h)
 	ui.layoutTabBar(gtx)
 	strip := image.Rectangle{Max: image.Pt(w, tabBarHeightDp)}
 
@@ -210,7 +211,7 @@ func TestScrolledTabBarClipsToItsWidth(t *testing.T) {
 	const w, h = 700, 300
 	ui := tabBarTestUI(t, 12)
 
-	gtx := asTabBar(newLayoutContextForTest(new(op.Ops), w, h), w, h)
+	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), w, h), w, h)
 	ui.layoutTabBar(gtx)
 	ui.tabScrollX = ui.tabMaxScroll(ui.tabBarWidth, ui.tabRowWidth)
 	last := ui.tabRects[len(ui.tabRects)-1]
@@ -248,7 +249,7 @@ func TestShortTabBarDoesNotScroll(t *testing.T) {
 	const w, h = 1400, 300
 	ui := tabBarTestUI(t, 2)
 
-	gtx := asTabBar(newLayoutContextForTest(new(op.Ops), w, h), w, h)
+	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), w, h), w, h)
 	ui.layoutTabBar(gtx)
 	if ui.tabRowWidth > ui.tabBarWidth {
 		t.Skipf("two tabs took %d px in a %d px bar, the fixture is too narrow", ui.tabRowWidth, ui.tabBarWidth)

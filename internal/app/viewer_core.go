@@ -14,6 +14,7 @@ import (
 
 	"dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/3d_viewer"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/sgb"
 	"dow-mod-studio/internal/whe"
@@ -34,7 +35,7 @@ type modelFrame struct {
 
 // modelMaterialResult carries resolved textures back to the UI goroutine.
 type modelMaterialResult struct {
-	materials   map[string]WhmMaterial
+	materials   map[string]render.WhmMaterial
 	rsh         map[string][]byte
 	aliases     map[string]string
 	diagnostics map[string]modelMaterialDiagnostic
@@ -57,7 +58,7 @@ type modelMaterialResult struct {
 // touched on the UI goroutine only; workers communicate through channels.
 type modelViewer struct {
 	model                *WhmModel
-	materials            map[string]WhmMaterial
+	materials            map[string]render.WhmMaterial
 	materialAliases      map[string]string
 	anim                 *WhmAnimation
 	anims                []*WhmAnimation
@@ -97,7 +98,7 @@ type modelViewer struct {
 	// past modelGpuRetryLimit the hardware path is given up on as if it had
 	// failed outright.
 	gpuBroken  bool
-	gpuFrame   modelGpuFrame
+	gpuFrame   render.Frame
 	gpuRetries int
 	// gpuProbeW/H and gpuProbedTextured record which GPU frames have already
 	// been read back, so the readback runs on the transitions that matter only.
@@ -119,8 +120,8 @@ type modelViewer struct {
 	// mapping of its own for the ones that need a different one. It is a
 	// reading of the model rather than a setting of the app: a map can be
 	// authored the wrong way round, and nothing in the file says so.
-	uv          uvMapping
-	uvMaterials map[string]*uvMapping
+	uv          render.UVMapping
+	uvMaterials map[string]*render.UVMapping
 	// uvSelection names the material the mapping controls are editing, and is
 	// empty for the one they all share. uvSelectionDirty says the controls
 	// still show the previous selection's numbers, which is what stops the
@@ -137,7 +138,7 @@ type modelViewer struct {
 	// The rest of the mapping. The three sliders are the widget's own 0..1
 	// value rather than a float the panel and the renderer both write to, so
 	// there is no second copy to fall out of step; the real numbers are read
-	// out of them by uvMapping.
+	// out of them by render.UVMapping.
 	// uvExtent is the range of the model's own coordinates, measured once when
 	// the model is opened: [minU, minV, maxU, maxV], with uvExtentOK false
 	// for a model with no vertices. It is read out beside the mapping rather
@@ -303,11 +304,11 @@ type modelViewer struct {
 // model was read from, which the texture loader uses to find the maps that sit
 // beside it.
 func newModelViewer(model *WhmModel, modelFile string) *modelViewer {
-	camera := NewCameraState(model, 0.7, 0.2, modelDefaultFov)
+	camera := render.NewCameraState(&model.Model, 0.7, 0.2, render.DefaultFov)
 	return &modelViewer{
 		model:     model,
 		modelFile: modelFile,
-		materials: map[string]WhmMaterial{},
+		materials: map[string]render.WhmMaterial{},
 		rshData:   map[string][]byte{},
 		// Textures start on. Set here rather than when a texture batch
 		// lands, so a Textures toggle made while loading is not overwritten.
@@ -316,14 +317,14 @@ func newModelViewer(model *WhmModel, modelFile string) *modelViewer {
 		// The map as the file has it, and the sliders showing that: no
 		// offset, no turn, no mirror, and a scale of one. A reader moves
 		// them away from that and back to it.
-		uv:      uvIdentityMapping(),
+		uv:      render.UVIdentityMapping(),
 		uvU:     widget.Float{Value: 0.5},
 		uvV:     widget.Float{Value: 0.5},
 		uvScale: widget.Float{Value: (1 - modelUVMinScale) / (modelUVMaxScale - modelUVMinScale)},
 		// The model's own coordinates, measured once so that the panel can
 		// say how far they run without walking the vertices every frame.
-		uvExtent:   uvExtentOf(model),
-		uvExtentOK: modelHasUVs(model),
+		uvExtent:   render.UVExtentOf(&model.Model),
+		uvExtentOK: render.ModelHasUVs(&model.Model),
 		// The effects at the size their files ask for; the panel moves this
 		// from there.
 		fxScale:     fxScaleDefaultValue,
@@ -449,7 +450,7 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 	}
 	gpu := ui.modelGpuRenderer()
 	opts := v.options(w, h)
-	opts.Quality = modelQualityFinal
+	opts.Quality = render.ModelQualityFinal
 	if t.kind == "sgb" && t.sgbView3D {
 		opts.SgbSelectedEntities = t.sgbSelectedEntities
 		opts.SgbEntityMeshIDs = t.sgbEntityMeshIDs
@@ -457,7 +458,7 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 	// Textures off means no materials and no .rsh lookups, so every draw
 	// falls back to the base colour. The GPU path must honour this too:
 	// it used to receive v.materials unconditionally.
-	var mats map[string]WhmMaterial
+	var mats map[string]render.WhmMaterial
 	var rsh func(string) ([]byte, bool)
 	if v.textured {
 		mats = v.materials
@@ -473,7 +474,7 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 	// a render that never returned.
 	firstGPUFrame := v.gpuFrame == nil
 	start := time.Now()
-	frame, err := gpu.Render(v.model, v.pose(), opts, mats, rsh)
+	frame, err := gpu.Render(&v.model.Model, v.pose(), opts, mats, rsh)
 	if err == nil {
 		d := time.Since(start)
 		if firstGPUFrame {
@@ -493,7 +494,7 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 		if needProbe {
 			v.gpuProbeW, v.gpuProbeH = w, h
 			context := fmt.Sprintf("%dx%d textures=%v", w, h, rsh != nil)
-			if !probeGpuFrame(frame, context) {
+			if !render.ProbeFrame(frame, context) {
 				// The device did not survive the readback. Every later submit
 				// would fail the same way, so the hardware path is given up on
 				// here rather than one frame at a time.
@@ -578,7 +579,7 @@ func (v *modelViewer) requestRender(width, height, quality int) {
 	v.frameCh = ch
 	v.rendering = true
 	go func() {
-		ch <- modelFrame{image: RenderWhmModel(model, pose, opts), serial: serial}
+		ch <- modelFrame{image: render.RenderWhmModel(&model.Model, pose, opts), serial: serial}
 	}()
 }
 
@@ -600,12 +601,12 @@ func (v *modelViewer) selectionIndicatorIfShown() *engine.SelectionIndicator {
 }
 
 // options builds the render request for the current camera and pose.
-func (v *modelViewer) options(width, height int) RenderOptions {
-	var mats map[string]WhmMaterial
+func (v *modelViewer) options(width, height int) render.RenderOptions {
+	var mats map[string]render.WhmMaterial
 	if v.textured {
 		mats = v.materials
 	}
-	return RenderOptions{
+	return render.RenderOptions{
 		RenderOptions: engine.RenderOptions{
 			Width:    width,
 			Height:   height,
@@ -624,13 +625,13 @@ func (v *modelViewer) options(width, height int) RenderOptions {
 			// of their own.
 			Ambient:   10,
 			Diffuse:   10,
-			BaseColor: rgbaWhite,
+			BaseColor: render.RgbaWhite,
 			Skeleton:  v.showSkeleton,
 			// nil rather than v.markerIndex: the viewer's -1 is its own
 			// "nothing picked", and the render request says the same thing
 			// by carrying no marker at all.
-			Marker:        pickedMarker(v.markerIndex),
-			PickedBone:    pickedBone(v.boneIndex),
+			Marker:        render.PickedMarker(v.markerIndex),
+			PickedBone:    render.PickedBone(v.boneIndex),
 			UVDefault:     v.uv,
 			UVPerMaterial: v.uvMaterials, MeshAlpha: v.meshAlphas(),
 			AnimatedEntities: v.animatedEntities,
@@ -1039,10 +1040,9 @@ func modelZoomByDelta(delta float32) float64 {
 
 // ─── merged from viewer_model_controls.go ───────────────────────────────────────────────
 
-// modelDefaultFov is the vertical field of view the orbit camera opens with.
-// It matches what a .whm camera stores, so a model that has one of its own and
-// is put on it does not jump in size.
-const modelDefaultFov = 45.0
+// render.DefaultFov moved to internal/app/render as render.DefaultFov. It matches
+// what a .whm camera stores, so a model that has one of its own and is put on
+// it does not jump in size.
 
 // Interactive 3D preview for a decoded .whm.
 //
@@ -1316,15 +1316,7 @@ func fxListLabel(th *material.Theme, s string, col color.NRGBA) func(gtx layout.
 	}
 }
 
-func clampFloat64(v, lo, hi float64) float64 {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
+// clampFloat64 moved to internal/3d_engine as engine.ClampFloat64.
 
 var _ = widget.Clickable{}
 
@@ -1370,4 +1362,57 @@ func (ui *uiState) modelGpuUnavailable(v *modelViewer) string {
 		return "no hardware renderer on this window"
 	}
 	return ""
+}
+
+// ─── GPU renderer lifecycle (moved from gpu_model_iface.go) ──────────────────
+
+// modelGpu opens the hardware renderer on first use and returns it, or nil when
+// there is none. Gio creates the window's GPU along with the first frame, so
+// this cannot be done any earlier.
+func (ui *uiState) modelGpuRenderer() render.Handle {
+	if ui.modelGpuTried {
+		return ui.modelGpu
+	}
+	ui.modelGpuTried = true
+	ui.modelGpu = render.NewForWindow(ui.win)
+	// A tab can be laid out before the window has drawn its first frame, and
+	// Gio only creates the device then. That is not a verdict on the backend,
+	// so the next layout asks again instead of falling back for good.
+	if ui.modelGpu == nil && render.TooEarly {
+		ui.modelGpuTried = false
+	}
+	return ui.modelGpu
+}
+
+func (ui *uiState) geometryChangedModelGpu(model *WhmModel) {
+	if model == nil || ui.modelGpu == nil {
+		return
+	}
+	ui.modelGpu.GeometryChanged(&model.Model)
+}
+
+func (ui *uiState) forgetModelGpu(model *WhmModel) {
+	if model == nil || ui.modelGpu == nil {
+		return
+	}
+	ui.modelGpu.Forget(&model.Model)
+}
+
+// releaseModelGpu frees the hardware renderer and everything it cached.
+func (ui *uiState) releaseModelGpu() {
+	for _, t := range ui.openTabs {
+		if t.model != nil {
+			t.model.gpuFrame = nil
+		}
+	}
+	// The object window's viewport has a viewer of its own, which is not in
+	// openTabs, so its video memory frame has to go back separately.
+	if ui.unitModel != nil && ui.unitModel.model != nil {
+		ui.unitModel.model.gpuFrame = nil
+	}
+	if ui.modelGpu != nil {
+		ui.modelGpu.Release()
+		ui.modelGpu = nil
+	}
+	ui.modelGpuTried = false
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"dow-mod-studio/internal/chunky"
 	"dow-mod-studio/internal/whe"
+	"dow-mod-studio/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -518,7 +519,7 @@ func TestTheEventsSectionLayoutsItsColumns(t *testing.T) {
 	tree.SortAll(tree.Root)
 	ui.unitSection = unitSectionNamed("Events")
 	var ops op.Ops
-	gtx := newLayoutContextForTest(&ops, 1400, 800)
+	gtx := testutil.NewLayoutContext(&ops, 1400, 800)
 	ui.layoutUnitBody(gtx)
 	if ui.unitEvtDoc == nil {
 		t.Fatalf("the section did not load a .whe while drawing: %s", ui.unitEvtErr)

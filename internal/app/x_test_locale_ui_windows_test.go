@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 	"gioui.org/gpu/headless"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -40,7 +41,7 @@ func renderLocaleOverlay(t *testing.T, ui *uiState, w, h int) *image.RGBA {
 	defer win.Release()
 
 	var ops op.Ops
-	gtx := newLayoutContextForTest(&ops, w, h)
+	gtx := testutil.NewLayoutContext(&ops, w, h)
 	ui.layoutLocaleOverlay(gtx)
 
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -256,7 +257,7 @@ func TestLocaleRowShowsTheTextAndRegistersTheAltClick(t *testing.T) {
 	defer win.Release()
 
 	var ops op.Ops
-	gtx := newLayoutContextForTest(&ops, w, h)
+	gtx := testutil.NewLayoutContext(&ops, w, h)
 	dims := ui.tableRowLocaleText(gtx, tab, e, "GameData/screen_name_id", false)
 
 	if dims.Size.Y == 0 {
@@ -305,7 +306,7 @@ func TestLocaleRowSaysWhenTheTableHasNoEntry(t *testing.T) {
 		t.Fatal("404 should not be in the table")
 	}
 	tab := &fileTab{path: "unit.rgd", kind: "text"}
-	gtx := newLayoutContextForTest(new(op.Ops), 400, 60)
+	gtx := testutil.NewLayoutContext(new(op.Ops), 400, 60)
 	ui.tableRowLocaleText(gtx, tab, e, "GameData/screen_name_id", false)
 	if len(tab.rgdLocTags) == 0 {
 		t.Error("a field with no text registered no pointer target, so a click on it could not add one")
@@ -347,7 +348,7 @@ func TestLocaleRowIsSkippedForANonIDValue(t *testing.T) {
 	tab := &fileTab{path: "unit.rgd", kind: "text"}
 	e := &rgd.RgdEntry{Name: "screen_name_id", Type: rgd.RgdTypeWString, WStrVal: "not an id"}
 
-	gtx := newLayoutContextForTest(new(op.Ops), 400, 60)
+	gtx := testutil.NewLayoutContext(new(op.Ops), 400, 60)
 	dims := ui.tableRowLocaleText(gtx, tab, e, "GameData/screen_name_id", false)
 	if dims.Size.Y != 0 {
 		t.Errorf("row took %d px, want nothing for a value that is not an id", dims.Size.Y)

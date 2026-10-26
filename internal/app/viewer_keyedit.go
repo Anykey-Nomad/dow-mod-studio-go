@@ -1,6 +1,8 @@
 package app
 
 import (
+	engine "dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/render"
 	"math"
 	"sort"
 )
@@ -784,7 +786,7 @@ func (v *modelViewer) boneKeyIndexForMode(frame, mode int) int {
 	// list's length panics on exactly such a track.
 	if mode == 1 {
 		for i := range t.RotKey {
-			d := absInt(frameAt(float64(t.RotKey[i].Time), v.anim.NumFrames) - frame)
+			d := engine.AbsInt(frameAt(float64(t.RotKey[i].Time), v.anim.NumFrames) - frame)
 			if d < bestDist {
 				best, bestDist = i, d
 			}
@@ -792,7 +794,7 @@ func (v *modelViewer) boneKeyIndexForMode(frame, mode int) int {
 		return best
 	}
 	for i := range t.PosKey {
-		d := absInt(frameAt(float64(t.PosKey[i].Time), v.anim.NumFrames) - frame)
+		d := engine.AbsInt(frameAt(float64(t.PosKey[i].Time), v.anim.NumFrames) - frame)
 		if d < bestDist {
 			best, bestDist = i, d
 		}
@@ -862,7 +864,7 @@ func quatSame(a, b [4]float32) bool {
 // quatFromEulerDeg turns XYZ degrees into the quaternion the rotation keys
 // hold: the X turn first, then Y, then Z, which is the order the fields are
 // read in. The three half-angle axis quaternions are multiplied in reverse so
-// that quatMatrix shows R = Rz·Ry·Rx, the matrix eulerDegFromQuat reads back.
+// that render.QuatMatrix shows R = Rz·Ry·Rx, the matrix eulerDegFromQuat reads back.
 func quatFromEulerDeg(x, y, z float64) [4]float32 {
 	const half = math.Pi / 360
 	sx, cx := math.Sin(x*half), math.Cos(x*half)
@@ -877,10 +879,10 @@ func quatFromEulerDeg(x, y, z float64) [4]float32 {
 
 // eulerDegFromQuat is the inverse of quatFromEulerDeg: the XYZ degrees a
 // quaternion turns about, read out of its rotation matrix for R = Rz·Ry·Rx.
-// quatMatrix normalizes on the way in, so a key stored slightly unnormalized
+// render.QuatMatrix normalizes on the way in, so a key stored slightly unnormalized
 // still comes back as angles rather than as garbage.
 func eulerDegFromQuat(q [4]float32) [3]float64 {
-	m := quatMatrix(q)
+	m := render.QuatMatrix(q)
 	sinBeta := -float64(m.X20)
 	if sinBeta < -1 {
 		sinBeta = -1

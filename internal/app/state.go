@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/cliphist"
 	"encoding/json"
 	"fmt"
@@ -90,7 +91,7 @@ func savePersistedState(ui *uiState) error {
 	state := persistedState{
 		Version:          1,
 		DarkTheme:        ui.darkTheme,
-		GPUAPI:           normalizeGPUAPI(ui.gpuAPI),
+		GPUAPI:           render.NormalizeGPUAPI(ui.gpuAPI),
 		TextFormats:      formatTextFormats(ui.textEditorFormats),
 		GamePath:         ui.gamePath,
 		ModulePath:       ui.modulePath,
@@ -160,7 +161,7 @@ func (ui *uiState) maybeSaveState() {
 
 func (ui *uiState) applyPersistedSettings(state persistedState) {
 	ui.darkTheme = state.DarkTheme
-	ui.gpuAPI = normalizeGPUAPI(state.GPUAPI)
+	ui.gpuAPI = render.NormalizeGPUAPI(state.GPUAPI)
 	// A state file from before the setting existed has no list, and so does
 	// one whose field was cleared: both mean the built-in default, which is
 	// what parseTextFormats answers for an empty string.

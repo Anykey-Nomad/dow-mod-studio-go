@@ -9,10 +9,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	engine "dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/audioplayer"
 	"dow-mod-studio/internal/fda"
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/testutil"
 	"github.com/fogleman/fauxgl"
 )
 
@@ -75,7 +78,7 @@ func TestRingSpinIsAppliedOverTheEffectLife(t *testing.T) {
 	// one plane: a ring's quad is laid out in the marker's own frame, whose
 	// axes are not the viewer's.
 	first, last := at(0), at(1)
-	deg := math.Acos(clampFloat64(first.Dot(last), -1, 1)) * 180 / math.Pi
+	deg := math.Acos(engine.ClampFloat64(first.Dot(last), -1, 1)) * 180 / math.Pi
 	t.Logf("a curve of 0.25 turns turned the quad by %.2f degrees, want 90", deg)
 	if math.Abs(deg-90) > 1 {
 		t.Errorf("a 0.25-turn spin curve turned the quad by %.2f degrees, not 90: the spin is being applied as the value at the sampled moment rather than accumulated", deg)
@@ -241,7 +244,7 @@ func TestMarkerArrowPointsAlongTheMarkerAxis(t *testing.T) {
 	// The screen direction from the marker to the tip has to agree with the
 	// marker's own forward axis once that axis is projected, which is what
 	// makes the arrow an arrow and not just a line.
-	view := buildViewMatrix(v.options(w, h))
+	view := render.BuildViewMatrix(v.options(w, h))
 	projected := fxProject(view, world.Add(axis.MulScalar(markerArrowWorldLength)), w, h)
 	if projected == nil {
 		t.Skip("the axis end is off screen, so there is nothing to compare against")
@@ -381,7 +384,7 @@ func TestFxSoundRateCorrectionOnlyChangesDuration(t *testing.T) {
 func TestMarkerSpaceSettledByBounds(t *testing.T) {
 	checked := 0
 	for _, name := range []string{"Necron_Summoning_Core.whm", "necron_monolith.whm", "necron_tomb_sviva.whm"} {
-		raw := findDowFile(name)
+		raw := testutil.FindDowFile(name)
 		if raw == nil {
 			continue
 		}
@@ -395,8 +398,8 @@ func TestMarkerSpaceSettledByBounds(t *testing.T) {
 		}
 		checked++
 		pose := model.RestPose()
-		min := vec3From(model.BoundMin)
-		max := vec3From(model.BoundMax)
+		min := render.Vec3From(model.BoundMin)
+		max := render.Vec3From(model.BoundMax)
 		// Markers such as muzzles legitimately stick out a little.
 		grow := max.Sub(min).MulScalar(0.2)
 		min = min.Sub(grow)

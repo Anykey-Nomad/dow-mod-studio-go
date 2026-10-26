@@ -1,9 +1,11 @@
 //go:build windows || linux
 
-package app
+package render
 
 import (
 	engine "dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/raster"
+	"dow-mod-studio/internal/whm"
 	"dow-mod-studio/internal/sgb"
 	_ "embed"
 
@@ -107,7 +109,7 @@ type modelGpuVkResolvedDraw struct {
 	draw    modelGpuVkDraw
 	tex     *gpu.VulkanTexture
 	tint    color.RGBA
-	mapping uvMapping
+	mapping UVMapping
 	// alpha is how much of this sub mesh the clip lets through at this frame,
 	// and depth is how far its centre is from the camera. A draw below one
 	// goes through the blended pipeline, after every solid one. Texture
@@ -129,7 +131,7 @@ type modelGpuVkTarget struct {
 // compressed form the .rsh file stores it in.
 type modelGpuVkTexture struct {
 	tex    *gpu.VulkanTexture
-	mips   []RshMip
+	mips   []raster.RshMip
 	format int32
 	data   []byte
 }
@@ -158,11 +160,11 @@ type modelGpuVkRenderer struct {
 	uniformsNext *gpu.VulkanBuffer
 	white        *gpu.VulkanTexture
 
-	meshes map[*WhmModel]*modelGpuVkMesh
+	meshes map[*whm.Model]*modelGpuVkMesh
 	// dirtyMeshes defers buffer retirement until the next Render call, which
 	// begins after Gio has submitted the layout frame that may still reference
 	// the current mesh's buffers.
-	dirtyMeshes map[*WhmModel]bool
+	dirtyMeshes map[*whm.Model]bool
 	// textures is keyed by material and holds both the texture and the
 	// file bytes its mip slices point into.
 	textures  map[string]*modelGpuVkTexture
@@ -184,8 +186,8 @@ type modelGpuVkRenderer struct {
 	order    []int
 }
 
-// newModelGpuVkRenderer compiles the pipeline and the buffers a frame needs.
-func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
+// NewModelGpuVkRenderer compiles the pipeline and the buffers a frame needs.
+func NewModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 	// The two pipelines differ in nothing but how a fragment reaches the
 	// target. The shader pair is the same, and the fragment shader writes
 	// premultiplied colour, so a fully opaque draw blends to exactly what it
@@ -298,8 +300,8 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 		uniforms:       uniforms,
 		uniformsNext:   uniformsNext,
 		white:          white,
-		meshes:         map[*WhmModel]*modelGpuVkMesh{},
-		dirtyMeshes:    map[*WhmModel]bool{},
+		meshes:         map[*whm.Model]*modelGpuVkMesh{},
+		dirtyMeshes:    map[*whm.Model]bool{},
 		textures:       map[string]*modelGpuVkTexture{},
 		frame:          make([]float32, modelGpuVkFrameFloats),
 		frameBuf:       make([]byte, modelGpuVkFrameFloats*4),
@@ -310,7 +312,7 @@ func newModelGpuVkRenderer(v *gpu.VulkanPass) (*modelGpuVkRenderer, error) {
 
 // retireMesh removes a model's cached device buffers only after queued draws
 // can no longer reference them.
-func (r *modelGpuVkRenderer) retireMesh(model *WhmModel) error {
+func (r *modelGpuVkRenderer) retireMesh(model *whm.Model) error {
 	m, ok := r.meshes[model]
 	if !ok {
 		return nil
@@ -330,7 +332,7 @@ func (r *modelGpuVkRenderer) retireMesh(model *WhmModel) error {
 
 // forget drops the cached geometry of a model, which is what a closing tab
 // needs.
-func (r *modelGpuVkRenderer) forget(model *WhmModel) {
+func (r *modelGpuVkRenderer) Forget(model *whm.Model) {
 	if err := r.retireMesh(model); err != nil {
 		log.Printf("3D preview: wait before forgetting mesh: %v", err)
 		return
@@ -343,18 +345,18 @@ func (r *modelGpuVkRenderer) forget(model *WhmModel) {
 // Gio layout that recorded draws using the old buffers; freeing them here
 // would leave the frame submitted after Layout with references to destroyed
 // Vulkan buffers.
-func (r *modelGpuVkRenderer) geometryChanged(model *WhmModel) {
+func (r *modelGpuVkRenderer) GeometryChanged(model *whm.Model) {
 	if model == nil {
 		return
 	}
 	if r.dirtyMeshes == nil {
-		r.dirtyMeshes = make(map[*WhmModel]bool)
+		r.dirtyMeshes = make(map[*whm.Model]bool)
 	}
 	r.dirtyMeshes[model] = true
 }
 
 // release frees every device resource the renderer owns.
-func (r *modelGpuVkRenderer) release() {
+func (r *modelGpuVkRenderer) Release() {
 	if r == nil {
 		return
 	}
@@ -404,7 +406,7 @@ func (m *modelGpuVkMesh) release() {
 }
 
 // mesh returns the GPU copy of a model, building it on first use.
-func (r *modelGpuVkRenderer) mesh(model *WhmModel) (*modelGpuVkMesh, error) {
+func (r *modelGpuVkRenderer) mesh(model *whm.Model) (*modelGpuVkMesh, error) {
 	if r.dirtyMeshes[model] {
 		if err := r.retireMesh(model); err != nil {
 			return nil, fmt.Errorf("retire changed mesh: %w", err)
@@ -430,7 +432,7 @@ func (r *modelGpuVkRenderer) mesh(model *WhmModel) (*modelGpuVkMesh, error) {
 // draws, so the limit that once capped a whole model at 0xffff vertices is
 // now a limit per draw — which is what lets a map scene carry hundreds of
 // placed meshes.
-func (r *modelGpuVkRenderer) buildMesh(model *WhmModel) (*modelGpuVkMesh, error) {
+func (r *modelGpuVkRenderer) buildMesh(model *whm.Model) (*modelGpuVkMesh, error) {
 	draws := make([]modelGpuVkDraw, 0, len(model.Meshes))
 	cleanup := func() {
 		for _, d := range draws {
@@ -568,7 +570,7 @@ func modelVkIndexGroups(indices []uint32, maxVerts int) []modelVkIndexGroup {
 // A vertex past the end of the vertex array is ignored rather than clamped:
 // a draw that had been built already threw that vertex out, and this only
 // ever reads what survived.
-func modelGroupCentre(model *WhmModel, local []uint32) [3]float64 {
+func modelGroupCentre(model *whm.Model, local []uint32) [3]float64 {
 	var sum [3]float64
 	n := 0
 	for _, i := range local {
@@ -690,7 +692,7 @@ func (r *modelGpuVkRenderer) materialTexture(material string, data []byte) (*gpu
 	}
 	entry, ok := r.textures[material]
 	if !ok {
-		info, mips, err := RshRawImage(data, 0)
+		info, mips, err := raster.RshRawImage(data, 0)
 		if err != nil {
 			// A material that cannot be read is not fatal: the mesh is drawn
 			// with the base colour instead.
@@ -812,8 +814,8 @@ func (r *modelGpuVkRenderer) materialImageTexture(material string, img *image.RG
 // renderTarget returns the offscreen render target, recreated when the size
 // changes.
 func (r *modelGpuVkRenderer) renderTarget(size image.Point) (*modelGpuVkTarget, error) {
-	size.X = maxInt(1, size.X)
-	size.Y = maxInt(1, size.Y)
+	size.X = max(1, size.X)
+	size.Y = max(1, size.Y)
 	if r.offscreen != nil && r.offscreen.size == size {
 		return r.offscreen, nil
 	}
@@ -862,12 +864,12 @@ func (r *modelGpuVkRenderer) renderTarget(size image.Point) (*modelGpuVkTarget, 
 // window frame to submit. Queue ordering makes the blit sample the completed
 // image without a CPU-side fence wait.
 func (r *modelGpuVkRenderer) Render(
-	model *WhmModel,
+	model *whm.Model,
 	pose WhmPose,
 	opts RenderOptions,
 	materials map[string]WhmMaterial,
 	rsh func(material string) ([]byte, bool),
-) (frame modelGpuFrame, err error) {
+) (frame Frame, err error) {
 	if model == nil {
 		return nil, fmt.Errorf("no model")
 	}
@@ -882,7 +884,7 @@ func (r *modelGpuVkRenderer) Render(
 	if err != nil {
 		return nil, err
 	}
-	view := buildViewMatrix(opts)
+	view := BuildViewMatrix(opts)
 	if opts.Ground && opts.GroundImage != nil {
 		if err := r.uploadGroundTexture(opts.GroundImage); err != nil {
 			return nil, err
@@ -902,7 +904,7 @@ func (r *modelGpuVkRenderer) Render(
 	for _, d := range mesh.draws {
 		// A clip that holds a mesh back does not draw it: the depth and
 		// colour behind it are already what the frame should show there.
-		alpha := meshAlphaFor(opts, d.name)
+		alpha := MeshAlphaFor(opts, d.name)
 		if alpha <= 0 {
 			continue
 		}
@@ -911,7 +913,7 @@ func (r *modelGpuVkRenderer) Render(
 			draw:    d,
 			tex:     r.white,
 			tint:    opts.BaseColor,
-			mapping: renderUVFor(opts, d.material),
+			mapping: RenderUVFor(opts, d.material),
 			alpha:   alpha,
 			depth:   modelVkDepth(view, d.centre),
 		}
@@ -919,7 +921,7 @@ func (r *modelGpuVkRenderer) Render(
 			st.tint = color.RGBA{R: sgb.WaterColor[0], G: sgb.WaterColor[1], B: sgb.WaterColor[2], A: sgb.WaterColor[3]}
 			st.alpha = 1
 		} else if st.tint == (color.RGBA{}) {
-			st.tint = rgbaWhite
+			st.tint = RgbaWhite
 		}
 		if !waterMesh {
 			materialKey := d.material
@@ -962,7 +964,7 @@ func (r *modelGpuVkRenderer) Render(
 		// the shader's alpha test instead, so a mesh a clip holds whole is
 		// drawn solid on the opaque pipeline.
 		if !waterMesh {
-			st.tint.A = meshAlphaByte(alpha)
+			st.tint.A = MeshAlphaByte(alpha)
 		}
 		resolved = append(resolved, st)
 	}
@@ -986,14 +988,14 @@ func (r *modelGpuVkRenderer) Render(
 	// The overlay is the optional selection indicator, skeleton and picked
 	// marker frame, prepared through the ribbon machinery as world-space
 	// quads with a colour and drawn through its depth-independent pipeline.
-	overlay := modelOverlayLines(model, pose, opts)
+	overlay := ModelOverlayLines(model, pose, opts)
 	if len(opts.SgbSelectedEntities) > 0 {
 		selectionPose := pose
 		if len(opts.AnimatedEntities) > 0 {
 			selectionPose = sgb.CombineEntityPoses(len(pose.Bones), opts.AnimatedEntities)
 		}
 		camera := engine.Camera{Width: opts.Width, Height: opts.Height, Yaw: opts.Yaw, Pitch: opts.Pitch, Distance: opts.Distance, Target: opts.Target, Fov: opts.Fov}
-		overlay = append(overlay, prepareSgbSelectionBounds(&model.Model, opts.SgbSelectedEntities, opts.SgbEntityMeshIDs, view, camera, selectionPose, len(selectionPose.Bones) > 0)...)
+		overlay = append(overlay, PrepareSgbSelectionBounds(model, opts.SgbSelectedEntities, opts.SgbEntityMeshIDs, view, camera, selectionPose, len(selectionPose.Bones) > 0)...)
 	}
 	r.fxGroups = nil
 	if (opts.FX != nil && len(opts.FX.Groups) > 0) || len(overlay) > 0 {
@@ -1082,7 +1084,7 @@ func (r *modelGpuVkRenderer) Render(
 	blending := false
 	written := false
 	var writtenTint color.RGBA
-	var writtenUV uvMapping
+	var writtenUV UVMapping
 	waterPipeline := false
 	for _, at := range order {
 		st := &resolved[at]
@@ -1224,7 +1226,7 @@ func (r *modelGpuVkRenderer) drawGround(opts RenderOptions) error {
 	if err := r.vk.SetTexture(0, r.groundTexture); err != nil {
 		return err
 	}
-	r.writePush(opts, rgbaWhite, uvMapping{Scale: 1}, 0)
+	r.writePush(opts, RgbaWhite, UVMapping{Scale: 1}, 0)
 	if err := r.uploadPush(); err != nil {
 		return err
 	}
@@ -1356,7 +1358,7 @@ const modelVkAlphaRef = 0.5
 // The tint's alpha is the fourth value, and it is what the fragment shader
 // premultiplies the colour by, so a mesh a clip is fading writes less of
 // itself over what is behind it rather than a darker version of itself.
-func (r *modelGpuVkRenderer) writePush(opts RenderOptions, tint color.RGBA, mapping uvMapping, alphaRef float32) {
+func (r *modelGpuVkRenderer) writePush(opts RenderOptions, tint color.RGBA, mapping UVMapping, alphaRef float32) {
 	p := r.push
 	diffuse := opts.Diffuse
 	if opts.Ambient == 0 && opts.Diffuse == 0 {
@@ -1445,23 +1447,23 @@ func (f *modelGpuVkFrame) overlayTransform(rect image.Rectangle) op.TransformOp 
 // it.
 func (f *modelGpuVkFrame) Release() {}
 
-var modelGpuTooEarly bool
+var TooEarly bool
 
-func newModelGpuForWindow(w *app.Window) modelGpuHandle {
+func NewForWindow(w *app.Window) Handle {
 	if w == nil {
 		return nil
 	}
 	vkDev, err := w.Vulkan()
 	if err != nil {
 		if errors.Is(err, app.ErrNoGPUYet) {
-			modelGpuTooEarly = true
+			TooEarly = true
 			return nil
 		}
 		log.Printf("3D preview: Vulkan GPU unavailable: %v", err)
 		return nil
 	}
-	modelGpuTooEarly = false
-	r, err := newModelGpuVkRenderer(vkDev)
+	TooEarly = false
+	r, err := NewModelGpuVkRenderer(vkDev)
 	if err != nil {
 		log.Printf("3D preview: Vulkan renderer unavailable: %v", err)
 		return nil

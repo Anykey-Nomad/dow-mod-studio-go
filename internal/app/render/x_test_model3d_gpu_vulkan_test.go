@@ -1,6 +1,6 @@
 //go:build windows || linux
 
-package app
+package render
 
 import (
 	"image"
@@ -13,7 +13,9 @@ import (
 	"testing"
 
 	"dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/chunky"
 	"dow-mod-studio/internal/fx"
+	"dow-mod-studio/internal/raster"
 	"dow-mod-studio/internal/whm"
 	"gioui.org/gpu/headless"
 	"gioui.org/layout"
@@ -36,10 +38,10 @@ func requireVulkanRenderer(t *testing.T) (*headless.Window, *modelGpuVkRenderer,
 		win.Release()
 		t.Skipf("Vulkan is not the backend: %v", err)
 	}
-	r, err := newModelGpuVkRenderer(v)
+	r, err := NewModelGpuVkRenderer(v)
 	if err != nil {
 		win.Release()
-		t.Fatalf("newModelGpuVkRenderer: %v", err)
+		t.Fatalf("NewModelGpuVkRenderer: %v", err)
 	}
 	readback := func() []byte {
 		t.Helper()
@@ -50,7 +52,7 @@ func requireVulkanRenderer(t *testing.T) (*headless.Window, *modelGpuVkRenderer,
 		return px
 	}
 	release := func() {
-		r.release()
+		r.Release()
 		win.Release()
 	}
 	return win, r, readback, release
@@ -82,7 +84,7 @@ func TestVulkanRendererRebuildsInPlaceEditedGeometry(t *testing.T) {
 	for i := range model.Vertices {
 		model.Vertices[i].Pos[0] += 1000
 	}
-	r.geometryChanged(model)
+	r.GeometryChanged(model)
 	after := renderCoverage()
 	t.Logf("covered fraction before/after in-place vertex edit: %.4f / %.4f", before, after)
 	if after >= before*0.1 {
@@ -92,7 +94,7 @@ func TestVulkanRendererRebuildsInPlaceEditedGeometry(t *testing.T) {
 
 func TestVulkanRendererDrawsTheSameShapeAsTheSoftwareRenderer(t *testing.T) {
 	model := twoBoxModel(t)
-	center, distance := model.ModelCenter()
+	center, distance := engine.ModelCenter(model)
 	const w, h = 200, 160
 	opts := RenderOptions{
 		Width:    w,
@@ -101,8 +103,8 @@ func TestVulkanRendererDrawsTheSameShapeAsTheSoftwareRenderer(t *testing.T) {
 		Pitch:    0.3,
 		Distance: distance,
 		Target:   center,
-		Fov:      modelDefaultFov,
-		Quality:  modelQualityFinal,
+		Fov:      DefaultFov,
+		Quality:  ModelQualityFinal,
 	}
 	soft := RenderWhmModel(model, model.RestPose(), opts)
 	softCover := coveredPixels(soft, image.Rect(0, 0, w, h))
@@ -135,8 +137,8 @@ func TestVulkanShowsTheOutsideOfAModel(t *testing.T) {
 		Width:    w,
 		Height:   h,
 		Distance: 6,
-		Fov:      modelDefaultFov,
-		Quality:  modelQualityFinal,
+		Fov:      DefaultFov,
+		Quality:  ModelQualityFinal,
 	}
 	_, r, readback, release := requireVulkanRenderer(t)
 	defer release()
@@ -167,7 +169,7 @@ func TestVulkanShowsTheOutsideOfAModel(t *testing.T) {
 // doubled, or applied to the wrong row of the matrix.
 func TestVulkanIsOrientedLikeTheSoftwareRenderer(t *testing.T) {
 	model := twoBoxModel(t)
-	center, distance := model.ModelCenter()
+	center, distance := engine.ModelCenter(model)
 	const w, h = 200, 160
 	// Aim a quarter of the way below the model: it lands clearly above the
 	// centre of the frame, and clearly off centre is what makes a mirror
@@ -179,8 +181,8 @@ func TestVulkanIsOrientedLikeTheSoftwareRenderer(t *testing.T) {
 		Pitch:    0.3,
 		Target:   fauxgl.Vector{X: center.X, Y: center.Y, Z: center.Z - distance*0.25},
 		Distance: distance,
-		Fov:      modelDefaultFov,
-		Quality:  modelQualityFinal,
+		Fov:      DefaultFov,
+		Quality:  ModelQualityFinal,
 	}
 	soft := RenderWhmModel(model, model.RestPose(), opts)
 	softRow := coveredCentroidRow(soft.Pix, soft.Stride, w, h)
@@ -215,7 +217,7 @@ func TestVulkanIsOrientedLikeTheSoftwareRenderer(t *testing.T) {
 // and so does one whose layout was left in the wrong state by the pass.
 func TestVulkanFramePaintsThroughGio(t *testing.T) {
 	model := twoBoxModel(t)
-	center, distance := model.ModelCenter()
+	center, distance := engine.ModelCenter(model)
 	const w, h = 200, 160
 	opts := RenderOptions{
 		Width:    w,
@@ -224,8 +226,8 @@ func TestVulkanFramePaintsThroughGio(t *testing.T) {
 		Pitch:    0.3,
 		Distance: distance,
 		Target:   center,
-		Fov:      modelDefaultFov,
-		Quality:  modelQualityFinal,
+		Fov:      DefaultFov,
+		Quality:  ModelQualityFinal,
 	}
 	win, r, _, release := requireVulkanRenderer(t)
 	defer release()
@@ -296,7 +298,7 @@ func coveredCentroidRow(px []byte, stride, w, h int) float64 {
 // single frame would only see the first of those.
 func TestVulkanSamplesBlockCompressedTexture(t *testing.T) {
 	var (
-		model    *WhmModel
+		model    *whm.Model
 		material string
 		data     []byte
 	)
@@ -314,7 +316,7 @@ func TestVulkanSamplesBlockCompressedTexture(t *testing.T) {
 	_, r, readback, release := requireVulkanRenderer(t)
 	defer release()
 	opts := gpuTestOptions(model, w, h)
-	mats := map[string]WhmMaterial{material: {Color: rgbaWhite}}
+	mats := map[string]WhmMaterial{material: {Color: RgbaWhite}}
 	rsh := func(string) ([]byte, bool) { return data, true }
 	for i := 0; i < 3; i++ {
 		if _, err := r.Render(model, model.RestPose(), opts, mats, rsh); err != nil {
@@ -354,7 +356,7 @@ func TestVulkanSamplesBlockCompressedTexture(t *testing.T) {
 // with the same pixel of the other.
 func TestSoftAndVulkanSampleTheSameTexels(t *testing.T) {
 	var (
-		model    *WhmModel
+		model    *whm.Model
 		material string
 		data     []byte
 	)
@@ -369,21 +371,21 @@ func TestSoftAndVulkanSampleTheSameTexels(t *testing.T) {
 		t.Skip("no installed model has a .rsh next to it")
 	}
 	const w, h = 256, 256
-	img, _, _, err := decodeImageDataWithMips(data, "rsh")
+	img, _, _, err := raster.DecodeImageDataWithMips(data, "rsh")
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	flip := verticalFlipImage(img)
 	mats := map[string]WhmMaterial{}
 	for _, m := range model.Meshes {
-		mats[m.Material] = WhmMaterial{Color: rgbaWhite}
+		mats[m.Material] = WhmMaterial{Color: RgbaWhite}
 	}
 
 	softRender := func(tex image.Image) []byte {
 		o := gpuTestOptions(model, w, h)
 		o.MaterialOverrides = map[string]WhmMaterial{}
 		for _, m := range model.Meshes {
-			o.MaterialOverrides[m.Material] = WhmMaterial{Texture: newModelTexture(tex), Color: rgbaWhite}
+			o.MaterialOverrides[m.Material] = WhmMaterial{Texture: NewModelTexture(tex), Color: RgbaWhite}
 		}
 		return rgbaPixels(RenderWhmModel(model, model.RestPose(), o))
 	}
@@ -480,7 +482,7 @@ func TestVulkanRSHAlphaLeavesBackgroundVisible(t *testing.T) {
 	opts.Yaw = 0
 	opts.Pitch = 0
 	texture := makeRSHWithFormat(11, solidDXT5AlphaBlock())
-	materials := map[string]WhmMaterial{"wire": {Color: rgbaWhite}}
+	materials := map[string]WhmMaterial{"wire": {Color: RgbaWhite}}
 	if _, err := r.Render(model, model.RestPose(), opts, materials, func(string) ([]byte, bool) {
 		return texture, true
 	}); err != nil {
@@ -648,7 +650,7 @@ func TestModelVkOrderReusesTheCallersSlice(t *testing.T) {
 // by. It has to grow with the distance and not merely with the position, or a
 // model whose pieces are spread along the view axis comes out inside out.
 func TestModelVkDepthCountsDistanceFromTheCamera(t *testing.T) {
-	view := buildViewMatrix(RenderOptions{Distance: 10, Yaw: 0, Pitch: 0, Fov: 45})
+	view := BuildViewMatrix(RenderOptions{Distance: 10, Yaw: 0, Pitch: 0, Fov: 45})
 	// The camera sits ten units out along +X looking at the origin, so
 	// anything on the negative X axis is in front of it and further along
 	// that axis is further away.
@@ -669,11 +671,11 @@ func TestModelVkDepthCountsDistanceFromTheCamera(t *testing.T) {
 // TestModelMeshCentreAveragesItsVertices is what the sort is fed. A sub mesh
 // is the vertices its indices name, and its centre is the middle of those.
 func TestModelMeshCentreAveragesItsVertices(t *testing.T) {
-	model := &WhmModel{}
+	model := &whm.Model{}
 	for _, p := range [4][3]float32{
 		{0, 0, 0}, {4, 0, 0}, {4, 6, 0}, {0, 6, 0},
 	} {
-		model.Vertices = append(model.Vertices, WhmVertex{Pos: p})
+		model.Vertices = append(model.Vertices, whm.Vertex{Pos: p})
 	}
 	all := modelGroupCentre(model, []uint32{0, 1, 2, 3})
 	if want := [3]float64{2, 3, 0}; all != want {
@@ -698,15 +700,15 @@ func TestModelMeshCentreAveragesItsVertices(t *testing.T) {
 // nearer a camera sitting on +X and coloured red, the second further away and
 // coloured blue. Overlapping and translucent, they are the case the draw order
 // exists for: whichever is drawn last is the one mixed on top.
-func twoColouredQuads(t *testing.T) *WhmModel {
+func twoColouredQuads(t *testing.T) *whm.Model {
 	t.Helper()
-	m := &WhmModel{Model: whm.Model{Name: "quads"}}
+	m := &whm.Model{Name: "quads"}
 	for i, x := range [2]float32{0.5, -0.5} {
 		base := uint32(len(m.Vertices))
 		for _, p := range [4][3]float32{
 			{x, -0.8, -0.8}, {x, 0.8, -0.8}, {x, 0.8, 0.8}, {x, -0.8, 0.8},
 		} {
-			m.Vertices = append(m.Vertices, WhmVertex{
+			m.Vertices = append(m.Vertices, whm.Vertex{
 				Pos:    p,
 				Normal: [3]float32{1, 0, 0},
 				Bones:  [4]int32{-1, -1, -1, -1},
@@ -716,14 +718,14 @@ func twoColouredQuads(t *testing.T) *WhmModel {
 		if i == 1 {
 			material = "blue"
 		}
-		m.Meshes = append(m.Meshes, WhmMesh{
+		m.Meshes = append(m.Meshes, whm.Mesh{
 			Name:       material,
 			Material:   material,
 			Indices:    []uint32{base, base + 1, base + 2, base, base + 2, base + 3},
 			SingleBone: -1,
 		})
 	}
-	m.Bones = []WhmBone{{Name: "root", Parent: -1}}
+	m.Bones = []whm.Bone{{Name: "root", Parent: -1}}
 	return m
 }
 
@@ -765,7 +767,7 @@ func TestVulkanPutsTheNearerOfTwoFadingMeshesOnTop(t *testing.T) {
 
 // ─── merged from x_test_model3d_gpu_vulkan_overlay_test.go ────────────────────────────────────────
 
-func gpuOverlayModel(t *testing.T) *WhmModel {
+func gpuOverlayModel(t *testing.T) *whm.Model {
 	t.Helper()
 	m := overlayTestModel()
 	// The box grows to twice its size and the chain stays where it was, so
@@ -782,7 +784,7 @@ func gpuOverlayModel(t *testing.T) *WhmModel {
 	// place where the skeleton behind it shows through whatever the depth
 	// test says — which would let this file pass on a renderer that buries
 	// the overlay inside the mesh, the one thing it exists to rule out.
-	m.Meshes = []WhmMesh{{Name: "box", Indices: []uint32{
+	m.Meshes = []whm.Mesh{{Name: "box", Indices: []uint32{
 		0, 2, 1, 0, 3, 2, // bottom
 		4, 5, 6, 4, 6, 7, // top
 		0, 1, 5, 0, 5, 4, // -y
@@ -792,13 +794,13 @@ func gpuOverlayModel(t *testing.T) *WhmModel {
 	}}}
 	// Three links off the root, each a fifth of the box, so the whole chain
 	// stays within the cube's middle.
-	m.Bones = []WhmBone{
+	m.Bones = []whm.Bone{
 		{Name: "root", Parent: -1},
 		{Name: "child", Parent: 0, Pos: [3]float32{0.4, 0, 0}},
 		{Name: "tip", Parent: 1, Pos: [3]float32{0.4, 0.4, 0}},
 		{Name: "end", Parent: 2, Pos: [3]float32{0, 0.4, 0.4}},
 	}
-	m.Markers = []WhmMarker{{
+	m.Markers = []whm.Marker{{
 		Name:   "marker_tip",
 		Parent: "end",
 		Matrix: [9]float32{1, 0, 0, 0, 1, 0, 0, 0, 1},
@@ -810,8 +812,8 @@ func gpuOverlayModel(t *testing.T) *WhmModel {
 // gpuOverlayOptions frames the model from a real camera: an overlay width is
 // derived from the field of view and the distance, so an unset one gives every
 // segment the same width whatever the camera is doing.
-func gpuOverlayOptions(m *WhmModel, w, h int) RenderOptions {
-	center, _ := m.ModelCenter()
+func gpuOverlayOptions(m *whm.Model, w, h int) RenderOptions {
+	center, _ := engine.ModelCenter(m)
 	// The distance is set rather than taken from ModelCenter: the box here is
 	// scaled up to swallow the skeleton, and the framing distance that fits the
 	// original box puts the camera inside this one — with the marker behind the
@@ -821,9 +823,9 @@ func gpuOverlayOptions(m *WhmModel, w, h int) RenderOptions {
 		Yaw: 0.6, Pitch: 0.3,
 		Distance:  9,
 		Target:    center,
-		Fov:       modelDefaultFov,
-		Quality:   modelQualityFinal,
-		BaseColor: rgbaWhite,
+		Fov:       DefaultFov,
+		Quality:   ModelQualityFinal,
+		BaseColor: RgbaWhite,
 	}
 }
 
@@ -922,7 +924,7 @@ func TestVulkanDrawsThePickedMarkerOnTheGpu(t *testing.T) {
 	}
 	without := readback()
 
-	opts.Marker = pickedMarker(0)
+	opts.Marker = PickedMarker(0)
 	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
 		t.Fatalf("Render with a marker: %v", err)
 	}
@@ -1007,9 +1009,9 @@ func TestOverlayQuadsFaceTheEyeAndHaveWidth(t *testing.T) {
 	pose := m.RestPose()
 	opts := overlayTestOptions()
 	opts.Skeleton = true
-	opts.Target = vec3From(m.BoundMin).Add(vec3From(m.BoundMax)).MulScalar(0.5)
-	eye := fxEyePosition(opts)
-	segments := modelOverlayLines(m, pose, opts)
+	opts.Target = Vec3From(m.BoundMin).Add(Vec3From(m.BoundMax)).MulScalar(0.5)
+	eye := FxEyePosition(opts)
+	segments := ModelOverlayLines(m, pose, opts)
 	if len(segments) == 0 {
 		t.Fatal("no segments to tessellate")
 	}
@@ -1042,9 +1044,326 @@ func TestOverlayQuadsFaceTheEyeAndHaveWidth(t *testing.T) {
 			}
 		}
 	}
+} // The clear colour of a pass is the panel background.
+const (
+	bgR, bgG, bgB = 0x1c, 0x1e, 0x24
+) // requireGpuTestModel reads a model from the game install, skipping the test// gpuTestOptions frames a model the way a freshly opened viewer does.// coveredFraction counts the pixels that are not the clear colour, which is
+// how much of the frame the model actually reached.
+func coveredFraction(px []byte, w, h int) float64 {
+	hits := 0
+	for i := 0; i+3 < len(px); i += 4 {
+		if px[i] != bgR || px[i+1] != bgG || px[i+2] != bgB {
+			hits++
+		}
+	}
+	return float64(hits) / float64(w*h)
+} // findRsh locates a material's .rsh by base name: a .whm stores a full virtual
+// path, but the file itself may sit in a different mod than the model.
+func findRsh(material string) []byte {
+	if material == "" {
+		return nil
+	}
+	return findDowFile(filepath.Base(filepath.FromSlash(material)) + ".rsh")
 }
 
-// ─── merged from x_test_model3d_gpu_test.go ────────────────────────────────────────
+// findMaterialWithTexture returns the first material of a model whose .rsh is
+// actually installed, since a model can reference a texture the install does
+// not ship.
+func findMaterialWithTexture(model *whm.Model) (string, []byte) {
+	for _, m := range model.Meshes {
+		if data := findRsh(m.Material); data != nil {
+			return m.Material, data
+		}
+	}
+	return "", nil
+}
+
+// rgbaPixels copies an image into the tightly packed layout the readback
+// helpers expect.
+func rgbaPixels(img *image.RGBA) []byte {
+	b := img.Bounds()
+	out := make([]byte, 0, b.Dx()*b.Dy()*4)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		out = append(out, img.Pix[y*img.Stride:y*img.Stride+b.Dx()*4]...)
+	}
+	return out
+}
+
+// singleQuad is one flat quad across the YZ plane with its normal along the X
+// axis, which is where the orbit camera sits with no yaw and no pitch.
+func singleQuad(t *testing.T, outwards bool) *whm.Model {
+	t.Helper()
+	m := &whm.Model{Name: "quad"}
+	for _, p := range [4][3]float32{
+		{0, -0.8, -0.8}, {0, 0.8, -0.8}, {0, 0.8, 0.8}, {0, -0.8, 0.8},
+	} {
+		m.Vertices = append(m.Vertices, whm.Vertex{
+			Pos:    p,
+			Normal: [3]float32{1, 0, 0},
+			Bones:  [4]int32{-1, -1, -1, -1},
+		})
+	}
+	// Counter clockwise seen from the front, which puts the outside of the
+	// quad on the side the camera is on.
+	idx := []uint32{0, 1, 2, 0, 2, 3}
+	if !outwards {
+		idx = []uint32{0, 2, 1, 0, 3, 2}
+	}
+	m.Meshes = append(m.Meshes, whm.Mesh{Name: "quad", Indices: idx, SingleBone: -1})
+	m.Bones = []whm.Bone{{Name: "root", Parent: -1}}
+	return m
+}
+
+// covered is whether a pixel is clear of the background a frame is cleared to.
+// The arithmetic is done on ints: the background is darker than the threshold
+// in the blue channel, and unsigned bytes would count that as a large number.
+func covered(c color.RGBA) bool {
+	return int(c.R)-0x1c > 12 || int(c.G)-0x1e > 12 || int(c.B)-0x24 > 12
+}
+
+// openBoxModel is a box with its top and bottom left off.
+func openBoxModel(t *testing.T) *whm.Model {
+	t.Helper()
+	m := &whm.Model{Name: "open_box"}
+	min, max := [3]float32{-1, -1, -1}, [3]float32{1, 1, 1}
+	corners := [8][3]float32{
+		{min[0], min[1], min[2]}, {max[0], min[1], min[2]}, {max[0], max[1], min[2]}, {min[0], max[1], min[2]},
+		{min[0], min[1], max[2]}, {max[0], min[1], max[2]}, {max[0], max[1], max[2]}, {min[0], max[1], max[2]},
+	}
+	centre := [3]float32{0, 0, 0}
+	for _, c := range corners {
+		n := [3]float32{c[0] - centre[0], c[1] - centre[1], c[2] - centre[2]}
+		l := float32(sqrt(n[0]*n[0] + n[1]*n[1] + n[2]*n[2]))
+		m.Vertices = append(m.Vertices, whm.Vertex{
+			Pos:    c,
+			Normal: [3]float32{n[0] / l, n[1] / l, n[2] / l},
+			Bones:  [4]int32{-1, -1, -1, -1},
+		})
+	}
+	// The four sides only. The opening is what the frame looks through.
+	faces := [][3]int{
+		{0, 1, 5}, {0, 5, 4}, // front
+		{1, 2, 6}, {1, 6, 5}, // right
+		{2, 3, 7}, {2, 7, 6}, // back
+		{3, 0, 4}, {3, 4, 7}, // left
+	}
+	var idx []uint32
+	for _, f := range faces {
+		if facePointsOutwards(m.Vertices[f[0]], m.Vertices[f[1]], m.Vertices[f[2]]) {
+			idx = append(idx, uint32(f[0]), uint32(f[1]), uint32(f[2]))
+		} else {
+			idx = append(idx, uint32(f[0]), uint32(f[2]), uint32(f[1]))
+		}
+	}
+	m.Meshes = append(m.Meshes, whm.Mesh{Name: "walls", Indices: idx, SingleBone: -1})
+	m.Bones = []whm.Bone{{Name: "root", Parent: -1}}
+	return m
+}
+
+// twoBoxModel is two cubes far apart, as two sub meshes. Which piece is drawn
+// is therefore obvious at a glance, and so is which side of each is.
+func twoBoxModel(t *testing.T) *whm.Model {
+	t.Helper()
+	m := &whm.Model{Name: "two_boxes"}
+	add := func(name string, min, max [3]float32) {
+		base := uint32(len(m.Vertices))
+		// Every face of a cube as two triangles, wound so that the normal
+		// each one carries points away from the middle of it.
+		corners := [8][3]float32{
+			{min[0], min[1], min[2]}, {max[0], min[1], min[2]}, {max[0], max[1], min[2]}, {min[0], max[1], min[2]},
+			{min[0], min[1], max[2]}, {max[0], min[1], max[2]}, {max[0], max[1], max[2]}, {min[0], max[1], max[2]},
+		}
+		centre := [3]float32{(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2}
+		for i, c := range corners {
+			n := [3]float32{c[0] - centre[0], c[1] - centre[1], c[2] - centre[2]}
+			length := float32(1)
+			if l := n[0]*n[0] + n[1]*n[1] + n[2]*n[2]; l > 0 {
+				length = float32(sqrt(l))
+			}
+			m.Vertices = append(m.Vertices, whm.Vertex{
+				Pos:    c,
+				Normal: [3]float32{n[0] / length, n[1] / length, n[2] / length},
+				UV:     [2]float32{0, 0},
+				Bones:  [4]int32{-1, -1, -1, -1},
+			})
+			_ = i
+		}
+		faces := [][3]int{
+			{0, 2, 1}, {0, 3, 2}, // bottom
+			{4, 5, 6}, {4, 6, 7}, // top
+			{0, 1, 5}, {0, 5, 4}, // front
+			{1, 2, 6}, {1, 6, 5}, // right
+			{2, 3, 7}, {2, 7, 6}, // back
+			{3, 0, 4}, {3, 4, 7}, // left
+		}
+		var idx []uint32
+		for _, f := range faces {
+			// Wound so that cross(b-a, c-a) points along the face normal.
+			if facePointsOutwards(m.Vertices[base+uint32(f[0])], m.Vertices[base+uint32(f[1])], m.Vertices[base+uint32(f[2])]) {
+				idx = append(idx, base+uint32(f[0]), base+uint32(f[1]), base+uint32(f[2]))
+			} else {
+				idx = append(idx, base+uint32(f[0]), base+uint32(f[2]), base+uint32(f[1]))
+			}
+		}
+		m.Meshes = append(m.Meshes, whm.Mesh{Name: name, Indices: idx, SingleBone: -1})
+	}
+	add("left", [3]float32{-1.4, -0.5, -0.5}, [3]float32{-0.4, 0.5, 0.5})
+	add("right", [3]float32{0.4, -0.5, -0.5}, [3]float32{1.4, 0.5, 0.5})
+	m.Bones = []whm.Bone{{Name: "root", Parent: -1}}
+	return m
+} // coveredPixels counts the pixels of a frame that are not the background the
+// renderer clears to.
+func coveredPixels(img *image.RGBA, area image.Rectangle) int {
+	n := 0
+	for y := area.Min.Y; y < area.Max.Y; y++ {
+		for x := area.Min.X; x < area.Max.X; x++ {
+			if covered(img.RGBAAt(x, y)) {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+func sqrt(v float32) float64 { return math.Sqrt(float64(v)) }
+
+// ─── merged from x_test_model3d_gpu_vulkan_cache_test.go ────────────────────────────────────────
+
+func TestModelGpuVkGeometryChangesAreDeferredUntilRender(t *testing.T) {
+	model := &whm.Model{}
+	mesh := &modelGpuVkMesh{draws: []modelGpuVkDraw{{count: 3}}}
+	r := &modelGpuVkRenderer{
+		meshes:      map[*whm.Model]*modelGpuVkMesh{model: mesh},
+		dirtyMeshes: make(map[*whm.Model]bool),
+	}
+
+	r.GeometryChanged(model)
+	if r.meshes[model] != mesh || !r.dirtyMeshes[model] {
+		t.Fatal("geometryChanged must retain the in-use mesh and mark it dirty for the next render")
+	}
+}
+
+func TestModelGpuVkForgetRetiresTheCachedMesh(t *testing.T) {
+	model := &whm.Model{}
+	mesh := &modelGpuVkMesh{}
+	r := &modelGpuVkRenderer{meshes: map[*whm.Model]*modelGpuVkMesh{model: mesh}}
+
+	r.Forget(model)
+	if _, ok := r.meshes[model]; ok {
+		t.Fatal("forgotten model remains in the GPU mesh cache")
+	}
+}
+
+// makeRSHWithFormat builds a minimal .rsh holding one uncompressed image of
+// the given format. It mirrors the fixture in the app package's material
+// tests; the two live in different packages now, and the shared copy belongs
+// in a testutil package when the tests are reorganised.
+func makeRSHWithFormat(format int32, pixels []byte) []byte {
+	attr := []byte{byte(format), 0, 0, 0, 4, 0, 0, 0, 4, 0, 0, 0, 1, 0, 0, 0}
+	imageChunk := &chunky.Chunk{TypeID: "FOLDIMAG", Children: []*chunky.Chunk{
+		{TypeID: "DATAATTR", Payload: attr},
+		{TypeID: "DATADATA", Payload: pixels},
+	}}
+	texture := &chunky.Chunk{TypeID: "FOLDTXTR", Children: []*chunky.Chunk{imageChunk}}
+	root := &chunky.Chunk{TypeID: "FOLDSHRF", Children: []*chunky.Chunk{texture}}
+	return append(chunky.Preamble(), chunky.Serialize(root)...)
+}
+
+// solidDXT5AlphaBlock is a solid white DXT5 block with full alpha; it mirrors
+// the fixture in the app package's material tests for the same reason as
+// makeRSHWithFormat above.
+func solidDXT5AlphaBlock() []byte {
+	block := make([]byte, 16)
+	block[0] = 0
+	block[1] = 255
+	// Every pixel selects alpha endpoint a0=0; set all sixteen 3-bit fields.
+	// The index bits are one contiguous little-endian 48-bit sequence.
+	block[2], block[3], block[4], block[5], block[6], block[7] = 0, 0, 0, 0, 0, 0
+	// White color endpoints, every pixel selects the first.
+	block[8], block[9] = 0xff, 0xff
+	block[10], block[11] = 0, 0
+	return block
+}
+
+// ─── fixtures mirrored from the app package's FX/material tests ──────────────
+// These four helpers are shared across both packages' tests; they live here
+// as copies until the shared fixtures move to an internal/testutil package.
+
+// overlayTestModel is a unit cube with a two-bone chain and a marker, so the
+// skeleton, marker and selection overlays have something to draw.
+func overlayTestModel() *whm.Model {
+	return &whm.Model{
+		Name: "overlay_box",
+		Vertices: []whm.Vertex{
+			{Pos: [3]float32{-0.5, -0.5, -0.5}, Normal: [3]float32{-1, -1, -1}, Bones: [4]int32{-1, -1, -1, -1}},
+			{Pos: [3]float32{0.5, -0.5, -0.5}, Normal: [3]float32{1, -1, -1}, Bones: [4]int32{-1, -1, -1, -1}},
+			{Pos: [3]float32{0.5, 0.5, -0.5}, Normal: [3]float32{1, 1, -1}, Bones: [4]int32{-1, -1, -1, -1}},
+			{Pos: [3]float32{-0.5, 0.5, -0.5}, Normal: [3]float32{-1, 1, -1}, Bones: [4]int32{-1, -1, -1, -1}},
+			{Pos: [3]float32{-0.5, -0.5, 0.5}, Normal: [3]float32{-1, -1, 1}, Bones: [4]int32{-1, -1, -1, -1}},
+			{Pos: [3]float32{0.5, -0.5, 0.5}, Normal: [3]float32{1, -1, 1}, Bones: [4]int32{-1, -1, -1, -1}},
+			{Pos: [3]float32{0.5, 0.5, 0.5}, Normal: [3]float32{1, 1, 1}, Bones: [4]int32{-1, -1, -1, -1}},
+			{Pos: [3]float32{-0.5, 0.5, 0.5}, Normal: [3]float32{-1, 1, 1}, Bones: [4]int32{-1, -1, -1, -1}},
+		},
+		Meshes: []whm.Mesh{{Name: "box", Indices: []uint32{0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4}}},
+		Bones: []whm.Bone{
+			{Name: "root", Parent: -1},
+			{Name: "child", Parent: 0, Pos: [3]float32{0.4, 0, 0}},
+		},
+		Markers: []whm.Marker{{
+			Name:   "marker_tip",
+			Parent: "child",
+			Matrix: [9]float32{1, 0, 0, 0, 1, 0, 0, 0, 1},
+			Pos:    [3]float32{0.3, 0, 0},
+		}},
+	}
+}
+
+// overlayTestOptions is a camera that frames the box: without a field of view
+// and a distance every overlay width works out to zero or to nonsense.
+func overlayTestOptions() RenderOptions {
+	return RenderOptions{
+		Width: 400, Height: 300,
+		Yaw: 0.6, Pitch: 0.3, Distance: 6,
+		Fov: DefaultFov, Quality: ModelQualityFinal,
+	}
+}
+
+// fxMeanLuma is the mean brightness of an RGBA frame, which is how the FX
+// tests tell a drawn effect from an empty one.
+func fxMeanLuma(px []byte, w, h int) float64 {
+	sum, n := 0.0, 0.0
+	for i := 0; i+3 < len(px); i += 4 {
+		sum += (float64(px[i]) + float64(px[i+1]) + float64(px[i+2])) / 3
+		n++
+	}
+	if n == 0 {
+		return 0
+	}
+	return sum / n
+}
+
+// repeatedSprite is one sprite copied n times, which is what an effect with no
+// spread looks like.
+func repeatedSprite(sprites []fx.Sprite, n int) []fx.Sprite {
+	if len(sprites) == 0 {
+		return nil
+	}
+	out := make([]fx.Sprite, 0, n)
+	for i := 0; i < n; i++ {
+		sp := sprites[0]
+		// Spread them so the burst is not one square on top of another.
+		sp.Pos[0] += float64(i%4)*0.2 - 0.3
+		sp.Pos[1] += float64((i/4)%4)*0.2 - 0.3
+		out = append(out, sp)
+	}
+	return out
+}
+
+// ─── local copies of the shared fixtures ─────────────────────────────────────
+// testutil holds the same fixtures for the application's tests, but this
+// package's tests cannot import it: testutil imports render, and an in-package
+// test may not close that circle. The copies stay until the fixtures move to a
+// package that does not import render.
 
 func newLayoutContextForTest(ops *op.Ops, w, h int) layout.Context {
 	return layout.Context{
@@ -1054,9 +1373,10 @@ func newLayoutContextForTest(ops *op.Ops, w, h int) layout.Context {
 	}
 }
 
-// The clear colour of a pass is the panel background.
+// The game install the file-reading tests read from.
 const (
-	bgR, bgG, bgB = 0x1c, 0x1e, 0x24
+	dowInstallDir = `C:\Program Files\Steam\steamapps\common\Dawn of War Definitive Edition\UltimateApocalypse_THB_test\data`
+	dowRacesDir   = dowInstallDir + `\art\ebps\races`
 )
 
 // findDowFile looks a file up by base name anywhere under the installed race
@@ -1082,22 +1402,22 @@ func findDowFile(name string) []byte {
 
 // requireGpuTestModel reads a model from the game install, skipping the test
 // when there is none.
-func requireGpuTestModel(t *testing.T, name string) *WhmModel {
+func requireGpuTestModel(t *testing.T, name string) *whm.Model {
 	t.Helper()
 	raw := findDowFile(name)
 	if raw == nil {
 		t.Skipf("no %s under %s", name, dowRacesDir)
 	}
-	model, err := ParseWhmModel(raw)
+	model, err := whm.Parse(raw)
 	if err != nil {
-		t.Fatalf("ParseWhmModel(%s): %v", name, err)
+		t.Fatalf("parse %s: %v", name, err)
 	}
 	return model
 }
 
 // gpuTestOptions frames a model the way a freshly opened viewer does.
-func gpuTestOptions(model *WhmModel, w, h int) RenderOptions {
-	center, dist := model.ModelCenter()
+func gpuTestOptions(model *whm.Model, w, h int) RenderOptions {
+	center, dist := engine.ModelCenter(model)
 	return RenderOptions{
 		Width:     w,
 		Height:    h,
@@ -1108,20 +1428,8 @@ func gpuTestOptions(model *WhmModel, w, h int) RenderOptions {
 		Fov:       45,
 		Ambient:   0.32,
 		Diffuse:   0.68,
-		BaseColor: rgbaWhite,
+		BaseColor: RgbaWhite,
 	}
-}
-
-// coveredFraction counts the pixels that are not the clear colour, which is
-// how much of the frame the model actually reached.
-func coveredFraction(px []byte, w, h int) float64 {
-	hits := 0
-	for i := 0; i+3 < len(px); i += 4 {
-		if px[i] != bgR || px[i+1] != bgG || px[i+2] != bgB {
-			hits++
-		}
-	}
-	return float64(hits) / float64(w*h)
 }
 
 // distinctColours counts the unique opaque colours in a frame, which is how a
@@ -1137,165 +1445,9 @@ func distinctColours(px []byte) int {
 	return len(seen)
 }
 
-// findRsh locates a material's .rsh by base name: a .whm stores a full virtual
-// path, but the file itself may sit in a different mod than the model.
-func findRsh(material string) []byte {
-	if material == "" {
-		return nil
-	}
-	return findDowFile(filepath.Base(filepath.FromSlash(material)) + ".rsh")
-}
-
-// findMaterialWithTexture returns the first material of a model whose .rsh is
-// actually installed, since a model can reference a texture the install does
-// not ship.
-func findMaterialWithTexture(model *WhmModel) (string, []byte) {
-	for _, m := range model.Meshes {
-		if data := findRsh(m.Material); data != nil {
-			return m.Material, data
-		}
-	}
-	return "", nil
-}
-
-// rgbaPixels copies an image into the tightly packed layout the readback
-// helpers expect.
-func rgbaPixels(img *image.RGBA) []byte {
-	b := img.Bounds()
-	out := make([]byte, 0, b.Dx()*b.Dy()*4)
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		out = append(out, img.Pix[y*img.Stride:y*img.Stride+b.Dx()*4]...)
-	}
-	return out
-}
-
-// singleQuad is one flat quad across the YZ plane with its normal along the X
-// axis, which is where the orbit camera sits with no yaw and no pitch.
-func singleQuad(t *testing.T, outwards bool) *WhmModel {
-	t.Helper()
-	m := &WhmModel{Model: whm.Model{Name: "quad"}}
-	for _, p := range [4][3]float32{
-		{0, -0.8, -0.8}, {0, 0.8, -0.8}, {0, 0.8, 0.8}, {0, -0.8, 0.8},
-	} {
-		m.Vertices = append(m.Vertices, WhmVertex{
-			Pos:    p,
-			Normal: [3]float32{1, 0, 0},
-			Bones:  [4]int32{-1, -1, -1, -1},
-		})
-	}
-	// Counter clockwise seen from the front, which puts the outside of the
-	// quad on the side the camera is on.
-	idx := []uint32{0, 1, 2, 0, 2, 3}
-	if !outwards {
-		idx = []uint32{0, 2, 1, 0, 3, 2}
-	}
-	m.Meshes = append(m.Meshes, WhmMesh{Name: "quad", Indices: idx, SingleBone: -1})
-	m.Bones = []WhmBone{{Name: "root", Parent: -1}}
-	return m
-}
-
-// covered is whether a pixel is clear of the background a frame is cleared to.
-// The arithmetic is done on ints: the background is darker than the threshold
-// in the blue channel, and unsigned bytes would count that as a large number.
-func covered(c color.RGBA) bool {
-	return int(c.R)-0x1c > 12 || int(c.G)-0x1e > 12 || int(c.B)-0x24 > 12
-}
-
-// openBoxModel is a box with its top and bottom left off.
-func openBoxModel(t *testing.T) *WhmModel {
-	t.Helper()
-	m := &WhmModel{Model: whm.Model{Name: "open_box"}}
-	min, max := [3]float32{-1, -1, -1}, [3]float32{1, 1, 1}
-	corners := [8][3]float32{
-		{min[0], min[1], min[2]}, {max[0], min[1], min[2]}, {max[0], max[1], min[2]}, {min[0], max[1], min[2]},
-		{min[0], min[1], max[2]}, {max[0], min[1], max[2]}, {max[0], max[1], max[2]}, {min[0], max[1], max[2]},
-	}
-	centre := [3]float32{0, 0, 0}
-	for _, c := range corners {
-		n := [3]float32{c[0] - centre[0], c[1] - centre[1], c[2] - centre[2]}
-		l := float32(sqrt(n[0]*n[0] + n[1]*n[1] + n[2]*n[2]))
-		m.Vertices = append(m.Vertices, WhmVertex{
-			Pos:    c,
-			Normal: [3]float32{n[0] / l, n[1] / l, n[2] / l},
-			Bones:  [4]int32{-1, -1, -1, -1},
-		})
-	}
-	// The four sides only. The opening is what the frame looks through.
-	faces := [][3]int{
-		{0, 1, 5}, {0, 5, 4}, // front
-		{1, 2, 6}, {1, 6, 5}, // right
-		{2, 3, 7}, {2, 7, 6}, // back
-		{3, 0, 4}, {3, 4, 7}, // left
-	}
-	var idx []uint32
-	for _, f := range faces {
-		if facePointsOutwards(m.Vertices[f[0]], m.Vertices[f[1]], m.Vertices[f[2]]) {
-			idx = append(idx, uint32(f[0]), uint32(f[1]), uint32(f[2]))
-		} else {
-			idx = append(idx, uint32(f[0]), uint32(f[2]), uint32(f[1]))
-		}
-	}
-	m.Meshes = append(m.Meshes, WhmMesh{Name: "walls", Indices: idx, SingleBone: -1})
-	m.Bones = []WhmBone{{Name: "root", Parent: -1}}
-	return m
-}
-
-// twoBoxModel is two cubes far apart, as two sub meshes. Which piece is drawn
-// is therefore obvious at a glance, and so is which side of each is.
-func twoBoxModel(t *testing.T) *WhmModel {
-	t.Helper()
-	m := &WhmModel{Model: whm.Model{Name: "two_boxes"}}
-	add := func(name string, min, max [3]float32) {
-		base := uint32(len(m.Vertices))
-		// Every face of a cube as two triangles, wound so that the normal
-		// each one carries points away from the middle of it.
-		corners := [8][3]float32{
-			{min[0], min[1], min[2]}, {max[0], min[1], min[2]}, {max[0], max[1], min[2]}, {min[0], max[1], min[2]},
-			{min[0], min[1], max[2]}, {max[0], min[1], max[2]}, {max[0], max[1], max[2]}, {min[0], max[1], max[2]},
-		}
-		centre := [3]float32{(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2}
-		for i, c := range corners {
-			n := [3]float32{c[0] - centre[0], c[1] - centre[1], c[2] - centre[2]}
-			length := float32(1)
-			if l := n[0]*n[0] + n[1]*n[1] + n[2]*n[2]; l > 0 {
-				length = float32(sqrt(l))
-			}
-			m.Vertices = append(m.Vertices, WhmVertex{
-				Pos:    c,
-				Normal: [3]float32{n[0] / length, n[1] / length, n[2] / length},
-				UV:     [2]float32{0, 0},
-				Bones:  [4]int32{-1, -1, -1, -1},
-			})
-			_ = i
-		}
-		faces := [][3]int{
-			{0, 2, 1}, {0, 3, 2}, // bottom
-			{4, 5, 6}, {4, 6, 7}, // top
-			{0, 1, 5}, {0, 5, 4}, // front
-			{1, 2, 6}, {1, 6, 5}, // right
-			{2, 3, 7}, {2, 7, 6}, // back
-			{3, 0, 4}, {3, 4, 7}, // left
-		}
-		var idx []uint32
-		for _, f := range faces {
-			// Wound so that cross(b-a, c-a) points along the face normal.
-			if facePointsOutwards(m.Vertices[base+uint32(f[0])], m.Vertices[base+uint32(f[1])], m.Vertices[base+uint32(f[2])]) {
-				idx = append(idx, base+uint32(f[0]), base+uint32(f[1]), base+uint32(f[2]))
-			} else {
-				idx = append(idx, base+uint32(f[0]), base+uint32(f[2]), base+uint32(f[1]))
-			}
-		}
-		m.Meshes = append(m.Meshes, WhmMesh{Name: name, Indices: idx, SingleBone: -1})
-	}
-	add("left", [3]float32{-1.4, -0.5, -0.5}, [3]float32{-0.4, 0.5, 0.5})
-	add("right", [3]float32{0.4, -0.5, -0.5}, [3]float32{1.4, 0.5, 0.5})
-	m.Bones = []WhmBone{{Name: "root", Parent: -1}}
-	return m
-}
-
 // facePointsOutwards reports whether the winding of a triangle agrees with the
 // normal its vertices carry.
-func facePointsOutwards(a, b, c WhmVertex) bool {
+func facePointsOutwards(a, b, c whm.Vertex) bool {
 	u1 := [3]float64{float64(b.Pos[0] - a.Pos[0]), float64(b.Pos[1] - a.Pos[1]), float64(b.Pos[2] - a.Pos[2])}
 	u2 := [3]float64{float64(c.Pos[0] - a.Pos[0]), float64(c.Pos[1] - a.Pos[1]), float64(c.Pos[2] - a.Pos[2])}
 	g := [3]float64{
@@ -1309,47 +1461,4 @@ func facePointsOutwards(a, b, c WhmVertex) bool {
 		float64(a.Normal[2]) + float64(b.Normal[2]) + float64(c.Normal[2]),
 	}
 	return g[0]*n[0]+g[1]*n[1]+g[2]*n[2] > 0
-}
-
-// coveredPixels counts the pixels of a frame that are not the background the
-// renderer clears to.
-func coveredPixels(img *image.RGBA, area image.Rectangle) int {
-	n := 0
-	for y := area.Min.Y; y < area.Max.Y; y++ {
-		for x := area.Min.X; x < area.Max.X; x++ {
-			if covered(img.RGBAAt(x, y)) {
-				n++
-			}
-		}
-	}
-	return n
-}
-
-func sqrt(v float32) float64 { return math.Sqrt(float64(v)) }
-
-// ─── merged from x_test_model3d_gpu_vulkan_cache_test.go ────────────────────────────────────────
-
-func TestModelGpuVkGeometryChangesAreDeferredUntilRender(t *testing.T) {
-	model := &WhmModel{}
-	mesh := &modelGpuVkMesh{draws: []modelGpuVkDraw{{count: 3}}}
-	r := &modelGpuVkRenderer{
-		meshes:      map[*WhmModel]*modelGpuVkMesh{model: mesh},
-		dirtyMeshes: make(map[*WhmModel]bool),
-	}
-
-	r.geometryChanged(model)
-	if r.meshes[model] != mesh || !r.dirtyMeshes[model] {
-		t.Fatal("geometryChanged must retain the in-use mesh and mark it dirty for the next render")
-	}
-}
-
-func TestModelGpuVkForgetRetiresTheCachedMesh(t *testing.T) {
-	model := &WhmModel{}
-	mesh := &modelGpuVkMesh{}
-	r := &modelGpuVkRenderer{meshes: map[*WhmModel]*modelGpuVkMesh{model: mesh}}
-
-	r.forget(model)
-	if _, ok := r.meshes[model]; ok {
-		t.Fatal("forgotten model remains in the GPU mesh cache")
-	}
 }

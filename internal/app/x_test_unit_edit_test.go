@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/whm"
@@ -1347,10 +1348,10 @@ func TestTurningTheModelTurnsItTheWayTheMouseWent(t *testing.T) {
 	// it as far as it can.
 	const w, h = 400, 400
 	point := fauxgl.Vector{X: 1, Y: 0.2, Z: 0.5}
-	opts := RenderOptions{Width: w, Height: h, Fov: 45, Distance: 8, Yaw: 0.7, Pitch: 0.2}
+	opts := render.RenderOptions{Width: w, Height: h, Fov: 45, Distance: 8, Yaw: 0.7, Pitch: 0.2}
 
-	onScreen := func(o RenderOptions) (float64, float64) {
-		v := buildViewMatrix(o).MulPositionW(point)
+	onScreen := func(o render.RenderOptions) (float64, float64) {
+		v := render.BuildViewMatrix(o).MulPositionW(point)
 		if v.W == 0 {
 			t.Fatalf("the point is at the camera, at yaw %v pitch %v", o.Yaw, o.Pitch)
 		}
@@ -1577,8 +1578,8 @@ func TestLookThroughCameraAimsAtTheFocusPoint(t *testing.T) {
 	cam := WhmCamera{Name: "port_hud", Pos: [3]float32{4, 0, 6}, Fov: 30, FocusPoint: [3]float32{0, 1, 0}}
 	v.lookThroughCamera(cam)
 
-	eye := boneRootFrame.MulPosition(vec3From(cam.Pos))
-	focus := boneRootFrame.MulPosition(vec3From(cam.FocusPoint))
+	eye := boneRootFrame.MulPosition(render.Vec3From(cam.Pos))
+	focus := boneRootFrame.MulPosition(render.Vec3From(cam.FocusPoint))
 	if got := (v.Center.Sub(focus)).Length(); got > 1e-6 {
 		t.Fatalf("the view is centred %v away from the camera's focus point", got)
 	}
@@ -1605,7 +1606,7 @@ func TestLookThroughCameraKeepsAnUnusableFieldOfView(t *testing.T) {
 	v := newModelViewer(&WhmModel{Model: whm.Model{Vertices: []WhmVertex{{}}, BoundMax: [3]float32{1, 1, 1}}}, "")
 	for _, fov := range []float32{0, -20, 180} {
 		v.lookThroughCamera(WhmCamera{Name: "c", Pos: [3]float32{0, 0, 5}, Fov: fov})
-		if v.FOV != modelDefaultFov {
+		if v.FOV != render.DefaultFov {
 			t.Errorf("a field of view of %v was taken, leaving the view at %v", fov, v.FOV)
 		}
 	}
@@ -1626,8 +1627,8 @@ func TestResetCameraForgetsTheModelsCamera(t *testing.T) {
 	if v.ActiveCamera != "" {
 		t.Errorf("the active camera survived a reset: %q", v.ActiveCamera)
 	}
-	if v.FOV != modelDefaultFov {
-		t.Errorf("the field of view is %v after a reset, want %v", v.FOV, modelDefaultFov)
+	if v.FOV != render.DefaultFov {
+		t.Errorf("the field of view is %v after a reset, want %v", v.FOV, render.DefaultFov)
 	}
 	if v.Distance != fit {
 		t.Errorf("the distance is %v after a reset, want the framing distance %v", v.Distance, fit)

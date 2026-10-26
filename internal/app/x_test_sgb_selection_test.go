@@ -12,6 +12,7 @@ import (
 
 	"dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/3d_viewer"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/sgb"
@@ -296,7 +297,7 @@ func TestSgbSelectionOutlineBoundsMergeAllSubmeshesPerEntity(t *testing.T) {
 			{Name: "entity-9", Indices: []uint32{6, 7, 8}},
 		},
 	}
-	bounds := sgbEntityProjectedBounds(model, map[string]int{"entity-4": 4, "entity-9": 9}, fauxgl.Identity(), 100, 100, whm.Pose{}, false)
+	bounds := render.SgbEntityProjectedBounds(model, map[string]int{"entity-4": 4, "entity-9": 9}, fauxgl.Identity(), 100, 100, whm.Pose{}, false)
 	if len(bounds) != 2 {
 		t.Fatalf("got bounds for %d entities, want 2: %v", len(bounds), bounds)
 	}
@@ -323,7 +324,7 @@ func TestSgbGpuSelectionBoundsAreOnlyBuiltForSelectedEntities(t *testing.T) {
 	}
 	camera := engine.Camera{Width: 120, Height: 120, Yaw: 0, Pitch: math.Pi / 2, Distance: 6, Target: fauxgl.Vector{}, Fov: 45}
 	meshes := map[string]int{"entity-4": 4, "entity-9": 9, sgb.WaterMeshName: 99}
-	lines := prepareSgbSelectionBounds(model, map[int]bool{4: true}, meshes, engine.ViewMatrix(camera), camera, whm.Pose{}, false)
+	lines := render.PrepareSgbSelectionBounds(model, map[int]bool{4: true}, meshes, engine.ViewMatrix(camera), camera, whm.Pose{}, false)
 	if len(lines) != 4 {
 		t.Fatalf("selected entity generated %d GPU outline edges, want 4", len(lines))
 	}
@@ -332,7 +333,7 @@ func TestSgbGpuSelectionBoundsAreOnlyBuiltForSelectedEntities(t *testing.T) {
 			t.Fatalf("unexpected GPU outline line: %+v", line)
 		}
 	}
-	if lines := prepareSgbSelectionBounds(model, map[int]bool{}, meshes, engine.ViewMatrix(camera), camera, whm.Pose{}, false); len(lines) != 0 {
+	if lines := render.PrepareSgbSelectionBounds(model, map[int]bool{}, meshes, engine.ViewMatrix(camera), camera, whm.Pose{}, false); len(lines) != 0 {
 		t.Fatalf("no selection generated %d GPU outline edges", len(lines))
 	}
 }
@@ -694,7 +695,7 @@ func TestSgbCameraTargetMarkerProjectsOntoSurfaceTarget(t *testing.T) {
 		t.Fatal("camera target did not project")
 	}
 	opts := viewer.options(640, 480)
-	projected := fxProject(buildViewMatrix(opts), viewer.Center, 640, 480)
+	projected := fxProject(render.BuildViewMatrix(opts), viewer.Center, 640, 480)
 	if projected == nil || math.Hypot(at.X-projected.X, at.Y-projected.Y) > 1e-9 {
 		t.Fatalf("camera target marker at (%v,%v), projected orbit target %v", at.X, at.Y, projected)
 	}
@@ -837,7 +838,7 @@ func TestSgbEntityMaterialsExposeTextureUnderMeshMaterialKey(t *testing.T) {
 
 func TestSgbObjectMaterialResultsMergeIntoMapViewer(t *testing.T) {
 	viewer := &modelViewer{
-		materials: map[string]WhmMaterial{"ground": {Color: rgbaWhite}},
+		materials: map[string]render.WhmMaterial{"ground": {Color: render.RgbaWhite}},
 		rshData:   map[string][]byte{"ground": []byte("ground-rsh")},
 	}
 	request := sgbObjectMaterialRequest{modelPath: "Data/art/ebps/environment/rock.whm"}
@@ -848,8 +849,8 @@ func TestSgbObjectMaterialResultsMergeIntoMapViewer(t *testing.T) {
 	}
 	tab.sgbObjectMaterialsCh <- sgbObjectMaterialsResult{
 		request: request,
-		materials: map[string]WhmMaterial{
-			"rock_diffuse": {Color: rgbaWhite},
+		materials: map[string]render.WhmMaterial{
+			"rock_diffuse": {Color: render.RgbaWhite},
 		},
 		rsh:         map[string][]byte{"rock_diffuse": []byte("rock-rsh")},
 		diagnostics: map[string]modelMaterialDiagnostic{"rock_diffuse": {Status: "decoded"}},
@@ -879,10 +880,10 @@ func TestSgbObjectMaterialResultsMergeIntoMapViewer(t *testing.T) {
 }
 
 func TestSgbSceneDeliveryTwoPhases(t *testing.T) {
-	v := &modelViewer{materials: map[string]WhmMaterial{}}
+	v := &modelViewer{materials: map[string]render.WhmMaterial{}}
 	tab := &fileTab{model: v, modelMaterialCh: make(chan modelMaterialResult, 2)}
 	ui := &uiState{}
-	terrainMat := map[string]WhmMaterial{"ground": {Color: rgbaWhite}}
+	terrainMat := map[string]render.WhmMaterial{"ground": {Color: render.RgbaWhite}}
 	tab.modelMaterialCh <- modelMaterialResult{materials: terrainMat, more: true}
 	ui.pollViewerJobs(tab)
 	if tab.modelMaterialCh == nil {
@@ -892,7 +893,7 @@ func TestSgbSceneDeliveryTwoPhases(t *testing.T) {
 		t.Fatalf("phase one state: materials=%d textured=%v loading=%v", len(v.materials), v.textured, v.loading)
 	}
 	scene := &WhmModel{}
-	both := map[string]WhmMaterial{"ground": {Color: rgbaWhite}, "wall": {Color: rgbaWhite}}
+	both := map[string]render.WhmMaterial{"ground": {Color: render.RgbaWhite}, "wall": {Color: render.RgbaWhite}}
 	tab.modelMaterialCh <- modelMaterialResult{materials: both, model: scene}
 	ui.pollViewerJobs(tab)
 	if tab.modelMaterialCh != nil {

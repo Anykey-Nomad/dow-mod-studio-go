@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"image"
 	"image/color"
 	"testing"
@@ -41,7 +42,7 @@ func TestImageViewerPaintsTheImage(t *testing.T) {
 	ui.ensureTabClicks()
 
 	var ops op.Ops
-	gtx := newLayoutContextForTest(&ops, size.X, size.Y)
+	gtx := testutil.NewLayoutContext(&ops, size.X, size.Y)
 	ui.layoutContent(gtx)
 
 	shot := image.NewRGBA(image.Rect(0, 0, size.X, size.Y))

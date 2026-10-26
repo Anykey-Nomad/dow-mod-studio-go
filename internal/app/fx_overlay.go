@@ -18,6 +18,7 @@ import (
 
 	"dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/app/fxscene"
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/audioplayer"
 	"dow-mod-studio/internal/fda"
 	"dow-mod-studio/internal/fx"
@@ -83,25 +84,8 @@ type (
 	fxSceneLight = fxscene.Light
 )
 
-// fxSceneLightOf is the light a render request asks for, with the same
-// defaults the model shader falls back on.
-func fxSceneLightOf(opts RenderOptions) fxSceneLight {
-	l := fxSceneLight{
-		Dir:     opts.Light,
-		Ambient: opts.Ambient,
-		Diffuse: opts.Diffuse,
-	}
-	if l.Dir == (fauxgl.Vector{}) {
-		l.Dir = fauxgl.Vector{X: 0.35, Y: -0.5, Z: 0.78}
-	}
-	if n := l.Dir.Length(); n > 0 {
-		l.Dir = l.Dir.Normalize()
-	}
-	if l.Ambient == 0 && l.Diffuse == 0 {
-		l.Ambient, l.Diffuse = 0.28, 0.72
-	}
-	return l
-}
+// fxSceneLightOf moved to internal/app/render: it derives the frame light
+// from the render request the GPU path is given.
 
 // fxGroupKey is what one draw group is: the map it reads, the blend mode it
 // draws through and the site its geometry is relative to. Sprites carry their
@@ -262,7 +246,7 @@ func (v *modelViewer) scaleFX(f float64) {
 	if s <= 0 {
 		s = fxScaleDefaultValue
 	}
-	s = clampFloat64(s*f, modelFXScaleMin, modelFXScaleMax)
+	s = engine.ClampFloat64(s*f, modelFXScaleMin, modelFXScaleMax)
 	v.fxScale = s
 	v.invalidate()
 	log.Printf("3D preview: FX scale %.2f", s)
@@ -478,7 +462,7 @@ func (v *modelViewer) fxSoundTick(anim string) {
 	v.fxSound.SetEnabled(v.fxSoundOn)
 	duration := animClipSeconds(v.anim)
 	v.fxSound.SetClipSeconds(duration)
-	v.fxSound.Advance(anim, clampFloat64(float64(v.time)*duration, 0, duration))
+	v.fxSound.Advance(anim, engine.ClampFloat64(float64(v.time)*duration, 0, duration))
 }
 
 // fxOrigins moves every effect to where its marker is under the pose on show.
@@ -670,7 +654,7 @@ func fxRotateAbout(v, axis fauxgl.Vector, angle float64) fauxgl.Vector {
 // built and thrown away. The flag is recomputed every frame from the same
 // conditions the renderer acts on (see modelGpuUnavailable), so a hardware
 // path that is off, or that breaks, has its picture back on the next frame.
-func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts RenderOptions, softwareFX bool) bool {
+func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts render.RenderOptions, softwareFX bool) bool {
 	anim := ""
 	if v != nil && v.anim != nil {
 		anim = v.anim.Name
@@ -748,7 +732,7 @@ func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts RenderOptions, sof
 	}
 	effects = fxScaledEffects(effects, scale)
 	// The camera's own up, which is what a billboard ring squares itself to.
-	_, camUp := fxCameraBasis(opts)
+	_, camUp := render.FxCameraBasis(opts)
 	if softwareFX && v.showFX {
 		v.fxOverlay = renderFxOverlay(effects, opts, w, h, v.fxTextures)
 	} else {
@@ -757,7 +741,7 @@ func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts RenderOptions, sof
 		v.fxOverlay = nil
 	}
 	if v.showFX {
-		v.fxScene = fxBuildGpuScene(effects, v.fxTextures, fxEyePosition(opts), camUp)
+		v.fxScene = fxBuildGpuScene(effects, v.fxTextures, render.FxEyePosition(opts), camUp)
 	} else {
 		v.fxScene = nil
 	}
@@ -1123,7 +1107,7 @@ func fxScaleSprite(sp fx.Sprite, scale float64) fx.Sprite {
 		sp.Pos[i] *= scale
 	}
 	if sp.Radius <= 0 {
-		sp.Radius = fxSpriteFallbackRadius
+		sp.Radius = render.SpriteFallbackRadius
 	}
 	sp.Radius *= scale
 	return sp
@@ -1201,7 +1185,7 @@ func fxRotateVectorBetween(v, from, to fauxgl.Vector) fauxgl.Vector {
 	}
 	cross := from.Cross(to)
 	sin := cross.Length()
-	cos := clampFloat64(from.Dot(to), -1, 1)
+	cos := engine.ClampFloat64(from.Dot(to), -1, 1)
 	if sin < 1e-6 {
 		if cos > 0 {
 			return v
@@ -1293,7 +1277,7 @@ func fxFrameToward(frame [3]fauxgl.Vector, direction fauxgl.Vector) [3]fauxgl.Ve
 	}
 	cross := from.Cross(to)
 	sin := cross.Length()
-	cos := clampFloat64(from.Dot(to), -1, 1)
+	cos := engine.ClampFloat64(from.Dot(to), -1, 1)
 	if sin < 1e-6 {
 		if cos > 0 {
 			return frame
@@ -1415,18 +1399,18 @@ func fxOverlayStep(effects []fxOverlayEffect, dt float64) {
 // sprite whose map is missing is still drawn, as a flat disc in its own
 // colour: an effect that shows where its particles are is worth more than one
 // that silently drops them.
-func renderFxOverlay(effects []fxOverlayEffect, opts RenderOptions, w, h int, textures map[string]*image.RGBA) *image.RGBA {
+func renderFxOverlay(effects []fxOverlayEffect, opts render.RenderOptions, w, h int, textures map[string]*image.RGBA) *image.RGBA {
 	out := image.NewRGBA(image.Rect(0, 0, w, h))
 	if len(effects) == 0 || w < 1 || h < 1 {
 		return out
 	}
-	view := buildViewMatrix(opts)
+	view := render.BuildViewMatrix(opts)
 	// The camera's own right and up, so that a quad drawn along them faces
 	// the eye square on. They come out of the same orbit the frame is drawn
 	// with: the direction from the target to the eye, and the Z-up the
 	// models are authored in.
-	right, up := fxCameraBasis(opts)
-	eye := fxEyePosition(opts)
+	right, up := render.FxCameraBasis(opts)
+	eye := render.FxEyePosition(opts)
 	for _, e := range effects {
 		if e.Sim == nil {
 			continue
@@ -1473,54 +1457,14 @@ func renderFxOverlay(effects []fxOverlayEffect, opts RenderOptions, w, h int, te
 	return out
 }
 
-// fxSpriteFallbackRadius is the size, in model units, given to a sprite whose
-// file carries no Radius curve.
-const fxSpriteFallbackRadius = 0.05
-
-// fxCameraBasis is where the camera's right and up point in model space, for
-// the same orbit buildViewMatrix sets up. Models are authored Z up, so that
-// is the up the look is taken against.
-//
-// The two are the same axes the view matrix is built from, and the order of
-// the cross product is what makes them agree: the eye sits along dir, so
-// looking at the model means looking back along -dir, and the camera's right
-// is worldUp x -dir. Taking dir x worldUp instead hands back the negative of
-// it — the camera's left — which squares every billboard to a frame rolled a
-// half turn against the one it is being viewed through. A round puff is
-// symmetric enough to hide that, but a sprite with a direction in it, which is
-// what a beam's map is, comes out upside down and swings the wrong way as the
-// camera orbits.
-func fxCameraBasis(opts RenderOptions) (right, up fauxgl.Vector) {
-	pitch := clampFloat64(opts.Pitch, -1.5, 1.5)
-	dir := fauxgl.Vector{
-		X: math.Cos(opts.Yaw) * math.Cos(pitch),
-		Y: math.Sin(opts.Yaw) * math.Cos(pitch),
-		Z: math.Sin(pitch),
-	}
-	worldUp := fauxgl.Vector{X: 0, Y: 0, Z: 1}
-	right = worldUp.Cross(dir).Normalize()
-	if n := right.Length(); n < 1e-6 {
-		// Looking straight down the up axis: any sideways direction will
-		// do, and the frame itself is edge on anyway.
-		right = fauxgl.Vector{X: 1}
-	}
-	up = dir.Cross(right).Normalize()
-	return right, up
-}
-
-// fxEyePosition is where the camera is in model space, for the same orbit
-// buildViewMatrix sets up. A beam needs it to turn its cross-section towards
-// the eye: a ribbon has a direction but no idea which way it is being looked
-// at, and a beam drawn flat to the world disappears edge on.
-func fxEyePosition(opts RenderOptions) fauxgl.Vector {
-	return engine.EyePosition(engine.Camera{Yaw: opts.Yaw, Pitch: opts.Pitch, Distance: opts.Distance, Target: opts.Target})
-}
+// render.SpriteFallbackRadius, render.FxCameraBasis and render.FxEyePosition moved to
+// internal/app/render: the GPU renderer needs them beside render.RenderOptions.
 
 // drawFxHorizontalSprite projects a fixed XY-plane sprite, matching the
 // non-billboard STYLE_RING plane the game authors perpendicular to world Z.
 func drawFxHorizontalSprite(dst *image.RGBA, view fauxgl.Matrix, w, h int, world fauxgl.Vector, radius float64, sp fx.Sprite, textures map[string]*image.RGBA) {
 	if radius <= 0 {
-		radius = fxSpriteFallbackRadius
+		radius = render.SpriteFallbackRadius
 	}
 	normal := fauxgl.Vector{X: sp.PlaneNormal[0], Y: sp.PlaneNormal[1], Z: sp.PlaneNormal[2]}
 	if normal.Length() < 1e-6 {
@@ -1552,10 +1496,10 @@ func drawFxHorizontalSprite(dst *image.RGBA, view fauxgl.Matrix, w, h int, world
 	verts := [4]fx.BeamVert{{U: 0, V: 1}, {U: 1, V: 1}, {U: 1, V: 0}, {U: 0, V: 0}}
 	drawFxBeamQuad(dst, projected[0], projected[1], projected[3], projected[2],
 		verts[0], verts[1], verts[3], verts[2], textures[sp.Texture],
-		clampFloat64(sp.R, 0, 1)*clampFloat64(sp.A, 0, 1),
-		clampFloat64(sp.G, 0, 1)*clampFloat64(sp.A, 0, 1),
-		clampFloat64(sp.B, 0, 1)*clampFloat64(sp.A, 0, 1),
-		clampFloat64(sp.A, 0, 1), sp.Additive, w, h)
+		engine.ClampFloat64(sp.R, 0, 1)*engine.ClampFloat64(sp.A, 0, 1),
+		engine.ClampFloat64(sp.G, 0, 1)*engine.ClampFloat64(sp.A, 0, 1),
+		engine.ClampFloat64(sp.B, 0, 1)*engine.ClampFloat64(sp.A, 0, 1),
+		engine.ClampFloat64(sp.A, 0, 1), sp.Additive, w, h)
 }
 
 // drawFxBillboard projects one sprite and fills the square it covers.
@@ -1593,13 +1537,13 @@ func drawFxBillboard(dst *image.RGBA, view fauxgl.Matrix, right, up fauxgl.Vecto
 	// Additive sprites brighten what is under them; the rest are laid over
 	// it. Both write into a transparent picture, which is then painted over
 	// the frame, so the frame shows through wherever nothing was drawn.
-	alpha := clampFloat64(sp.A, 0, 1)
+	alpha := engine.ClampFloat64(sp.A, 0, 1)
 	if alpha <= 0 {
 		return
 	}
-	cr := clampFloat64(sp.R, 0, 1) * alpha
-	cg := clampFloat64(sp.G, 0, 1) * alpha
-	cb := clampFloat64(sp.B, 0, 1) * alpha
+	cr := engine.ClampFloat64(sp.R, 0, 1) * alpha
+	cg := engine.ClampFloat64(sp.G, 0, 1) * alpha
+	cb := engine.ClampFloat64(sp.B, 0, 1) * alpha
 	span := half * 2
 	for y := y0; y < y1; y++ {
 		v := (float64(y) + 0.5 - (centre.Y - half)) / span
@@ -1661,10 +1605,10 @@ func blendFxPixel(dst *image.RGBA, x, y int, r, g, b, a float64, additive bool) 
 		// Brighten, and let the picture grow no brighter than the sprite
 		// itself: without the cap a hundred overlapping particles pile up
 		// into a white square.
-		dst.Pix[i] = clampByte(float64(dst.Pix[i]) + r*255)
-		dst.Pix[i+1] = clampByte(float64(dst.Pix[i+1]) + g*255)
-		dst.Pix[i+2] = clampByte(float64(dst.Pix[i+2]) + b*255)
-		dst.Pix[i+3] = clampByte(math.Max(float64(dst.Pix[i+3]), a*255))
+		dst.Pix[i] = engine.ClampByte(float64(dst.Pix[i]) + r*255)
+		dst.Pix[i+1] = engine.ClampByte(float64(dst.Pix[i+1]) + g*255)
+		dst.Pix[i+2] = engine.ClampByte(float64(dst.Pix[i+2]) + b*255)
+		dst.Pix[i+3] = engine.ClampByte(math.Max(float64(dst.Pix[i+3]), a*255))
 		return
 	}
 	// Over: the sprite in front of what is already there.
@@ -1673,21 +1617,13 @@ func blendFxPixel(dst *image.RGBA, x, y int, r, g, b, a float64, additive bool) 
 		return
 	}
 	keep := 1 - a
-	dst.Pix[i] = clampByte(r*255 + float64(dst.Pix[i])*keep)
-	dst.Pix[i+1] = clampByte(g*255 + float64(dst.Pix[i+1])*keep)
-	dst.Pix[i+2] = clampByte(b*255 + float64(dst.Pix[i+2])*keep)
-	dst.Pix[i+3] = clampByte(in + float64(dst.Pix[i+3])*keep)
+	dst.Pix[i] = engine.ClampByte(r*255 + float64(dst.Pix[i])*keep)
+	dst.Pix[i+1] = engine.ClampByte(g*255 + float64(dst.Pix[i+1])*keep)
+	dst.Pix[i+2] = engine.ClampByte(b*255 + float64(dst.Pix[i+2])*keep)
+	dst.Pix[i+3] = engine.ClampByte(in + float64(dst.Pix[i+3])*keep)
 }
 
-func clampByte(v float64) uint8 {
-	if v <= 0 {
-		return 0
-	}
-	if v >= 255 {
-		return 255
-	}
-	return uint8(v + 0.5)
-}
+// clampByte moved to internal/3d_engine as engine.ClampByte.
 
 // fxTextureCandidates is where a sprite's Texture property can name its map
 // from. The property is written every which way: a full data path, a path
@@ -2715,13 +2651,13 @@ func drawFxBeam(dst *image.RGBA, view fauxgl.Matrix, eye fauxgl.Vector, w, h int
 		return
 	}
 	tex := textures[fxTexturePath(rb.Texture)]
-	alpha := clampFloat64(rb.Alpha, 0, 1)
+	alpha := engine.ClampFloat64(rb.Alpha, 0, 1)
 	if alpha <= 0 {
 		return
 	}
-	cr := clampFloat64(rb.R, 0, 1) * alpha
-	cg := clampFloat64(rb.G, 0, 1) * alpha
-	cb := clampFloat64(rb.B, 0, 1) * alpha
+	cr := engine.ClampFloat64(rb.R, 0, 1) * alpha
+	cg := engine.ClampFloat64(rb.G, 0, 1) * alpha
+	cb := engine.ClampFloat64(rb.B, 0, 1) * alpha
 	// The screen positions of every corner, and which ones were off screen.
 	pts := make([]*fauxgl.Vector, len(verts))
 	any := false
@@ -2836,7 +2772,7 @@ func (v *modelViewer) markerHighlight(w, h int) (fauxgl.Vector, bool) {
 	if !ok {
 		return fauxgl.Vector{}, false
 	}
-	p := fxProject(buildViewMatrix(v.options(w, h)), world, w, h)
+	p := fxProject(render.BuildViewMatrix(v.options(w, h)), world, w, h)
 	if p == nil {
 		return fauxgl.Vector{}, false
 	}
@@ -2855,7 +2791,7 @@ func (v *modelViewer) markerArrow(w, h int) (fauxgl.Vector, bool) {
 	if !ok {
 		return fauxgl.Vector{}, false
 	}
-	view := buildViewMatrix(v.options(w, h))
+	view := render.BuildViewMatrix(v.options(w, h))
 	at := fxProject(view, world, w, h)
 	tip := fxProject(view, world.Add(axis.MulScalar(markerArrowWorldLength)), w, h)
 	if at == nil || tip == nil {
@@ -2918,7 +2854,7 @@ func (v *modelViewer) paintFXAttributeMarkers(gtx layout.Context, w, h int) {
 	if v == nil || v.model == nil || w < 1 || h < 1 {
 		return
 	}
-	view := buildViewMatrix(v.options(w, h))
+	view := render.BuildViewMatrix(v.options(w, h))
 	pose := v.pose()
 	for i := range v.fxEffects {
 		e := &v.fxEffects[i]
@@ -3030,7 +2966,7 @@ func (v *modelViewer) layoutFXOriginAxes(th *material.Theme, gtx layout.Context,
 	if len(indices) == 0 {
 		return layout.Dimensions{}
 	}
-	view := buildViewMatrix(v.options(w, h))
+	view := render.BuildViewMatrix(v.options(w, h))
 	pose := v.pose()
 	origins := make(map[[21]uint64]fxOriginAxesEntry, len(indices))
 	for _, index := range indices {
@@ -3065,7 +3001,7 @@ func (v *modelViewer) layoutFXOriginAxes(th *material.Theme, gtx layout.Context,
 			continue
 		}
 		centreX, centreY := offsetX+at.X*canvasScale, offsetY+at.Y*canvasScale
-		paintFXAxesDot(gtx, centreX, centreY, modelMarkerFwdColor)
+		paintFXAxesDot(gtx, centreX, centreY, render.ModelMarkerFwdColor)
 		for frameIndex, frame := range entry.frames {
 			cx := centreX + (float64(frameIndex)-0.5)*fxAxesPairGap
 			for axisIndex, axis := range frame {
@@ -3079,7 +3015,7 @@ func (v *modelViewer) layoutFXOriginAxes(th *material.Theme, gtx layout.Context,
 					continue
 				}
 				endX, endY := cx+dx/length*fxAxesTriadLen, centreY+dy/length*fxAxesTriadLen
-				col := [3][4]float64{modelMarkerXColor, modelMarkerYColor, modelMarkerZColor}[axisIndex]
+				col := [3][4]float64{render.ModelMarkerXColor, render.ModelMarkerYColor, render.ModelMarkerZColor}[axisIndex]
 				paintFXAxesLine(gtx, cx, centreY, endX, endY, col)
 				paintFXAxesText(gtx, th, [3]string{"X", "Y", "Z"}[axisIndex], endX-3, endY-7, col)
 			}
@@ -3087,7 +3023,7 @@ func (v *modelViewer) layoutFXOriginAxes(th *material.Theme, gtx layout.Context,
 			if frameIndex == 1 {
 				label = "world"
 			}
-			paintFXAxesText(gtx, th, label, cx-15, centreY+11, modelMarkerFwdColor)
+			paintFXAxesText(gtx, th, label, cx-15, centreY+11, render.ModelMarkerFwdColor)
 		}
 	}
 	return layout.Dimensions{Size: area}

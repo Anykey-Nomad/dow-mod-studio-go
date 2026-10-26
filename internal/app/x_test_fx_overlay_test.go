@@ -12,9 +12,13 @@ import (
 	"strings"
 	"testing"
 
+	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/whm"
+
+	"gioui.org/gpu/headless"
 	"github.com/fogleman/fauxgl"
 )
 
@@ -46,7 +50,7 @@ func fxOverlayTestModel(t *testing.T) *WhmModel {
 		}
 		var idx []uint32
 		for _, f := range faces {
-			if facePointsOutwards(m.Vertices[base+uint32(f[0])], m.Vertices[base+uint32(f[1])], m.Vertices[base+uint32(f[2])]) {
+			if testutil.FacePointsOutwards(m.Vertices[base+uint32(f[0])], m.Vertices[base+uint32(f[1])], m.Vertices[base+uint32(f[2])]) {
 				idx = append(idx, base+uint32(f[0]), base+uint32(f[1]), base+uint32(f[2]))
 			} else {
 				idx = append(idx, base+uint32(f[0]), base+uint32(f[2]), base+uint32(f[1]))
@@ -94,8 +98,8 @@ func TestVulkanDrawsFxParticlesOnTheGpu(t *testing.T) {
 	const w, h = 200, 200
 	_, r, readback, release := requireVulkanRenderer(t)
 	defer release()
-	opts := gpuTestOptions(model, w, h)
-	plain, err := r.Render(model, model.RestPose(), opts, nil, nil)
+	opts := testutil.GpuTestOptions(&model.Model, w, h)
+	plain, err := r.Render(&model.Model, model.RestPose(), opts, nil, nil)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -125,11 +129,15 @@ func TestVulkanDrawsFxParticlesOnTheGpu(t *testing.T) {
 			Additive: true,
 		}},
 	}
-	if _, err := r.Render(model, model.RestPose(), opts, nil, nil); err != nil {
+	if _, err := r.Render(&model.Model, model.RestPose(), opts, nil, nil); err != nil {
 		t.Fatalf("Render with particles: %v", err)
 	}
 	with := fxMeanLuma(readback(), w, h)
-	if got, want := r.fxGroups[0].compute, os.Getenv("DOW_FX_COMPUTE") != "0"; got != want {
+	fxInfo := render.FxGroups(r)
+	if fxInfo.Groups == 0 {
+		t.Fatal("the render recorded no FX group")
+	}
+	if got, want := fxInfo.Compute, os.Getenv("DOW_FX_COMPUTE") != "0"; got != want {
 		t.Errorf("sprite group compute=%v, want %v (DOW_FX_COMPUTE=%q)", got, want, os.Getenv("DOW_FX_COMPUTE"))
 	}
 	t.Logf("mean luma: model alone %.1f, with twelve additive particles %.1f", without, with)
@@ -179,8 +187,8 @@ func TestVulkanDrawsFxRibbonsOnTheGpu(t *testing.T) {
 	const w, h = 200, 200
 	_, r, readback, release := requireVulkanRenderer(t)
 	defer release()
-	opts := gpuTestOptions(model, w, h)
-	if _, err := r.Render(model, model.RestPose(), opts, nil, nil); err != nil {
+	opts := testutil.GpuTestOptions(&model.Model, w, h)
+	if _, err := r.Render(&model.Model, model.RestPose(), opts, nil, nil); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	without := fxMeanLuma(readback(), w, h)
@@ -195,7 +203,7 @@ func TestVulkanDrawsFxRibbonsOnTheGpu(t *testing.T) {
 		Y: math.Sin(opts.Yaw) * math.Cos(opts.Pitch) * front,
 		Z: math.Sin(opts.Pitch) * front,
 	}
-	eye := fxEyePosition(opts)
+	eye := render.FxEyePosition(opts)
 
 	var beams []fxGpuBeam
 	for i := 0; i < 8; i++ {
@@ -221,19 +229,20 @@ func TestVulkanDrawsFxRibbonsOnTheGpu(t *testing.T) {
 			Additive: true,
 		}},
 	}
-	if _, err := r.Render(model, model.RestPose(), opts, nil, nil); err != nil {
+	if _, err := r.Render(&model.Model, model.RestPose(), opts, nil, nil); err != nil {
 		t.Fatalf("Render with beams: %v", err)
 	}
 	with := fxMeanLuma(readback(), w, h)
-	if len(r.fxGroups) == 0 {
+	fxInfo := render.FxGroups(r)
+	if fxInfo.Groups == 0 {
 		t.Fatal("the beams produced no draw group")
 	}
-	computeAvailable := os.Getenv("DOW_FX_COMPUTE") != "0" && r.fx != nil && r.fx.ribbonExpand != nil
-	if got := r.fxGroups[0].compute; got != computeAvailable {
+	computeAvailable := os.Getenv("DOW_FX_COMPUTE") != "0" && fxInfo.RibbonPipeline
+	if got := fxInfo.Compute; got != computeAvailable {
 		t.Errorf("ribbon group compute=%v, want %v (DOW_FX_COMPUTE=%q, ribbon pipeline=%v)",
-			got, computeAvailable, os.Getenv("DOW_FX_COMPUTE"), r.fx != nil && r.fx.ribbonExpand != nil)
+			got, computeAvailable, os.Getenv("DOW_FX_COMPUTE"), fxInfo.RibbonPipeline)
 	}
-	if r.fxGroups[0].overlay {
+	if fxInfo.Overlay {
 		t.Error("the beam group was drawn through the skeleton overlay pipeline")
 	}
 	t.Logf("mean luma: model alone %.1f, with additive beams %.1f", without, with)
@@ -248,12 +257,12 @@ func TestVulkanDrawsFxRibbonsOnTheGpu(t *testing.T) {
 // particles must draw nothing at all rather than a smear over the frame.
 func TestRenderFxOverlayDrawsAtTheMarker(t *testing.T) {
 	const w, h = 200, 160
-	opts := RenderOptions{
+	opts := render.RenderOptions{
 		Width: w, Height: h,
 		Yaw: 0.7, Pitch: 0.2, Distance: 6,
 		Fov: 45, Ambient: 1, Diffuse: 1,
 	}
-	view := buildViewMatrix(opts)
+	view := render.BuildViewMatrix(opts)
 	origin := fauxgl.Vector{X: 0.4, Y: -0.2, Z: 0.3}
 	sim := &fx.FxSim{}
 	sim.Anchored = []fx.Visual{{
@@ -295,7 +304,7 @@ func TestRenderFxOverlayDrawsAtTheMarker(t *testing.T) {
 // told apart by what they leave behind.
 func TestRenderFxHorizontalRingRemainsAWorldPlane(t *testing.T) {
 	const w, h = 256, 200
-	opts := RenderOptions{Width: w, Height: h, Yaw: 0.4, Pitch: 0.3, Distance: 6, Fov: 45}
+	opts := render.RenderOptions{Width: w, Height: h, Yaw: 0.4, Pitch: 0.3, Distance: 6, Fov: 45}
 	texture := image.NewRGBA(image.Rect(0, 0, 16, 16))
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
@@ -323,7 +332,7 @@ func TestRenderFxHorizontalRingRemainsAWorldPlane(t *testing.T) {
 
 func TestRenderFxOverlayAdditiveBrightens(t *testing.T) {
 	const w, h = 64, 64
-	opts := RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 6, Fov: 45}
+	opts := render.RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 6, Fov: 45}
 	// A 2x2 map, opaque red, so a sprite drawn through it comes out red whatever
 	// colour its own ramp asks for.
 	tex := image.NewRGBA(image.Rect(0, 0, 2, 2))
@@ -374,8 +383,8 @@ func TestFxOverlaySizeFollowsTheCamera(t *testing.T) {
 	sim := &fx.FxSim{}
 	sim.Anchored = []fx.Visual{{Lifetime: 1, Radius: []fx.FxKey{{V: 0.3}}, Colour: []fx.FxColourStop{{R: 1, G: 1, B: 1, A: 1}}}}
 	effects := []fxOverlayEffect{{Sim: sim}}
-	near := renderFxOverlay(effects, RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 4, Fov: 45}, w, h, nil)
-	far := renderFxOverlay(effects, RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 16, Fov: 45}, w, h, nil)
+	near := renderFxOverlay(effects, render.RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 4, Fov: 45}, w, h, nil)
+	far := renderFxOverlay(effects, render.RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 16, Fov: 45}, w, h, nil)
 	n, f := fxLitPixels(near), fxLitPixels(far)
 	if n == 0 || f == 0 {
 		t.Fatalf("a sprite went missing: near %d pixels, far %d pixels", n, f)
@@ -436,7 +445,7 @@ func TestFxPreviewScaleAffectsCPUOverlaySpriteGeometry(t *testing.T) {
 		Radius:   []fx.FxKey{{V: 0.2}},
 		Colour:   []fx.FxColourStop{{R: 1, G: 1, B: 1, A: 1}},
 	}}}
-	opts := RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 6, Fov: 45}
+	opts := render.RenderOptions{Width: w, Height: h, Yaw: 0.7, Pitch: 0.2, Distance: 6, Fov: 45}
 	render := func(scale float64) int {
 		return fxLitPixels(renderFxOverlay([]fxOverlayEffect{{Sim: sim, Scale: scale}}, opts, w, h, nil))
 	}
@@ -548,7 +557,7 @@ func TestLoadModelEffectsForRealModel(t *testing.T) {
 	}
 	defer tree.Close()
 	for _, name := range []string{"necron_greater_summoning_core.whm", "necron_lord.whm", "lych_guard.whm"} {
-		raw := findDowFile(name)
+		raw := testutil.FindDowFile(name)
 		if raw == nil {
 			continue
 		}
@@ -586,179 +595,40 @@ func TestLoadModelEffectsForRealModel(t *testing.T) {
 	}
 	t.Skip("no installed model with resolvable events")
 }
+func sqrt(v float32) float64 { return math.Sqrt(float64(v)) }
 
-// ─── merged from x_test_fx_gpu_vulkan_test.go ────────────────────────────────────────
-
-func TestFxSpriteInputRecordLayout(t *testing.T) {
-	r := &fxVkRenderer{spriteBytes: make([]byte, fxComputeSpriteInputFloats*4)}
-	sp := fx.Sprite{
-		Pos:         [3]float64{1.5, -2, 3.25},
-		Radius:      0.75,
-		R:           0.25,
-		G:           0.5,
-		B:           0.75,
-		A:           0.5,
-		Additive:    true,
-		Horizontal:  true,
-		PlaneNormal: [3]float64{1, 0, 0},
-		Rotation:    0.75,
-		SelfLit:     true,
+// requireVulkanRenderer opens a headless Vulkan window and a renderer over
+// it, skipping the test when the backend is not there. It returns the
+// renderer through render.Handle — the app tests only render frames and read
+// them back, which the exported API covers.
+func requireVulkanRenderer(t *testing.T) (*headless.Window, render.Handle, func() []byte, func()) {
+	t.Helper()
+	const size = 256
+	win, err := headless.NewVulkanWindow(size, size)
+	if err != nil {
+		t.Skipf("no Vulkan backend available: %v", err)
 	}
-	// The record sits after the count header, at sprite index 3, and carries
-	// the site added to the particle's own offset.
-	r.appendSpriteInput([3]float64{10, 20, 30}, sp, 3)
-	base := fxComputeSpriteCountFloats*4 + 3*fxComputeSpriteStrideFloats*4
-	rec := r.spriteBytes[base : base+fxComputeSpriteStrideFloats*4]
-	at := func(off int) float32 {
-		return math.Float32frombits(binary.LittleEndian.Uint32(rec[off:]))
+	v, err := win.Vulkan()
+	if err != nil {
+		win.Release()
+		t.Skipf("Vulkan is not the backend: %v", err)
 	}
-	for i, want := range []float32{11.5, 18, 33.25} {
-		if got := at(i * 4); got != want {
-			t.Errorf("pos.%c = %v, want %v (site + particle offset)", "xyz"[i], got, want)
+	r, err := render.NewModelGpuVkRenderer(v)
+	if err != nil {
+		win.Release()
+		t.Fatalf("NewModelGpuVkRenderer: %v", err)
+	}
+	readback := func() []byte {
+		t.Helper()
+		px, err := render.Readback(r)
+		if err != nil {
+			t.Fatalf("Readback: %v", err)
 		}
+		return px
 	}
-	if at(12) != 0 {
-		t.Errorf("pos.w = %v, want the zero lane the shader ignores", at(12))
+	release := func() {
+		r.Release()
+		win.Release()
 	}
-	if at(16) != 0.75 {
-		t.Errorf("radius = %v, want 0.75", at(16))
-	}
-	for off := 20; off < 32; off++ {
-		if rec[off] != 0 {
-			t.Fatalf("std430 padding byte %d = %#x, want 0", off, rec[off])
-		}
-	}
-	for i, want := range []float32{0.25, 0.5, 0.75, 0.5} {
-		if got := at(32 + 4*i); got != want {
-			t.Errorf("tint[%d] = %v, want %v", i, got, want)
-		}
-	}
-	for i, want := range []float32{0.75, 2, 1, 0} {
-		if got := at(48 + 4*i); got != want {
-			t.Errorf("orientation[%d] = %v, want %v", i, got, want)
-		}
-	}
-	for i, want := range []float32{1, 0, 0, 0} {
-		if got := at(64 + 4*i); got != want {
-			t.Errorf("planeNormal[%d] = %v, want %v", i, got, want)
-		}
-	}
-	// A particle whose file carries no Radius curve is drawn at the fallback
-	// size, and the compute input has to see that the same way the CPU quad
-	// build does.
-	r.appendSpriteInput([3]float64{}, fx.Sprite{}, 0)
-	zeroRecord := fxComputeSpriteCountFloats * 4 // record 0 starts after the count header
-	if got := math.Float32frombits(binary.LittleEndian.Uint32(r.spriteBytes[zeroRecord+16:])); got != fxSpriteFallbackRadius {
-		t.Errorf("zero-radius sprite recorded %v, want the fallback %v", got, fxSpriteFallbackRadius)
-	}
-	// Indices outside the buffer are ignored rather than written past it.
-	r.appendSpriteInput([3]float64{}, sp, -1)
-	r.appendSpriteInput([3]float64{}, sp, fxComputeMaxSprites)
-}
-
-// TestFxCPUVertexLayoutCarriesHorizontalOrientationAndLighting pins the CPU
-// fallback vertex attributes consumed by fx_vk.vert.
-func TestFxCPUVertexLayoutCarriesHorizontalOrientationAndLighting(t *testing.T) {
-	r := &fxVkRenderer{vertsData: make([]byte, 0, fxVertexStride*fxVertsPerQuad)}
-	sp := fx.Sprite{
-		Pos:         [3]float64{1, 2, 3},
-		Radius:      2,
-		R:           0.2,
-		G:           0.4,
-		B:           0.6,
-		A:           0.8,
-		Horizontal:  true,
-		PlaneNormal: [3]float64{1, 0, 0},
-		Rotation:    math.Pi / 2,
-		SelfLit:     true,
-	}
-	r.appendSprite([3]float64{10, 20, 30}, sp)
-	if got, want := len(r.vertsData), fxVertexStride*fxVertsPerQuad; got != want {
-		t.Fatalf("CPU sprite vertex bytes = %d, want %d", got, want)
-	}
-	vertex := r.vertsData[:fxVertexStride]
-	at := func(off int) float32 {
-		return math.Float32frombits(binary.LittleEndian.Uint32(vertex[off:]))
-	}
-	for i, want := range []float32{11, 22, 33, -1, -1, 2, 0.2, 0.4, 0.6, 0.8, 0, 1, float32(math.Pi / 2), 2, 1, 0, 1, 0, 0, 0} {
-		if got := at(i * 4); got != want {
-			t.Errorf("vertex float[%d] = %v, want %v", i, got, want)
-		}
-	}
-}
-
-// TestFxRibbonInputRecordLayout pins the bytes appendRibbonInput writes:
-// fx_vk_ribbon.comp reads those exact offsets, and a field out of place still
-// draws a ribbon — the wrong shape, which an end-to-end render would not
-// separate from the right one.
-func TestFxRibbonInputRecordLayout(t *testing.T) {
-	r := &fxVkRenderer{ribbonBytes: make([]byte, fxComputeRibbonInputFloats*4)}
-	rb := fx.BeamRibbon{
-		From:     fauxgl.Vector{X: 1, Y: 2, Z: 3},
-		To:       fauxgl.Vector{X: 1, Y: 2, Z: 5.5},
-		Arc:      fauxgl.Vector{X: 0.75},
-		Across:   fauxgl.Vector{X: 1},
-		Width:    0.25,
-		Noise:    0.5,
-		U0:       0.25,
-		U1:       1.5,
-		R:        1,
-		G:        0.5,
-		B:        0.25,
-		Alpha:    0.75,
-		Segments: 4,
-		FlipV:    true,
-		Fixed:    true,
-		SelfLit:  true,
-	}
-	eye := fauxgl.Vector{Z: -10}
-	if got := r.appendRibbonInput(rb, eye, 3, 42); got != 4*6 {
-		t.Fatalf("four segments expanded to %d vertices, want %d (fx.BeamTriangles per quad)", got, 4*6)
-	}
-	base := fxComputeRibbonCountFloats*4 + 3*fxComputeRibbonStrideFloats*4
-	rec := r.ribbonBytes[base : base+fxComputeRibbonStrideFloats*4]
-	at := func(off int) float32 {
-		return math.Float32frombits(binary.LittleEndian.Uint32(rec[off:]))
-	}
-	u32 := func(off int) uint32 {
-		return binary.LittleEndian.Uint32(rec[off:])
-	}
-	for _, c := range []struct {
-		off  int
-		want float32
-		what string
-	}{
-		{0, 1, "from.x"}, {4, 2, "from.y"}, {8, 3, "from.z"}, {12, 0, "from.w"},
-		{16, 1, "to.x"}, {20, 2, "to.y"}, {24, 5.5, "to.z"}, {28, 0, "to.w"},
-		{32, 0.75, "arc.x"}, {36, 0, "arc.y"}, {40, 0, "arc.z"},
-		{48, 1, "across.x"}, {60, 1, "across.w (fixed)"},
-		{64, 1, "tint.r"}, {68, 0.5, "tint.g"}, {72, 0.25, "tint.b"}, {76, 0.75, "tint.a"},
-		{80, 0.25, "width"}, {84, 0.5, "noise"}, {88, 0.25, "u0"}, {92, 1.5, "u1"},
-		{96, 0, "eye.x"}, {100, 0, "eye.y"}, {104, -10, "eye.z"},
-	} {
-		if got := at(c.off); got != c.want {
-			t.Errorf("%s = %v, want %v", c.what, got, c.want)
-		}
-	}
-	if u32(112) != 4 {
-		t.Errorf("segments = %d, want 4", u32(112))
-	}
-	if u32(116) != 3 {
-		t.Errorf("flags = %d, want flipV and self-lit bits set", u32(116))
-	}
-	if u32(120) != 42 {
-		t.Errorf("vertex offset = %d, want 42", u32(120))
-	}
-	// A ribbon the tessellator would refuse produces no record and no
-	// vertices, so the group's range never claims them.
-	origin := fauxgl.Vector{}
-	if n := r.appendRibbonInput(fx.BeamRibbon{From: origin, To: origin, Width: 0.2}, eye, 0, 0); n != 0 {
-		t.Errorf("empty span wrote %d vertices, want none", n)
-	}
-	if n := r.appendRibbonInput(fx.BeamRibbon{From: origin, To: origin.Add(fauxgl.Vector{Z: 2}), Width: 0}, eye, 0, 0); n != 0 {
-		t.Errorf("zero width wrote %d vertices, want none", n)
-	}
-	if n := r.appendRibbonInput(rb, eye, -1, 0); n != 0 {
-		t.Errorf("out-of-range index wrote %d vertices, want none", n)
-	}
+	return win, r, readback, release
 }
