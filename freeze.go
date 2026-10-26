@@ -198,56 +198,56 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 		return nil, fmt.Errorf("no mod is loaded")
 	}
 	graph := ui.graphFor()
-	e := graph.entity(virtualPath)
+	e := graph.Entity(virtualPath)
 	if e == nil {
 		return nil, fmt.Errorf("%s is not in the mod", virtualPath)
 	}
-	if e.kind != graphKindUnit && e.kind != graphKindStructure {
-		return nil, fmt.Errorf("only a unit or a building can be frozen, and %s is a %s", e.name, e.kind.label())
+	if e.Kind != graphKindUnit && e.Kind != graphKindStructure {
+		return nil, fmt.Errorf("only a unit or a building can be frozen, and %s is a %s", e.Name, e.Kind.Label())
 	}
 	book, err := readFreezeBook(ui.modTree, ui.modulePath)
 	if err != nil {
 		return nil, err
 	}
-	if book.isFrozen(e.path) {
-		return nil, fmt.Errorf("%s is already frozen", e.name)
+	if book.isFrozen(e.Path) {
+		return nil, fmt.Errorf("%s is already frozen", e.Name)
 	}
 	// The references are read here, in full, rather than being taken from
 	// whatever a background scan happens to have reached. This is the one
 	// operation that rewrites other people's files, and a freeze that cleared
 	// only some of what pointed at the unit would leave a mod broken, so it
 	// waits for the whole mod rather than showing a progress bar.
-	graph.ensureLinks()
+	graph.EnsureLinks()
 	// The files have to be the mod's own: a file that lives in a required
 	// mod or an archive cannot be moved, and pretending otherwise would
 	// leave the game still loading a unit the author believes is gone. The
 	// path itself is not needed here — it is asked for again when the file
 	// actually moves — so what matters is that this refuses.
-	if _, err := ui.managedFileDiskPath(e.path); err != nil {
-		return nil, fmt.Errorf("%s cannot be frozen: %v", e.name, err)
+	if _, err := ui.managedFileDiskPath(e.Path); err != nil {
+		return nil, fmt.Errorf("%s cannot be frozen: %v", e.Name, err)
 	}
 
 	record := freezeRecord{
-		Path:     e.path,
-		Name:     e.name,
-		Kind:     e.kind.label(),
-		Race:     e.race,
+		Path:     e.Path,
+		Name:     e.Name,
+		Kind:     e.Kind.Label(),
+		Race:     e.Race,
 		FrozenAt: time.Now().Format(time.RFC3339),
 	}
 
 	// Every reference to this entity, from every other file, found by walking
 	// the graph backwards from it.
-	mentions := graph.Incoming(e.path)
+	mentions := graph.Incoming(e.Path)
 	for _, l := range mentions {
-		if strings.EqualFold(l.from, e.path) {
+		if strings.EqualFold(l.From, e.Path) {
 			continue
 		}
 		record.Mentions = append(record.Mentions, freezeMention{
-			File:  l.from,
-			Field: l.field,
-			Slot:  l.slot,
-			Role:  l.role.label(),
-			Value: l.ref,
+			File:  l.From,
+			Field: l.Field,
+			Slot:  l.Slot,
+			Role:  l.Role.Label(),
+			Value: l.Ref,
 		})
 	}
 
@@ -256,10 +256,10 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 	// moves with it.
 	squadPath := ebpsSquadPathFor(e)
 	if squadPath != "" && ui.modTree.FindFile(squadPath) != nil {
-		record.Files = append(record.Files, freezeFile{From: e.path, To: e.name + ".rgd"})
-		record.Files = append(record.Files, freezeFile{From: squadPath, To: e.name + "_squad.rgd"})
+		record.Files = append(record.Files, freezeFile{From: e.Path, To: e.Name + ".rgd"})
+		record.Files = append(record.Files, freezeFile{From: squadPath, To: e.Name + "_squad.rgd"})
 	} else {
-		record.Files = append(record.Files, freezeFile{From: e.path, To: e.name + ".rgd"})
+		record.Files = append(record.Files, freezeFile{From: e.Path, To: e.Name + ".rgd"})
 	}
 
 	// Saved before anything is touched: a record that does not exist cannot
@@ -421,10 +421,10 @@ func (ui *uiState) forgetFreezeBook() {
 // kind of object. Only units have one — a building is never a squad — so a
 // building's answer is empty, and so is anything that is not in a race.
 func ebpsSquadPathFor(e *graphEntity) string {
-	if e == nil || e.race == "" || e.kind != graphKindUnit {
+	if e == nil || e.Race == "" || e.Kind != graphKindUnit {
 		return ""
 	}
-	return fmt.Sprintf(`Data\attrib\sbps\races\%s\%s.rgd`, e.race, e.name)
+	return fmt.Sprintf(`Data\attrib\sbps\races\%s\%s.rgd`, e.Race, e.Name)
 }
 
 // ── clearing and restoring a field ──────────────────────────────────────────

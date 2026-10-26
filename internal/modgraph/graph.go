@@ -1,4 +1,4 @@
-package main
+package modgraph
 
 import (
 	"dow-mod-studio/internal/modtree"
@@ -29,135 +29,135 @@ import (
 
 const (
 	// graphRoot is where the indexed data starts.
-	graphRoot = "attrib"
+	GraphRoot = "attrib"
 )
 
 // graphKind is what an entity is, decided by where it sits in the tree. The
 // game's own folders are the only description of this there is.
-type graphKind int
+type GraphKind int
 
 const (
-	graphKindUnit graphKind = iota
-	graphKindStructure
-	graphKindSquad
-	graphKindWeapon
-	graphKindAbility
-	graphKindAddon
-	graphKindResearch
-	graphKindModifier
-	graphKindRequirement
-	graphKindFormation
-	graphKindEnvironment
-	graphKindSchema
-	graphKindOther
+	GraphKindUnit GraphKind = iota
+	GraphKindStructure
+	GraphKindSquad
+	GraphKindWeapon
+	GraphKindAbility
+	GraphKindAddon
+	GraphKindResearch
+	GraphKindModifier
+	GraphKindRequirement
+	GraphKindFormation
+	GraphKindEnvironment
+	GraphKindSchema
+	GraphKindOther
 )
 
 // label is what the UI calls the kind.
-func (k graphKind) label() string {
+func (k GraphKind) Label() string {
 	switch k {
-	case graphKindUnit:
+	case GraphKindUnit:
 		return "Unit"
-	case graphKindStructure:
+	case GraphKindStructure:
 		return "Structure"
-	case graphKindSquad:
+	case GraphKindSquad:
 		return "Squad"
-	case graphKindWeapon:
+	case GraphKindWeapon:
 		return "Weapon"
-	case graphKindAbility:
+	case GraphKindAbility:
 		return "Ability"
-	case graphKindAddon:
+	case GraphKindAddon:
 		return "Addon"
-	case graphKindResearch:
+	case GraphKindResearch:
 		return "Research"
-	case graphKindModifier:
+	case GraphKindModifier:
 		return "Modifier"
-	case graphKindRequirement:
+	case GraphKindRequirement:
 		return "Requirement"
-	case graphKindFormation:
+	case GraphKindFormation:
 		return "Formation"
-	case graphKindEnvironment:
+	case GraphKindEnvironment:
 		return "Environment"
-	case graphKindSchema:
+	case GraphKindSchema:
 		return "Schema"
 	}
 	return "Other"
 }
 
 // graphEntity is one .rgd of the mod, as the graph knows it.
-type graphEntity struct {
+type GraphEntity struct {
 	// path is the virtual tree path, e.g.
 	// "Data\attrib\ebps\races\necrons\troops\necron_wraith.rgd".
-	path string
+	Path string
 	// name is the file name without its extension.
-	name string
+	Name string
 	// kind is what the entity is.
-	kind graphKind
+	Kind GraphKind
 	// race is the folder name under "races" for the kinds that have one.
-	race string
+	Race string
 	// file is the tree entry it came from, which knows whether the mod owns
 	// it and where it physically lives.
-	file *modtree.TreeFile
+	File *modtree.TreeFile
 }
 
 // graphRole is what a link means to the entity that holds it, said from that
 // entity's point of view.
-type graphRole int
+type GraphRole int
 
 const (
-	roleWeapon graphRole = iota
-	roleAbility
-	roleAddon
-	roleResearch
-	roleSquad
-	roleBuiltBy
-	roleNeedsAddon
-	roleNeedsResearch
-	roleBlueprint
-	roleRelocation
-	roleEffect
-	roleModifies
-	roleSpawns
-	roleProjectile
-	roleNeedsStructure
-	roleExcludesAddon
+	RoleWeapon GraphRole = iota
+	RoleAbility
+	RoleAddon
+	RoleResearch
+	RoleSquad
+	RoleBuiltBy
+	RoleNeedsAddon
+	RoleNeedsResearch
+	RoleBlueprint
+	RoleRelocation
+	RoleEffect
+	RoleModifies
+	RoleSpawns
+	RoleProjectile
+	RoleNeedsStructure
+	RoleExcludesAddon
 )
 
 // label is what the UI calls the role, and the wording matters: a link is read
 // from the entity that holds it, so "built by" is right and "builds" would be
 // backwards.
-func (r graphRole) label() string {
+func (r GraphRole) Label() string {
 	switch r {
-	case roleWeapon:
+	case RoleWeapon:
 		return "weapon"
-	case roleAbility:
+	case RoleAbility:
 		return "ability"
-	case roleAddon:
+	case RoleAddon:
 		return "addon"
-	case roleResearch:
+	case RoleResearch:
 		return "research"
-	case roleSquad:
+	case RoleSquad:
 		return "squad"
-	case roleBuiltBy:
+	case RoleBuiltBy:
 		return "built by"
-	case roleNeedsAddon:
+	case RoleNeedsAddon:
 		return "needs addon"
-	case roleNeedsResearch:
+	case RoleNeedsResearch:
 		return "needs research"
-	case roleBlueprint:
+	case RoleBlueprint:
 		return "entrenched as"
-	case roleRelocation:
+	case RoleRelocation:
 		return "relocates as"
-	case roleEffect:
+	case RoleEffect:
 		return "death effect"
-	case roleModifies:
+	case RoleModifies:
 		return "modifies"
-	case roleSpawns:
+	case RoleSpawns:
 		return "spawns"
-	case roleProjectile:
+	case RoleProjectile:
 		return "fires"
-	case roleNeedsStructure:
+	case RoleNeedsStructure:
 		return "needs structure"
-	case roleExcludesAddon:
+	case RoleExcludesAddon:
 		return "excludes addon"
 	}
 	return "refers to"
@@ -165,84 +165,84 @@ func (r graphRole) label() string {
 
 // isRequirement is true of the roles that come out of a requirements table,
 // which is where the game's own "only buildable if" rules live.
-func (r graphRole) isRequirement() bool {
-	return r == roleBuiltBy || r == roleNeedsAddon || r == roleNeedsResearch
+func (r GraphRole) IsRequirement() bool {
+	return r == RoleBuiltBy || r == RoleNeedsAddon || r == RoleNeedsResearch
 }
 
 // graphLink is one reference from one entity to another.
-type graphLink struct {
+type GraphLink struct {
 	// from is the virtual path of the entity holding the reference.
-	from string
+	From string
 	// to is the virtual path it resolves to, or "" when it resolves to
 	// nothing at all — a dangling reference, which is the whole point of
 	// looking.
-	to string
+	To string
 	// ref is the reference exactly as the file writes it, e.g.
 	// "weapon\chaos_bolt_pistol_champion.lua" or the bare "chaos_hq".
-	ref string
+	Ref string
 	// field is the dotted path of the field holding it, e.g.
 	// "ability_ext.abilities.ability_01", which is what a freeze has to
 	// find again to clear it.
-	field string
+	Field string
 	// slot is the numbered slot the reference sits in, e.g. "ability_01",
 	// or the hardpoint and weapon pair for a weapon. It is the part of
 	// field that says which of several similar references this is.
-	slot string
+	Slot string
 	// role is what the reference means.
-	role graphRole
+	Role GraphRole
 }
 
 // resolved reports whether the link found a file.
-func (l graphLink) resolved() bool { return l.to != "" }
+func (l GraphLink) Resolved() bool { return l.To != "" }
 
 // targetName is what the link points at, as a name, whether or not it resolved.
-func (l graphLink) targetName() string { return refStem(l.ref) }
+func (l GraphLink) TargetName() string { return RefStem(l.Ref) }
 
 // modGraph is the whole of Data\attrib, indexed.
-type modGraph struct {
-	tree *modtree.ModTree
+type ModGraph struct {
+	Tree *modtree.ModTree
 
 	// entities is every .rgd under Data\attrib, in tree order.
-	entities []*graphEntity
+	Entities []*GraphEntity
 	// byPath indexes the entities by their lower cased virtual path.
-	byPath map[string]*graphEntity
+	ByPath map[string]*GraphEntity
 	// byName indexes them by lower cased file stem, because references are
 	// often written as a bare name and a name is all there is to go on.
-	byName map[string][]*graphEntity
+	ByName map[string][]*GraphEntity
 
 	// links is every reference found, once ensureLinks has run.
-	links []graphLink
+	Links []GraphLink
 	// out and in index the links by their source and their target, so both
 	// directions of a relationship are one lookup.
-	out map[string][]int
-	in  map[string][]int
+	Out map[string][]int
+	In  map[string][]int
 	// linked is set once the unit and building files have been read.
-	linked bool
+	Linked bool
 	// scanning is set while a background scan is still writing batches in, so
 	// that the indexes are built once at the end rather than by two threads at
 	// once.
-	scanning bool
+	Scanning bool
 	// parsed holds the files already read, so the freeze that rewrites a
 	// reference and the report that found it agree on the same parse.
-	parsed map[string]*rgd.RgdFile
+	ParsedFiles map[string]*rgd.RgdFile
 }
 
 // newModGraph indexes the tree without reading a single file's contents: the
 // folder layout alone says what every .rgd is. Reading the ~580 unit and
 // building files to find their references is left to ensureLinks, because that
 // is the expensive half and not every caller needs it.
-func newModGraph(tree *modtree.ModTree) *modGraph {
-	g := &modGraph{
-		tree:   tree,
-		byPath: make(map[string]*graphEntity),
-		byName: make(map[string][]*graphEntity),
-		out:    make(map[string][]int),
-		in:     make(map[string][]int),
+func NewModGraph(Tree *modtree.ModTree) *ModGraph {
+	g := &ModGraph{
+		Tree:   Tree,
+		ByPath: make(map[string]*GraphEntity),
+		ByName: make(map[string][]*GraphEntity),
+		Out:    make(map[string][]int),
+		In:     make(map[string][]int),
 	}
-	if tree == nil || tree.Root == nil {
+	if Tree == nil || Tree.Root == nil {
 		return g
 	}
-	root := modtree.FindFolderByPath(tree.Root, graphRoot)
+	root := modtree.FindFolderByPath(Tree.Root, GraphRoot)
 	if root == nil {
 		return g
 	}
@@ -250,42 +250,42 @@ func newModGraph(tree *modtree.ModTree) *modGraph {
 		if f == nil || !strings.EqualFold(filepath.Ext(f.Name), ".rgd") {
 			return
 		}
-		e := &graphEntity{
-			path: f.FullPath,
-			name: strings.TrimSuffix(f.Name, filepath.Ext(f.Name)),
-			file: f,
+		e := &GraphEntity{
+			Path: f.FullPath,
+			Name: strings.TrimSuffix(f.Name, filepath.Ext(f.Name)),
+			File: f,
 		}
-		e.kind, e.race = classifyGraphEntity(f.FullPath)
-		g.entities = append(g.entities, e)
+		e.Kind, e.Race = ClassifyGraphEntity(f.FullPath)
+		g.Entities = append(g.Entities, e)
 		lower := strings.ToLower(f.FullPath)
-		g.byPath[lower] = e
-		lowerName := strings.ToLower(e.name)
-		g.byName[lowerName] = append(g.byName[lowerName], e)
+		g.ByPath[lower] = e
+		lowerName := strings.ToLower(e.Name)
+		g.ByName[lowerName] = append(g.ByName[lowerName], e)
 	})
 	return g
 }
 
 // entity looks an entity up by virtual path.
-func (g *modGraph) entity(path string) *graphEntity {
+func (g *ModGraph) Entity(Path string) *GraphEntity {
 	if g == nil {
 		return nil
 	}
-	return g.byPath[strings.ToLower(path)]
+	return g.ByPath[strings.ToLower(Path)]
 }
 
 // entitiesOfKind returns every entity of one kind, in tree order.
-func (g *modGraph) entitiesOfKind(kinds ...graphKind) []*graphEntity {
-	want := make(map[graphKind]bool, len(kinds))
+func (g *ModGraph) EntitiesOfKind(kinds ...GraphKind) []*GraphEntity {
+	want := make(map[GraphKind]bool, len(kinds))
 	for _, k := range kinds {
 		want[k] = true
 	}
-	var out []*graphEntity
-	for _, e := range g.entities {
-		if want[e.kind] {
-			out = append(out, e)
+	var Out []*GraphEntity
+	for _, e := range g.Entities {
+		if want[e.Kind] {
+			Out = append(Out, e)
 		}
 	}
-	return out
+	return Out
 }
 
 // ── classification ──────────────────────────────────────────────────────────
@@ -293,43 +293,43 @@ func (g *modGraph) entitiesOfKind(kinds ...graphKind) []*graphEntity {
 // classifyGraphEntity decides what a .rgd is from its path, and which race it
 // belongs to. The folder names are the game's own; there is no marker inside
 // the files that would say.
-func classifyGraphEntity(path string) (graphKind, string) {
-	parts := strings.Split(strings.ReplaceAll(path, "/", "\\"), "\\")
+func ClassifyGraphEntity(Path string) (GraphKind, string) {
+	parts := strings.Split(strings.ReplaceAll(Path, "/", "\\"), "\\")
 	// parts[0] is "Data", parts[1] is "attrib"; anything else is not data
 	// we index.
-	if len(parts) < 3 || !strings.EqualFold(parts[1], graphRoot) {
-		return graphKindOther, ""
+	if len(parts) < 3 || !strings.EqualFold(parts[1], GraphRoot) {
+		return GraphKindOther, ""
 	}
 	folder := strings.ToLower(parts[2])
 	switch folder {
 	case "weapon":
-		return graphKindWeapon, ""
+		return GraphKindWeapon, ""
 	case "abilities":
-		return graphKindAbility, ""
+		return GraphKindAbility, ""
 	case "addons":
-		return graphKindAddon, ""
+		return GraphKindAddon, ""
 	case "research":
-		return graphKindResearch, ""
+		return GraphKindResearch, ""
 	case "modifiers":
-		return graphKindModifier, ""
+		return GraphKindModifier, ""
 	case "requirements":
-		return graphKindRequirement, ""
+		return GraphKindRequirement, ""
 	case "formations":
-		return graphKindFormation, ""
+		return GraphKindFormation, ""
 	case "sbps":
 		// sbps\races\<race>\<squad>.rgd
 		if len(parts) >= 5 && strings.EqualFold(parts[3], "races") {
-			return graphKindSquad, parts[4]
+			return GraphKindSquad, parts[4]
 		}
-		return graphKindOther, ""
+		return GraphKindOther, ""
 	case "ebps":
 		// ebps\races\<race>\{troops,structures}\<unit>.rgd
 		if len(parts) >= 6 && strings.EqualFold(parts[3], "races") {
 			switch strings.ToLower(parts[5]) {
 			case "troops":
-				return graphKindUnit, parts[4]
+				return GraphKindUnit, parts[4]
 			case "structures":
-				return graphKindStructure, parts[4]
+				return GraphKindStructure, parts[4]
 			}
 		}
 		// environment and game hold the props, projectiles and relocation
@@ -337,15 +337,15 @@ func classifyGraphEntity(path string) (graphKind, string) {
 		if len(parts) >= 4 {
 			switch strings.ToLower(parts[3]) {
 			case "environment", "game":
-				return graphKindEnvironment, ""
+				return GraphKindEnvironment, ""
 			}
 		}
-		return graphKindOther, ""
+		return GraphKindOther, ""
 	}
 	// ebpextensions, sbpextensions, tables, tuning, racebps and every
 	// type_* folder hold the definitions the rest of the data is written
 	// against. They are the schema, not content.
-	return graphKindSchema, ""
+	return GraphKindSchema, ""
 }
 
 // ── link extraction ─────────────────────────────────────────────────────────
@@ -366,24 +366,24 @@ func classifyGraphEntity(path string) (graphKind, string) {
 // than guessed. Hardpoints are numbered, and so are the weapon, ability,
 // addon, research, squad, modifier and requirement slots, so a number in the
 // path is expected rather than matched literally.
-func graphRoleForField(kind graphKind, path []string) (graphRole, string, bool) {
+func GraphRoleForField(Kind GraphKind, Path []string) (GraphRole, string, bool) {
 	// combat_ext.hardpoints.hardpoint_NN.weapon_table.weapon_NN.weapon
-	if len(path) == 6 && eq(path[0], "combat_ext") && eq(path[1], "hardpoints") &&
-		eq(path[3], "weapon_table") && eq(path[5], "weapon") {
-		return roleWeapon, path[2] + "/" + path[4], true
+	if len(Path) == 6 && Eq(Path[0], "combat_ext") && Eq(Path[1], "hardpoints") &&
+		Eq(Path[3], "weapon_table") && Eq(Path[5], "weapon") {
+		return RoleWeapon, Path[2] + "/" + Path[4], true
 	}
 	// The four numbered slot tables. Each is one section, one table, and
 	// the slot itself.
-	if len(path) == 3 {
+	if len(Path) == 3 {
 		switch {
-		case eq(path[0], "ability_ext") && eq(path[1], "abilities"):
-			return roleAbility, path[2], true
-		case eq(path[0], "addon_ext") && eq(path[1], "addons"):
-			return roleAddon, path[2], true
-		case eq(path[0], "research_ext") && eq(path[1], "research_table"):
-			return roleResearch, path[2], true
-		case eq(path[0], "spawner_ext") && eq(path[1], "squad_table"):
-			return roleSquad, path[2], true
+		case Eq(Path[0], "ability_ext") && Eq(Path[1], "abilities"):
+			return RoleAbility, Path[2], true
+		case Eq(Path[0], "addon_ext") && Eq(Path[1], "addons"):
+			return RoleAddon, Path[2], true
+		case Eq(Path[0], "research_ext") && Eq(Path[1], "research_table"):
+			return RoleResearch, Path[2], true
+		case Eq(Path[0], "spawner_ext") && Eq(Path[1], "squad_table"):
+			return RoleSquad, Path[2], true
 		}
 	}
 	// A requirement table. The game writes it two ways and both are in use:
@@ -398,23 +398,23 @@ func graphRoleForField(kind graphKind, path []string) (graphRole, string, bool) 
 	// says what it means. A unit or a squad naming a structure is being built
 	// by it; an add-on, an ability, a weapon or a piece of research naming one
 	// is asking for it to be finished first.
-	if i := requirementLeafIndex(path); i > 0 {
-		leaf := strings.ToLower(path[i])
-		slot := path[i-1]
+	if i := RequirementLeafIndex(Path); i > 0 {
+		leaf := strings.ToLower(Path[i])
+		Slot := Path[i-1]
 		switch {
 		case strings.Contains(leaf, "structure_name"):
-			if kind == graphKindUnit || kind == graphKindStructure || kind == graphKindSquad {
-				return roleBuiltBy, slot, true
+			if Kind == GraphKindUnit || Kind == GraphKindStructure || Kind == GraphKindSquad {
+				return RoleBuiltBy, Slot, true
 			}
-			return roleNeedsStructure, slot, true
+			return RoleNeedsStructure, Slot, true
 		case leaf == "global_addon_name" || leaf == "addon_name" || leaf == "addon":
-			return roleNeedsAddon, slot, true
+			return RoleNeedsAddon, Slot, true
 		case leaf == "mutually_exclusive_with":
-			return roleExcludesAddon, slot, true
+			return RoleExcludesAddon, Slot, true
 		case strings.Contains(leaf, "research_name"):
-			return roleNeedsResearch, slot, true
+			return RoleNeedsResearch, Slot, true
 		case leaf == "squad_name":
-			return roleSquad, slot, true
+			return RoleSquad, Slot, true
 		}
 		return 0, "", false
 	}
@@ -426,63 +426,63 @@ func graphRoleForField(kind graphKind, path []string) (graphRole, string, bool) 
 	// add-ons and research (modifiers.N) and in units and squads (which carry
 	// several sections of their own), so the path is matched by shape rather
 	// than by section name.
-	if n := len(path); n >= 2 && eq(path[n-1], "target_type_name") {
-		for _, part := range path[:n-1] {
-			if eq(part, "modifiers") {
-				return roleModifies, path[n-2], true
+	if n := len(Path); n >= 2 && Eq(Path[n-1], "target_type_name") {
+		for _, part := range Path[:n-1] {
+			if Eq(part, "modifiers") {
+				return RoleModifies, Path[n-2], true
 			}
 		}
 		return 0, "", false
 	}
 	// An ability that fires another ability, and the entity it puts in the
 	// world. Both are top-level fields of an ability file.
-	if len(path) == 1 {
+	if len(Path) == 1 {
 		switch {
-		case eq(path[0], "child_ability_name"):
-			return roleAbility, path[0], true
-		case eq(path[0], "spawned_entity_name"):
-			return roleSpawns, path[0], true
+		case Eq(Path[0], "child_ability_name"):
+			return RoleAbility, Path[0], true
+		case Eq(Path[0], "spawned_entity_name"):
+			return RoleSpawns, Path[0], true
 		}
 	}
 	// The projectile a weapon or an ability sends, and the ability a weapon
 	// triggers on impact. The projectile is a file under
 	// ebps\environment\gameplay, so it is an entity like any other.
-	if len(path) == 1 {
+	if len(Path) == 1 {
 		switch {
-		case eq(path[0], "fired_projectile"), eq(path[0], "projectile_name"):
-			return roleProjectile, path[0], true
-		case eq(path[0], "impact_ability"):
-			return roleAbility, path[0], true
+		case Eq(Path[0], "fired_projectile"), Eq(Path[0], "projectile_name"):
+			return RoleProjectile, Path[0], true
+		case Eq(Path[0], "impact_ability"):
+			return RoleAbility, Path[0], true
 		}
 	}
 	// A weapon that is really a group of other weapons. Chaos' advance
 	// variants put three real weapons behind one slot, and swapping one out
 	// has to know the other two.
-	if len(path) == 3 && eq(path[0], "group_weapon_table") && eq(path[2], "referenced_weapon_name") {
-		return roleWeapon, path[1], true
+	if len(Path) == 3 && Eq(Path[0], "group_weapon_table") && Eq(Path[2], "referenced_weapon_name") {
+		return RoleWeapon, Path[1], true
 	}
 	// A unit that has a second, entrenched version of itself.
-	if len(path) == 2 && eq(path[0], "entrench_ext") && eq(path[1], "entrenched_blueprint_name") {
-		return roleBlueprint, path[1], true
+	if len(Path) == 2 && Eq(Path[0], "entrench_ext") && Eq(Path[1], "entrenched_blueprint_name") {
+		return RoleBlueprint, Path[1], true
 	}
 	// The building a relocation leaves behind: when a structure moves, the
 	// game stands a dummy in its place, and that dummy is another unit. It is
 	// named in a bare name, and it is a reference like any other — a building
 	// that is moved out of the mod must not leave a dummy pointing at it.
-	if len(path) == 2 && eq(path[0], "relocatee_ext") && eq(path[1], "dummy_structure_name") {
-		return roleRelocation, path[1], true
+	if len(Path) == 2 && Eq(Path[0], "relocatee_ext") && Eq(Path[1], "dummy_structure_name") {
+		return RoleRelocation, Path[1], true
 	}
 	// What a corpse leaves behind.
-	if len(path) == 2 && eq(path[0], "health_ext") {
-		switch strings.ToLower(path[1]) {
+	if len(Path) == 2 && Eq(Path[0], "health_ext") {
+		switch strings.ToLower(Path[1]) {
 		case "spawn_death_blossom", "spawn_blood_splat_on_death", "spawn_usable_body_on_death":
-			return roleEffect, path[1], true
+			return RoleEffect, Path[1], true
 		}
 	}
 	return 0, "", false
 }
 
-func eq(a, b string) bool { return strings.EqualFold(a, b) }
+func Eq(a, b string) bool { return strings.EqualFold(a, b) }
 
 // requirementLeafIndex finds the field of a requirement slot in a dotted path,
 // or returns -1 when the path is not one.
@@ -491,9 +491,9 @@ func eq(a, b string) bool { return strings.EqualFold(a, b) }
 // and "requirement_ext.requirements.required_1.structure_name", and the
 // difference is one element. Rather than test for both, this walks for the
 // "requirements" table and takes the field after the slot that follows it.
-func requirementLeafIndex(path []string) int {
-	for i := 0; i+2 < len(path); i++ {
-		if eq(path[i], "requirements") && strings.HasPrefix(strings.ToLower(path[i+1]), "required") {
+func RequirementLeafIndex(Path []string) int {
+	for i := 0; i+2 < len(Path); i++ {
+		if Eq(Path[i], "requirements") && strings.HasPrefix(strings.ToLower(Path[i+1]), "required") {
 			return i + 2
 		}
 	}
@@ -513,15 +513,15 @@ func requirementLeafIndex(path []string) int {
 // The kinds deliberately left out are the ones that only ever hold tuning
 // numbers: modifiers, requirements and formations. The schema and environment
 // kinds are out for a different reason — they are large and mostly props.
-func graphLinkKinds() []graphKind {
-	return []graphKind{
-		graphKindUnit,
-		graphKindStructure,
-		graphKindAbility,
-		graphKindAddon,
-		graphKindWeapon,
-		graphKindSquad,
-		graphKindResearch,
+func GraphLinkKinds() []GraphKind {
+	return []GraphKind{
+		GraphKindUnit,
+		GraphKindStructure,
+		GraphKindAbility,
+		GraphKindAddon,
+		GraphKindWeapon,
+		GraphKindSquad,
+		GraphKindResearch,
 	}
 }
 
@@ -531,17 +531,17 @@ func graphLinkKinds() []graphKind {
 // It is the blocking form, used by the tests and by anything that is not on a
 // frame. A window that wants the links should start a scan instead, because
 // reading three thousand files takes seconds and a frame cannot wait that long.
-func (g *modGraph) ensureLinks() {
-	if g == nil || g.linked {
+func (g *ModGraph) EnsureLinks() {
+	if g == nil || g.Linked {
 		return
 	}
-	g.linked = true
-	if g.tree == nil {
+	g.Linked = true
+	if g.Tree == nil {
 		return
 	}
-	for _, e := range g.entitiesOfKind(graphLinkKinds()...) {
-		for _, l := range g.scanEntityLinks(e) {
-			g.addLink(l)
+	for _, e := range g.EntitiesOfKind(GraphLinkKinds()...) {
+		for _, l := range g.ScanEntityLinks(e) {
+			g.AddLink(l)
 		}
 	}
 }
@@ -550,70 +550,70 @@ func (g *modGraph) ensureLinks() {
 // links arrive over time rather than all at once, and the forward and reverse
 // indexes are built at the end from what arrived, so that no two goroutines
 // are ever writing to the same map.
-func (g *modGraph) beginLinkScan() {
+func (g *ModGraph) BeginLinkScan() {
 	if g == nil {
 		return
 	}
-	g.scanning = true
-	g.links = nil
-	g.out = make(map[string][]int)
-	g.in = make(map[string][]int)
+	g.Scanning = true
+	g.Links = nil
+	g.Out = make(map[string][]int)
+	g.In = make(map[string][]int)
 }
 
 // finishLinkScan ends a scan and builds the indexes.
-func (g *modGraph) finishLinkScan() {
+func (g *ModGraph) FinishLinkScan() {
 	if g == nil {
 		return
 	}
-	g.scanning = false
-	g.linked = true
-	g.reindex()
+	g.Scanning = false
+	g.Linked = true
+	g.Reindex()
 }
 
 // addScannedLinks takes a batch from a scan. The links are resolved here,
 // because the resolution is the part that reads the tree and has to happen
 // before anything can be asked about them.
-func (g *modGraph) addScannedLinks(links []graphLink) {
+func (g *ModGraph) AddScannedLinks(Links []GraphLink) {
 	if g == nil {
 		return
 	}
-	for _, l := range links {
-		g.addLink(l)
+	for _, l := range Links {
+		g.AddLink(l)
 	}
 }
 
 // addLink records one reference. During a scan the link is only kept, because
 // the indexes are built from the whole list once every batch has arrived; the
 // rest of the time it is indexed as it goes.
-func (g *modGraph) addLink(l graphLink) {
-	if g.scanning {
-		g.links = append(g.links, l)
+func (g *ModGraph) AddLink(l GraphLink) {
+	if g.Scanning {
+		g.Links = append(g.Links, l)
 		return
 	}
-	g.appendLink(l)
+	g.AppendLink(l)
 }
 
 // appendLink puts a resolved link into the indexes and returns its index.
-func (g *modGraph) appendLink(l graphLink) int {
-	g.links = append(g.links, l)
-	idx := len(g.links) - 1
-	g.out[strings.ToLower(l.from)] = append(g.out[strings.ToLower(l.from)], idx)
-	if l.to != "" {
-		g.in[strings.ToLower(l.to)] = append(g.in[strings.ToLower(l.to)], idx)
+func (g *ModGraph) AppendLink(l GraphLink) int {
+	g.Links = append(g.Links, l)
+	idx := len(g.Links) - 1
+	g.Out[strings.ToLower(l.From)] = append(g.Out[strings.ToLower(l.From)], idx)
+	if l.To != "" {
+		g.In[strings.ToLower(l.To)] = append(g.In[strings.ToLower(l.To)], idx)
 	}
 	return idx
 }
 
 // reindex rebuilds the forward and reverse indexes from the link list, which is
 // what a scan needs once every batch has arrived.
-func (g *modGraph) reindex() {
-	g.out = make(map[string][]int, len(g.out))
-	g.in = make(map[string][]int, len(g.in))
-	for i := range g.links {
-		l := &g.links[i]
-		g.out[strings.ToLower(l.from)] = append(g.out[strings.ToLower(l.from)], i)
-		if l.to != "" {
-			g.in[strings.ToLower(l.to)] = append(g.in[strings.ToLower(l.to)], i)
+func (g *ModGraph) Reindex() {
+	g.Out = make(map[string][]int, len(g.Out))
+	g.In = make(map[string][]int, len(g.In))
+	for i := range g.Links {
+		l := &g.Links[i]
+		g.Out[strings.ToLower(l.From)] = append(g.Out[strings.ToLower(l.From)], i)
+		if l.To != "" {
+			g.In[strings.ToLower(l.To)] = append(g.In[strings.ToLower(l.To)], i)
 		}
 	}
 }
@@ -626,26 +626,26 @@ func (g *modGraph) reindex() {
 // The file is read without going through the cache: this runs on the scan's own
 // goroutine, and the cache belongs to the frame, and a map written by two
 // threads is a crash waiting for the second one.
-func (g *modGraph) scanEntityLinks(e *graphEntity) []graphLink {
-	rf := g.readRgd(e.path)
+func (g *ModGraph) ScanEntityLinks(e *GraphEntity) []GraphLink {
+	rf := g.ReadRgd(e.Path)
 	if rf == nil {
 		return nil
 	}
-	var out []graphLink
-	collectGraphLinks(e, rf, func(l graphLink) {
-		l.to = g.resolveIn(e, l.ref)
-		out = append(out, l)
+	var Out []GraphLink
+	CollectGraphLinks(e, rf, func(l GraphLink) {
+		l.To = g.ResolveIn(e, l.Ref)
+		Out = append(Out, l)
 	})
-	return out
+	return Out
 }
 
 // readRgd reads and parses a file without keeping it, which is safe to call
 // from any thread.
-func (g *modGraph) readRgd(virtualPath string) *rgd.RgdFile {
-	if g == nil || g.tree == nil || virtualPath == "" {
+func (g *ModGraph) ReadRgd(virtualPath string) *rgd.RgdFile {
+	if g == nil || g.Tree == nil || virtualPath == "" {
 		return nil
 	}
-	data, err := g.tree.ReadFile(virtualPath)
+	data, err := g.Tree.ReadFile(virtualPath)
 	if err != nil {
 		return nil
 	}
@@ -658,63 +658,63 @@ func (g *modGraph) readRgd(virtualPath string) *rgd.RgdFile {
 
 // parse reads an entity's file. Results are kept, so the second caller of the
 // same entity does not pay for it again.
-func (g *modGraph) parse(e *graphEntity) *rgd.RgdFile {
-	if e == nil || g.tree == nil {
+func (g *ModGraph) Parse(e *GraphEntity) *rgd.RgdFile {
+	if e == nil || g.Tree == nil {
 		return nil
 	}
-	if rf, ok := g.parsed[strings.ToLower(e.path)]; ok {
+	if rf, ok := g.ParsedFiles[strings.ToLower(e.Path)]; ok {
 		return rf
 	}
 	var rf *rgd.RgdFile
-	if data, err := g.tree.ReadFile(e.path); err == nil {
+	if data, err := g.Tree.ReadFile(e.Path); err == nil {
 		rf, _ = rgd.ParseRgd(data)
 	}
-	if g.parsed == nil {
-		g.parsed = make(map[string]*rgd.RgdFile)
+	if g.ParsedFiles == nil {
+		g.ParsedFiles = make(map[string]*rgd.RgdFile)
 	}
-	g.parsed[strings.ToLower(e.path)] = rf
+	g.ParsedFiles[strings.ToLower(e.Path)] = rf
 	return rf
 }
 
 // Parsed returns the file of an entity, reading it on first use. It is how a
 // caller that needs the fields of a unit — a freeze clearing a reference, an
 // editor showing a table — gets them without reading the file twice.
-func (g *modGraph) Parsed(path string) *rgd.RgdFile {
+func (g *ModGraph) Parsed(Path string) *rgd.RgdFile {
 	if g == nil {
 		return nil
 	}
-	return g.parse(g.entity(path))
+	return g.Parse(g.Entity(Path))
 }
 
 // collectGraphLinks walks one parsed file and hands every field that
 // graphRoleForField recognises to the caller, which is given the link because
 // a background scan and a blocking read want them in different ways.
-func collectGraphLinks(e *graphEntity, rf *rgd.RgdFile, emit func(graphLink)) {
+func CollectGraphLinks(e *GraphEntity, rf *rgd.RgdFile, emit func(GraphLink)) {
 	if rf == nil || rf.Root == nil || emit == nil {
 		return
 	}
-	var walk func(entry *rgd.RgdEntry, path []string)
-	walk = func(entry *rgd.RgdEntry, path []string) {
+	var walk func(entry *rgd.RgdEntry, Path []string)
+	walk = func(entry *rgd.RgdEntry, Path []string) {
 		if entry == nil {
 			return
 		}
 		if !entry.IsTable() {
-			role, slot, ok := graphRoleForField(e.kind, path)
+			Role, Slot, ok := GraphRoleForField(e.Kind, Path)
 			if !ok {
 				return
 			}
-			ref := strings.TrimSpace(entry.DisplayValue())
-			if ref == "" {
+			Ref := strings.TrimSpace(entry.DisplayValue())
+			if Ref == "" {
 				// An empty slot is the normal state of almost every
 				// slot in the game: a unit has ten ability slots and
 				// usually two of them. It is not a broken reference.
 				return
 			}
-			emit(graphLink{from: e.path, ref: ref, field: strings.Join(path, "."), slot: slot, role: role})
+			emit(GraphLink{From: e.Path, Ref: Ref, Field: strings.Join(Path, "."), Slot: Slot, Role: Role})
 			return
 		}
 		for _, c := range entry.Children {
-			walk(c, append(path, c.Name))
+			walk(c, append(Path, c.Name))
 		}
 	}
 	for _, section := range rf.Root.Children {
@@ -731,22 +731,22 @@ func collectGraphLinks(e *graphEntity, rf *rgd.RgdFile, emit func(graphLink)) {
 // and a bare file name with neither folder nor extension ("chaos_hq"), which
 // is what a good part of the requirement tables use. Rather than guess which
 // one a given field means, every shape is tried and the first that exists wins.
-func (g *modGraph) resolveIn(from *graphEntity, ref string) string {
-	if g == nil || g.tree == nil {
+func (g *ModGraph) ResolveIn(From *GraphEntity, Ref string) string {
+	if g == nil || g.Tree == nil {
 		return ""
 	}
-	ref = strings.TrimSpace(ref)
-	if ref == "" {
+	Ref = strings.TrimSpace(Ref)
+	if Ref == "" {
 		return ""
 	}
-	rel := strings.ReplaceAll(ref, "/", "\\")
+	rel := strings.ReplaceAll(Ref, "/", "\\")
 	rel = strings.TrimPrefix(rel, "Data\\")
-	stem := refStem(ref)
+	stem := RefStem(Ref)
 	// The .rgd form comes before the literal one everywhere: a reference
 	// naming a .lua almost never has a .lua on disk, so the literal name
 	// would only ever cost a wasted lookup.
-	for _, c := range resolveCandidates(rel, stem) {
-		if p := g.findDataPath(c); p != "" {
+	for _, c := range ResolveCandidates(rel, stem) {
+		if p := g.FindDataPath(c); p != "" {
 			return p
 		}
 	}
@@ -754,42 +754,42 @@ func (g *modGraph) resolveIn(from *graphEntity, ref string) string {
 	// own race answers it before anything of another race, and before content
 	// that has no race at all: "chaos_hq" in a Chaos building's requirement
 	// table means the building, not a weapon that happens to share a name.
-	list := g.byName[strings.ToLower(stem)]
-	if from != nil {
+	list := g.ByName[strings.ToLower(stem)]
+	if From != nil {
 		for _, cand := range list {
-			if cand.race != "" && strings.EqualFold(cand.race, from.race) {
-				return cand.path
+			if cand.Race != "" && strings.EqualFold(cand.Race, From.Race) {
+				return cand.Path
 			}
 		}
 	}
 	if len(list) > 0 {
-		return list[0].path
+		return list[0].Path
 	}
 	return ""
 }
 
 // resolveCandidates lists the relative paths a reference might be written as,
 // most specific first.
-func resolveCandidates(rel, stem string) []string {
+func ResolveCandidates(rel, stem string) []string {
 	asRgd := stem + ".rgd"
-	out := []string{rel, asRgd}
+	Out := []string{rel, asRgd}
 	for _, base := range []string{`ebps\`, `sbps\`} {
-		out = append(out, base+rel, base+asRgd)
+		Out = append(Out, base+rel, base+asRgd)
 	}
-	return out
+	return Out
 }
 
 // findDataPath resolves a path relative to Data\attrib, then as a full tree
 // path, and returns the first that exists.
-func (g *modGraph) findDataPath(rel string) string {
+func (g *ModGraph) FindDataPath(rel string) string {
 	if rel == "" {
 		return ""
 	}
 	if !strings.EqualFold(filepath.Ext(rel), ".rgd") {
 		rel += ".rgd"
 	}
-	for _, candidate := range []string{filepath.Join("Data", graphRoot, rel), rel} {
-		if g.tree.FindFile(candidate) != nil {
+	for _, candidate := range []string{filepath.Join("Data", GraphRoot, rel), rel} {
+		if g.Tree.FindFile(candidate) != nil {
 			return candidate
 		}
 	}
@@ -798,8 +798,8 @@ func (g *modGraph) findDataPath(rel string) string {
 
 // refStem is a reference's file name with neither its folder nor its
 // extension, which is how the game names the thing it points at.
-func refStem(ref string) string {
-	base := strings.TrimSpace(ref)
+func RefStem(Ref string) string {
+	base := strings.TrimSpace(Ref)
 	base = strings.ReplaceAll(base, "/", "\\")
 	if i := strings.LastIndexAny(base, `\/`); i >= 0 {
 		base = base[i+1:]
@@ -816,53 +816,53 @@ func refStem(ref string) string {
 // no scan is running it reads the mod itself, so that a caller that just wants
 // the answer — a test, a freeze — is never quietly handed an empty list
 // because nobody had started a scan.
-func (g *modGraph) Outgoing(path string) []graphLink {
+func (g *ModGraph) Outgoing(Path string) []GraphLink {
 	if g == nil {
 		return nil
 	}
-	if !g.scanning {
-		g.ensureLinks()
+	if !g.Scanning {
+		g.EnsureLinks()
 	}
-	return g.collect(g.out[strings.ToLower(path)])
+	return g.Collect(g.Out[strings.ToLower(Path)])
 }
 
 // Incoming returns the references other entities hold to the entity at path.
 //
 // This is the direction a freeze needs: what has to be cleared before the
 // entity can be moved out of the mod.
-func (g *modGraph) Incoming(path string) []graphLink {
+func (g *ModGraph) Incoming(Path string) []GraphLink {
 	if g == nil {
 		return nil
 	}
-	if !g.scanning {
-		g.ensureLinks()
+	if !g.Scanning {
+		g.EnsureLinks()
 	}
-	return g.collect(g.in[strings.ToLower(path)])
+	return g.Collect(g.In[strings.ToLower(Path)])
 }
 
 // LinksOfRole returns the outgoing links of one role, which is how a caller
 // asks "what does this unit build" without walking everything.
-func (g *modGraph) LinksOfRole(path string, role graphRole) []graphLink {
-	var out []graphLink
-	for _, l := range g.Outgoing(path) {
-		if l.role == role {
-			out = append(out, l)
+func (g *ModGraph) LinksOfRole(Path string, Role GraphRole) []GraphLink {
+	var Out []GraphLink
+	for _, l := range g.Outgoing(Path) {
+		if l.Role == Role {
+			Out = append(Out, l)
 		}
 	}
-	return out
+	return Out
 }
 
-func (g *modGraph) collect(idxs []int) []graphLink {
+func (g *ModGraph) Collect(idxs []int) []GraphLink {
 	if len(idxs) == 0 {
 		return nil
 	}
-	out := make([]graphLink, 0, len(idxs))
+	Out := make([]GraphLink, 0, len(idxs))
 	for _, i := range idxs {
-		if i >= 0 && i < len(g.links) {
-			out = append(out, g.links[i])
+		if i >= 0 && i < len(g.Links) {
+			Out = append(Out, g.Links[i])
 		}
 	}
-	return out
+	return Out
 }
 
 // Produces returns the units and buildings the structure at path is what
@@ -871,56 +871,56 @@ func (g *modGraph) collect(idxs []int) []graphLink {
 // This is not read from the building: no building says what it builds. Each
 // unit names the structure that makes it in its requirement table, so the
 // answer is the requirement links pointing at this building, read backwards.
-func (g *modGraph) Produces(path string) []string {
-	var out []string
-	for _, l := range g.Incoming(path) {
-		if l.role == roleBuiltBy && l.from != path {
-			out = append(out, l.from)
+func (g *ModGraph) Produces(Path string) []string {
+	var Out []string
+	for _, l := range g.Incoming(Path) {
+		if l.Role == RoleBuiltBy && l.From != Path {
+			Out = append(Out, l.From)
 		}
 	}
-	return dedupeStrings(out)
+	return DedupeStrings(Out)
 }
 
 // ReferencesTo returns the entities that point at the entity at path for one
 // role, which is how "what breaks if I delete this ability" is answered.
-func (g *modGraph) ReferencesTo(path string, role graphRole) []graphLink {
-	var out []graphLink
-	for _, l := range g.Incoming(path) {
-		if l.role == role {
-			out = append(out, l)
+func (g *ModGraph) ReferencesTo(Path string, Role GraphRole) []GraphLink {
+	var Out []GraphLink
+	for _, l := range g.Incoming(Path) {
+		if l.Role == Role {
+			Out = append(Out, l)
 		}
 	}
-	return out
+	return Out
 }
 
 // BrokenLinks returns every reference that resolves to nothing, in the order
 // they were found.
-func (g *modGraph) BrokenLinks() []graphLink {
+func (g *ModGraph) BrokenLinks() []GraphLink {
 	if g == nil {
 		return nil
 	}
-	if !g.scanning {
-		g.ensureLinks()
+	if !g.Scanning {
+		g.EnsureLinks()
 	}
-	var out []graphLink
-	for _, l := range g.links {
-		if !l.resolved() {
-			out = append(out, l)
+	var Out []GraphLink
+	for _, l := range g.Links {
+		if !l.Resolved() {
+			Out = append(Out, l)
 		}
 	}
-	return out
+	return Out
 }
 
 // BrokenLinksOf returns the broken references held by one entity, which is what
 // the object window shows under a single unit.
-func (g *modGraph) BrokenLinksOf(path string) []graphLink {
-	var out []graphLink
-	for _, l := range g.Outgoing(path) {
-		if !l.resolved() {
-			out = append(out, l)
+func (g *ModGraph) BrokenLinksOf(Path string) []GraphLink {
+	var Out []GraphLink
+	for _, l := range g.Outgoing(Path) {
+		if !l.Resolved() {
+			Out = append(Out, l)
 		}
 	}
-	return out
+	return Out
 }
 
 // Orphans returns the entities of a kind that nothing points at, which for a
@@ -929,50 +929,50 @@ func (g *modGraph) BrokenLinksOf(path string) []graphLink {
 // A requirement link only counts when it is the one that names a structure:
 // research and addon requirements say what unlocks a unit, not what makes it,
 // and a unit that is only unlocked and never built is normal.
-func (g *modGraph) Orphans(kinds ...graphKind) []string {
+func (g *ModGraph) Orphans(kinds ...GraphKind) []string {
 	if g == nil {
 		return nil
 	}
-	if !g.scanning {
-		g.ensureLinks()
+	if !g.Scanning {
+		g.EnsureLinks()
 	}
 	referenced := make(map[string]bool)
-	for _, l := range g.links {
-		if l.resolved() {
-			referenced[strings.ToLower(l.to)] = true
+	for _, l := range g.Links {
+		if l.Resolved() {
+			referenced[strings.ToLower(l.To)] = true
 		}
 	}
 	// A unit is produced by a structure, so a unit that is required by
 	// nothing but is pointed at by some other unit's build requirement is not
 	// an orphan.
 	produced := make(map[string]bool)
-	for _, l := range g.links {
-		if l.role == roleBuiltBy && l.resolved() {
-			produced[strings.ToLower(l.from)] = true
+	for _, l := range g.Links {
+		if l.Role == RoleBuiltBy && l.Resolved() {
+			produced[strings.ToLower(l.From)] = true
 		}
 	}
-	var out []string
-	for _, e := range g.entitiesOfKind(kinds...) {
-		key := strings.ToLower(e.path)
+	var Out []string
+	for _, e := range g.EntitiesOfKind(kinds...) {
+		key := strings.ToLower(e.Path)
 		if referenced[key] || produced[key] {
 			continue
 		}
-		out = append(out, e.path)
+		Out = append(Out, e.Path)
 	}
-	sort.Strings(out)
-	return out
+	sort.Strings(Out)
+	return Out
 }
 
-func dedupeStrings(in []string) []string {
-	seen := make(map[string]bool, len(in))
-	out := make([]string, 0, len(in))
-	for _, s := range in {
+func DedupeStrings(In []string) []string {
+	seen := make(map[string]bool, len(In))
+	Out := make([]string, 0, len(In))
+	for _, s := range In {
 		key := strings.ToLower(s)
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		out = append(out, s)
+		Out = append(Out, s)
 	}
-	return out
+	return Out
 }

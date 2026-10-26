@@ -51,19 +51,19 @@ func linkRows(g *modGraph, path string) []linkRow {
 	var out []linkRow
 	for _, l := range g.Outgoing(path) {
 		out = append(out, linkRow{
-			role: l.role.label(), slot: l.slot, target: l.targetName(),
-			path: l.to, found: l.resolved(), outgoing: true,
+			role: l.Role.Label(), slot: l.Slot, target: l.TargetName(),
+			path: l.To, found: l.Resolved(), outgoing: true,
 		})
 	}
 	for _, l := range g.Incoming(path) {
 		// A unit that refers to itself is its own production chain, and
 		// saying so twice helps nobody.
-		if strings.EqualFold(l.from, path) {
+		if strings.EqualFold(l.From, path) {
 			continue
 		}
 		out = append(out, linkRow{
-			role: l.role.label(), slot: l.slot, target: graphEntityName(g, l.from),
-			path: l.from, found: l.resolved(), outgoing: false,
+			role: l.Role.Label(), slot: l.Slot, target: graphEntityName(g, l.From),
+			path: l.From, found: l.Resolved(), outgoing: false,
 		})
 	}
 	return out
@@ -73,8 +73,8 @@ func linkRows(g *modGraph, path string) []linkRow {
 // name when the graph does not know it — which happens for a path the
 // inventory missed, and is worth showing rather than hiding.
 func graphEntityName(g *modGraph, path string) string {
-	if e := g.entity(path); e != nil {
-		return e.name
+	if e := g.Entity(path); e != nil {
+		return e.Name
 	}
 	return refStem(path)
 }
@@ -205,14 +205,14 @@ func (ui *uiState) linkScanNote() string {
 	if g == nil {
 		return "No mod is loaded."
 	}
-	files := len(g.entitiesOfKind(graphLinkKinds()...))
+	files := len(g.EntitiesOfKind(graphLinkKinds()...))
 	if ui.graphLinksRunning {
-		return "Reading the mod… " + itoa(len(g.links)) + " references so far."
+		return "Reading the mod… " + itoa(len(g.Links)) + " references so far."
 	}
 	if files == 0 {
 		return "The mod has no units, buildings, abilities, add-ons, weapons, squads or research."
 	}
-	return itoa(len(g.links)) + " references read from " + itoa(files) + " files."
+	return itoa(len(g.Links)) + " references read from " + itoa(files) + " files."
 }
 
 // ── the mod-wide report ─────────────────────────────────────────────────────
@@ -242,13 +242,13 @@ func brokenLinkGroups(g *modGraph) []brokenLinkGroup {
 	}
 	groups := map[key]*brokenLinkGroup{}
 	for _, l := range g.BrokenLinks() {
-		k := key{ref: strings.ToLower(l.ref), role: l.role}
+		k := key{ref: strings.ToLower(l.Ref), role: l.Role}
 		grp := groups[k]
 		if grp == nil {
-			grp = &brokenLinkGroup{ref: l.ref, role: l.role}
+			grp = &brokenLinkGroup{ref: l.Ref, role: l.Role}
 			groups[k] = grp
 		}
-		grp.holders = append(grp.holders, l.from)
+		grp.holders = append(grp.holders, l.From)
 	}
 	out := make([]brokenLinkGroup, 0, len(groups))
 	for _, grp := range groups {
@@ -316,7 +316,7 @@ func (ui *uiState) problemRow(gtx layout.Context, grp brokenLinkGroup) layout.Di
 					w := gtx.Dp(unit.Dp(150))
 					gtx.Constraints.Min.X = w
 					gtx.Constraints.Max.X = w
-					l := material.Label(ui.th, unit.Sp(10), grp.role.label())
+					l := material.Label(ui.th, unit.Sp(10), grp.role.Label())
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				})

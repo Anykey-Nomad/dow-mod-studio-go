@@ -41,7 +41,7 @@ func (ui *uiState) startGraphLinkScan() *modGraph {
 	ui.stopGraphLinkScan()
 
 	ui.graphLinksGraph = g
-	g.beginLinkScan()
+	g.BeginLinkScan()
 	ui.graphLinksCh = make(chan graphLinkBatch, 8)
 	stop := make(chan struct{})
 	ui.graphLinksStop = stop
@@ -49,7 +49,7 @@ func (ui *uiState) startGraphLinkScan() *modGraph {
 
 	// The entities are copied so the goroutine does not walk a graph the UI
 	// thread is free to replace.
-	entities := append([]*graphEntity(nil), g.entitiesOfKind(graphLinkKinds()...)...)
+	entities := append([]*graphEntity(nil), g.EntitiesOfKind(graphLinkKinds()...)...)
 	ch := ui.graphLinksCh
 	go func() {
 		batch := make([]graphLink, 0, graphLinkBatchSize)
@@ -65,7 +65,7 @@ func (ui *uiState) startGraphLinkScan() *modGraph {
 			}
 		}
 		for _, e := range entities {
-			for _, l := range g.scanEntityLinks(e) {
+			for _, l := range g.ScanEntityLinks(e) {
 				batch = append(batch, l)
 			}
 			if len(batch) >= graphLinkBatchSize && !flush(false) {
@@ -100,11 +100,11 @@ func (ui *uiState) pollGraphLinks() bool {
 		select {
 		case batch := <-ui.graphLinksCh:
 			if ui.graphLinksGraph != nil {
-				ui.graphLinksGraph.addScannedLinks(batch.links)
+				ui.graphLinksGraph.AddScannedLinks(batch.links)
 			}
 			if batch.done {
 				if ui.graphLinksGraph != nil {
-					ui.graphLinksGraph.finishLinkScan()
+					ui.graphLinksGraph.FinishLinkScan()
 				}
 				ui.stopGraphLinkScan()
 			}
