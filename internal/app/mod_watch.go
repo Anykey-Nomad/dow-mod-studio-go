@@ -258,66 +258,66 @@ type modCatalogRefreshResult struct {
 	err      error
 }
 
-func (ui *uiState) stopModFileWatcher() {
-	if ui.modFileWatcher != nil {
-		_ = ui.modFileWatcher.Close()
-		ui.modFileWatcher = nil
+func StopModFileWatcher(ui *uiState) {
+	if ui.ModFileWatcher != nil {
+		_ = ui.ModFileWatcher.Close()
+		ui.ModFileWatcher = nil
 	}
 }
 
-func (ui *uiState) startModFileWatcher(tree *modtree.ModTree) {
-	ui.stopModFileWatcher()
-	if ui.modFileWatchSignal == nil {
-		ui.modFileWatchSignal = make(chan struct{}, 1)
+func StartModFileWatcher(ui *uiState, tree *modtree.ModTree) {
+	StopModFileWatcher(ui)
+	if ui.ModFileWatchSignal == nil {
+		ui.ModFileWatchSignal = make(chan struct{}, 1)
 	}
 	for {
 		select {
-		case <-ui.modFileWatchSignal:
+		case <-ui.ModFileWatchSignal:
 		default:
 			goto drained
 		}
 	}
 drained:
-	watcher, err := startModFileWatcher(tree, ui.modFileWatchSignal)
+	watcher, err := startModFileWatcher(tree, ui.ModFileWatchSignal)
 	if err != nil {
 		log.Printf("file watcher unavailable, falling back to periodic refresh: %v", err)
 		return
 	}
-	ui.modFileWatcher = watcher
+	ui.ModFileWatcher = watcher
 }
 
-func (ui *uiState) pollModCatalog() {
-	if ui.modTree == nil || ui.modulePath == "" {
+func PollModCatalog(ui *uiState) {
+	if ui.ModTree == nil || ui.ModulePath == "" {
 		return
 	}
-	if result, ok := ui.pollModCatalogResult(); ok {
-		ui.applyModCatalogResult(result)
+	if result, ok := PollModCatalogResult(ui); ok {
+		ApplyModCatalogResult(ui, result)
 	}
-	if ui.modRefreshRunning {
+	if ui.ModRefreshRunning {
 		return
 	}
-	if ui.modFileWatchSignal != nil {
+	if ui.ModFileWatchSignal != nil {
 		select {
-		case <-ui.modFileWatchSignal:
-			ui.lastModPoll = time.Time{}
+		case <-ui.ModFileWatchSignal:
+			ui.LastModPoll = time.Time{}
 		default:
 		}
 	}
 	now := time.Now()
-	if !ui.lastModPoll.IsZero() && now.Sub(ui.lastModPoll) < modCatalogPollInterval {
+	if !ui.LastModPoll.IsZero() && now.Sub(ui.LastModPoll) < modCatalogPollInterval {
 		return
 	}
-	ui.lastModPoll = now
+	ui.LastModPoll = now
 
-	baseTree := ui.modTree
-	if ui.modRefreshCh == nil {
-		ui.modRefreshCh = make(chan modCatalogRefreshResult, 1)
+	baseTree := ui.ModTree
+	if ui.ModRefreshCh == nil {
+		ui.ModRefreshCh = make(chan modCatalogRefreshResult, 1)
 	}
 	watch := watchFromTree(baseTree)
-	knownSnapshot := ui.modSnapshot
-	modulePath := ui.modulePath
-	refreshCh := ui.modRefreshCh
-	ui.modRefreshRunning = true
+	knownSnapshot := ui.ModSnapshot
+	modulePath := ui.ModulePath
+	refreshCh := ui.ModRefreshCh
+	ui.ModRefreshRunning = true
 	go func() {
 		result := modCatalogRefreshResult{path: modulePath, baseTree: baseTree}
 		result.snapshot = watch.snapshot()
@@ -333,21 +333,21 @@ func (ui *uiState) pollModCatalog() {
 	}()
 }
 
-func (ui *uiState) pollModCatalogResult() (modCatalogRefreshResult, bool) {
-	if ui.modRefreshCh == nil {
+func PollModCatalogResult(ui *uiState) (modCatalogRefreshResult, bool) {
+	if ui.ModRefreshCh == nil {
 		return modCatalogRefreshResult{}, false
 	}
 	select {
-	case result := <-ui.modRefreshCh:
-		ui.modRefreshRunning = false
+	case result := <-ui.ModRefreshCh:
+		ui.ModRefreshRunning = false
 		return result, true
 	default:
 		return modCatalogRefreshResult{}, false
 	}
 }
 
-func (ui *uiState) applyModCatalogResult(result modCatalogRefreshResult) {
-	if result.path != ui.modulePath || result.baseTree != ui.modTree {
+func ApplyModCatalogResult(ui *uiState, result modCatalogRefreshResult) {
+	if result.path != ui.ModulePath || result.baseTree != ui.ModTree {
 		if result.newTree != nil {
 			result.newTree.Close()
 		}
@@ -357,16 +357,16 @@ func (ui *uiState) applyModCatalogResult(result modCatalogRefreshResult) {
 		return
 	}
 	if result.newTree == nil {
-		ui.modSnapshot = result.snapshot
+		ui.ModSnapshot = result.snapshot
 		return
 	}
-	ui.modSnapshot = result.snapshot
-	oldPosition := ui.leftList.Position
-	oldTree := ui.modTree
-	ui.modTree = result.newTree
+	ui.ModSnapshot = result.snapshot
+	oldPosition := ui.LeftList.Position
+	oldTree := ui.ModTree
+	ui.ModTree = result.newTree
 	oldTree.Close()
-	ui.leftList.Position = oldPosition
-	ui.visibleNodes = nil
-	ui.rowClicks = nil
-	ui.statusText = "Mod catalog updated"
+	ui.LeftList.Position = oldPosition
+	ui.VisibleNodes = nil
+	ui.RowClicks = nil
+	ui.StatusText = "Mod catalog updated"
 }

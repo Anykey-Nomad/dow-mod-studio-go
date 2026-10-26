@@ -42,11 +42,11 @@ func TestRecentModules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ui.rememberRecentModule(first)
-	ui.rememberRecentModule(second)
-	ui.rememberRecentModule(first)
-	if len(ui.recentModules) != 2 || ui.recentModules[0] != first || ui.recentModules[1] != second {
-		t.Fatalf("recent modules = %#v", ui.recentModules)
+	RememberRecentModule(ui, first)
+	RememberRecentModule(ui, second)
+	RememberRecentModule(ui, first)
+	if len(ui.RecentModules) != 2 || ui.RecentModules[0] != first || ui.RecentModules[1] != second {
+		t.Fatalf("recent modules = %#v", ui.RecentModules)
 	}
 }
 

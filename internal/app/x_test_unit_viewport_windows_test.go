@@ -24,11 +24,11 @@ import (
 func unitViewportUI(t *testing.T, unitName string, w, h int) (*uiState, *windowFrame) {
 	t.Helper()
 	ui := newUI(unitTestTheme())
-	ui.modTree = openTestDXP3(t)
-	ui.openUnitTab()
+	ui.ModTree = openTestDXP3(t)
+	OpenUnitTab(ui)
 	raceSel, unitSel := unitViewportPicker(t, ui, unitName)
-	ui.unitRaceSel, ui.unitSel = raceSel, unitSel
-	ui.unitSection = findUnitSection(t, "Viewport")
+	ui.UnitRaceSel, ui.UnitSel = raceSel, unitSel
+	ui.UnitSection = findUnitSection(t, "Viewport")
 	f := newWindowFrame(ui, w, h)
 	return ui, f
 }
@@ -37,13 +37,13 @@ func unitViewportUI(t *testing.T, unitName string, w, h int) (*uiState, *windowF
 // lands on it without counting rows of the dropdown.
 func unitViewportPicker(t *testing.T, ui *uiState, name string) (raceSel, unitSel int) {
 	t.Helper()
-	cat := ui.unitCatalogFor()
+	cat := UnitCatalogFor(ui)
 	if cat == nil {
 		t.Skip("no unit catalog")
 	}
-	for ri, race := range cat.races {
-		for idx, u := range race.unitsOf() {
-			if strings.EqualFold(u.name, name) {
+	for ri, race := range cat.Races {
+		for idx, u := range race.UnitsOf() {
+			if strings.EqualFold(u.Name, name) {
 				return ri, idx
 			}
 		}
@@ -60,9 +60,9 @@ func unitViewportLoad(t *testing.T, ui *uiState, f *windowFrame, quiet bool) boo
 	t.Helper()
 	deadline := time.Now().Add(90 * time.Second)
 	for i := 0; i < 8000; i++ {
-		ui.pollUnitModel()
-		ui.pollModelJobs()
-		if ui.unitModelLoaded() {
+		PollUnitModel(ui)
+		PollModelJobs(ui)
+		if UnitModelLoaded(ui) {
 			// A couple of frames so the panel that lists the cameras and the
 			// clips is laid out with the model on it.
 			if !quiet {
@@ -70,7 +70,7 @@ func unitViewportLoad(t *testing.T, ui *uiState, f *windowFrame, quiet bool) boo
 			}
 			return true
 		}
-		if ui.unitModelErr != "" {
+		if ui.UnitModelErr != "" {
 			return false
 		}
 		if time.Now().After(deadline) {
@@ -86,8 +86,8 @@ func unitViewportLoad(t *testing.T, ui *uiState, f *windowFrame, quiet bool) boo
 func unitViewportFrames(f *windowFrame, n int) {
 	for i := 0; i < n; i++ {
 		f.gtx.Now = time.Now()
-		f.ui.pollUnitModel()
-		f.ui.pollModelJobs()
+		f.PollUnitModel(ui)
+		f.PollModelJobs(ui)
 		f.frame()
 	}
 }
@@ -99,38 +99,38 @@ func unitViewportFrames(f *windowFrame, n int) {
 func TestTheViewportShowsTheUnitsModelAndAnimations(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
 	if !unitViewportLoad(t, ui, f, false) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
-	if !strings.HasSuffix(strings.ToLower(ui.unitModelPath), ".whm") {
-		t.Errorf("the viewport is showing %q, which is not a model", ui.unitModelPath)
+	if !strings.HasSuffix(strings.ToLower(ui.UnitModelPath), ".whm") {
+		t.Errorf("the viewport is showing %q, which is not a model", ui.UnitModelPath)
 	}
-	anims := ui.unitModelAnimNames()
+	anims := UnitModelAnimNames(ui)
 	if len(anims) < 2 {
 		t.Fatalf("the model carries %d clips (%v), so there is nothing to play", len(anims), anims)
 	}
-	if len(ui.unitAnimClicks) != len(anims) {
-		t.Errorf("%d clip rows were laid out for %d clips", len(ui.unitAnimClicks), len(anims))
+	if len(ui.UnitAnimClicks) != len(anims) {
+		t.Errorf("%d clip rows were laid out for %d clips", len(ui.UnitAnimClicks), len(anims))
 	}
-	v := ui.unitModelViewer()
-	if v.anim == nil {
+	v := UnitModelViewer(ui)
+	if v.Anim == nil {
 		t.Fatal("no clip is selected")
 	}
-	if v.animIndex < 0 || v.animIndex >= len(v.model.Animations) {
-		t.Fatalf("the selected clip is index %d of %d", v.animIndex, len(v.model.Animations))
+	if v.AnimIndex < 0 || v.AnimIndex >= len(v.Model.Animations) {
+		t.Fatalf("the selected clip is index %d of %d", v.AnimIndex, len(v.Model.Animations))
 	}
-	if !v.playing {
+	if !v.Playing {
 		t.Error("the viewport opened on a still model rather than playing a clip")
 	}
 	if unitModelClipDuration(v) <= 0 {
-		t.Errorf("the clip on show, %q, has no length to play", v.anim.Name)
+		t.Errorf("the clip on show, %q, has no length to play", v.Anim.Name)
 	}
 	// Something has to have asked for a frame, or the canvas would stay empty
 	// whatever state the camera is in. The software rasteriser answers on a
 	// worker, so the wait is for the frame rather than for the request.
-	for i := 0; i < 200 && v.frame == nil && v.gpuFrame == nil && !v.redraw; i++ {
+	for i := 0; i < 200 && v.Frame == nil && v.GpuFrame == nil && !v.Redraw; i++ {
 		unitViewportFrames(f, 1)
 	}
-	if v.frame == nil && v.gpuFrame == nil && !v.redraw {
+	if v.Frame == nil && v.GpuFrame == nil && !v.Redraw {
 		t.Error("nothing has asked for a frame, so the canvas would stay empty")
 	}
 }
@@ -140,20 +140,20 @@ func TestTheViewportShowsTheUnitsModelAndAnimations(t *testing.T) {
 func TestTheViewportPlaysTheClip(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
 	if !unitViewportLoad(t, ui, f, false) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
-	v := ui.unitModelViewer()
-	first := v.time
+	v := UnitModelViewer(ui)
+	first := v.Time
 	deadline := time.Now().Add(30 * time.Second)
-	for v.time == first && time.Now().Before(deadline) {
+	for v.Time == first && time.Now().Before(deadline) {
 		sleepMillis()
 		unitViewportFrames(f, 1)
 	}
-	if v.time == first {
+	if v.Time == first {
 		t.Fatalf("the clip stayed at %v over a second of frames", first)
 	}
-	if v.time < 0 || v.time > 1 {
-		t.Errorf("the clip is at %v, outside the 0..1 the renderer expects", v.time)
+	if v.Time < 0 || v.Time > 1 {
+		t.Errorf("the clip is at %v, outside the 0..1 the renderer expects", v.Time)
 	}
 }
 
@@ -164,21 +164,21 @@ func TestTheViewportPlaysTheClip(t *testing.T) {
 func TestTheClipOnShowMovesTheSkeleton(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_basic_warrior", 1200, 760)
 	if !unitViewportLoad(t, ui, f, true) {
-		t.Fatalf("the model of the basic warrior never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the basic warrior never loaded: %q", ui.UnitModelErr)
 	}
-	v := ui.unitModelViewer()
-	if v.anim == nil {
+	v := UnitModelViewer(ui)
+	if v.Anim == nil {
 		t.Fatal("no clip is selected")
 	}
 	// The default clip of a unit is the one it moves with, rather than a
 	// "vis_" clip that only fades a weapon in and out.
-	if strings.HasPrefix(strings.ToLower(v.anim.Name), "vis_") {
-		t.Errorf("the viewport opened on %q, which moves nothing", v.anim.Name)
+	if strings.HasPrefix(strings.ToLower(v.Anim.Name), "vis_") {
+		t.Errorf("the viewport opened on %q, which moves nothing", v.Anim.Name)
 	}
-	rest := v.model.RestPose()
+	rest := v.Model.RestPose()
 	moved := 0
 	for _, at := range []float32{0.25, 0.5, 0.75} {
-		pose := v.model.PoseAt(v.anim, at)
+		pose := v.Model.PoseAt(v.Anim, at)
 		for b := range rest.Bones {
 			if rest.Bones[b] != pose.Bones[b] {
 				moved++
@@ -187,7 +187,7 @@ func TestTheClipOnShowMovesTheSkeleton(t *testing.T) {
 		}
 	}
 	if moved == 0 {
-		t.Errorf("the clip on show, %q, leaves every bone where it was", v.anim.Name)
+		t.Errorf("the clip on show, %q, leaves every bone where it was", v.Anim.Name)
 	}
 }
 
@@ -196,21 +196,21 @@ func TestTheClipOnShowMovesTheSkeleton(t *testing.T) {
 func TestTheViewportListsEveryClipAndPlaysThePickedOne(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
 	if !unitViewportLoad(t, ui, f, false) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
-	v := ui.unitModelViewer()
-	anims := ui.unitModelAnimNames()
-	if len(ui.unitAnimClicks) != len(anims) {
-		t.Fatalf("%d clip rows were laid out for %d clips", len(ui.unitAnimClicks), len(anims))
+	v := UnitModelViewer(ui)
+	anims := UnitModelAnimNames(ui)
+	if len(ui.UnitAnimClicks) != len(anims) {
+		t.Fatalf("%d clip rows were laid out for %d clips", len(ui.UnitAnimClicks), len(anims))
 	}
 	// Still it, so the frames of the search below are not spent on a software
 	// render of a playing clip.
-	v.playing = false
-	start := v.animIndex
+	v.Playing = false
+	start := v.AnimIndex
 	// The clip on show is skipped: finding it again would prove only that the
 	// first row of the list is there, which it is whether the rest are or not.
-	at, idx, ok := unitViewportFindRow(t, f, 1200, 760, len(ui.unitAnimClicks), func(i int) bool {
-		return i != start && ui.unitAnimClicks[i].Hovered()
+	at, idx, ok := unitViewportFindRow(t, f, 1200, 760, len(ui.UnitAnimClicks), func(i int) bool {
+		return i != start && ui.UnitAnimClicks[i].Hovered()
 	})
 	if !ok {
 		t.Skip("no other clip row is on screen at this size")
@@ -219,11 +219,11 @@ func TestTheViewportListsEveryClipAndPlaysThePickedOne(t *testing.T) {
 	if idx == start {
 		t.Errorf("the only clip row on screen is the one already selected (%q), so the list is not being drawn", anims[idx])
 	}
-	if v.anim == nil || v.anim.Name != anims[idx] {
-		t.Errorf("the selected clip is %v, want %q", v.anim, anims[idx])
+	if v.Anim == nil || v.Anim.Name != anims[idx] {
+		t.Errorf("the selected clip is %v, want %q", v.Anim, anims[idx])
 	}
 	// Picking a clip of a still model is a request to watch it.
-	if !v.playing {
+	if !v.Playing {
 		t.Error("picking a clip left the model still, so nothing would be seen to happen")
 	}
 }
@@ -232,30 +232,30 @@ func TestTheViewportListsEveryClipAndPlaysThePickedOne(t *testing.T) {
 // the canvas says so and the panel says there is nothing loaded.
 func TestTheViewportSaysWhenAUnitHasNoModel(t *testing.T) {
 	ui := newUI(unitTestTheme())
-	ui.modTree = unitViewportMod(t)
-	unitViewportWriteUnit(t, ui.modTree, unitTemplateName{Race: "necrons", Name: "necron_wraith"}, "")
-	ui.openUnitTab()
+	ui.ModTree = unitViewportMod(t)
+	unitViewportWriteUnit(t, ui.ModTree, unitTemplateName{Race: "necrons", Name: "necron_wraith"}, "")
+	OpenUnitTab(ui)
 	raceSel, unitSel := unitViewportPicker(t, ui, "necron_wraith")
-	ui.unitRaceSel, ui.unitSel = raceSel, unitSel
-	ui.unitSection = findUnitSection(t, "Viewport")
+	ui.UnitRaceSel, ui.UnitSel = raceSel, unitSel
+	ui.UnitSection = findUnitSection(t, "Viewport")
 	f := newWindowFrame(ui, 1200, 760)
 	// A unit with no model is reported rather than waited on: the answer is
 	// the absence of a file, and the section has to say so rather than sit on
 	// a "loading" message for ever.
 	deadline := time.Now().Add(30 * time.Second)
-	for ui.unitModelErr == "" && time.Now().Before(deadline) {
-		ui.pollUnitModel()
+	for ui.UnitModelErr == "" && time.Now().Before(deadline) {
+		PollUnitModel(ui)
 		sleepMillis()
 	}
 	unitViewportFrames(f, 2)
-	if ui.unitModelErr == "" {
+	if ui.UnitModelErr == "" {
 		t.Fatal("a unit that names no model neither loaded one nor said so")
 	}
-	if ui.unitModelLoaded() {
+	if UnitModelLoaded(ui) {
 		t.Error("a model appeared for a unit that has none")
 	}
-	if !strings.Contains(ui.unitModelErr, "no model file") {
-		t.Errorf("the reason given is %q", ui.unitModelErr)
+	if !strings.Contains(ui.UnitModelErr, "no model file") {
+		t.Errorf("the reason given is %q", ui.UnitModelErr)
 	}
 }
 
@@ -268,22 +268,22 @@ func TestTheViewportSaysWhenAUnitHasNoModel(t *testing.T) {
 func TestTheViewportPaintsTheModelOnScreen(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
 	if !unitViewportLoad(t, ui, f, false) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
 	// The frame the canvas paints comes back from a worker, so the wait is for
 	// the picture rather than for the request for it.
-	v := ui.unitModelViewer()
-	for i := 0; i < 200 && v.frame == nil && v.gpuFrame == nil; i++ {
+	v := UnitModelViewer(ui)
+	for i := 0; i < 200 && v.Frame == nil && v.GpuFrame == nil; i++ {
 		unitViewportFrames(f, 1)
 	}
-	if v.frame == nil && v.gpuFrame == nil {
+	if v.Frame == nil && v.GpuFrame == nil {
 		t.Fatal("the viewer never produced a frame, so there is nothing to paint")
 	}
 	// Held still, so the render under test is the one that was waited for.
-	v.playing = false
-	v.redraw = false
+	v.Playing = false
+	v.Redraw = false
 	const w, h = 1200, 760
-	img := renderUnitSection(t, ui, ui.unitSection, ui.unitRaceSel, ui.unitSel, w, h)
+	img := renderUnitSection(t, ui, ui.UnitSection, ui.UnitRaceSel, ui.UnitSel, w, h)
 	strip := unitViewportCanvasStrip(ui, v, w, h)
 	if strip.Empty() {
 		t.Fatalf("the canvas has no area in a %dx%d window", w, h)
@@ -315,7 +315,7 @@ func unitViewportCanvasStrip(ui *uiState, v *modelViewer, w, h int) image.Rectan
 	const contentPad, border, sectionPad = 4, 1, 6
 	left := contentPad + unitTabPadDp + unitLeftColumnDp + unitColGapDp + border + sectionPad
 	bottom := h - contentPad - unitTabPadDp - border - sectionPad - unitPlaybackStripDp - 1
-	return image.Rect(left, bottom-v.renderH, left+v.renderW, bottom)
+	return image.Rect(left, bottom-v.RenderH, left+v.RenderW, bottom)
 }
 
 // The wheel over the canvas moves the camera in and out of the model. It is
@@ -324,9 +324,9 @@ func unitViewportCanvasStrip(ui *uiState, v *modelViewer, w, h int) image.Rectan
 func TestTheWheelOverTheCanvasZoomsInAndOut(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
 	if !unitViewportLoad(t, ui, f, true) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
-	v := ui.unitModelViewer()
+	v := UnitModelViewer(ui)
 	unitViewportFrames(f, 2)
 	canvas := unitViewportCanvasStrip(ui, v, 1200, 760)
 	if canvas.Empty() {
@@ -368,32 +368,32 @@ func TestTheWheelOverTheCanvasZoomsInAndOut(t *testing.T) {
 func TestTheViewportWindsTheClipAFrameAtATime(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
 	if !unitViewportLoad(t, ui, f, false) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
-	v := ui.unitModelViewer()
-	if v.anim == nil || v.anim.NumFrames < 4 {
+	v := UnitModelViewer(ui)
+	if v.Anim == nil || v.Anim.NumFrames < 4 {
 		t.Skip("this model has no clip with enough frames to step through")
 	}
-	tab := ui.unitModel
+	tab := ui.UnitModel
 	// From the first frame, so that a step is a step and not a step from
 	// wherever the clip happened to be when the test got to it.
-	v.playing = false
-	v.time = 0
+	v.Playing = false
+	v.Time = 0
 	// The strip is drawn in the panel beside the canvas, not under it, so the
 	// buttons are found by a walk across the panel.
-	fwd := unitViewportButton(t, f, tab, &tab.modelStepFwd)
+	fwd := unitViewportButton(t, f, tab, &tab.ModelStepFwd)
 	clickAt(f, fwd)
-	if v.playing {
+	if v.Playing {
 		t.Error("winding the clip left the model playing, so the frame would move on")
 	}
-	frame, frames := v.currentFrame()
-	if frames != v.anim.NumFrames || frame != 1 {
+	frame, frames := v.CurrentFrame()
+	if frames != v.Anim.NumFrames || frame != 1 {
 		t.Fatalf("one step forward is on frame %d of %d, want frame 2", frame+1, frames)
 	}
 	unitViewportFrames(f, 2)
-	back := unitViewportButton(t, f, tab, &tab.modelStepBack)
+	back := unitViewportButton(t, f, tab, &tab.ModelStepBack)
 	clickAt(f, back)
-	if again, _ := v.currentFrame(); again != 0 {
+	if again, _ := v.CurrentFrame(); again != 0 {
 		t.Errorf("one step back is on frame %d, want the first", again+1)
 	}
 }
@@ -411,23 +411,23 @@ func TestTheWheelOverTheAnimationListScrollsThePanel(t *testing.T) {
 	const w, h = 1200, 430
 	ui, f := unitViewportUI(t, "necron_listening_post", w, h)
 	if !unitViewportLoad(t, ui, f, true) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
-	anims := ui.unitModelAnimNames()
+	anims := UnitModelAnimNames(ui)
 	if len(anims) < 6 {
 		t.Skipf("this model carries %d clips, too few to fill the panel", len(anims))
 	}
 	// The panel is laid out with the model on it, which is what gives the
 	// scroll view its content to be taller than.
 	unitViewportFrames(f, 3)
-	state := &ui.unitViewportScroll
+	state := &ui.UnitViewportScroll
 	if !state.hasBar {
 		t.Skipf("the panel fits its %d clips without a scrollbar", len(anims))
 	}
 	// The wheel has to land on the list itself: the panel's fixed controls
 	// above it have no scroll of their own, and a row of them is where the
 	// middle of the window happens to be.
-	at, _, ok := unitViewportFindRow(t, f, w, h, len(anims), func(i int) bool { return ui.unitAnimClicks[i].Hovered() })
+	at, _, ok := unitViewportFindRow(t, f, w, h, len(anims), func(i int) bool { return ui.UnitAnimClicks[i].Hovered() })
 	if !ok {
 		t.Skip("no clip row is on screen at this size")
 	}
@@ -482,20 +482,20 @@ func TestTheWheelOverTheAnimationListScrollsThePanel(t *testing.T) {
 func TestTheZoomButtonsStepTheCameraAndResetBringsItBack(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
 	if !unitViewportLoad(t, ui, f, false) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
-	v := ui.unitModelViewer()
-	tab := ui.unitModel
-	row := []*widget.Clickable{&tab.modelZoomIn, &tab.modelZoomOut, &tab.modelReset}
+	v := UnitModelViewer(ui)
+	tab := ui.UnitModel
+	row := []*widget.Clickable{&tab.ModelZoomIn, &tab.ModelZoomOut, &tab.ModelReset}
 
 	// The three buttons are found once, then pressed in turn: each press is a
 	// step, and two steps in is nowhere near the factor of ten the wheel used
 	// to ask for.
-	v.resetCamera()
+	v.ResetCamera()
 	fit := v.Distance
-	near := unitViewportSideButton(t, f, row, &tab.modelZoomIn, "toggles")
-	far := unitViewportSideButton(t, f, row, &tab.modelZoomOut, "toggles")
-	reset := unitViewportSideButton(t, f, row, &tab.modelReset, "toggles")
+	near := unitViewportSideButton(t, f, row, &tab.ModelZoomIn, "toggles")
+	far := unitViewportSideButton(t, f, row, &tab.ModelZoomOut, "toggles")
+	reset := unitViewportSideButton(t, f, row, &tab.ModelReset, "toggles")
 
 	clickAt(f, near)
 	unitViewportFrames(f, 2)
@@ -635,14 +635,14 @@ func renderUnitSection(t *testing.T, ui *uiState, section, raceSel, unitSel, w, 
 		t.Skipf("no GPU backend: %v", err)
 	}
 	defer win.Release()
-	ui.th = unitTestTheme()
-	ui.openUnitTab()
-	ui.unitSection = section
-	ui.unitRaceSel = raceSel
-	ui.unitSel = unitSel
+	ui.Th = unitTestTheme()
+	OpenUnitTab(ui)
+	ui.UnitSection = section
+	ui.UnitRaceSel = raceSel
+	ui.UnitSel = unitSel
 	var ops op.Ops
 	gtx := testutil.NewLayoutContext(&ops, w, h)
-	ui.layoutContent(gtx)
+	LayoutContent(ui, gtx)
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	if err := win.Frame(&ops); err != nil {
 		t.Fatalf("Frame at %dx%d: %v", w, h, err)
@@ -675,16 +675,16 @@ func TestSquadColumnRendersAfterTheScan(t *testing.T) {
 	section := findUnitSection(t, "Squads")
 
 	// Before the scan: still something on screen, not a crash and not a blank.
-	ui := &uiState{modTree: tree}
+	ui := &uiState{ModTree: tree}
 	img := renderUnitSection(t, ui, section, 0, 0, 1400, 800)
 	if !unitFrameHasContent(img) {
 		t.Error("the Squads column drew nothing before the scan")
 	}
 
 	// After the scan, for a unit that is known to be in a squad.
-	ui2 := &uiState{modTree: tree}
-	ui2.startUnitSquadScan(tree)
-	defer ui2.stopUnitSquadScan()
+	ui2 := &uiState{ModTree: tree}
+	ui2.StartUnitSquadScan(tree)
+	defer ui2.StopUnitSquadScan()
 	runSquadScanToCompletion(t, ui2)
 	raceIdx, unitIdx := firstUnitInASquad(t, ui2)
 	if raceIdx < 0 {
@@ -697,7 +697,7 @@ func TestSquadColumnRendersAfterTheScan(t *testing.T) {
 	// The selected squad's properties go in the right column, so a frame that
 	// differs from the unselected one is the evidence that the selection is
 	// being drawn rather than ignored.
-	ui2.unitSelRow = 0
+	ui2.UnitSelRow = 0
 	img3 := renderUnitSection(t, ui2, section, raceIdx, unitIdx, 1400, 800)
 	if !unitFrameHasContent(img3) {
 		t.Error("the Squads right column drew nothing with a row selected")
@@ -710,10 +710,10 @@ func TestSquadColumnRendersAfterTheScan(t *testing.T) {
 // returns where it sits in the catalog so a test can select it.
 func firstUnitInASquad(t *testing.T, ui *uiState) (raceIdx, unitIdx int) {
 	t.Helper()
-	cat := ui.unitCatalogFor()
-	for ri := range cat.races {
-		for ui_, u := range cat.races[ri].unitsOf() {
-			if len(ui.squadsOfUnitOf(u)) > 0 {
+	cat := UnitCatalogFor(ui)
+	for ri := range cat.Races {
+		for ui_, u := range cat.Races[ri].UnitsOf() {
+			if len(SquadsOfUnitOf(ui, u)) > 0 {
 				return ri, ui_
 			}
 		}
@@ -726,9 +726,9 @@ func firstUnitInASquad(t *testing.T, ui *uiState) (raceIdx, unitIdx int) {
 // even a handful of rows do.
 func TestSquadColumnScrolls(t *testing.T) {
 	tree := openTestDXP3(t)
-	ui := &uiState{modTree: tree}
-	ui.startUnitSquadScan(tree)
-	defer ui.stopUnitSquadScan()
+	ui := &uiState{ModTree: tree}
+	StartUnitSquadScan(ui, tree)
+	defer StopUnitSquadScan(ui)
 	runSquadScanToCompletion(t, ui)
 	raceIdx, unitIdx := firstUnitInASquad(t, ui)
 	if raceIdx < 0 {
@@ -736,17 +736,17 @@ func TestSquadColumnScrolls(t *testing.T) {
 	}
 	section := findUnitSection(t, "Squads")
 	renderUnitSection(t, ui, section, raceIdx, unitIdx, 1000, 260)
-	u := ui.currentUnit()
+	u := CurrentUnit(ui)
 	if u == nil {
 		t.Fatal("no unit is selected after the index ran")
 	}
-	squads := ui.squadsOfUnitOf(*u)
+	squads := SquadsOfUnitOf(ui, *u)
 	if len(squads) == 0 {
 		t.Fatal("the selected unit is in no squad after the index ran")
 	}
 	// The scroll state has to have been written for the scrollbar to be
 	// drawable; an untouched one means the list was laid out without it.
-	if ui.unitSquadScroll.viewport == 0 {
+	if ui.UnitSquadScroll.viewport == 0 {
 		t.Error("the Squads list never recorded a viewport, so its scrollbar cannot be drawn")
 	}
 }
@@ -758,33 +758,33 @@ func TestSquadColumnScrolls(t *testing.T) {
 func TestInfoColumnScrollsAndGroups(t *testing.T) {
 	tree := openTestDXP3(t)
 	section := findUnitSection(t, "Unit info")
-	ui := &uiState{modTree: tree}
+	ui := &uiState{ModTree: tree}
 	// A necrons unit, which is the race with the most sections carried.
-	ui.unitSection = section
+	ui.UnitSection = section
 	renderUnitSection(t, ui, section, 0, 0, 1200, 700)
-	d := ui.currentUnitDetails()
-	if d == nil || len(d.fields) < 40 {
-		t.Fatalf("the info list has %v rows, so this proves nothing", len(d.fields))
+	d := CurrentUnitDetails(ui)
+	if d == nil || len(d.Fields) < 40 {
+		t.Fatalf("the info list has %v rows, so this proves nothing", len(d.Fields))
 	}
-	if ui.unitInfoScroll.viewport == 0 {
+	if ui.UnitInfoScroll.viewport == 0 {
 		t.Error("the info list never recorded a viewport, so its scrollbar cannot be drawn")
 	}
 	// With a hundred rows in a 700px window the list is longer than the column,
 	// which is exactly the case the scrollbar is there for.
-	if !ui.unitInfoScroll.hasBar {
+	if !ui.UnitInfoScroll.hasBar {
 		t.Log("the info list fitted its column at this size; the scrollbar is simply not needed")
 	}
 	// A group heading is drawn as part of the row, so laying the list out at all
 	// exercises the heading path; the invariant that matters is that exactly the
 	// rows marked startsGroup carry one, and that is checked in the list tests.
 	groups := 0
-	for _, f := range d.fields {
-		if f.startsGroup {
+	for _, f := range d.Fields {
+		if f.StartsGroup {
 			groups++
 		}
 	}
 	if groups < 8 {
-		t.Errorf("only %d headings for %d rows, so the list is not really grouped", groups, len(d.fields))
+		t.Errorf("only %d headings for %d rows, so the list is not really grouped", groups, len(d.Fields))
 	}
 }
 
@@ -797,7 +797,7 @@ func TestEverySectionHasBothColumns(t *testing.T) {
 	// Every section, laid out with a real mod behind it, has to put something
 	// on screen in both of its columns.
 	for i := range unitSections {
-		img := renderUnitSection(t, &uiState{modTree: tree}, i, 0, 0, 1400, 800)
+		img := renderUnitSection(t, &uiState{ModTree: tree}, i, 0, 0, 1400, 800)
 		if !unitFrameHasContent(img) {
 			t.Errorf("the %q section drew a blank frame", unitSections[i].label)
 		}
@@ -864,18 +864,18 @@ func TestUnitTabRendersWithRealMod(t *testing.T) {
 		// quietly stopped covering the last one.
 		for _, section := range allUnitSectionIndexes() {
 			for _, raceSel := range []int{0, 3, 99} {
-				ui := &uiState{th: unitTestTheme(), modTree: tree}
-				ui.openUnitTab()
-				ui.unitSection = section
-				ui.unitRaceSel = raceSel
+				ui := &uiState{Th: unitTestTheme(), ModTree: tree}
+				OpenUnitTab(ui)
+				ui.UnitSection = section
+				ui.UnitRaceSel = raceSel
 				// An open dropdown is the case most likely to overflow the
 				// columns, since it is drawn over them.
-				ui.unitListOpen = section == 1
-				ui.unitRaceOpen = section == 2
+				ui.UnitListOpen = section == 1
+				ui.UnitRaceOpen = section == 2
 
 				var ops op.Ops
 				gtx := testutil.NewLayoutContext(&ops, size.X, size.Y)
-				ui.layoutContent(gtx)
+				LayoutContent(ui, gtx)
 
 				img := image.NewRGBA(image.Rect(0, 0, size.X, size.Y))
 				if err := win.Frame(&ops); err != nil {
@@ -901,17 +901,17 @@ func TestUnitTabRendersWithRealMod(t *testing.T) {
 // object tab is left, or the tab would take the window over permanently.
 func TestContentAreaRestoresWhenTabIsNotActive(t *testing.T) {
 	tree := openTestDXP3(t)
-	ui := &uiState{th: unitTestTheme(), modTree: tree}
-	ui.openUnitTab()
-	if !ui.unitTabOwnsLeftPanel() || !ui.unitTabOwnsMiddlePanel() {
+	ui := &uiState{Th: unitTestTheme(), ModTree: tree}
+	OpenUnitTab(ui)
+	if !UnitTabOwnsLeftPanel(ui) || !UnitTabOwnsMiddlePanel(ui) {
 		t.Fatal("the object tab should own the left and middle panels while it is active")
 	}
 	// Selecting anything else hands the panels back.
-	ui.tabSel = 0
-	if ui.unitTabOwnsLeftPanel() || ui.unitTabOwnsMiddlePanel() {
+	ui.TabSel = 0
+	if UnitTabOwnsLeftPanel(ui) || UnitTabOwnsMiddlePanel(ui) {
 		t.Error("the object tab kept the panels after the selection moved away")
 	}
-	if isUnitTab(ui.activeTab()) {
+	if isUnitTab(ActiveTab(ui)) {
 		t.Error("the object tab should not be the active tab on the Module tab")
 	}
 }
@@ -952,8 +952,8 @@ func unitPickerTestUI(t *testing.T) *uiState {
 		`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`:  "",
 		`Data\attrib\ebps\races\necrons\troops\necron_lord2.rgd`: "",
 	})
-	ui := &uiState{th: th, modTree: tree}
-	ui.openUnitTab()
+	ui := &uiState{Th: th, ModTree: tree}
+	OpenUnitTab(ui)
 	return ui
 }
 
@@ -974,20 +974,20 @@ func TestOpenDropdownSurvivesAFrameWithNoClick(t *testing.T) {
 	var r input.Router
 
 	for i := 0; i < 5; i++ {
-		ui.closeUnitPickers()
-		ui.unitRaceOpen = true
+		CloseUnitPickers(ui)
+		ui.UnitRaceOpen = true
 		var ops op.Ops
-		ui.handleUnitPickerInput(pickerGTX(&ops, &r))
-		if !ui.unitRaceOpen {
+		HandleUnitPickerInput(ui, pickerGTX(&ops, &r))
+		if !ui.UnitRaceOpen {
 			t.Fatalf("the race list closed by itself on frame %d with no click", i)
 		}
 	}
 	for i := 0; i < 5; i++ {
-		ui.closeUnitPickers()
-		ui.unitListOpen = true
+		CloseUnitPickers(ui)
+		ui.UnitListOpen = true
 		var ops op.Ops
-		ui.handleUnitPickerInput(pickerGTX(&ops, &r))
-		if !ui.unitListOpen {
+		HandleUnitPickerInput(ui, pickerGTX(&ops, &r))
+		if !ui.UnitListOpen {
 			t.Fatalf("the unit list closed by itself on frame %d with no click", i)
 		}
 	}
@@ -999,10 +999,10 @@ func TestEscapeClosesOpenDropdownOnlyWhenOpen(t *testing.T) {
 	ui := unitPickerTestUI(t)
 	var r input.Router
 
-	ui.closeUnitPickers()
+	CloseUnitPickers(ui)
 	var ops op.Ops
-	ui.handleUnitPickerKeys(pickerGTX(&ops, &r))
-	if ui.unitPickerOpen() {
+	HandleUnitPickerKeys(ui, pickerGTX(&ops, &r))
+	if UnitPickerOpen(ui) {
 		t.Error("a list appeared out of nowhere")
 	}
 	// The key must still be in the queue for whoever handles it next.
@@ -1011,10 +1011,10 @@ func TestEscapeClosesOpenDropdownOnlyWhenOpen(t *testing.T) {
 	}
 
 	// With a list open, the same key closes it.
-	ui.unitRaceOpen = true
+	ui.UnitRaceOpen = true
 	r.Queue(key.Event{Name: key.NameEscape, State: key.Press})
-	ui.handleUnitPickerKeys(pickerGTX(&ops, &r))
-	if ui.unitRaceOpen {
+	HandleUnitPickerKeys(ui, pickerGTX(&ops, &r))
+	if ui.UnitRaceOpen {
 		t.Error("Escape did not put the race list away")
 	}
 }
@@ -1023,16 +1023,16 @@ func TestEscapeClosesOpenDropdownOnlyWhenOpen(t *testing.T) {
 // put both away.
 func TestDropdownHelpers(t *testing.T) {
 	ui := unitPickerTestUI(t)
-	if ui.unitPickerOpen() {
+	if UnitPickerOpen(ui) {
 		t.Error("a fresh ui reports an open dropdown")
 	}
-	ui.unitRaceOpen = true
-	if !ui.unitPickerOpen() {
+	ui.UnitRaceOpen = true
+	if !UnitPickerOpen(ui) {
 		t.Error("an open race list was not reported as open")
 	}
-	ui.unitListOpen = true
-	ui.closeUnitPickers()
-	if ui.unitRaceOpen || ui.unitListOpen {
+	ui.UnitListOpen = true
+	CloseUnitPickers(ui)
+	if ui.UnitRaceOpen || ui.UnitListOpen {
 		t.Error("closeUnitPickers left a list open")
 	}
 	_ = f32.Pt
@@ -1043,8 +1043,8 @@ func TestDropdownHelpers(t *testing.T) {
 func TestUnitDropdownRendersItsRows(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	necrons := cat.findRace("necrons")
-	if necrons == nil || len(necrons.unitsOf()) < 3 {
+	necrons := cat.FindRace("necrons")
+	if necrons == nil || len(necrons.UnitsOf()) < 3 {
 		t.Skip("necrons has too few units to test with")
 	}
 
@@ -1055,13 +1055,13 @@ func TestUnitDropdownRendersItsRows(t *testing.T) {
 	}
 	defer win.Release()
 
-	ui := &uiState{th: unitTestTheme(), modTree: tree}
-	ui.openUnitTab()
-	ui.unitListOpen = true
+	ui := &uiState{Th: unitTestTheme(), ModTree: tree}
+	OpenUnitTab(ui)
+	ui.UnitListOpen = true
 
 	var ops op.Ops
 	gtx := testutil.NewLayoutContext(&ops, w, h)
-	ui.layoutUnitTabBody(gtx)
+	LayoutUnitTabBody(ui, gtx)
 
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	if err := win.Frame(&ops); err != nil {
@@ -1073,7 +1073,7 @@ func TestUnitDropdownRendersItsRows(t *testing.T) {
 
 	// The layout records where the list landed, so the probe can be aimed at it
 	// rather than at the columns beside it.
-	box := ui.unitDropBox
+	box := ui.UnitDropBox
 	t.Logf("dropdown box %v", box)
 	if box.Empty() {
 		t.Fatal("the layout reported no dropdown box at all")
@@ -1104,8 +1104,8 @@ func TestUnitDropdownRendersItsRows(t *testing.T) {
 	}
 
 	// The rows must also be tall enough for the list to hold several of them.
-	ui.ensureUnitDropdownClicks(len(necrons.unitsOf()))
-	if ui.unitListScroll.contentHeight <= 0 {
+	EnsureUnitDropdownClicks(ui, len(necrons.UnitsOf()))
+	if ui.UnitListScroll.contentHeight <= 0 {
 		t.Error("the list reported no content height")
 	}
 }
@@ -1132,15 +1132,15 @@ var _ = unitDropdownProbeColumn
 func TestSaveWHMIsOnScreenInTheBonePanel(t *testing.T) {
 	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
 	if !unitViewportLoad(t, ui, f, false) {
-		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+		t.Fatalf("the model of the listening post never loaded: %q", ui.UnitModelErr)
 	}
-	ui.unitListMode = 2
-	ui.unitModelWhmDirty = true
+	ui.UnitListMode = 2
+	ui.UnitModelWhmDirty = true
 	unitViewportFrames(f, 3)
 	// The walk fails the test when the button is never hovered on screen.
 	// The walk goes down the panel near its left edge, where the first button
 	// of a row sits: Import is that button now, and Save shares its row.
 	unitViewportSideButton(t, f,
-		[]*widget.Clickable{&ui.unitImpClick, &ui.unitBoneKeySaveClick},
-		&ui.unitBoneKeySaveClick, "Save WHM")
+		[]*widget.Clickable{&ui.UnitImpClick, &ui.UnitBoneKeySaveClick},
+		&ui.UnitBoneKeySaveClick, "Save WHM")
 }

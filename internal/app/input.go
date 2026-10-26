@@ -31,33 +31,33 @@ import (
 // by five thousand instead.
 const wheelNotchDelta = 120
 
-func (ui *uiState) getVisibleNodes() []modtree.VisibleNode {
-	if ui.modTree == nil {
+func GetVisibleNodes(ui *uiState) []modtree.VisibleNode {
+	if ui.ModTree == nil {
 		return nil
 	}
-	return ui.modTree.Flatten(ui.expanded, ui.selectedPath)
+	return ui.ModTree.Flatten(ui.Expanded, ui.SelectedPath)
 }
 
-func (ui *uiState) ensureRowHover(n int) {
-	if len(ui.rowHover) < n {
-		old := ui.rowHover
-		ui.rowHover = make([]bool, n)
-		copy(ui.rowHover, old)
-	} else if len(ui.rowHover) > n {
-		ui.rowHover = ui.rowHover[:n]
+func EnsureRowHover(ui *uiState, n int) {
+	if len(ui.RowHover) < n {
+		old := ui.RowHover
+		ui.RowHover = make([]bool, n)
+		copy(ui.RowHover, old)
+	} else if len(ui.RowHover) > n {
+		ui.RowHover = ui.RowHover[:n]
 	}
 }
 
 // ensureRowClicks keeps one click gesture per visible row, in step with the
 // row list it belongs to. The gestures are kept when the list grows, so a
 // scroll does not take a row's hover away with it.
-func (ui *uiState) ensureRowClicks(n int) {
-	if len(ui.rowClicks) < n {
-		old := ui.rowClicks
-		ui.rowClicks = make([]gesture.Click, n)
-		copy(ui.rowClicks, old)
-	} else if len(ui.rowClicks) > n {
-		ui.rowClicks = ui.rowClicks[:n]
+func EnsureRowClicks(ui *uiState, n int) {
+	if len(ui.RowClicks) < n {
+		old := ui.RowClicks
+		ui.RowClicks = make([]gesture.Click, n)
+		copy(ui.RowClicks, old)
+	} else if len(ui.RowClicks) > n {
+		ui.RowClicks = ui.RowClicks[:n]
 	}
 }
 
@@ -88,12 +88,12 @@ var treeNavKeyNames = []key.Name{
 // NameDeleteForward, which is what Windows delivers for VK_DELETE.
 var treeActionKeyNames = []key.Name{key.NameDeleteForward}
 
-func (ui *uiState) handleKeyboard(gtx layout.Context) {
-	if ui.searchVisible {
+func HandleKeyboard(ui *uiState, gtx layout.Context) {
+	if ui.SearchVisible {
 		// The result list is the focus while the search panel is open.
 		return
 	}
-	if ui.contextMenuVisible {
+	if ui.ContextMenuVisible {
 		for {
 			ev, ok := gtx.Event(key.Filter{Name: key.NameEscape})
 			if !ok {
@@ -104,17 +104,17 @@ func (ui *uiState) handleKeyboard(gtx layout.Context) {
 				continue
 			}
 			if e.State == key.Press {
-				ui.closeFileContextMenu()
+				CloseFileContextMenu(ui)
 				return
 			}
 		}
 	}
-	if ui.textActive() {
+	if TextActive(ui) {
 		return
 	}
-	if tab := ui.activeTab(); tab != nil && tab.kind == "sgb" && tab.sgbView3D && tab.model != nil && tab.sgbCameraTag != nil && gtx.Focused(tab.sgbCameraTag) {
+	if tab := ActiveTab(ui); tab != nil && tab.Kind == "sgb" && tab.SgbView3D && tab.Model != nil && tab.SgbCameraTag != nil && gtx.Focused(tab.SgbCameraTag) {
 		for {
-			ev, ok := gtx.Event(key.Filter{Focus: tab.sgbCameraTag, Name: key.NameDeleteForward})
+			ev, ok := gtx.Event(key.Filter{Focus: tab.SgbCameraTag, Name: key.NameDeleteForward})
 			if !ok {
 				break
 			}
@@ -122,14 +122,14 @@ func (ui *uiState) handleKeyboard(gtx layout.Context) {
 			if !ok || ke.State != key.Press {
 				continue
 			}
-			ui.deleteSelectedSgbEntities(tab)
+			DeleteSelectedSgbEntities(ui, tab)
 			return
 		}
 		// The focused map viewer consumes its own arrows after input handling;
 		// do not also move the file-tree selection on the same key press.
 		return
 	}
-	if ui.treeHasKeyboard() {
+	if TreeHasKeyboard(ui) {
 		for _, name := range treeActionKeyNames {
 			for {
 				ev, ok := gtx.Event(key.Filter{Name: name})
@@ -140,7 +140,7 @@ func (ui *uiState) handleKeyboard(gtx layout.Context) {
 				if !ok || e.State != key.Press {
 					continue
 				}
-				ui.deleteSelectedTreeFile()
+				DeleteSelectedTreeFile(ui)
 				return
 			}
 		}
@@ -155,31 +155,31 @@ func (ui *uiState) handleKeyboard(gtx layout.Context) {
 			if !ok || e.State != key.Press {
 				continue
 			}
-			switch ui.keyboardArea {
+			switch ui.KeyboardArea {
 			case "rgd":
 				if isEnterKey(name) {
-					ui.activateSelectedRgdNode(gtx)
+					ActivateSelectedRgdNode(ui, gtx)
 				} else {
-					ui.navigateRgdTree(name)
+					NavigateRgdTree(ui, name)
 				}
 			default:
-				ui.navigateFileTree(name)
+				NavigateFileTree(ui, name)
 			}
 		}
 	}
 }
 
-func (ui *uiState) navigateFileTree(name key.Name) {
-	if ui.modTree == nil || len(ui.visibleNodes) == 0 {
+func NavigateFileTree(ui *uiState, name key.Name) {
+	if ui.ModTree == nil || len(ui.VisibleNodes) == 0 {
 		return
 	}
 	if isEnterKey(name) {
-		ui.openSelectedTreeFile()
+		OpenSelectedTreeFile(ui)
 		return
 	}
 	idx := 0
-	for i, node := range ui.visibleNodes {
-		if node.FullPath == ui.selectedTreePath {
+	for i, node := range ui.VisibleNodes {
+		if node.FullPath == ui.SelectedTreePath {
 			idx = i
 			break
 		}
@@ -190,56 +190,56 @@ func (ui *uiState) navigateFileTree(name key.Name) {
 			idx--
 		}
 	case key.NameDownArrow:
-		if idx+1 < len(ui.visibleNodes) {
+		if idx+1 < len(ui.VisibleNodes) {
 			idx++
 		}
 	case key.NameLeftArrow:
-		node := ui.visibleNodes[idx]
-		if node.IsDir && node.HasKids && ui.expanded[node.FullPath] {
-			delete(ui.expanded, node.FullPath)
+		node := ui.VisibleNodes[idx]
+		if node.IsDir && node.HasKids && ui.Expanded[node.FullPath] {
+			delete(ui.Expanded, node.FullPath)
 			break
 		}
 		for i := idx - 1; i >= 0; i-- {
-			if ui.visibleNodes[i].Depth < node.Depth {
+			if ui.VisibleNodes[i].Depth < node.Depth {
 				idx = i
 				break
 			}
 		}
 	case key.NameRightArrow:
-		node := ui.visibleNodes[idx]
-		if node.IsDir && node.HasKids && !ui.expanded[node.FullPath] {
-			ui.expanded[node.FullPath] = true
+		node := ui.VisibleNodes[idx]
+		if node.IsDir && node.HasKids && !ui.Expanded[node.FullPath] {
+			ui.Expanded[node.FullPath] = true
 		}
 	}
-	node := ui.visibleNodes[idx]
-	ui.selectedTreePath = node.FullPath
+	node := ui.VisibleNodes[idx]
+	ui.SelectedTreePath = node.FullPath
 	if node.IsFile {
-		ui.selectedPath = node.FullPath
+		ui.SelectedPath = node.FullPath
 	} else {
-		ui.selectedPath = ""
+		ui.SelectedPath = ""
 	}
-	ui.leftList.ScrollTo(idx)
-	ui.markStateDirty()
+	ui.LeftList.ScrollTo(idx)
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) openFileContextMenu(n modtree.VisibleNode, anchor int) {
+func OpenFileContextMenu(ui *uiState, n modtree.VisibleNode, anchor int) {
 	if !n.IsFile {
 		return
 	}
 	// A right press in the tree is a press in the tree, so the keys follow the
 	// pointer there as they do on a left click.
-	ui.keyboardArea = "files"
-	ui.selectedTreePath = n.FullPath
-	ui.selectedPath = n.FullPath
-	ui.contextMenuPath = n.FullPath
-	ui.contextMenuAnchor = anchor
-	ui.contextMenuVisible = true
-	ui.markStateDirty()
+	ui.KeyboardArea = "files"
+	ui.SelectedTreePath = n.FullPath
+	ui.SelectedPath = n.FullPath
+	ui.ContextMenuPath = n.FullPath
+	ui.ContextMenuAnchor = anchor
+	ui.ContextMenuVisible = true
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) closeFileContextMenu() {
-	ui.contextMenuVisible = false
-	ui.contextMenuPath = ""
+func CloseFileContextMenu(ui *uiState) {
+	ui.ContextMenuVisible = false
+	ui.ContextMenuPath = ""
 }
 
 // deleteSelectedTreeFile puts the selected file up for deletion, which is the
@@ -250,22 +250,22 @@ func (ui *uiState) closeFileContextMenu() {
 // A file of another mod, or one inside an archive, is not the mod's to delete,
 // and the menu's Delete is disabled for it — the key says so rather than
 // opening a dialog that cannot be confirmed.
-func (ui *uiState) deleteSelectedTreeFile() {
-	if ui.fileDeleteDialog {
+func DeleteSelectedTreeFile(ui *uiState) {
+	if ui.FileDeleteDialog {
 		return
 	}
-	path := ui.selectedPath
+	path := ui.SelectedPath
 	if path == "" {
 		return
 	}
-	if !ui.canDeleteCurrentModFile(path) {
-		ui.statusText = fmt.Sprintf("%s is not a file of this module, so it cannot be deleted here", filepath.Base(path))
-		ui.markStateDirty()
+	if !CanDeleteCurrentModFile(ui, path) {
+		ui.StatusText = fmt.Sprintf("%s is not a file of this module, so it cannot be deleted here", filepath.Base(path))
+		MarkStateDirty(ui)
 		return
 	}
-	ui.fileDeletePath = path
-	ui.fileDeleteDialog = true
-	ui.markStateDirty()
+	ui.FileDeletePath = path
+	ui.FileDeleteDialog = true
+	MarkStateDirty(ui)
 }
 
 // openSettingsDialog remembers what the fields say now, so Cancel has
@@ -273,35 +273,35 @@ func (ui *uiState) deleteSelectedTreeFile() {
 // shown as a comma separated list rather than as a set: it is a thing a
 // reader types, and what they typed should still be there when they come
 // back to it.
-func (ui *uiState) openSettingsDialog() {
-	ui.settingsThemeOriginal = ui.darkTheme
-	ui.settingsGameOriginal = ui.gamePath
-	ui.settingsGameEditor.SetText(ui.gamePath)
-	ui.settingsFormatOriginal = formatTextFormats(ui.textEditorFormats)
-	ui.settingsFormatEditor.SetText(ui.settingsFormatOriginal)
+func OpenSettingsDialog(ui *uiState) {
+	ui.SettingsThemeOriginal = ui.DarkTheme
+	ui.SettingsGameOriginal = ui.GamePath
+	ui.SettingsGameEditor.SetText(ui.GamePath)
+	ui.SettingsFormatOriginal = formatTextFormats(ui.TextEditorFormats)
+	ui.SettingsFormatEditor.SetText(ui.SettingsFormatOriginal)
 	// The association buttons are one per format, and what a click would do
 	// depends on the registry right now, so the rows are sized and read here.
-	ui.assocClicks = make([]widget.Clickable, len(assocTypes))
-	ui.refreshAssocStates()
-	ui.settingsDialog = true
+	ui.AssocClicks = make([]widget.Clickable, len(assocTypes))
+	RefreshAssocStates(ui)
+	ui.SettingsDialog = true
 }
 
-func (ui *uiState) openSelectedTreeFile() {
-	for _, n := range ui.visibleNodes {
-		if n.FullPath == ui.selectedTreePath {
-			ui.openTreeFile(n)
+func OpenSelectedTreeFile(ui *uiState) {
+	for _, n := range ui.VisibleNodes {
+		if n.FullPath == ui.SelectedTreePath {
+			OpenTreeFile(ui, n)
 			return
 		}
 	}
 }
 
-func (ui *uiState) openTreeFile(n modtree.VisibleNode) {
+func OpenTreeFile(ui *uiState, n modtree.VisibleNode) {
 	if !n.IsFile {
 		return
 	}
-	ui.selectedPath = n.FullPath
-	ui.selectedTreePath = n.FullPath
-	ui.statusText = fmt.Sprintf("%s  —  %s  [%s]", n.FullPath, n.ModName, kindLabel(n.Kind))
+	ui.SelectedPath = n.FullPath
+	ui.SelectedTreePath = n.FullPath
+	ui.StatusText = fmt.Sprintf("%s  —  %s  [%s]", n.FullPath, n.ModName, kindLabel(n.Kind))
 	// The formats that need a viewer of their own are opened by name, and
 	// everything else is offered to the text editor. Keeping the two apart
 	// is what lets the editor's list be a setting: a module can carry
@@ -312,58 +312,58 @@ func (ui *uiState) openTreeFile(n modtree.VisibleNode) {
 	// Spelling it out here is how .rtx and .rsh ended up decodable but
 	// unopenable.
 	if isImageViewerFile(n.FullPath) {
-		ui.openImage(n.FullPath)
-		ui.markStateDirty()
+		OpenImage(ui, n.FullPath)
+		MarkStateDirty(ui)
 		return
 	}
 	switch strings.ToLower(filepath.Ext(n.FullPath)) {
 	case ".rgd":
-		ui.openRgd(n.FullPath)
-		ui.markStateDirty()
+		OpenRgd(ui, n.FullPath)
+		MarkStateDirty(ui)
 		return
 	case ".fda":
-		ui.openFda(n.FullPath)
-		ui.markStateDirty()
+		OpenFda(ui, n.FullPath)
+		MarkStateDirty(ui)
 		return
 	case ".wav":
-		ui.openWav(n.FullPath)
-		ui.markStateDirty()
+		OpenWav(ui, n.FullPath)
+		MarkStateDirty(ui)
 		return
 	case ".sgb":
-		ui.openSgb(n.FullPath)
-		ui.markStateDirty()
+		OpenSgb(ui, n.FullPath)
+		MarkStateDirty(ui)
 		return
 	case ".whm", ".sgm":
-		ui.openWhm(n.FullPath)
-		ui.markStateDirty()
+		OpenWhm(ui, n.FullPath)
+		MarkStateDirty(ui)
 		return
 	}
-	if ui.isEditorFile(n.FullPath) {
-		ui.openTextFile(n.FullPath)
+	if IsEditorFile(ui, n.FullPath) {
+		OpenTextFile(ui, n.FullPath)
 	}
-	ui.markStateDirty()
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) activateSelectedRgdNode(gtx layout.Context) {
-	tab := ui.activeTab()
-	if tab == nil || tab.kind != "rgd" || tab.rgdFile == nil {
+func ActivateSelectedRgdNode(ui *uiState, gtx layout.Context) {
+	tab := ActiveTab(ui)
+	if tab == nil || tab.Kind != "rgd" || tab.RgdFile == nil {
 		return
 	}
-	ui.rgdFlushPending(tab)
+	RgdFlushPending(ui, tab)
 	var selected *rgdVisible
-	for i := range tab.rgdMidNodes {
-		if tab.rgdMidNodes[i].Path == tab.rgdSelected {
-			selected = &tab.rgdMidNodes[i]
+	for i := range tab.RgdMidNodes {
+		if tab.RgdMidNodes[i].Path == tab.RgdSelected {
+			selected = &tab.RgdMidNodes[i]
 			break
 		}
 	}
 	if selected == nil || selected.Entry == nil {
 		return
 	}
-	if refPath := ui.findRgdReferenceFile(selected.Ref); refPath != "" {
-		file := ui.modTree.FindFile(refPath)
+	if refPath := FindRgdReferenceFile(ui, selected.Ref); refPath != "" {
+		file := ui.ModTree.FindFile(refPath)
 		if file != nil {
-			ui.openTreeFile(modtree.VisibleNode{
+			OpenTreeFile(ui, modtree.VisibleNode{
 				Name:     file.Name,
 				FullPath: file.FullPath,
 				IsFile:   true,
@@ -375,18 +375,18 @@ func (ui *uiState) activateSelectedRgdNode(gtx layout.Context) {
 	}
 	// RGD entries do not have a separate file to open. Keep the entry selected,
 	// reveal its properties, and focus the editable property when possible.
-	ui.rightScroll.offset = 0
+	ui.RightScroll.offset = 0
 	if selected.IsTable {
-		gtx.Execute(key.FocusCmd{Tag: &tab.rgdRefEditor})
+		gtx.Execute(key.FocusCmd{Tag: &tab.RgdRefEditor})
 	} else if selected.Entry.Type != rgd.RgdTypeBool && rgdIsEditableType(selected.Entry.Type) {
-		ed := ui.rgdEnsureValEditor(tab, tab.rgdSelected, selected.Entry.DisplayValue())
+		ed := RgdEnsureValEditor(ui, tab, tab.RgdSelected, selected.Entry.DisplayValue())
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
-	ui.statusText = "Properties: " + tab.rgdSelected
+	ui.StatusText = "Properties: " + tab.RgdSelected
 }
 
-func (ui *uiState) findRgdReferenceFile(ref string) string {
-	if ui.modTree == nil {
+func FindRgdReferenceFile(ui *uiState, ref string) string {
+	if ui.ModTree == nil {
 		return ""
 	}
 	ref = strings.Trim(strings.TrimSpace(ref), "\"'")
@@ -399,21 +399,21 @@ func (ui *uiState) findRgdReferenceFile(ref string) string {
 		candidates = append(candidates, `Data\`+ref)
 	}
 	for _, candidate := range candidates {
-		if file := ui.modTree.FindFile(candidate); file != nil {
+		if file := ui.ModTree.FindFile(candidate); file != nil {
 			return file.FullPath
 		}
 	}
 	return ""
 }
 
-func (ui *uiState) navigateRgdTree(name key.Name) {
-	tab := ui.activeTab()
-	if tab == nil || tab.kind != "rgd" || len(tab.rgdMidNodes) == 0 {
+func NavigateRgdTree(ui *uiState, name key.Name) {
+	tab := ActiveTab(ui)
+	if tab == nil || tab.Kind != "rgd" || len(tab.RgdMidNodes) == 0 {
 		return
 	}
 	idx := 0
-	for i, node := range tab.rgdMidNodes {
-		if node.Path == tab.rgdSelected {
+	for i, node := range tab.RgdMidNodes {
+		if node.Path == tab.RgdSelected {
 			idx = i
 			break
 		}
@@ -424,75 +424,75 @@ func (ui *uiState) navigateRgdTree(name key.Name) {
 			idx--
 		}
 	case key.NameDownArrow:
-		if idx+1 < len(tab.rgdMidNodes) {
+		if idx+1 < len(tab.RgdMidNodes) {
 			idx++
 		}
 	case key.NameLeftArrow:
-		node := tab.rgdMidNodes[idx]
-		if node.IsTable && node.HasKids && tab.rgdExpanded[node.Path] {
-			delete(tab.rgdExpanded, node.Path)
+		node := tab.RgdMidNodes[idx]
+		if node.IsTable && node.HasKids && tab.RgdExpanded[node.Path] {
+			delete(tab.RgdExpanded, node.Path)
 			break
 		}
 		for i := idx - 1; i >= 0; i-- {
-			if tab.rgdMidNodes[i].Depth < node.Depth {
+			if tab.RgdMidNodes[i].Depth < node.Depth {
 				idx = i
 				break
 			}
 		}
 	case key.NameRightArrow:
-		node := tab.rgdMidNodes[idx]
-		if node.IsTable && node.HasKids && !tab.rgdExpanded[node.Path] {
-			tab.rgdExpanded[node.Path] = true
+		node := tab.RgdMidNodes[idx]
+		if node.IsTable && node.HasKids && !tab.RgdExpanded[node.Path] {
+			tab.RgdExpanded[node.Path] = true
 		}
 	}
-	newPath := tab.rgdMidNodes[idx].Path
-	if newPath != tab.rgdSelected {
-		ui.rgdFlushPending(tab)
+	newPath := tab.RgdMidNodes[idx].Path
+	if newPath != tab.RgdSelected {
+		RgdFlushPending(ui, tab)
 	}
-	tab.rgdSelected = newPath
-	ui.rebuildRgdMidNodesFor(tab)
-	ui.ensureRgdMidClicks(tab, len(tab.rgdMidNodes))
-	tab.rgdMidList.ScrollTo(idx)
-	ui.markStateDirty()
+	tab.RgdSelected = newPath
+	RebuildRgdMidNodesFor(ui, tab)
+	EnsureRgdMidClicks(ui, tab, len(tab.RgdMidNodes))
+	tab.RgdMidList.ScrollTo(idx)
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) activateTreeRow(index int, n modtree.VisibleNode) {
-	ui.keyboardArea = "files"
-	ui.selectedTreePath = n.FullPath
+func ActivateTreeRow(ui *uiState, index int, n modtree.VisibleNode) {
+	ui.KeyboardArea = "files"
+	ui.SelectedTreePath = n.FullPath
 	if n.IsDir {
-		ui.selectedPath = ""
+		ui.SelectedPath = ""
 		if n.HasKids {
-			if ui.expanded[n.FullPath] {
-				delete(ui.expanded, n.FullPath)
+			if ui.Expanded[n.FullPath] {
+				delete(ui.Expanded, n.FullPath)
 			} else {
-				ui.expanded[n.FullPath] = true
+				ui.Expanded[n.FullPath] = true
 			}
 		}
 	} else if n.IsFile {
-		if ui.isExternalTextFile(n.FullPath) && ui.lastTreeClickPath == n.FullPath && time.Since(ui.lastTreeClickAt) < 350*time.Millisecond {
-			ui.lastTreeClickPath = ""
-			ui.lastTreeClickAt = time.Time{}
-			if err := ui.openTreeFileExternally(n.FullPath); err != nil {
-				ui.statusText = fmt.Sprintf("Open with system application failed: %v", err)
+		if IsExternalTextFile(ui, n.FullPath) && ui.LastTreeClickPath == n.FullPath && time.Since(ui.LastTreeClickAt) < 350*time.Millisecond {
+			ui.LastTreeClickPath = ""
+			ui.LastTreeClickAt = time.Time{}
+			if err := OpenTreeFileExternally(ui, n.FullPath); err != nil {
+				ui.StatusText = fmt.Sprintf("Open with system application failed: %v", err)
 			}
 		} else {
-			ui.lastTreeClickPath = n.FullPath
-			ui.lastTreeClickAt = time.Now()
-			ui.openTreeFile(n)
+			ui.LastTreeClickPath = n.FullPath
+			ui.LastTreeClickAt = time.Now()
+			OpenTreeFile(ui, n)
 		}
 	} else {
-		ui.lastTreeClickPath = ""
-		ui.lastTreeClickAt = time.Time{}
+		ui.LastTreeClickPath = ""
+		ui.LastTreeClickAt = time.Time{}
 	}
-	ui.markStateDirty()
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) treeRowAt(y float32) int {
-	if ui.leftRowHeightPx <= 0 {
+func TreeRowAt(ui *uiState, y float32) int {
+	if ui.LeftRowHeightPx <= 0 {
 		return -1
 	}
-	local := y + float32(ui.leftList.Position.Offset)
-	return ui.leftList.Position.First + int(local/float32(ui.leftRowHeightPx))
+	local := y + float32(ui.LeftList.Position.Offset)
+	return ui.LeftList.Position.First + int(local/float32(ui.LeftRowHeightPx))
 }
 
 // handleTreePointerInput is the file tree's pointer handling.
@@ -509,30 +509,30 @@ func (ui *uiState) treeRowAt(y float32) int {
 // definition, and Gio drops any other button. The file menu therefore still
 // comes from the one area the tree keeps over the whole list, where a press of
 // the secondary button names the row it landed on.
-func (ui *uiState) handleTreePointerInput(gtx layout.Context, nodes []modtree.VisibleNode) {
-	for i := range ui.rowClicks {
+func HandleTreePointerInput(ui *uiState, gtx layout.Context, nodes []modtree.VisibleNode) {
+	for i := range ui.RowClicks {
 		if i >= len(nodes) {
 			break
 		}
-		click := &ui.rowClicks[i]
+		click := &ui.RowClicks[i]
 		for {
 			ev, ok := click.Update(gtx.Source)
 			if !ok {
 				break
 			}
-			if ev.Kind == gesture.KindClick && !ui.contextMenuVisible {
-				ui.activateTreeRow(i, nodes[i])
+			if ev.Kind == gesture.KindClick && !ui.ContextMenuVisible {
+				ActivateTreeRow(ui, i, nodes[i])
 			}
 		}
-		if i < len(ui.rowHover) {
-			ui.rowHover[i] = click.Hovered()
+		if i < len(ui.RowHover) {
+			ui.RowHover[i] = click.Hovered()
 		}
 	}
-	if ui.leftTreePointerTag == nil {
+	if ui.LeftTreePointerTag == nil {
 		return
 	}
 	for {
-		ev, ok := gtx.Event(pointer.Filter{Target: ui.leftTreePointerTag, Kinds: pointer.Press})
+		ev, ok := gtx.Event(pointer.Filter{Target: ui.LeftTreePointerTag, Kinds: pointer.Press})
 		if !ok {
 			break
 		}
@@ -540,9 +540,9 @@ func (ui *uiState) handleTreePointerInput(gtx layout.Context, nodes []modtree.Vi
 		if !ok || !e.Buttons.Contain(pointer.ButtonSecondary) {
 			continue
 		}
-		row := ui.treeRowAt(e.Position.Y)
+		row := TreeRowAt(ui, e.Position.Y)
 		if row >= 0 && row < len(nodes) && nodes[row].IsFile {
-			ui.openFileContextMenu(nodes[row], row)
+			OpenFileContextMenu(ui, nodes[row], row)
 		}
 	}
 }
@@ -551,12 +551,12 @@ func (ui *uiState) handleTreePointerInput(gtx layout.Context, nodes []modtree.Vi
 // row sideways, and a right press opens the context menu on whichever tab it
 // landed on. Both are read from one area covering the whole bar, which the
 // layout registers inside a PassOp so the tabs underneath keep their clicks.
-func (ui *uiState) handleTabBarInput(gtx layout.Context) {
-	if ui.tabBarPointerTag == nil {
+func HandleTabBarInput(ui *uiState, gtx layout.Context) {
+	if ui.TabBarPointerTag == nil {
 		return
 	}
 	for {
-		ev, ok := gtx.Event(pointer.Filter{Target: ui.tabBarPointerTag, Kinds: pointer.Press | pointer.Scroll})
+		ev, ok := gtx.Event(pointer.Filter{Target: ui.TabBarPointerTag, Kinds: pointer.Press | pointer.Scroll})
 		if !ok {
 			break
 		}
@@ -574,27 +574,27 @@ func (ui *uiState) handleTabBarInput(gtx layout.Context) {
 			if e.Scroll.Y == 0 {
 				continue
 			}
-			ui.tabScrollX += int(e.Scroll.Y * tabWheelStepPx)
+			ui.TabScrollX += int(e.Scroll.Y * tabWheelStepPx)
 			// Clamping here as well as in the layout keeps the bar from
 			// overshooting on a fast wheel and then snapping back a frame later.
-			ui.clampTabScroll(ui.tabBarWidth, ui.tabRowWidth)
+			ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
 		case pointer.Press:
 			if !e.Buttons.Contain(pointer.ButtonSecondary) {
 				continue
 			}
-			idx := ui.tabAt(e.Position)
+			idx := TabAt(ui, e.Position)
 			if idx < 0 {
 				// A right press on the empty part of the bar is not a tab, so
 				// there is nothing to open a menu for. It does put an open menu
 				// away, which is what a click on the background means anywhere
 				// else.
-				ui.closeTabContextMenu()
+				CloseTabContextMenu(ui)
 				continue
 			}
 			// e.Position is in the bar's own coordinates; the menu is drawn in
 			// the window's, so the bar's top is added to put it in the right
 			// place.
-			ui.openTabContextMenu(idx, ui.tabContextPoint(gtx, e.Position.X))
+			OpenTabContextMenu(ui, idx, TabContextPoint(ui, gtx, e.Position.X))
 		}
 	}
 }
@@ -604,15 +604,15 @@ func (ui *uiState) handleTabBarInput(gtx layout.Context) {
 // horizontal position. It is a function of its own because the offset is easy to
 // get wrong by the height of a band — a menu 25px too high sits on the bar it
 // belongs to, and nobody would notice until they clicked it.
-func (ui *uiState) tabContextPoint(gtx layout.Context, x float32) image.Point {
+func TabContextPoint(ui *uiState, gtx layout.Context, x float32) image.Point {
 	return image.Pt(int(x), tabBarTop(gtx)+gtx.Dp(unit.Dp(tabBarHeightDp)))
 }
 
 // handleTabContextMenuInput acts on the tab context menu and puts it away again.
 // Escape closes it, a click elsewhere closes it, and the one item closes the
 // tabs.
-func (ui *uiState) handleTabContextMenuInput(gtx layout.Context) {
-	if !ui.tabContextVisible {
+func HandleTabContextMenuInput(ui *uiState, gtx layout.Context) {
+	if !ui.TabContextVisible {
 		return
 	}
 	for {
@@ -624,39 +624,39 @@ func (ui *uiState) handleTabContextMenuInput(gtx layout.Context) {
 		if !ok || e.State != key.Press {
 			continue
 		}
-		ui.closeTabContextMenu()
+		CloseTabContextMenu(ui)
 		return
 	}
-	if ui.tabContextCloseAll.Clicked(gtx) {
-		ui.closeTabContextMenu()
-		ui.closeAllFileTabs()
-		ui.statusText = "Closed all tabs"
+	if ui.TabContextCloseAll.Clicked(gtx) {
+		CloseTabContextMenu(ui)
+		CloseAllFileTabs(ui)
+		ui.StatusText = "Closed all tabs"
 		return
 	}
-	if ui.tabContextDismiss.Clicked(gtx) {
-		ui.closeTabContextMenu()
+	if ui.TabContextDismiss.Clicked(gtx) {
+		CloseTabContextMenu(ui)
 	}
 }
 
-func (ui *uiState) handleInput(gtx layout.Context) {
+func HandleInput(ui *uiState, gtx layout.Context) {
 	// The new unit dialog writes a file, so it is read before everything else
 	// and nothing behind it is read while it is up.
-	if ui.newObjDialog {
-		ui.handleNewObjDialogInput(gtx)
+	if ui.NewObjDialog {
+		HandleNewObjDialogInput(ui, gtx)
 		return
 	}
-	if ui.fileDeleteDialog {
-		if ui.fileDeleteConfirm.Clicked(gtx) {
-			path := ui.fileDeletePath
-			ui.fileDeleteDialog = false
-			ui.fileDeletePath = ""
-			if err := ui.deleteCurrentModFile(path); err != nil {
-				ui.statusText = fmt.Sprintf("Delete failed: %v", err)
+	if ui.FileDeleteDialog {
+		if ui.FileDeleteConfirm.Clicked(gtx) {
+			path := ui.FileDeletePath
+			ui.FileDeleteDialog = false
+			ui.FileDeletePath = ""
+			if err := DeleteCurrentModFile(ui, path); err != nil {
+				ui.StatusText = fmt.Sprintf("Delete failed: %v", err)
 			}
-		} else if ui.fileDeleteCancel.Clicked(gtx) {
-			ui.fileDeleteDialog = false
-			ui.fileDeletePath = ""
-			ui.statusText = "File deletion cancelled"
+		} else if ui.FileDeleteCancel.Clicked(gtx) {
+			ui.FileDeleteDialog = false
+			ui.FileDeletePath = ""
+			ui.StatusText = "File deletion cancelled"
 		} else {
 			// The dialog can be reached from the keyboard, so it has to be
 			// leaveable from there too.
@@ -666,94 +666,94 @@ func (ui *uiState) handleInput(gtx layout.Context) {
 					break
 				}
 				if e, ok := ev.(key.Event); ok && e.State == key.Press {
-					ui.fileDeleteDialog = false
-					ui.fileDeletePath = ""
-					ui.statusText = "File deletion cancelled"
+					ui.FileDeleteDialog = false
+					ui.FileDeletePath = ""
+					ui.StatusText = "File deletion cancelled"
 					break
 				}
 			}
 		}
 		return
 	}
-	if ui.clearRecycleDialog {
-		if ui.clearRecycleConfirm.Clicked(gtx) {
-			ui.clearRecycleDialog = false
+	if ui.ClearRecycleDialog {
+		if ui.ClearRecycleConfirm.Clicked(gtx) {
+			ui.ClearRecycleDialog = false
 			dir, err := ensureRecycleBinDir()
 			if err == nil {
 				err = clearRecycleDir(dir)
 			}
 			if err != nil {
-				ui.statusText = fmt.Sprintf("Empty Recycle Bin failed: %v", err)
+				ui.StatusText = fmt.Sprintf("Empty Recycle Bin failed: %v", err)
 			} else {
-				ui.statusText = "Recycle Bin emptied"
+				ui.StatusText = "Recycle Bin emptied"
 			}
-		} else if ui.clearRecycleCancel.Clicked(gtx) {
-			ui.clearRecycleDialog = false
-			ui.statusText = "Recycle Bin cleanup cancelled"
+		} else if ui.ClearRecycleCancel.Clicked(gtx) {
+			ui.ClearRecycleDialog = false
+			ui.StatusText = "Recycle Bin cleanup cancelled"
 		}
 		return
 	}
 	// The localisation editor is modal over the object window: it owns the keys
 	// and the clicks, so nothing behind it is read while it is up. It sits above
 	// the other dialogs in the stack, so it is resolved before them.
-	if ui.localeEditDialog {
-		ui.handleLocaleEditInput(gtx)
+	if ui.LocaleEditDialog {
+		HandleLocaleEditInput(ui, gtx)
 		return
 	}
-	if ui.settingsDialog {
+	if ui.SettingsDialog {
 		for {
-			if _, ok := ui.settingsGameEditor.Update(gtx); !ok {
+			if _, ok := ui.SettingsGameEditor.Update(gtx); !ok {
 				break
 			}
 		}
 		for {
-			if _, ok := ui.settingsFormatEditor.Update(gtx); !ok {
+			if _, ok := ui.SettingsFormatEditor.Update(gtx); !ok {
 				break
 			}
 		}
-		if ui.settingsThemeClick.Clicked(gtx) {
-			ui.darkTheme = !ui.darkTheme
-			applyMaterialTheme(ui.th, ui.darkTheme)
-			ui.markStateDirty()
+		if ui.SettingsThemeClick.Clicked(gtx) {
+			ui.DarkTheme = !ui.DarkTheme
+			applyMaterialTheme(ui.Th, ui.DarkTheme)
+			MarkStateDirty(ui)
 		}
-		for i := range ui.assocClicks {
-			if ui.assocClicks[i].Clicked(gtx) {
-				ui.toggleAssociation(i)
+		for i := range ui.AssocClicks {
+			if ui.AssocClicks[i].Clicked(gtx) {
+				ToggleAssociation(ui, i)
 			}
 		}
-		if ui.settingsOk.Clicked(gtx) {
-			ui.gamePath = strings.TrimSpace(ui.settingsGameEditor.Text())
+		if ui.SettingsOk.Clicked(gtx) {
+			ui.GamePath = strings.TrimSpace(ui.SettingsGameEditor.Text())
 			// The format list is read here rather than as it is typed,
 			// so a half-finished entry never changes what a click opens.
-			ui.textEditorFormats = parseTextFormats(ui.settingsFormatEditor.Text())
+			ui.TextEditorFormats = parseTextFormats(ui.SettingsFormatEditor.Text())
 			// A new game folder means a different set of .ucs files, so the
 			// language list and the string table are both rebuilt from it.
-			ui.refreshLocales()
-			ui.settingsDialog = false
-			ui.markStateDirty()
+			RefreshLocales(ui)
+			ui.SettingsDialog = false
+			MarkStateDirty(ui)
 		}
-		if ui.settingsCancel.Clicked(gtx) {
-			ui.darkTheme = ui.settingsThemeOriginal
-			ui.gamePath = ui.settingsGameOriginal
-			ui.textEditorFormats = parseTextFormats(ui.settingsFormatOriginal)
-			applyMaterialTheme(ui.th, ui.darkTheme)
-			ui.settingsDialog = false
+		if ui.SettingsCancel.Clicked(gtx) {
+			ui.DarkTheme = ui.SettingsThemeOriginal
+			ui.GamePath = ui.SettingsGameOriginal
+			ui.TextEditorFormats = parseTextFormats(ui.SettingsFormatOriginal)
+			applyMaterialTheme(ui.Th, ui.DarkTheme)
+			ui.SettingsDialog = false
 		}
 		return
 	}
 	// The file dialog is modal and is shared by Open Module, the timeline
 	// import and the sound field, so it answers before the rest of the input.
-	if ui.filePickOpen {
-		ui.handleFilePicker(gtx)
+	if ui.FilePickOpen {
+		HandleFilePicker(ui, gtx)
 		return
 	}
-	if ui.archiveDialog {
-		ui.handleArchiveDialogInput(gtx)
+	if ui.ArchiveDialog {
+		HandleArchiveDialogInput(ui, gtx)
 		return
 	}
 	// The event picker is modal over the Events section the same way.
-	if ui.evtPick.open {
-		ui.handleEvtPickerInput(gtx)
+	if ui.EvtPick.open {
+		HandleEvtPickerInput(ui, gtx)
 		return
 	}
 	// The object interface is a tab, so its pickers and rows are part of the
@@ -763,330 +763,330 @@ func (ui *uiState) handleInput(gtx layout.Context) {
 	// The unit screen names are read in the background and arrive in batches.
 	// Nothing else keeps the window repainting, so this has to ask for the
 	// redraw itself or a list would sit on file names until the mouse moved.
-	if ui.pollUnitNames() {
+	if PollUnitNames(ui) {
 		gtx.Execute(op.InvalidateCmd{})
 	}
 	// The squads a unit belongs to are indexed in the background for the same
 	// reason: the index is built by walking 431 squad files, and nothing else
 	// would repaint the window when the results arrived.
-	if ui.pollUnitSquads() {
+	if PollUnitSquads(ui) {
 		gtx.Execute(op.InvalidateCmd{})
 	}
 	// The references between a mod's units, buildings, weapons and abilities
 	// are read in the background too, and for the same reason: reading six
 	// hundred files takes seconds, and a relationships list that filled in
 	// quietly would otherwise sit half-empty until the mouse moved.
-	if ui.pollGraphLinks() {
+	if PollGraphLinks(ui) {
 		gtx.Execute(op.InvalidateCmd{})
 	}
-	ui.handleUnitToolInput(gtx)
-	if ui.unitTabActive() {
-		ui.handleUnitTabInput(gtx)
+	HandleUnitToolInput(ui, gtx)
+	if UnitTabActive(ui) {
+		HandleUnitTabInput(ui, gtx)
 	}
 	// The language picker hangs off the menu bar like the menus and the search
 	// field, and it puts both of them away when it opens, so it is polled first
 	// and leaves the rest of the input alone when it is closed.
-	ui.handleLocaleInput(gtx)
+	HandleLocaleInput(ui, gtx)
 	// The tab bar's wheel and right click, and then whatever the context menu
 	// they opened wants. Both come before the tab clicks so a right press on a
 	// tab is not also read as selecting it.
-	ui.handleTabBarInput(gtx)
-	ui.handleTabContextMenuInput(gtx)
+	HandleTabBarInput(ui, gtx)
+	HandleTabContextMenuInput(ui, gtx)
 	// An Alt+click on a resolved string was seen while the row was laid out;
 	// opening the .ucs is what the next frame does with it.
-	if ui.localePending != "" {
-		id := ui.localePending
-		ui.localePending = ""
-		ui.jumpToLocaleEntry(id)
+	if ui.LocalePending != "" {
+		id := ui.LocalePending
+		ui.LocalePending = ""
+		JumpToLocaleEntry(ui, id)
 	}
 	// Alt+Ctrl on a localised row, or a click on one with no text, was seen the
 	// same way. The request is acted on here because putting a dialog up is the
 	// input pass's business, not a layout's.
-	if req := ui.localePendingRequest; req.action != localeRowNothing {
-		ui.localePendingRequest = localeEditRequest{}
+	if req := ui.LocalePendingRequest; req.action != localeRowNothing {
+		ui.LocalePendingRequest = localeEditRequest{}
 		switch req.action {
 		case localeRowJump:
-			ui.jumpToLocaleEntry(req.id)
+			JumpToLocaleEntry(ui, req.id)
 		case localeRowEdit, localeRowCreate:
 			// A press in the file view knows its own entry; one in the object
 			// window has to be looked up among the unit's rows.
-			field := ui.localePendingField
+			field := ui.LocalePendingField
 			if field == nil {
-				if d := ui.currentUnitDetails(); d != nil {
+				if d := CurrentUnitDetails(ui); d != nil {
 					field = localeFieldForID(d, req.id)
 				}
 			}
-			fieldKey := ui.localePendingFieldKey
+			fieldKey := ui.LocalePendingFieldKey
 			if fieldKey == "" && field != nil {
 				fieldKey = localeRowKey(field, "")
 			}
-			ui.localePendingField = nil
-			ui.localePendingFieldKey = ""
-			ui.openLocaleEdit(req.id, req.action, field, fieldKey)
+			ui.LocalePendingField = nil
+			ui.LocalePendingFieldKey = ""
+			OpenLocaleEdit(ui, req.id, req.action, field, fieldKey)
 		}
 	}
 	// The search field owns the arrow and Enter keys while it is open, so it
 	// has to run before the tree's keyboard handling.
-	ui.handleSearchInput(gtx)
-	ui.handleKeyboard(gtx)
+	HandleSearchInput(ui, gtx)
+	HandleKeyboard(ui, gtx)
 
-	for i := range ui.menuClicks {
-		if ui.menuClicks[i].Clicked(gtx) {
-			ui.closeFileContextMenu()
+	for i := range ui.MenuClicks {
+		if ui.MenuClicks[i].Clicked(gtx) {
+			CloseFileContextMenu(ui)
 			// A menu and the search panel both hang off the menu bar, so
 			// opening a menu puts the search away.
-			ui.closeSearch()
-			if ui.menuOpen == i {
-				ui.menuOpen = -1
+			CloseSearch(ui)
+			if ui.MenuOpen == i {
+				ui.MenuOpen = -1
 			} else {
-				ui.menuOpen = i
+				ui.MenuOpen = i
 			}
-			ui.recentMenuExpanded = false
+			ui.RecentMenuExpanded = false
 		}
 	}
-	if ui.menuOpen >= 0 {
-		items := ui.menuItemsForOpen()
-		ui.ensureMenuItemClicks(ui.menuOpen, len(items))
-		for j := range ui.menuItemClicks[ui.menuOpen] {
-			if ui.menuItemClicks[ui.menuOpen][j].Clicked(gtx) {
+	if ui.MenuOpen >= 0 {
+		items := MenuItemsForOpen(ui)
+		EnsureMenuItemClicks(ui, ui.MenuOpen, len(items))
+		for j := range ui.MenuItemClicks[ui.MenuOpen] {
+			if ui.MenuItemClicks[ui.MenuOpen][j].Clicked(gtx) {
 				if items[j] != "—" {
 					label := items[j]
-					if ui.menuOpen == 0 && label == "Recent Modules" {
-						ui.recentMenuExpanded = !ui.recentMenuExpanded
+					if ui.MenuOpen == 0 && label == "Recent Modules" {
+						ui.RecentMenuExpanded = !ui.RecentMenuExpanded
 						continue
 					}
-					if ui.menuOpen == 0 && ui.recentMenuExpanded {
+					if ui.MenuOpen == 0 && ui.RecentMenuExpanded {
 						header := recentModulesHeaderIndex()
 						nameIndex := j - header - 2
-						if header >= 0 && nameIndex >= 0 && nameIndex < len(ui.recentModules) {
-							ui.loadModule(ui.recentModules[nameIndex])
-							ui.menuOpen = -1
-							ui.recentMenuExpanded = false
+						if header >= 0 && nameIndex >= 0 && nameIndex < len(ui.RecentModules) {
+							LoadModule(ui, ui.RecentModules[nameIndex])
+							ui.MenuOpen = -1
+							ui.RecentMenuExpanded = false
 							break
 						}
 					}
-					if ui.menuOpen == 0 && isEmptyRecycleBinMenuLabel(label) {
-						ui.clearRecycleDialog = true
-					} else if ui.menuOpen == 0 {
+					if ui.MenuOpen == 0 && isEmptyRecycleBinMenuLabel(label) {
+						ui.ClearRecycleDialog = true
+					} else if ui.MenuOpen == 0 {
 						switch label {
 						case "Open Module...":
-							ui.openModulePicker()
+							OpenModulePicker(ui)
 						case "Recent Modules":
-							ui.recentMenuExpanded = !ui.recentMenuExpanded
+							ui.RecentMenuExpanded = !ui.RecentMenuExpanded
 							continue
 						case "View Recycle Bin":
 							if err := openRecycleFolder(); err != nil {
-								ui.statusText = fmt.Sprintf("Open Recycle Bin failed: %v", err)
+								ui.StatusText = fmt.Sprintf("Open Recycle Bin failed: %v", err)
 							} else {
-								ui.statusText = "Opened Recycle Bin"
+								ui.StatusText = "Opened Recycle Bin"
 							}
 						case "Settings":
-							ui.openSettingsDialog()
+							OpenSettingsDialog(ui)
 						case "Close":
-							ui.stopModFileWatcher()
-							ui.closeAllFileTabs()
-							if ui.modTree != nil {
-								ui.modTree.Close()
-								ui.modTree = nil
-								ui.modulePath = ""
-								ui.visibleNodes = nil
-								ui.expanded = map[string]bool{"Data": true}
-								ui.selectedPath = ""
-								ui.statusText = "No module loaded"
-								ui.syncWindowTitle()
+							StopModFileWatcher(ui)
+							CloseAllFileTabs(ui)
+							if ui.ModTree != nil {
+								ui.ModTree.Close()
+								ui.ModTree = nil
+								ui.ModulePath = ""
+								ui.VisibleNodes = nil
+								ui.Expanded = map[string]bool{"Data": true}
+								ui.SelectedPath = ""
+								ui.StatusText = "No module loaded"
+								SyncWindowTitle(ui)
 							}
 						case "Associate .module files":
 							if err := registerModuleAssociation(); err != nil {
-								ui.statusText = fmt.Sprintf("Associate failed: %v", err)
+								ui.StatusText = fmt.Sprintf("Associate failed: %v", err)
 							} else {
-								ui.statusText = fmt.Sprintf("Associated .module with %s — double-click any .module to open", getExePath())
+								ui.StatusText = fmt.Sprintf("Associated .module with %s — double-click any .module to open", getExePath())
 							}
 						case "Remove .module association":
 							if err := unregisterModuleAssociation(); err != nil {
-								ui.statusText = fmt.Sprintf("Remove failed: %v", err)
+								ui.StatusText = fmt.Sprintf("Remove failed: %v", err)
 							} else {
-								ui.statusText = "Removed .module association (HKCU)"
+								ui.StatusText = "Removed .module association (HKCU)"
 							}
 						case "Exit":
 							exitLogged(0)
 						default:
-							ui.statusText = fmt.Sprintf("Menu: %s", label)
+							ui.StatusText = fmt.Sprintf("Menu: %s", label)
 						}
-					} else if ui.menuOpen == 1 {
+					} else if ui.MenuOpen == 1 {
 						switch label {
 						case "Save":
-							if ui.saveEligible() {
-								ui.handleSaveActiveTab()
-							} else if tab := ui.activeTab(); tab != nil && tab.kind == "sgb" && tab.sgbMap != nil {
-								ui.handleSgbSave(tab)
+							if SaveEligible(ui) {
+								HandleSaveActiveTab(ui)
+							} else if tab := ActiveTab(ui); tab != nil && tab.Kind == "sgb" && tab.SgbMap != nil {
+								HandleSgbSave(ui, tab)
 							} else {
-								ui.statusText = "Save — no unsaved changes"
+								ui.StatusText = "Save — no unsaved changes"
 							}
 						case "Export File":
-							if eligible, reason := ui.exportEligible(ui.activeTab()); eligible {
-								ui.handleExportActiveTab()
+							if eligible, reason := ExportEligible(ui, ActiveTab(ui)); eligible {
+								HandleExportActiveTab(ui)
 							} else {
-								ui.statusText = "Export — " + reason
+								ui.StatusText = "Export — " + reason
 							}
 						case "Pack SGA...":
-							ui.packCurrentModSGA()
+							PackCurrentModSGA(ui)
 						case "Extract SGA...":
-							ui.openArchiveDialog()
+							OpenArchiveDialog(ui)
 						default:
-							ui.statusText = fmt.Sprintf("Mod menu: %s", label)
+							ui.StatusText = fmt.Sprintf("Mod menu: %s", label)
 						}
-					} else if ui.menuOpen == 2 {
+					} else if ui.MenuOpen == 2 {
 						switch label {
 						case "Open log folder":
 							if err := openLogFolder(); err != nil {
-								ui.statusText = fmt.Sprintf("Open log folder failed: %v — log=%s", err, logDir())
+								ui.StatusText = fmt.Sprintf("Open log folder failed: %v — log=%s", err, logDir())
 							} else {
-								ui.statusText = fmt.Sprintf("Opened log folder: %s", logDir())
+								ui.StatusText = fmt.Sprintf("Opened log folder: %s", logDir())
 							}
 						default:
-							ui.statusText = fmt.Sprintf("Menu: %s → %s", menus[ui.menuOpen].name, label)
+							ui.StatusText = fmt.Sprintf("Menu: %s → %s", menus[ui.MenuOpen].name, label)
 						}
 					} else {
-						ui.statusText = fmt.Sprintf("Menu: %s → %s", menus[ui.menuOpen].name, label)
+						ui.StatusText = fmt.Sprintf("Menu: %s → %s", menus[ui.MenuOpen].name, label)
 					}
-					ui.menuOpen = -1
+					ui.MenuOpen = -1
 				}
 				// The click handler closes the menu, so stop this loop before
 				// the next iteration indexes menuItemClicks with menuOpen == -1.
 				break
 			}
 		}
-		if ui.dismissClick.Clicked(gtx) {
-			ui.menuOpen = -1
+		if ui.DismissClick.Clicked(gtx) {
+			ui.MenuOpen = -1
 		}
 	}
 	// The language list, the search panel and the menus all hang off the menu
 	// bar, and only one of them can own the space under it. Opening the list
 	// puts the other two away when it happens, so this is the other half of
 	// that rule, run after both of them have been resolved.
-	ui.closeLocaleUnderOtherMenuBarPopups()
-	ui.ensureTabClicks()
-	for i := range ui.tabClicks {
-		if ui.tabClicks[i].Clicked(gtx) {
-			ui.tabSel = i
-			ui.markStateDirty()
+	CloseLocaleUnderOtherMenuBarPopups(ui)
+	EnsureTabClicks(ui)
+	for i := range ui.TabClicks {
+		if ui.TabClicks[i].Clicked(gtx) {
+			ui.TabSel = i
+			MarkStateDirty(ui)
 		}
 	}
-	for idx := range ui.tabCloses {
-		if ui.tabCloses[idx].Clicked(gtx) {
-			ui.closeTabAt(idx)
-			ui.markStateDirty()
+	for idx := range ui.TabCloses {
+		if ui.TabCloses[idx].Clicked(gtx) {
+			CloseTabAt(ui, idx)
+			MarkStateDirty(ui)
 			break
 		}
 	}
-	if ui.fdaActive() {
-		tab := ui.activeTab()
-		ui.checkFdaAutoRepeat()
-		if tab.fdaPlayPause.Clicked(gtx) {
-			ui.fdaTogglePlayPause()
+	if FdaActive(ui) {
+		tab := ActiveTab(ui)
+		CheckFdaAutoRepeat(ui)
+		if tab.FdaPlayPause.Clicked(gtx) {
+			FdaTogglePlayPause(ui)
 		}
-		if tab.fdaBack10.Clicked(gtx) {
-			ui.fdaSeekBy(-10 * time.Second)
+		if tab.FdaBack10.Clicked(gtx) {
+			FdaSeekBy(ui, -10*time.Second)
 		}
-		if tab.fdaFwd10.Clicked(gtx) {
-			ui.fdaSeekBy(10 * time.Second)
+		if tab.FdaFwd10.Clicked(gtx) {
+			FdaSeekBy(ui, 10*time.Second)
 		}
-		if tab.fdaBack30.Clicked(gtx) {
-			ui.fdaSeekBy(-30 * time.Second)
+		if tab.FdaBack30.Clicked(gtx) {
+			FdaSeekBy(ui, -30*time.Second)
 		}
-		if tab.fdaFwd30.Clicked(gtx) {
-			ui.fdaSeekBy(30 * time.Second)
+		if tab.FdaFwd30.Clicked(gtx) {
+			FdaSeekBy(ui, 30*time.Second)
 		}
-		if tab.fdaRepeatBtn.Clicked(gtx) {
-			tab.fdaRepeat = !tab.fdaRepeat
-			ui.statusText = fmt.Sprintf("Repeat: %v", tab.fdaRepeat)
+		if tab.FdaRepeatBtn.Clicked(gtx) {
+			tab.FdaRepeat = !tab.FdaRepeat
+			ui.StatusText = fmt.Sprintf("Repeat: %v", tab.FdaRepeat)
 		}
-		if tab.fdaExportBtn.Clicked(gtx) {
-			ui.fdaExportWav()
+		if tab.FdaExportBtn.Clicked(gtx) {
+			FdaExportWav(ui)
 		}
-		if tab.fdaStopBtn.Clicked(gtx) {
-			if tab.fdaPlayer != nil {
-				tab.fdaPlayer.PauseAndStopReading()
-				_, _ = tab.fdaPlayer.Seek(0, io.SeekStart)
-				tab.fdaPaused = true
-				ui.statusText = "Stopped"
+		if tab.FdaStopBtn.Clicked(gtx) {
+			if tab.FdaPlayer != nil {
+				tab.FdaPlayer.PauseAndStopReading()
+				_, _ = tab.FdaPlayer.Seek(0, io.SeekStart)
+				tab.FdaPaused = true
+				ui.StatusText = "Stopped"
 			}
 		}
 	}
-	if tab := ui.activeTab(); tab != nil && tab.kind == "wav" && tab.wavPlayer != nil {
-		ui.checkWavAutoRepeat()
-		if tab.wavPlayClick.Clicked(gtx) {
-			ui.wavTogglePlayPause()
+	if tab := ActiveTab(ui); tab != nil && tab.Kind == "wav" && tab.WavPlayer != nil {
+		CheckWavAutoRepeat(ui)
+		if tab.WavPlayClick.Clicked(gtx) {
+			WavTogglePlayPause(ui)
 		}
-		if tab.wavStopClick.Clicked(gtx) {
-			ui.wavStop()
+		if tab.WavStopClick.Clicked(gtx) {
+			WavStop(ui)
 		}
-		if tab.wavRepeatClick.Clicked(gtx) {
-			tab.wavRepeat = !tab.wavRepeat
-			ui.statusText = fmt.Sprintf("WAV Repeat: %v", tab.wavRepeat)
-		}
-	}
-	if tab := ui.activeTab(); tab != nil && tab.kind == "whm" {
-		if tab.whmConvertClick.Clicked(gtx) {
-			ui.convertWhmToSgmFile(tab)
+		if tab.WavRepeatClick.Clicked(gtx) {
+			tab.WavRepeat = !tab.WavRepeat
+			ui.StatusText = fmt.Sprintf("WAV Repeat: %v", tab.WavRepeat)
 		}
 	}
-	if ui.rgdActive() {
-		ui.focusClickedRgdEditor(gtx)
-		ui.rgdSyncAndApply(gtx)
+	if tab := ActiveTab(ui); tab != nil && tab.Kind == "whm" {
+		if tab.WhmConvertClick.Clicked(gtx) {
+			ConvertWhmToSgmFile(ui, tab)
+		}
 	}
-	if ui.textActive() {
-		ui.textSyncAndApply(gtx)
+	if RgdActive(ui) {
+		FocusClickedRgdEditor(ui, gtx)
+		RgdSyncAndApply(ui, gtx)
 	}
-	nodes := ui.getVisibleNodes()
-	ui.ensureRowClicks(len(nodes))
-	ui.ensureRowHover(len(nodes))
-	ui.handleTreePointerInput(gtx, nodes)
-	if ui.contextMenuVisible {
-		if ui.contextDuplicate.Clicked(gtx) {
-			path := ui.contextMenuPath
-			ui.closeFileContextMenu()
-			if err := ui.duplicateCurrentModFile(path); err != nil {
-				ui.statusText = fmt.Sprintf("Duplicate failed: %v", err)
+	if TextActive(ui) {
+		TextSyncAndApply(ui, gtx)
+	}
+	nodes := GetVisibleNodes(ui)
+	EnsureRowClicks(ui, len(nodes))
+	EnsureRowHover(ui, len(nodes))
+	HandleTreePointerInput(ui, gtx, nodes)
+	if ui.ContextMenuVisible {
+		if ui.ContextDuplicate.Clicked(gtx) {
+			path := ui.ContextMenuPath
+			CloseFileContextMenu(ui)
+			if err := DuplicateCurrentModFile(ui, path); err != nil {
+				ui.StatusText = fmt.Sprintf("Duplicate failed: %v", err)
 			}
-		} else if ui.contextDelete.Clicked(gtx) && ui.canDeleteCurrentModFile(ui.contextMenuPath) {
-			ui.fileDeletePath = ui.contextMenuPath
-			ui.fileDeleteDialog = true
-			ui.closeFileContextMenu()
-		} else if ui.contextDismissClick.Clicked(gtx) {
-			ui.closeFileContextMenu()
+		} else if ui.ContextDelete.Clicked(gtx) && CanDeleteCurrentModFile(ui, ui.ContextMenuPath) {
+			ui.FileDeletePath = ui.ContextMenuPath
+			ui.FileDeleteDialog = true
+			CloseFileContextMenu(ui)
+		} else if ui.ContextDismissClick.Clicked(gtx) {
+			CloseFileContextMenu(ui)
 		}
 	}
-	if tab := ui.activeTab(); tab != nil && tab.kind == "rgd" {
-		selBefore := tab.rgdSelected
-		if len(tab.rgdMidNodes) == 0 {
-			ui.rebuildRgdMidNodesFor(tab)
-			ui.ensureRgdMidClicks(tab, len(tab.rgdMidNodes))
+	if tab := ActiveTab(ui); tab != nil && tab.Kind == "rgd" {
+		selBefore := tab.RgdSelected
+		if len(tab.RgdMidNodes) == 0 {
+			RebuildRgdMidNodesFor(ui, tab)
+			EnsureRgdMidClicks(ui, tab, len(tab.RgdMidNodes))
 		}
-		midNodes := tab.rgdMidNodes
-		ui.ensureRgdMidClicks(tab, len(midNodes))
+		midNodes := tab.RgdMidNodes
+		EnsureRgdMidClicks(ui, tab, len(midNodes))
 		clickedAny := false
 		for i, m := range midNodes {
-			if tab.rgdMidClicks[i].Clicked(gtx) {
-				ui.keyboardArea = "rgd"
+			if tab.RgdMidClicks[i].Clicked(gtx) {
+				ui.KeyboardArea = "rgd"
 				if m.IsTable && m.HasKids {
-					if tab.rgdExpanded[m.Path] {
-						delete(tab.rgdExpanded, m.Path)
+					if tab.RgdExpanded[m.Path] {
+						delete(tab.RgdExpanded, m.Path)
 					} else {
-						tab.rgdExpanded[m.Path] = true
+						tab.RgdExpanded[m.Path] = true
 					}
 				}
 				if m.Path != selBefore {
-					ui.rgdFlushPending(tab)
+					RgdFlushPending(ui, tab)
 				}
-				tab.rgdSelected = m.Path
+				tab.RgdSelected = m.Path
 				clickedAny = true
-				ui.markStateDirty()
+				MarkStateDirty(ui)
 			}
 		}
 		if clickedAny {
-			ui.rebuildRgdMidNodesFor(tab)
-			ui.ensureRgdMidClicks(tab, len(tab.rgdMidNodes))
+			RebuildRgdMidNodesFor(ui, tab)
+			EnsureRgdMidClicks(ui, tab, len(tab.RgdMidNodes))
 		}
 	}
 }

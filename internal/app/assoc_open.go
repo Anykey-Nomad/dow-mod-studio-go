@@ -43,30 +43,30 @@ func findFirstAssocArg() string {
 
 // openAssociatedFile opens one OS file argument by its format. It runs once,
 // at startup, after the module is in place.
-func (ui *uiState) openAssociatedFile(path string) {
+func OpenAssociatedFile(ui *uiState, path string) {
 	log.Printf("openAssociatedFile: %q", path)
 	switch strings.ToLower(pickExt(path)) {
 	case ".fda":
-		ui.openFda(path)
+		OpenFda(ui, path)
 	case ".whm":
-		ui.openWhm(path)
+		OpenWhm(ui, path)
 	case ".whe":
-		ui.openWheViaUnit(path)
+		OpenWheViaUnit(ui, path)
 	case ".sga":
-		ui.openSgaArchive(path)
+		OpenSgaArchive(ui, path)
 	default:
-		ui.statusText = fmt.Sprintf("Cannot open %s — unknown format", filepath.Base(path))
+		ui.StatusText = fmt.Sprintf("Cannot open %s — unknown format", filepath.Base(path))
 		return
 	}
-	ui.markStateDirty()
+	MarkStateDirty(ui)
 }
 
 // readTabFile reads the bytes a tab is opened from. A virtual path belongs to
 // the open module's tree; an absolute one is a file the OS handed the studio
 // through an association, read straight off disk.
-func (ui *uiState) readTabFile(path string) ([]byte, error) {
-	if ui.modTree != nil && !filepath.IsAbs(path) {
-		return ui.modTree.ReadFile(path)
+func ReadTabFile(ui *uiState, path string) ([]byte, error) {
+	if ui.ModTree != nil && !filepath.IsAbs(path) {
+		return ui.ModTree.ReadFile(path)
 	}
 	return os.ReadFile(path)
 }
@@ -78,22 +78,22 @@ func (ui *uiState) readTabFile(path string) ([]byte, error) {
 // share their name, so the first unit of the open mod whose resolved model has
 // the file's own name is shown in the Object tab. With no such unit the file
 // is simply reported, since a .whe alone has no viewer of its own.
-func (ui *uiState) openWheViaUnit(path string) {
+func OpenWheViaUnit(ui *uiState, path string) {
 	name := strings.ToLower(strings.TrimSuffix(filepath.Base(path), pickExt(path)))
-	if ui.modTree == nil {
-		ui.statusText = fmt.Sprintf("Open %s — no module loaded", filepath.Base(path))
+	if ui.ModTree == nil {
+		ui.StatusText = fmt.Sprintf("Open %s — no module loaded", filepath.Base(path))
 		return
 	}
-	cat := ui.unitCatalogFor()
+	cat := UnitCatalogFor(ui)
 	start := time.Now()
 	units := cat.AllUnits()
 	for _, u := range units {
-		d := loadUnitDetails(ui.modTree, u)
-		src, ok := newUnitModelSource(ui.modTree, d)
+		d := loadUnitDetails(ui.ModTree, u)
+		src, ok := newUnitModelSource(ui.ModTree, d)
 		if !ok {
 			continue
 		}
-		model := unitModelPath(ui.modTree, src)
+		model := unitModelPath(ui.ModTree, src)
 		if model == "" {
 			continue
 		}
@@ -101,15 +101,15 @@ func (ui *uiState) openWheViaUnit(path string) {
 		if base != name {
 			continue
 		}
-		ui.unitPickRace = u.Race
-		ui.unitPickPath = u.Path
-		ui.applyPendingUnitPick()
-		ui.openUnitTab()
-		ui.statusText = fmt.Sprintf("Opened %s as unit %s", filepath.Base(path), u.DisplayName())
+		ui.UnitPickRace = u.Race
+		ui.UnitPickPath = u.Path
+		ApplyPendingUnitPick(ui)
+		OpenUnitTab(ui)
+		ui.StatusText = fmt.Sprintf("Opened %s as unit %s", filepath.Base(path), u.DisplayName())
 		log.Printf("openWheViaUnit %q: unit %s after scanning %d units in %v", path, u.Path, len(units), time.Since(start))
 		return
 	}
-	ui.statusText = fmt.Sprintf("Open %s — no unit references that model", filepath.Base(path))
+	ui.StatusText = fmt.Sprintf("Open %s — no unit references that model", filepath.Base(path))
 	log.Printf("openWheViaUnit %q: no match among %d units in %v", path, len(units), time.Since(start))
 }
 
@@ -125,28 +125,28 @@ type sgaRow struct {
 // openSgaArchive opens an .sga as a read-only listing of what it carries.
 // Nothing is extracted: the archive is the game's own packaging, and a listing
 // answers what is inside without writing a byte of it back out.
-func (ui *uiState) openSgaArchive(path string) {
-	if idx := ui.findTabIndex(path); idx >= 0 {
-		ui.tabSel = idx + 1
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Opened %s", filepath.Base(path))
+func OpenSgaArchive(ui *uiState, path string) {
+	if idx := FindTabIndex(ui, path); idx >= 0 {
+		ui.TabSel = idx + 1
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(path))
 		return
 	}
-	t := &fileTab{path: path, kind: "sga"}
+	t := &fileTab{Path: path, Kind: "sga"}
 	arch, err := sga.OpenSGA(path)
 	if err != nil {
-		t.sgaError = err.Error()
+		t.SgaError = err.Error()
 	} else {
-		t.sgaRows = sgaArchiveRows(arch)
+		t.SgaRows = sgaArchiveRows(arch)
 		arch.Close()
 	}
-	ui.openTabs = append(ui.openTabs, t)
-	ui.tabSel = len(ui.openTabs)
-	ui.ensureTabClicks()
-	if t.sgaError != "" {
-		ui.statusText = "Open " + filepath.Base(path) + " failed: " + t.sgaError
+	ui.OpenTabs = append(ui.OpenTabs, t)
+	ui.TabSel = len(ui.OpenTabs)
+	EnsureTabClicks(ui)
+	if t.SgaError != "" {
+		ui.StatusText = "Open " + filepath.Base(path) + " failed: " + t.SgaError
 	} else {
-		ui.statusText = fmt.Sprintf("Opened %s — %d entries", filepath.Base(path), len(t.sgaRows))
+		ui.StatusText = fmt.Sprintf("Opened %s — %d entries", filepath.Base(path), len(t.SgaRows))
 	}
 }
 
@@ -201,21 +201,21 @@ func sgaSizeLabel(size int64) string {
 // layoutSgaListing is the archive tab's body: every folder and file the .sga
 // carries, one per row. Folders run on in the same list rather than opening,
 // because the whole point of the tab is to see the archive at a glance.
-func (ui *uiState) layoutSgaListing(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t.sgaError != "" {
+func LayoutSgaListing(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t.SgaError != "" {
 		return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "Failed: "+t.sgaError)
+			l := material.Label(ui.Th, unit.Sp(11), "Failed: "+t.SgaError)
 			l.Color = rgb(0xB00020)
 			return l.Layout(gtx)
 		})
 	}
-	if len(t.sgaRows) == 0 {
-		return centeredPanelLabel(gtx, ui.th, "Empty archive", unit.Sp(10), cTextDim)
+	if len(t.SgaRows) == 0 {
+		return centeredPanelLabel(gtx, ui.Th, "Empty archive", unit.Sp(10), cTextDim)
 	}
-	t.sgaList.Axis = layout.Vertical
+	t.SgaList.Axis = layout.Vertical
 	return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutListWithScrollbar(gtx, &t.sgaScroll, &t.sgaList, 20, len(t.sgaRows), func(gtx layout.Context, index int) layout.Dimensions {
-			r := t.sgaRows[index]
+		return LayoutListWithScrollbar(ui, gtx, &t.SgaScroll, &t.SgaList, 20, len(t.SgaRows), func(gtx layout.Context, index int) layout.Dimensions {
+			r := t.SgaRows[index]
 			gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(20))
 			gtx.Constraints.Max.Y = gtx.Dp(unit.Dp(20))
 			name := r.path
@@ -229,14 +229,14 @@ func (ui *uiState) layoutSgaListing(gtx layout.Context, t *fileTab) layout.Dimen
 			return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(10), name)
+						l := material.Label(ui.Th, unit.Sp(10), name)
 						l.Color = cTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
 					layout.Flexed(1, flexGap()),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(10), size)
+						l := material.Label(ui.Th, unit.Sp(10), size)
 						l.Color = cTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
@@ -250,21 +250,21 @@ func (ui *uiState) layoutSgaListing(gtx layout.Context, t *fileTab) layout.Dimen
 // refreshAssocStates re-reads which formats the studio is associated with, so
 // the Settings buttons can say what a click would do. A query that fails is
 // shown as "not associated": the button then offers the safe action.
-func (ui *uiState) refreshAssocStates() {
-	ui.assocOn = make([]bool, len(assocTypes))
+func RefreshAssocStates(ui *uiState) {
+	ui.AssocOn = make([]bool, len(assocTypes))
 	if !associationsSupported() {
 		return
 	}
 	for i, t := range assocTypes {
 		on, _, _ := isExtAssociated(t)
-		ui.assocOn[i] = on
+		ui.AssocOn[i] = on
 	}
 }
 
 // toggleAssociation adds or removes one format's association and re-reads the
 // row's state, so the button reflects the registry at once rather than the
 // next time the dialog is opened.
-func (ui *uiState) toggleAssociation(i int) {
+func ToggleAssociation(ui *uiState, i int) {
 	if i < 0 || i >= len(assocTypes) {
 		return
 	}
@@ -278,18 +278,18 @@ func (ui *uiState) toggleAssociation(i int) {
 	}
 	if err != nil {
 		log.Printf("association %s: %v", t.Ext, err)
-		ui.statusText = fmt.Sprintf("%s association failed: %v", t.Ext, err)
-		ui.refreshAssocStates()
+		ui.StatusText = fmt.Sprintf("%s association failed: %v", t.Ext, err)
+		RefreshAssocStates(ui)
 		return
 	}
 	if on {
 		log.Printf("association %s: removed", t.Ext)
-		ui.statusText = fmt.Sprintf("Removed %s association", t.Ext)
+		ui.StatusText = fmt.Sprintf("Removed %s association", t.Ext)
 	} else {
 		log.Printf("association %s: registered for %s", t.Ext, getExePath())
-		ui.statusText = fmt.Sprintf("Associated %s with %s", t.Ext, getExePath())
+		ui.StatusText = fmt.Sprintf("Associated %s with %s", t.Ext, getExePath())
 	}
-	ui.refreshAssocStates()
+	RefreshAssocStates(ui)
 }
 
 // assocTypeFor returns the table row for an extension, ".module" included.
@@ -349,7 +349,7 @@ func discoverModuleFiles(dirs []string) []moduleCandidate {
 }
 
 // moduleRoots are the folders the Open Module dialog starts from.
-func (ui *uiState) moduleRoots() []string {
+func ModuleRoots(ui *uiState) []string {
 	dirs := make([]string, 0, 6)
 	if exe, err := os.Executable(); err == nil {
 		dirs = append(dirs, filepath.Dir(exe))
@@ -358,31 +358,31 @@ func (ui *uiState) moduleRoots() []string {
 		`C:\Program Files\Steam\steamapps\common\Dawn of War Definitive Edition`,
 		`C:\Program Files (x86)\Steam\steamapps\common\Dawn of War Definitive Edition`,
 	)
-	if ui.gamePath != "" {
-		dirs = append(dirs, ui.gamePath)
+	if ui.GamePath != "" {
+		dirs = append(dirs, ui.GamePath)
 	}
-	dirs = append(dirs, ui.recentFolders...)
-	if ui.modulePath != "" {
-		dirs = append(dirs, filepath.Dir(ui.modulePath))
+	dirs = append(dirs, ui.RecentFolders...)
+	if ui.ModulePath != "" {
+		dirs = append(dirs, filepath.Dir(ui.ModulePath))
 	}
 	return dirs
 }
 
 // openModulePicker shows the Open Module dialog over the .module files.
-func (ui *uiState) openModulePicker() {
-	ui.openFilePicker(pickConfig{
+func OpenModulePicker(ui *uiState) {
+	OpenFilePicker(ui, pickConfig{
 		title:    "Open Module",
 		subtitle: "Enter a .module file or the Dawn of War folder to scan",
 		hint:     `C:\Program Files\Steam\steamapps\common\Dawn of War Definitive Edition`,
 		exts:     []string{".module"},
-		roots:    ui.moduleRoots,
-		start:    ui.modulePath,
+		roots:    func() []string { return ModuleRoots(ui) },
+		start:    ui.ModulePath,
 		onPick: func(path string) (bool, string) {
-			path = ui.resolveModulePath(path)
+			path = ResolveModulePath(ui, path)
 			if !pathExists(path) {
 				return false, "No such module file: " + path
 			}
-			ui.loadModule(path)
+			LoadModule(ui, path)
 			return true, ""
 		},
 	})
@@ -390,10 +390,10 @@ func (ui *uiState) openModulePicker() {
 
 // resolveModulePath finds a module named relative to the app or to the game
 // folder, which is where a bare name typed in the dialog is looked for.
-func (ui *uiState) resolveModulePath(path string) string {
+func ResolveModulePath(ui *uiState, path string) string {
 	if !filepath.IsAbs(path) && pickExt(path) == ".module" {
-		if ui.modTree != nil && ui.modTree.AppPath != "" {
-			if cand := filepath.Join(ui.modTree.AppPath, path); pathExists(cand) {
+		if ui.ModTree != nil && ui.ModTree.AppPath != "" {
+			if cand := filepath.Join(ui.ModTree.AppPath, path); pathExists(cand) {
 				return cand
 			}
 		}

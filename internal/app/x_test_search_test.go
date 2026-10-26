@@ -271,30 +271,30 @@ func TestSearchRealModule(t *testing.T) {
 func TestSearchPanelStaysDownUntilTheQueryChanges(t *testing.T) {
 	ui := newUI(unitTestTheme())
 
-	if ui.searchPanelWanted("") {
+	if SearchPanelWanted(ui, "") {
 		t.Fatal("an empty field should not want the panel")
 	}
-	if !ui.searchPanelWanted("necron") {
+	if !SearchPanelWanted(ui, "necron") {
 		t.Fatal("typing a query should bring the panel up")
 	}
-	ui.searchVisible = true
+	ui.SearchVisible = true
 
 	// The user clicks outside, which dismisses it. The query is kept in the
 	// field so it can be refined, and the hold is recorded from that field.
-	ui.searchEditor.SetText("necron")
-	ui.closeSearch()
-	if ui.searchVisible {
+	ui.SearchEditor.SetText("necron")
+	CloseSearch(ui)
+	if ui.SearchVisible {
 		t.Fatal("closeSearch left the panel on screen")
 	}
 	for i := 0; i < 5; i++ {
-		if ui.searchPanelWanted("necron") {
+		if SearchPanelWanted(ui, "necron") {
 			t.Fatalf("the panel sprang back open on frame %d with an unchanged query; "+
 				"its dismiss catcher is now over the file tree", i)
 		}
 	}
 
 	// Refining the query is how the user asks for the panel again.
-	if !ui.searchPanelWanted("necron lord") {
+	if !SearchPanelWanted(ui, "necron lord") {
 		t.Error("changing the query should bring the panel back")
 	}
 }
@@ -304,14 +304,14 @@ func TestSearchPanelStaysDownUntilTheQueryChanges(t *testing.T) {
 // look like the search had stopped working.
 func TestEmptyingTheSearchReleasesTheHold(t *testing.T) {
 	ui := newUI(unitTestTheme())
-	ui.searchEditor.SetText("necron")
-	ui.searchPanelWanted("necron")
-	ui.closeSearch()
+	ui.SearchEditor.SetText("necron")
+	SearchPanelWanted(ui, "necron")
+	CloseSearch(ui)
 
-	if ui.searchPanelWanted("") {
+	if SearchPanelWanted(ui, "") {
 		t.Error("an empty field should not want the panel")
 	}
-	if !ui.searchPanelWanted("necron") {
+	if !SearchPanelWanted(ui, "necron") {
 		t.Error("the same query typed again after clearing should bring the panel back")
 	}
 }
@@ -322,16 +322,16 @@ func TestEmptyingTheSearchReleasesTheHold(t *testing.T) {
 // frame and quietly cover the content again.
 func TestEveryPathThatHidesThePanelHoldsItDown(t *testing.T) {
 	ui := newUI(unitTestTheme())
-	ui.searchEditor.SetText("necron")
-	ui.searchPanelWanted("necron")
-	ui.searchVisible = true
+	ui.SearchEditor.SetText("necron")
+	SearchPanelWanted(ui, "necron")
+	ui.SearchVisible = true
 
-	ui.closeSearch() // what a menu click and the language picker both do
+	CloseSearch(ui) // what a menu click and the language picker both do
 
-	if ui.searchVisible {
+	if ui.SearchVisible {
 		t.Error("closeSearch did not put the panel away")
 	}
-	if ui.searchPanelWanted(ui.searchEditor.Text()) {
+	if SearchPanelWanted(ui, ui.SearchEditor.Text()) {
 		t.Error("a panel hidden from the menu bar sprang straight back up")
 	}
 }

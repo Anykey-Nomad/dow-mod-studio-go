@@ -101,14 +101,14 @@ func TestRealCommonRgdAttributes(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
 	var troops, structures []unitEntry
-	for _, r := range cat.races {
-		troops = append(troops, r.troops...)
-		structures = append(structures, r.structures...)
+	for _, r := range cat.Races {
+		troops = append(troops, r.Troops...)
+		structures = append(structures, r.Structures...)
 	}
 	var full strings.Builder
-	fmt.Fprintf(&full, "races: %d\n", len(cat.races))
-	for _, r := range cat.races {
-		fmt.Fprintf(&full, "  %-14s %d troops, %d structures\n", r.name, len(r.troops), len(r.structures))
+	fmt.Fprintf(&full, "races: %d\n", len(cat.Races))
+	for _, r := range cat.Races {
+		fmt.Fprintf(&full, "  %-14s %d troops, %d structures\n", r.Name, len(r.Troops), len(r.Structures))
 	}
 	for _, set := range []struct {
 		title   string
@@ -136,17 +136,17 @@ func rgdCommonStats(tree *modtree.ModTree, entries []unitEntry) (map[string]*rgd
 	stats := map[string]*rgdAttrStat{}
 	var unreadable []string
 	for _, e := range entries {
-		if !strings.EqualFold(filepath.Ext(e.path), ".rgd") {
+		if !strings.EqualFold(filepath.Ext(e.Path), ".rgd") {
 			continue
 		}
-		data, err := tree.ReadFile(e.path)
+		data, err := tree.ReadFile(e.Path)
 		if err != nil {
-			unreadable = append(unreadable, e.name)
+			unreadable = append(unreadable, e.Name)
 			continue
 		}
 		rf, err := rgd.ParseRgd(data)
 		if err != nil {
-			unreadable = append(unreadable, e.name)
+			unreadable = append(unreadable, e.Name)
 			continue
 		}
 		one := map[string]*rgdAttrStat{}
@@ -623,19 +623,19 @@ func TestFindRgdReferenceFile(t *testing.T) {
 	}
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
-	ui := &uiState{modTree: tree}
+	ui := &uiState{ModTree: tree}
 
 	for _, ref := range []string{
 		`ebpextensions\health_ext.lua`,
 		`ebpextensions/health_ext.lua`,
 		`Data\ebpextensions\health_ext.lua`,
 	} {
-		if got := ui.findRgdReferenceFile(ref); got != file.FullPath {
+		if got := FindRgdReferenceFile(ui, ref); got != file.FullPath {
 			t.Errorf("reference %q resolved to %q, want %q", ref, got, file.FullPath)
 		}
 	}
 	for _, ref := range []string{"object://something", "missing.lua", ""} {
-		if got := ui.findRgdReferenceFile(ref); got != "" {
+		if got := FindRgdReferenceFile(ui, ref); got != "" {
 			t.Errorf("reference %q unexpectedly resolved to %q", ref, got)
 		}
 	}

@@ -22,50 +22,50 @@ import (
 )
 
 // ── helpers for RGD textual editing ────────────────────────────────────────
-func (ui *uiState) rgdEnsureEditorClick(ed *widget.Editor) *rgdEditorClickState {
-	if ui.rgdEditorClicks == nil {
-		ui.rgdEditorClicks = make(map[*widget.Editor]*rgdEditorClickState)
+func RgdEnsureEditorClick(ui *uiState, ed *widget.Editor) *rgdEditorClickState {
+	if ui.RgdEditorClicks == nil {
+		ui.RgdEditorClicks = make(map[*widget.Editor]*rgdEditorClickState)
 	}
-	state, ok := ui.rgdEditorClicks[ed]
+	state, ok := ui.RgdEditorClicks[ed]
 	if !ok {
 		state = &rgdEditorClickState{editor: ed}
-		ui.rgdEditorClicks[ed] = state
+		ui.RgdEditorClicks[ed] = state
 	}
 	return state
 }
 
-func (ui *uiState) focusClickedRgdEditor(gtx layout.Context) {
-	for _, state := range ui.rgdEditorClicks {
+func FocusClickedRgdEditor(ui *uiState, gtx layout.Context) {
+	for _, state := range ui.RgdEditorClicks {
 		if state.click.Clicked(gtx) {
 			gtx.Execute(key.FocusCmd{Tag: state.editor})
 		}
 	}
 }
 
-func (ui *uiState) rgdEnsureValEditor(t *fileTab, key, init string) *widget.Editor {
-	if t.rgdValEditors == nil {
-		t.rgdValEditors = make(map[string]*widget.Editor)
+func RgdEnsureValEditor(ui *uiState, t *fileTab, key, init string) *widget.Editor {
+	if t.RgdValEditors == nil {
+		t.RgdValEditors = make(map[string]*widget.Editor)
 	}
-	if ed, ok := t.rgdValEditors[key]; ok {
+	if ed, ok := t.RgdValEditors[key]; ok {
 		return ed
 	}
 	ed := &widget.Editor{SingleLine: true, Submit: true}
 	ed.SetText(init)
-	t.rgdValEditors[key] = ed
+	t.RgdValEditors[key] = ed
 	return ed
 }
 
-func (ui *uiState) rgdEnsureSuggestionClicks(t *fileTab, key string, n int) []widget.Clickable {
-	if t.rgdSuggestionClicks == nil {
-		t.rgdSuggestionClicks = make(map[string][]widget.Clickable)
+func RgdEnsureSuggestionClicks(ui *uiState, t *fileTab, key string, n int) []widget.Clickable {
+	if t.RgdSuggestionClicks == nil {
+		t.RgdSuggestionClicks = make(map[string][]widget.Clickable)
 	}
-	clicks := t.rgdSuggestionClicks[key]
+	clicks := t.RgdSuggestionClicks[key]
 	if len(clicks) < n {
 		clicks = append(clicks, make([]widget.Clickable, n-len(clicks))...)
 	} else if len(clicks) > n {
 		clicks = clicks[:n]
 	}
-	t.rgdSuggestionClicks[key] = clicks
+	t.RgdSuggestionClicks[key] = clicks
 	return clicks
 }
 
@@ -92,11 +92,11 @@ func rgdCollectStringValues(e *rgd.RgdEntry, values map[string]bool) {
 }
 
 func rgdSuggestionsFor(t *fileTab, e *rgd.RgdEntry) []string {
-	if t == nil || t.rgdFile == nil || t.rgdFile.Root == nil || e == nil {
+	if t == nil || t.RgdFile == nil || t.RgdFile.Root == nil || e == nil {
 		return nil
 	}
 	values := make(map[string]bool)
-	rgdCollectStringValues(t.rgdFile.Root, values)
+	rgdCollectStringValues(t.RgdFile.Root, values)
 	current := strings.TrimSpace(e.DisplayValue())
 	delete(values, current)
 	prefix := strings.ToLower(current)
@@ -140,31 +140,31 @@ func rgdSuggestionLabel(value string) string {
 	return value
 }
 
-func (ui *uiState) rgdSyncStringSuggestions(t *fileTab, e *rgd.RgdEntry, key string, gtx layout.Context) {
+func RgdSyncStringSuggestions(ui *uiState, t *fileTab, e *rgd.RgdEntry, key string, gtx layout.Context) {
 	if t == nil || e == nil || (e.Type != rgd.RgdTypeString && e.Type != rgd.RgdTypeWString) {
 		return
 	}
 	suggestions := rgdVisibleSuggestions(t, e)
-	clicks := ui.rgdEnsureSuggestionClicks(t, key, len(suggestions))
+	clicks := RgdEnsureSuggestionClicks(ui, t, key, len(suggestions))
 	for i := range clicks {
 		if clicks[i].Clicked(gtx) {
-			ed := ui.rgdEnsureValEditor(t, key, e.DisplayValue())
+			ed := RgdEnsureValEditor(ui, t, key, e.DisplayValue())
 			ed.SetText(suggestions[i])
-			ui.rgdApplyEditorText(t, e, key, suggestions[i])
+			RgdApplyEditorText(ui, t, e, key, suggestions[i])
 			return
 		}
 	}
 }
 
-func (ui *uiState) rgdEnsureBoolClick(t *fileTab, key string) *widget.Clickable {
-	if t.rgdValClicks == nil {
-		t.rgdValClicks = make(map[string]*widget.Clickable)
+func RgdEnsureBoolClick(ui *uiState, t *fileTab, key string) *widget.Clickable {
+	if t.RgdValClicks == nil {
+		t.RgdValClicks = make(map[string]*widget.Clickable)
 	}
-	if click, ok := t.rgdValClicks[key]; ok {
+	if click, ok := t.RgdValClicks[key]; ok {
 		return click
 	}
 	click := &widget.Clickable{}
-	t.rgdValClicks[key] = click
+	t.RgdValClicks[key] = click
 	return click
 }
 
@@ -240,47 +240,47 @@ func rgdApplyReferenceText(e *rgd.RgdEntry, text string) bool {
 	return old != text
 }
 
-func (ui *uiState) rgdApplyEditorText(t *fileTab, e *rgd.RgdEntry, key, text string) {
+func RgdApplyEditorText(ui *uiState, t *fileTab, e *rgd.RgdEntry, key, text string) {
 	if t == nil || e == nil || !rgdIsEditableType(e.Type) {
 		return
 	}
 	changed, err := rgdApplyScalarText(e, text)
 	if err != nil {
-		if t.rgdValErrors == nil {
-			t.rgdValErrors = make(map[string]string)
+		if t.RgdValErrors == nil {
+			t.RgdValErrors = make(map[string]string)
 		}
-		t.rgdValErrors[key] = err.Error()
+		t.RgdValErrors[key] = err.Error()
 		return
 	}
-	if t.rgdValErrors != nil {
-		delete(t.rgdValErrors, key)
+	if t.RgdValErrors != nil {
+		delete(t.RgdValErrors, key)
 	}
 	if changed {
-		t.rgdDirty = true
+		t.RgdDirty = true
 	}
 }
 
-func (ui *uiState) rgdSyncEditor(t *fileTab, e *rgd.RgdEntry, key string, gtx layout.Context) {
+func RgdSyncEditor(ui *uiState, t *fileTab, e *rgd.RgdEntry, key string, gtx layout.Context) {
 	if t == nil || e == nil || e.Type == rgd.RgdTypeBool || !rgdIsEditableType(e.Type) {
 		return
 	}
-	ed := ui.rgdEnsureValEditor(t, key, e.DisplayValue())
+	ed := RgdEnsureValEditor(ui, t, key, e.DisplayValue())
 	for {
 		if _, ok := ed.Update(gtx); !ok {
 			break
 		}
 	}
-	ui.rgdApplyEditorText(t, e, key, ed.Text())
+	RgdApplyEditorText(ui, t, e, key, ed.Text())
 }
 
-func (ui *uiState) rgdFlushPending(t *fileTab) {
-	if t == nil || t.rgdFile == nil {
+func RgdFlushPending(ui *uiState, t *fileTab) {
+	if t == nil || t.RgdFile == nil {
 		return
 	}
-	eSel := ui.rgdSelectedEntryFor(t)
+	eSel := RgdSelectedEntryFor(ui, t)
 	if eSel != nil && eSel.IsTable() {
 		cur := eSel.RefString()
-		newText := t.rgdRefEditor.Text()
+		newText := t.RgdRefEditor.Text()
 		if newText != cur {
 			if strings.TrimSpace(newText) == "" {
 				eSel.Ref = nil
@@ -301,28 +301,28 @@ func (ui *uiState) rgdFlushPending(t *fileTab) {
 					eSel.Ref.Name = "$REF"
 				}
 			}
-			t.rgdDirty = true
+			t.RgdDirty = true
 		}
 	}
 	if eSel != nil && rgdIsEditableType(eSel.Type) {
-		if ed, ok := t.rgdValEditors[t.rgdSelected]; ok {
-			ui.rgdApplyEditorText(t, eSel, t.rgdSelected, ed.Text())
+		if ed, ok := t.RgdValEditors[t.RgdSelected]; ok {
+			RgdApplyEditorText(ui, t, eSel, t.RgdSelected, ed.Text())
 		}
 	}
 	if eSel != nil && eSel.IsTable() {
 		for _, ch := range eSel.Children {
-			key := t.rgdSelected + "/" + ch.Name
+			key := t.RgdSelected + "/" + ch.Name
 			if ch.IsTable() {
-				if ed, ok := t.rgdValEditors[key+"/$ref"]; ok && rgdApplyReferenceText(ch, ed.Text()) {
-					t.rgdDirty = true
+				if ed, ok := t.RgdValEditors[key+"/$ref"]; ok && rgdApplyReferenceText(ch, ed.Text()) {
+					t.RgdDirty = true
 				}
 				continue
 			}
 			if !rgdIsEditableType(ch.Type) {
 				continue
 			}
-			if ed, ok := t.rgdValEditors[key]; ok {
-				ui.rgdApplyEditorText(t, ch, key, ed.Text())
+			if ed, ok := t.RgdValEditors[key]; ok {
+				RgdApplyEditorText(ui, t, ch, key, ed.Text())
 			}
 		}
 	}
@@ -330,23 +330,23 @@ func (ui *uiState) rgdFlushPending(t *fileTab) {
 
 // rgdSyncAndApply processes editor Update events and applies live text changes to the RGD model.
 // Must be called from handleInput with a valid gtx.
-func (ui *uiState) rgdSyncAndApply(gtx layout.Context) {
-	t := ui.activeTab()
-	if t == nil || t.kind != "rgd" || t.rgdFile == nil {
+func RgdSyncAndApply(ui *uiState, gtx layout.Context) {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "rgd" || t.RgdFile == nil {
 		return
 	}
-	eSel := ui.rgdSelectedEntryFor(t)
+	eSel := RgdSelectedEntryFor(ui, t)
 	// ── Reference editor (only for tables) ──────────────────────────────────
 	if eSel != nil && eSel.IsTable() {
-		if t.rgdRefBound != t.rgdSelected {
+		if t.RgdRefBound != t.RgdSelected {
 			cur := eSel.RefString()
-			t.rgdRefEditor.SetText(cur)
-			t.rgdRefBound = t.rgdSelected
-			t.rgdRefEditor.SingleLine = true
-			t.rgdRefEditor.Submit = true
+			t.RgdRefEditor.SetText(cur)
+			t.RgdRefBound = t.RgdSelected
+			t.RgdRefEditor.SingleLine = true
+			t.RgdRefEditor.Submit = true
 		}
 		for {
-			ev, ok := t.rgdRefEditor.Update(gtx)
+			ev, ok := t.RgdRefEditor.Update(gtx)
 			if !ok {
 				break
 			}
@@ -355,7 +355,7 @@ func (ui *uiState) rgdSyncAndApply(gtx layout.Context) {
 			}
 			_ = ev
 		}
-		newText := t.rgdRefEditor.Text()
+		newText := t.RgdRefEditor.Text()
 		cur := eSel.RefString()
 		if newText != cur {
 			if strings.TrimSpace(newText) == "" {
@@ -377,91 +377,91 @@ func (ui *uiState) rgdSyncAndApply(gtx layout.Context) {
 					eSel.Ref.Name = "$REF"
 				}
 			}
-			t.rgdDirty = true
+			t.RgdDirty = true
 		}
 	}
 	// ── Scalar value editors and Bool toggles ───────────────────────────────
 	if eSel != nil && eSel.Type == rgd.RgdTypeBool {
-		if ui.rgdEnsureBoolClick(t, t.rgdSelected).Clicked(gtx) {
+		if RgdEnsureBoolClick(ui, t, t.RgdSelected).Clicked(gtx) {
 			eSel.BoolVal = !eSel.BoolVal
-			t.rgdDirty = true
+			t.RgdDirty = true
 		}
 	} else if eSel != nil && (eSel.Type == rgd.RgdTypeString || eSel.Type == rgd.RgdTypeWString) {
-		ui.rgdSyncStringSuggestions(t, eSel, t.rgdSelected, gtx)
-		ui.rgdSyncEditor(t, eSel, t.rgdSelected, gtx)
+		RgdSyncStringSuggestions(ui, t, eSel, t.RgdSelected, gtx)
+		RgdSyncEditor(ui, t, eSel, t.RgdSelected, gtx)
 	} else if eSel != nil && rgdIsEditableType(eSel.Type) {
-		ui.rgdSyncEditor(t, eSel, t.rgdSelected, gtx)
+		RgdSyncEditor(ui, t, eSel, t.RgdSelected, gtx)
 	}
 	if eSel != nil && eSel.IsTable() {
 		for _, ch := range eSel.Children {
-			key := t.rgdSelected + "/" + ch.Name
+			key := t.RgdSelected + "/" + ch.Name
 			if ch.Type == rgd.RgdTypeBool {
-				if ui.rgdEnsureBoolClick(t, key).Clicked(gtx) {
+				if RgdEnsureBoolClick(ui, t, key).Clicked(gtx) {
 					ch.BoolVal = !ch.BoolVal
-					t.rgdDirty = true
+					t.RgdDirty = true
 				}
 				continue
 			}
 			if ch.Type == rgd.RgdTypeString || ch.Type == rgd.RgdTypeWString {
-				ui.rgdSyncStringSuggestions(t, ch, key, gtx)
-				ui.rgdSyncEditor(t, ch, key, gtx)
+				RgdSyncStringSuggestions(ui, t, ch, key, gtx)
+				RgdSyncEditor(ui, t, ch, key, gtx)
 				continue
 			}
 			if ch.IsTable() {
 				refKey := key + "/$ref"
-				refEditor := ui.rgdEnsureValEditor(t, refKey, ch.RefString())
+				refEditor := RgdEnsureValEditor(ui, t, refKey, ch.RefString())
 				for {
 					if _, ok := refEditor.Update(gtx); !ok {
 						break
 					}
 				}
 				if rgdApplyReferenceText(ch, refEditor.Text()) {
-					t.rgdDirty = true
+					t.RgdDirty = true
 				}
 				continue
 			}
-			ui.rgdSyncEditor(t, ch, key, gtx)
+			RgdSyncEditor(ui, t, ch, key, gtx)
 		}
 	}
 }
 
-func (ui *uiState) handleRgdSave(t *fileTab) {
-	if t == nil || t.kind != "rgd" || t.rgdFile == nil {
-		ui.statusText = "Nothing to save"
+func HandleRgdSave(ui *uiState, t *fileTab) {
+	if t == nil || t.Kind != "rgd" || t.RgdFile == nil {
+		ui.StatusText = "Nothing to save"
 		return
 	}
 	// flush any pending editor text that hasn't been applied via Update yet
-	ui.rgdFlushPending(t)
-	if len(t.rgdValErrors) > 0 {
-		ui.statusText = "Save failed: correct invalid RGD values first"
+	RgdFlushPending(ui, t)
+	if len(t.RgdValErrors) > 0 {
+		ui.StatusText = "Save failed: correct invalid RGD values first"
 		return
 	}
-	if !t.rgdDirty {
-		ui.statusText = fmt.Sprintf("%s — no changes", filepath.Base(t.path))
+	if !t.RgdDirty {
+		ui.StatusText = fmt.Sprintf("%s — no changes", filepath.Base(t.Path))
 		return
 	}
-	data, err := t.rgdFile.MarshalBinary()
+	data, err := t.RgdFile.MarshalBinary()
 	if err != nil {
-		ui.statusText = fmt.Sprintf("Save failed: %v", err)
-		log.Printf("marshal %q: %v", t.path, err)
+		ui.StatusText = fmt.Sprintf("Save failed: %v", err)
+		log.Printf("marshal %q: %v", t.Path, err)
 		return
 	}
-	if ui.modTree == nil {
-		ui.statusText = "Save failed: no mod loaded"
+	if ui.ModTree == nil {
+		ui.StatusText = "Save failed: no mod loaded"
 		return
 	}
-	diskPath, err := ui.modTree.WriteOverlayFile(t.path, data)
+	diskPath, err := ui.ModTree.WriteOverlayFile(t.Path, data)
 	if err != nil {
-		ui.statusText = fmt.Sprintf("Save failed: %v", err)
-		log.Printf("write overlay %q: %v", t.path, err)
+		ui.StatusText = fmt.Sprintf("Save failed: %v", err)
+		log.Printf("write overlay %q: %v", t.Path, err)
 		return
 	}
-	t.rgdDirty = false
-	ui.statusText = fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(t.path), diskPath, len(data))
-	log.Printf("saved rgd %q -> %q (%d bytes)", t.path, diskPath, len(data))
+	t.RgdDirty = false
+	ui.StatusText = fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(t.Path), diskPath, len(data))
+	log.Printf("saved rgd %q -> %q (%d bytes)", t.Path, diskPath, len(data))
 }
 
-func (ui *uiState) tableRowBool(gtx layout.Context, label string, t *fileTab, e *rgd.RgdEntry, key string, alt bool) layout.Dimensions {
+func TableRowBool(ui *uiState, gtx layout.Context, label string, t *fileTab, e *rgd.RgdEntry, key string, alt bool) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(28))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -469,7 +469,7 @@ func (ui *uiState) tableRowBool(gtx layout.Context, label string, t *fileTab, e 
 	if alt {
 		bg = cSaveBg
 	}
-	click := ui.rgdEnsureBoolClick(t, key)
+	click := RgdEnsureBoolClick(ui, t, key)
 	value := "False"
 	if e.BoolVal {
 		value = "True"
@@ -487,7 +487,7 @@ func (ui *uiState) tableRowBool(gtx layout.Context, label string, t *fileTab, e 
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), label)
+						l := material.Label(ui.Th, unit.Sp(11), label)
 						l.Color = cText
 						return l.Layout(gtx)
 					})
@@ -495,7 +495,7 @@ func (ui *uiState) tableRowBool(gtx layout.Context, label string, t *fileTab, e 
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, cBorderLight) }),
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4), Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.toggleButton(gtx, click, value, e.BoolVal, cSelectBg)
+						return ToggleButton(ui, gtx, click, value, e.BoolVal, cSelectBg)
 					})
 				}),
 			)
@@ -534,7 +534,7 @@ func rgdTooltipForValue(e *rgd.RgdEntry) string {
 //
 // It is kept apart from the layout so the wording can be pinned without
 // laying a frame out.
-func (ui *uiState) localeRowDisplay(value string) (text, tooltip string) {
+func LocaleRowDisplay(ui *uiState, value string) (text, tooltip string) {
 	id, ok := rgd.LocID(value)
 	if !ok {
 		return "", ""
@@ -558,9 +558,9 @@ func (ui *uiState) localeRowDisplay(value string) (text, tooltip string) {
 		return resolved, strings.Join(lines, "\n")
 	}
 	lines = append(lines,
-		fmt.Sprintf("No entry for $%s in the %s .ucs files", id, ui.localeLabel()),
+		fmt.Sprintf("No entry for $%s in the %s .ucs files", id, LocaleLabel(ui)),
 		"", "Click to add one")
-	return fmt.Sprintf("not in the %s string table", ui.localeLabel()), strings.Join(lines, "\n")
+	return fmt.Sprintf("not in the %s string table", LocaleLabel(ui)), strings.Join(lines, "\n")
 }
 
 // tableRowLocaleText is the text a DT_WString resolves to in the chosen
@@ -571,11 +571,11 @@ func (ui *uiState) localeRowDisplay(value string) (text, tooltip string) {
 // Alt+click on the text opens the .ucs it came from with the caret on the
 // line, which is why the press is caught here rather than on a clickable: only
 // the raw pointer event carries the modifier.
-func (ui *uiState) tableRowLocaleText(gtx layout.Context, t *fileTab, e *rgd.RgdEntry, key string, alt bool) layout.Dimensions {
+func TableRowLocaleText(ui *uiState, gtx layout.Context, t *fileTab, e *rgd.RgdEntry, key string, alt bool) layout.Dimensions {
 	if e == nil || e.Type != rgd.RgdTypeWString {
 		return layout.Dimensions{}
 	}
-	text, tooltip := ui.localeRowDisplay(e.DisplayValue())
+	text, tooltip := LocaleRowDisplay(ui, e.DisplayValue())
 	if text == "" {
 		// Not a localisation id at all, so there is no row to show.
 		return layout.Dimensions{}
@@ -583,17 +583,17 @@ func (ui *uiState) tableRowLocaleText(gtx layout.Context, t *fileTab, e *rgd.Rgd
 	if len(text) > 96 {
 		text = text[:93] + "…"
 	}
-	row := ui.tableRow2WithTooltip(gtx, "Text", text, alt, tooltip)
+	row := TableRow2WithTooltip(ui, gtx, "Text", text, alt, tooltip)
 	// A row with no text is still worth a target: a click on it is how a field
 	// with no localisation gets one.
-	tag := ui.rgdEnsureLocTag(t, key)
+	tag := RgdEnsureLocTag(ui, t, key)
 	return layout.Stack{}.Layout(gtx,
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return row }),
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			// The pointer cursor is the only cue that the row does something,
 			// and it costs no per-frame state to keep.
 			pointer.CursorPointer.Add(gtx.Ops)
-			ui.pollLocaleLinkPress(gtx, tag, e.DisplayValue(), e, key)
+			PollLocaleLinkPress(ui, gtx, tag, e.DisplayValue(), e, key)
 			return layout.Dimensions{}
 		}),
 	)
@@ -602,17 +602,17 @@ func (ui *uiState) tableRowLocaleText(gtx layout.Context, t *fileTab, e *rgd.Rgd
 // rgdEnsureLocTag is the pointer target of one Alt+click row. The target is
 // kept per tab because the same entry can be drawn in more than one tab, and
 // Gio routes a press to the area that registered it.
-func (ui *uiState) rgdEnsureLocTag(t *fileTab, key string) event.Tag {
+func RgdEnsureLocTag(ui *uiState, t *fileTab, key string) event.Tag {
 	if t == nil {
 		return nil
 	}
-	if t.rgdLocTags == nil {
-		t.rgdLocTags = make(map[string]event.Tag)
+	if t.RgdLocTags == nil {
+		t.RgdLocTags = make(map[string]event.Tag)
 	}
-	tag, ok := t.rgdLocTags[key]
+	tag, ok := t.RgdLocTags[key]
 	if !ok {
 		tag = newPointerTag(key)
-		t.rgdLocTags[key] = tag
+		t.RgdLocTags[key] = tag
 	}
 	return tag
 }
@@ -622,7 +622,7 @@ func (ui *uiState) rgdEnsureLocTag(t *fileTab, key string) event.Tag {
 // there is no text to select. Opening a tab or a dialog is the input pass's
 // job, so the request is left on the state for the next frame instead of acted
 // on here.
-func (ui *uiState) pollLocaleLinkPress(gtx layout.Context, tag event.Tag, value string, e *rgd.RgdEntry, fieldKey string) {
+func PollLocaleLinkPress(ui *uiState, gtx layout.Context, tag event.Tag, value string, e *rgd.RgdEntry, fieldKey string) {
 	if tag == nil {
 		return
 	}
@@ -644,28 +644,28 @@ func (ui *uiState) pollLocaleLinkPress(gtx layout.Context, tag event.Tag, value 
 		case localeRowNothing:
 			continue
 		case localeRowJump:
-			ui.localePending = id
+			ui.LocalePending = id
 		case localeRowEdit, localeRowCreate:
-			ui.localePendingRequest = localeEditRequest{id: id, action: action}
-			ui.localePendingField = e
-			ui.localePendingFieldKey = fieldKey
+			ui.LocalePendingRequest = localeEditRequest{id: id, action: action}
+			ui.LocalePendingField = e
+			ui.LocalePendingFieldKey = fieldKey
 		}
 	}
 }
 
-func (ui *uiState) tableRowStringEditor(gtx layout.Context, label string, t *fileTab, e *rgd.RgdEntry, key string, alt bool) layout.Dimensions {
+func TableRowStringEditor(ui *uiState, gtx layout.Context, label string, t *fileTab, e *rgd.RgdEntry, key string, alt bool) layout.Dimensions {
 	// A DT_String numeric alias is a dictionary reference, not a readable value,
 	// so it shows the resolved name while the original alias stays in the model.
 	// A DT_WString is a localisation id, which is shown as it is.
 	if display := e.DisplayFieldValue(); display != e.DisplayValue() && e.Type == rgd.RgdTypeString {
-		return ui.tableRow2WithTooltip(gtx, label, display, alt, rgdTooltipForValue(e))
+		return TableRow2WithTooltip(ui, gtx, label, display, alt, rgdTooltipForValue(e))
 	}
 	suggestions := rgdVisibleSuggestions(t, e)
-	clicks := ui.rgdEnsureSuggestionClicks(t, key, len(suggestions))
+	clicks := RgdEnsureSuggestionClicks(ui, t, key, len(suggestions))
 	children := make([]layout.FlexChild, 0, len(suggestions)+1)
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		ed := ui.rgdEnsureValEditor(t, key, e.DisplayValue())
-		return ui.tableRowEditor(gtx, label, ed, alt, t.rgdValErrors[key])
+		ed := RgdEnsureValEditor(ui, t, key, e.DisplayValue())
+		return TableRowEditor(ui, gtx, label, ed, alt, t.RgdValErrors[key])
 	}))
 	for i, suggestion := range suggestions {
 		i, suggestion := i, suggestion
@@ -675,7 +675,7 @@ func (ui *uiState) tableRowStringEditor(gtx layout.Context, label string, t *fil
 				text = text[:55] + "…"
 			}
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButton(gtx, &clicks[i], text)
+				return SmallButton(ui, gtx, &clicks[i], text)
 			})
 		}))
 	}
@@ -684,7 +684,7 @@ func (ui *uiState) tableRowStringEditor(gtx layout.Context, label string, t *fil
 	// dictionary alias and has nothing to resolve against.
 	if e.Type == rgd.RgdTypeWString {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRowLocaleText(gtx, t, e, key, alt)
+			return TableRowLocaleText(ui, gtx, t, e, key, alt)
 		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -692,7 +692,7 @@ func (ui *uiState) tableRowStringEditor(gtx layout.Context, label string, t *fil
 
 // ── row with inline editor ──────────────────────────────────────────────────
 
-func (ui *uiState) tableRowEditor(gtx layout.Context, label string, ed *widget.Editor, alt bool, validationErr string) layout.Dimensions {
+func TableRowEditor(ui *uiState, gtx layout.Context, label string, ed *widget.Editor, alt bool, validationErr string) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(28))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -713,7 +713,7 @@ func (ui *uiState) tableRowEditor(gtx layout.Context, label string, ed *widget.E
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), label)
+						l := material.Label(ui.Th, unit.Sp(11), label)
 						l.Color = cText
 						return l.Layout(gtx)
 					})
@@ -727,7 +727,7 @@ func (ui *uiState) tableRowEditor(gtx layout.Context, label string, ed *widget.E
 							borderColor = rgb(0xB00020)
 						}
 						b := widget.Border{Color: borderColor, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
-						click := ui.rgdEnsureEditorClick(ed)
+						click := RgdEnsureEditorClick(ui, ed)
 						return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							return layout.Stack{}.Layout(gtx,
 								layout.Expanded(func(gtx layout.Context) layout.Dimensions {
@@ -740,7 +740,7 @@ func (ui *uiState) tableRowEditor(gtx layout.Context, label string, ed *widget.E
 								}),
 								layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 									return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-										w := material.Editor(ui.th, ed, "")
+										w := material.Editor(ui.Th, ed, "")
 										w.TextSize = unit.Sp(11)
 										w.HintColor = cTextDim
 										return w.Layout(gtx)
@@ -768,116 +768,116 @@ func (ui *uiState) tableRowEditor(gtx layout.Context, label string, ed *widget.E
 
 // ─── merged from rgd_tree.go ───────────────────────────────────────────────
 
-func (ui *uiState) openRgd(virtualPath string) {
-	if ui.modTree == nil {
+func OpenRgd(ui *uiState, virtualPath string) {
+	if ui.ModTree == nil {
 		return
 	}
-	if idx := ui.findTabIndex(virtualPath); idx >= 0 {
-		ui.tabSel = idx + 1
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
+	if idx := FindTabIndex(ui, virtualPath); idx >= 0 {
+		ui.TabSel = idx + 1
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
-	data, err := ui.modTree.ReadFile(virtualPath)
+	data, err := ui.ModTree.ReadFile(virtualPath)
 	if err != nil {
-		t := &fileTab{path: virtualPath, kind: "rgd", rgdError: err.Error(), rgdExpanded: map[string]bool{"GameData": true}, rgdSelected: "GameData"}
-		ui.openTabs = append(ui.openTabs, t)
-		ui.tabSel = len(ui.openTabs)
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(virtualPath), err)
+		t := &fileTab{Path: virtualPath, Kind: "rgd", RgdError: err.Error(), RgdExpanded: map[string]bool{"GameData": true}, RgdSelected: "GameData"}
+		ui.OpenTabs = append(ui.OpenTabs, t)
+		ui.TabSel = len(ui.OpenTabs)
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(virtualPath), err)
 		return
 	}
 	rf, err := rgd.ParseRgd(data)
 	if err != nil {
-		t := &fileTab{path: virtualPath, kind: "rgd", rgdError: err.Error(), rgdExpanded: map[string]bool{"GameData": true}, rgdSelected: "GameData"}
-		ui.openTabs = append(ui.openTabs, t)
-		ui.tabSel = len(ui.openTabs)
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Failed to parse %s: %v", filepath.Base(virtualPath), err)
+		t := &fileTab{Path: virtualPath, Kind: "rgd", RgdError: err.Error(), RgdExpanded: map[string]bool{"GameData": true}, RgdSelected: "GameData"}
+		ui.OpenTabs = append(ui.OpenTabs, t)
+		ui.TabSel = len(ui.OpenTabs)
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Failed to parse %s: %v", filepath.Base(virtualPath), err)
 		return
 	}
 	t := &fileTab{
-		path: virtualPath, kind: "rgd",
-		rgdFile: rf, rgdError: "",
-		rgdExpanded:         map[string]bool{"GameData": true},
-		rgdSelected:         "GameData",
-		rgdValEditors:       make(map[string]*widget.Editor),
-		rgdValErrors:        make(map[string]string),
-		rgdValClicks:        make(map[string]*widget.Clickable),
-		rgdSuggestionClicks: make(map[string][]widget.Clickable),
+		Path: virtualPath, Kind: "rgd",
+		RgdFile: rf, RgdError: "",
+		RgdExpanded:         map[string]bool{"GameData": true},
+		RgdSelected:         "GameData",
+		RgdValEditors:       make(map[string]*widget.Editor),
+		RgdValErrors:        make(map[string]string),
+		RgdValClicks:        make(map[string]*widget.Clickable),
+		RgdSuggestionClicks: make(map[string][]widget.Clickable),
 	}
-	t.rgdRefEditor.SingleLine = true
-	t.rgdRefEditor.Submit = true
-	ui.openTabs = append(ui.openTabs, t)
-	ui.tabSel = len(ui.openTabs)
-	ui.ensureTabClicks()
-	ui.rebuildRgdMidNodesFor(t)
-	ui.ensureRgdMidClicks(t, len(t.rgdMidNodes))
-	ui.statusText = fmt.Sprintf("Opened %s — %d top-level entries", filepath.Base(virtualPath), len(rf.Root.Children))
+	t.RgdRefEditor.SingleLine = true
+	t.RgdRefEditor.Submit = true
+	ui.OpenTabs = append(ui.OpenTabs, t)
+	ui.TabSel = len(ui.OpenTabs)
+	EnsureTabClicks(ui)
+	RebuildRgdMidNodesFor(ui, t)
+	EnsureRgdMidClicks(ui, t, len(t.RgdMidNodes))
+	ui.StatusText = fmt.Sprintf("Opened %s — %d top-level entries", filepath.Base(virtualPath), len(rf.Root.Children))
 	log.Printf("openRgd %q: %d top entries", virtualPath, len(rf.Root.Children))
 }
 
-func (ui *uiState) ensureRgdMidClicks(t *fileTab, n int) {
-	if len(t.rgdMidClicks) < n {
-		old := t.rgdMidClicks
-		t.rgdMidClicks = make([]widget.Clickable, n)
-		copy(t.rgdMidClicks, old)
-	} else if len(t.rgdMidClicks) > n {
-		t.rgdMidClicks = t.rgdMidClicks[:n]
+func EnsureRgdMidClicks(ui *uiState, t *fileTab, n int) {
+	if len(t.RgdMidClicks) < n {
+		old := t.RgdMidClicks
+		t.RgdMidClicks = make([]widget.Clickable, n)
+		copy(t.RgdMidClicks, old)
+	} else if len(t.RgdMidClicks) > n {
+		t.RgdMidClicks = t.RgdMidClicks[:n]
 	}
 }
 
-func (ui *uiState) rebuildRgdMidNodes() {
-	t := ui.activeTab()
-	if t == nil || t.kind != "rgd" {
+func RebuildRgdMidNodes(ui *uiState) {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "rgd" {
 		return
 	}
-	ui.rebuildRgdMidNodesFor(t)
+	RebuildRgdMidNodesFor(ui, t)
 }
 
-func (ui *uiState) rebuildRgdMidNodesFor(t *fileTab) {
-	if t.rgdFile == nil || t.rgdFile.Root == nil {
-		t.rgdMidNodes = nil
+func RebuildRgdMidNodesFor(ui *uiState, t *fileTab) {
+	if t.RgdFile == nil || t.RgdFile.Root == nil {
+		t.RgdMidNodes = nil
 		return
 	}
-	if t.rgdExpanded == nil {
-		t.rgdExpanded = map[string]bool{"GameData": true}
+	if t.RgdExpanded == nil {
+		t.RgdExpanded = map[string]bool{"GameData": true}
 	}
-	if t.rgdSelected == "" {
-		t.rgdSelected = "GameData"
+	if t.RgdSelected == "" {
+		t.RgdSelected = "GameData"
 	}
 	var out []rgdVisible
-	root := t.rgdFile.Root
+	root := t.RgdFile.Root
 	out = append(out, rgdVisible{
 		Name:     root.Name,
 		Path:     "GameData",
 		Depth:    0,
 		IsTable:  root.IsTable(),
 		HasKids:  len(root.Children) > 0,
-		Expanded: t.rgdExpanded["GameData"],
-		Selected: t.rgdSelected == "GameData",
+		Expanded: t.RgdExpanded["GameData"],
+		Selected: t.RgdSelected == "GameData",
 		Type:     root.Type,
 		Ref:      root.RefString(),
 		Entry:    root,
 	})
-	if t.rgdExpanded["GameData"] {
-		ui.rgdFlattenChildrenFor(t, root.Children, "GameData", 1, &out)
+	if t.RgdExpanded["GameData"] {
+		RgdFlattenChildrenFor(ui, t, root.Children, "GameData", 1, &out)
 	}
-	t.rgdMidNodes = out
+	t.RgdMidNodes = out
 }
 
-func (ui *uiState) rgdFlattenChildren(children []*rgd.RgdEntry, basePath string, depth int, out *[]rgdVisible) {
-	t := ui.activeTab()
+func RgdFlattenChildren(ui *uiState, children []*rgd.RgdEntry, basePath string, depth int, out *[]rgdVisible) {
+	t := ActiveTab(ui)
 	if t == nil {
 		return
 	}
-	ui.rgdFlattenChildrenFor(t, children, basePath, depth, out)
+	RgdFlattenChildrenFor(ui, t, children, basePath, depth, out)
 }
 
-func (ui *uiState) rgdFlattenChildrenFor(t *fileTab, children []*rgd.RgdEntry, basePath string, depth int, out *[]rgdVisible) {
+func RgdFlattenChildrenFor(ui *uiState, t *fileTab, children []*rgd.RgdEntry, basePath string, depth int, out *[]rgdVisible) {
 	for _, ch := range children {
 		path := basePath + "/" + ch.Name
-		expanded := t.rgdExpanded[path]
+		expanded := t.RgdExpanded[path]
 		*out = append(*out, rgdVisible{
 			Name:     ch.Name,
 			Path:     path,
@@ -885,37 +885,37 @@ func (ui *uiState) rgdFlattenChildrenFor(t *fileTab, children []*rgd.RgdEntry, b
 			IsTable:  ch.IsTable(),
 			HasKids:  len(ch.Children) > 0,
 			Expanded: expanded,
-			Selected: t.rgdSelected == path,
+			Selected: t.RgdSelected == path,
 			Type:     ch.Type,
 			Ref:      ch.RefString(),
 			Entry:    ch,
 		})
 		if ch.IsTable() && len(ch.Children) > 0 && expanded {
-			ui.rgdFlattenChildrenFor(t, ch.Children, path, depth+1, out)
+			RgdFlattenChildrenFor(ui, t, ch.Children, path, depth+1, out)
 		}
 	}
 }
 
-func (ui *uiState) rgdFindEntry(path string) *rgd.RgdEntry {
-	t := ui.activeTab()
-	if t == nil || t.kind != "rgd" {
+func RgdFindEntry(ui *uiState, path string) *rgd.RgdEntry {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "rgd" {
 		return nil
 	}
-	return ui.rgdFindEntryFor(t, path)
+	return RgdFindEntryFor(ui, t, path)
 }
 
-func (ui *uiState) rgdFindEntryFor(t *fileTab, path string) *rgd.RgdEntry {
-	if t.rgdFile == nil || t.rgdFile.Root == nil {
+func RgdFindEntryFor(ui *uiState, t *fileTab, path string) *rgd.RgdEntry {
+	if t.RgdFile == nil || t.RgdFile.Root == nil {
 		return nil
 	}
 	if path == "GameData" || path == "" {
-		return t.rgdFile.Root
+		return t.RgdFile.Root
 	}
 	parts := strings.Split(path, "/")
 	if len(parts) == 0 || parts[0] != "GameData" {
 		return nil
 	}
-	cur := t.rgdFile.Root
+	cur := t.RgdFile.Root
 	for _, seg := range parts[1:] {
 		found := false
 		for _, ch := range cur.Children {
@@ -932,37 +932,37 @@ func (ui *uiState) rgdFindEntryFor(t *fileTab, path string) *rgd.RgdEntry {
 	return cur
 }
 
-func (ui *uiState) rgdSelectedEntry() *rgd.RgdEntry {
-	t := ui.activeTab()
-	if t == nil || t.kind != "rgd" {
+func RgdSelectedEntry(ui *uiState) *rgd.RgdEntry {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "rgd" {
 		return nil
 	}
-	return ui.rgdSelectedEntryFor(t)
+	return RgdSelectedEntryFor(ui, t)
 }
 
-func (ui *uiState) rgdSelectedEntryFor(t *fileTab) *rgd.RgdEntry {
-	if t.rgdFile == nil {
+func RgdSelectedEntryFor(ui *uiState, t *fileTab) *rgd.RgdEntry {
+	if t.RgdFile == nil {
 		return nil
 	}
-	if e := ui.rgdFindEntryFor(t, t.rgdSelected); e != nil {
+	if e := RgdFindEntryFor(ui, t, t.RgdSelected); e != nil {
 		return e
 	}
-	return t.rgdFile.Root
+	return t.RgdFile.Root
 }
 
 // ─── merged from rgd_view.go ───────────────────────────────────────────────
 
-func (ui *uiState) propertiesTable(gtx layout.Context, t *fileTab) layout.Dimensions {
-	e := ui.rgdSelectedEntryFor(t)
+func PropertiesTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	e := RgdSelectedEntryFor(ui, t)
 	var name, typeLabel string
 	if e == nil {
 		name = "—"
 		typeLabel = "—"
 	} else {
-		if t.rgdSelected == "GameData" || t.rgdSelected == "" {
+		if t.RgdSelected == "GameData" || t.RgdSelected == "" {
 			name = "GameData"
-		} else if idx := strings.LastIndex(t.rgdSelected, "/"); idx >= 0 {
-			name = t.rgdSelected[idx+1:]
+		} else if idx := strings.LastIndex(t.RgdSelected, "/"); idx >= 0 {
+			name = t.RgdSelected[idx+1:]
 		} else {
 			name = e.Name
 		}
@@ -971,28 +971,28 @@ func (ui *uiState) propertiesTable(gtx layout.Context, t *fileTab) layout.Dimens
 	isTable := e != nil && e.IsTable()
 	editableScalar := e != nil && rgdIsEditableType(e.Type)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableRow2(gtx, "Name", name, false) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableRow2(gtx, "Data Type", typeLabel, true) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableRow2(ui, gtx, "Name", name, false) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableRow2(ui, gtx, "Data Type", typeLabel, true) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if isTable {
-				return ui.tableRowEditor(gtx, "Reference", &t.rgdRefEditor, false, "")
+				return TableRowEditor(ui, gtx, "Reference", &t.RgdRefEditor, false, "")
 			}
-			return ui.tableRow2(gtx, "Reference", e.RefString(), false)
+			return TableRow2(ui, gtx, "Reference", e.RefString(), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if e != nil && e.Type == rgd.RgdTypeBool {
-				return ui.tableRowBool(gtx, "Value", t, e, t.rgdSelected, true)
+				return TableRowBool(ui, gtx, "Value", t, e, t.RgdSelected, true)
 			}
 			if e != nil && (e.Type == rgd.RgdTypeString || e.Type == rgd.RgdTypeWString) {
-				return ui.tableRowStringEditor(gtx, "Value", t, e, t.rgdSelected, true)
+				return TableRowStringEditor(ui, gtx, "Value", t, e, t.RgdSelected, true)
 			}
 			if editableScalar {
-				ed := ui.rgdEnsureValEditor(t, t.rgdSelected, e.DisplayValue())
-				return ui.tableRowEditor(gtx, "Value", ed, true, t.rgdValErrors[t.rgdSelected])
+				ed := RgdEnsureValEditor(ui, t, t.RgdSelected, e.DisplayValue())
+				return TableRowEditor(ui, gtx, "Value", ed, true, t.RgdValErrors[t.RgdSelected])
 			}
 			if e != nil && !isTable {
-				return ui.tableRow2(gtx, "Value", e.DisplayFieldValue(), true)
+				return TableRow2(ui, gtx, "Value", e.DisplayFieldValue(), true)
 			}
 			return layout.Dimensions{}
 		}),
@@ -1025,19 +1025,19 @@ var childrenRows = [][]string{
 	{"ui_ext", "ebpextensions\\ui_ext.lua"},
 }
 
-func (ui *uiState) childrenTable(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t.rgdFile == nil {
+func ChildrenTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t.RgdFile == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Bottom: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), "Select a .rgd file, then a node in the middle tree")
+				l := material.Label(ui.Th, unit.Sp(10), "Select a .rgd file, then a node in the middle tree")
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			})
 		})
 	}
-	e := ui.rgdSelectedEntryFor(t)
+	e := RgdSelectedEntryFor(ui, t)
 	if e == nil {
-		e = t.rgdFile.Root
+		e = t.RgdFile.Root
 	}
 	if !e.IsTable() {
 		return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -1046,7 +1046,7 @@ func (ui *uiState) childrenTable(gtx layout.Context, t *fileTab) layout.Dimensio
 				val = "—"
 			}
 			msg := fmt.Sprintf("%s (%s) = %s — no children", e.Name, e.TypeLabel(), val)
-			l := material.Label(ui.th, unit.Sp(11), msg)
+			l := material.Label(ui.Th, unit.Sp(11), msg)
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		})
@@ -1055,44 +1055,44 @@ func (ui *uiState) childrenTable(gtx layout.Context, t *fileTab) layout.Dimensio
 	if len(children) == 0 {
 		if ref := e.RefString(); ref != "" {
 			return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), fmt.Sprintf("Empty table — Reference: %s", ref))
+				l := material.Label(ui.Th, unit.Sp(10), fmt.Sprintf("Empty table — Reference: %s", ref))
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			})
 		}
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), "No children")
+			l := material.Label(ui.Th, unit.Sp(10), "No children")
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		})
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutListWithScrollbar(gtx, &t.rgdChildScroll, &t.rgdChildList, 28, len(children), func(gtx layout.Context, index int) layout.Dimensions {
+			return LayoutListWithScrollbar(ui, gtx, &t.RgdChildScroll, &t.RgdChildList, 28, len(children), func(gtx layout.Context, index int) layout.Dimensions {
 				ch := children[index]
 				alt := index%2 == 1
-				key := t.rgdSelected + "/" + ch.Name
+				key := t.RgdSelected + "/" + ch.Name
 				if ch.IsTable() {
-					refEditor := ui.rgdEnsureValEditor(t, key+"/$ref", ch.RefString())
-					return ui.tableRowEditor(gtx, ch.Name, refEditor, alt, "")
+					refEditor := RgdEnsureValEditor(ui, t, key+"/$ref", ch.RefString())
+					return TableRowEditor(ui, gtx, ch.Name, refEditor, alt, "")
 				}
 				if ch.Type == rgd.RgdTypeBool {
-					return ui.tableRowBool(gtx, ch.Name, t, ch, key, alt)
+					return TableRowBool(ui, gtx, ch.Name, t, ch, key, alt)
 				}
 				if ch.Type == rgd.RgdTypeString || ch.Type == rgd.RgdTypeWString {
-					return ui.tableRowStringEditor(gtx, ch.Name, t, ch, key, alt)
+					return TableRowStringEditor(ui, gtx, ch.Name, t, ch, key, alt)
 				}
 				if rgdIsEditableType(ch.Type) {
-					ed := ui.rgdEnsureValEditor(t, key, ch.DisplayValue())
-					return ui.tableRowEditor(gtx, ch.Name, ed, alt, t.rgdValErrors[key])
+					ed := RgdEnsureValEditor(ui, t, key, ch.DisplayValue())
+					return TableRowEditor(ui, gtx, ch.Name, ed, alt, t.RgdValErrors[key])
 				}
 				val := ch.DisplayFieldValue()
 				if len(val) > 64 {
 					val = val[:61] + "…"
 				}
-				return ui.tableRow2WithTooltip(gtx, ch.Name, val, alt, rgdTooltipForValue(ch))
+				return TableRow2WithTooltip(ui, gtx, ch.Name, val, alt, rgdTooltipForValue(ch))
 			})
 		}),
 	)

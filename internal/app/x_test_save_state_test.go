@@ -3,38 +3,38 @@ package app
 import "testing"
 
 func TestSaveEligibleOnlyForDirtyEditableTabs(t *testing.T) {
-	ui := &uiState{tabSel: 1, openTabs: []*fileTab{{path: `Data\script.lua`, kind: "text"}}}
-	if ui.saveEligible() {
+	ui := &uiState{TabSel: 1, OpenTabs: []*fileTab{{Path: `Data\script.lua`, Kind: "text"}}}
+	if SaveEligible(ui) {
 		t.Fatal("clean text file must not enable Save")
 	}
-	ui.activeTab().textDirty = true
-	if !ui.saveEligible() {
+	ActiveTab(ui).TextDirty = true
+	if !SaveEligible(ui) {
 		t.Fatal("dirty text file must enable Save")
 	}
 
-	ui.activeTab().kind = "rgd"
-	ui.activeTab().textDirty = false
-	if ui.saveEligible() {
+	ActiveTab(ui).Kind = "rgd"
+	ActiveTab(ui).TextDirty = false
+	if SaveEligible(ui) {
 		t.Fatal("clean RGD file must not enable Save")
 	}
-	ui.activeTab().rgdDirty = true
-	if !ui.saveEligible() {
+	ActiveTab(ui).RgdDirty = true
+	if !SaveEligible(ui) {
 		t.Fatal("dirty RGD file must enable Save")
 	}
 
-	ui.activeTab().kind = "sgb"
-	ui.activeTab().rgdDirty = false
-	if ui.saveEligible() {
+	ActiveTab(ui).Kind = "sgb"
+	ActiveTab(ui).RgdDirty = false
+	if SaveEligible(ui) {
 		t.Fatal("clean SGB map must not enable Save")
 	}
-	ui.activeTab().sgbDirty = true
-	if !ui.saveEligible() {
+	ActiveTab(ui).SgbDirty = true
+	if !SaveEligible(ui) {
 		t.Fatal("dirty SGB map must enable Save")
 	}
 
-	ui.activeTab().kind = "fda"
-	ui.activeTab().sgbDirty = false
-	if ui.saveEligible() {
+	ActiveTab(ui).Kind = "fda"
+	ActiveTab(ui).SgbDirty = false
+	if SaveEligible(ui) {
 		t.Fatal("FDA playback/export must not enable top Save")
 	}
 }

@@ -515,46 +515,46 @@ const rshNecronsDir = `C:\Program Files\Steam\steamapps\common\Dawn of War Defin
 func TestModelViewerStepsOneFrameAtATime(t *testing.T) {
 	model := renderTestModelWithAnyAnimation(t)
 	v := newModelViewer(model, "")
-	v.selectAnim(0)
-	anim := v.anim
+	v.SelectAnim(0)
+	anim := v.Anim
 	if anim == nil || anim.NumFrames < 4 {
 		t.Skip("this model has no clip with enough frames to step through")
 	}
-	v.playing = true
-	v.time = 0.5
+	v.Playing = true
+	v.Time = 0.5
 	step := float32(1) / float32(anim.NumFrames)
-	before, frames := v.currentFrame()
+	before, frames := v.CurrentFrame()
 
-	v.stepFrame(1)
-	if v.playing {
+	v.StepFrame(1)
+	if v.Playing {
 		t.Error("the model is still playing after a frame was wound to")
 	}
-	if got, want := v.time, float32(0.5)+step; abs32(got-want) > 1e-5 {
+	if got, want := v.Time, float32(0.5)+step; abs32(got-want) > 1e-5 {
 		t.Errorf("one frame forward landed on %v, want %v", got, want)
 	}
-	if frame, total := v.currentFrame(); total != frames || frame != before+1 {
+	if frame, total := v.CurrentFrame(); total != frames || frame != before+1 {
 		t.Errorf("the readout says frame %d of %d, want the one after frame %d of %d",
 			frame+1, total, before+1, frames)
 	}
 
-	v.stepFrame(-1)
-	if got := v.time; abs32(got-0.5) > 1e-5 {
+	v.StepFrame(-1)
+	if got := v.Time; abs32(got-0.5) > 1e-5 {
 		t.Errorf("stepping back landed on %v, want the frame it came from, 0.5", got)
 	}
 	// The first frame is a floor rather than a wrap: holding the button down
 	// walks to the start of the clip and stays there.
-	v.time = step
-	v.stepFrame(-1)
-	if got := v.time; abs32(got) > 1e-5 {
+	v.Time = step
+	v.StepFrame(-1)
+	if got := v.Time; abs32(got) > 1e-5 {
 		t.Errorf("stepping back past the first frame landed on %v, want the first", got)
 	}
 
 	// The last frame of a clip is the first one again, so a step forward from
 	// there wraps to the start rather than past the end of the pose.
-	v.time = 1 - step
-	v.stepFrame(1)
-	if v.time != 0 {
-		t.Errorf("stepping past the last frame landed on %v, want the start of the clip", v.time)
+	v.Time = 1 - step
+	v.StepFrame(1)
+	if v.Time != 0 {
+		t.Errorf("stepping past the last frame landed on %v, want the start of the clip", v.Time)
 	}
 }
 
@@ -562,11 +562,11 @@ func TestModelViewerStepsOneFrameAtATime(t *testing.T) {
 // operation rather than a division by nothing.
 func TestModelViewerStepsNothingWithoutAClip(t *testing.T) {
 	v := newModelViewer(renderTestModel(t), "")
-	v.stepFrame(1)
-	if v.time != 0 || v.playing {
-		t.Errorf("stepping a model with no clip left time at %v and playing at %v", v.time, v.playing)
+	v.StepFrame(1)
+	if v.Time != 0 || v.Playing {
+		t.Errorf("stepping a model with no clip left time at %v and playing at %v", v.Time, v.Playing)
 	}
-	if frame, frames := v.currentFrame(); frame != 0 || frames != 0 {
+	if frame, frames := v.CurrentFrame(); frame != 0 || frames != 0 {
 		t.Errorf("the readout says frame %d of %d for a model with no clip", frame, frames)
 	}
 }
@@ -603,15 +603,15 @@ func TestOneNotchOfZoomIsAStepAndTheButtonsMatchIt(t *testing.T) {
 	// The wheel and the buttons take the same path, so a press moves the
 	// camera by exactly as much as a click of the wheel.
 	v.Distance = v.FitDistance
-	v.zoomBy(modelZoomByDelta(-wheelNotchDelta))
+	v.ZoomBy(modelZoomByDelta(-wheelNotchDelta))
 	byWheel := v.Distance
 	v.Distance = v.FitDistance
-	v.zoomBy(modelZoomStep) // the near button, in the modelControlClicks path
+	v.ZoomBy(modelZoomStep) // the near button, in the modelControlClicks path
 	if abs64(v.Distance-byWheel) > 1e-9 {
 		t.Errorf("a press moved the distance to %v and a notch to %v: the two are not the same step", v.Distance, byWheel)
 	}
 	// And the far button is the same step the other way.
-	v.zoomBy(1 / modelZoomStep)
+	v.ZoomBy(1 / modelZoomStep)
 	if abs64(v.Distance-v.FitDistance) > 1e-9 {
 		t.Errorf("pressing the two zoom buttons returned the distance to %v, want the %v it started at", v.Distance, v.FitDistance)
 	}
@@ -623,13 +623,13 @@ func TestZoomStepsAreClampedToWhatTheViewerAllows(t *testing.T) {
 	v := newModelViewer(renderTestModel(t), "")
 	lo, hi := v.FitDistance*0.15, v.FitDistance*6
 	for i := 0; i < 200; i++ {
-		v.zoomBy(modelZoomStep)
+		v.ZoomBy(modelZoomStep)
 	}
 	if v.Distance > hi+1e-9 {
 		t.Errorf("zooming in stopped at %v, want no closer than %v", v.Distance, hi)
 	}
 	for i := 0; i < 400; i++ {
-		v.zoomBy(1 / modelZoomStep)
+		v.ZoomBy(1 / modelZoomStep)
 	}
 	if v.Distance < lo-1e-9 {
 		t.Errorf("zooming out stopped at %v, want no further than %v", v.Distance, lo)
@@ -665,37 +665,37 @@ func TestObjectModelViewerUsesViewportDefaults(t *testing.T) {
 	ground := image.NewRGBA(image.Rect(3, 4, 9, 10))
 	v := newObjectModelViewer(model, "Data/art/ebps/test/model.whm", ground)
 
-	if v.modelFile != "Data/art/ebps/test/model.whm" {
-		t.Errorf("model path = %q", v.modelFile)
+	if v.ModelFile != "Data/art/ebps/test/model.whm" {
+		t.Errorf("model path = %q", v.ModelFile)
 	}
-	if v.anim == nil || v.anim.Name != "move" || v.animIndex != 2 {
-		t.Errorf("initial animation = %v at index %d, want move at 2", v.anim, v.animIndex)
+	if v.Anim == nil || v.Anim.Name != "move" || v.AnimIndex != 2 {
+		t.Errorf("initial animation = %v at index %d, want move at 2", v.Anim, v.AnimIndex)
 	}
-	if !v.playing {
+	if !v.Playing {
 		t.Error("viewer with clips should start playing")
 	}
 	var groundBounds image.Rectangle
-	if v.groundImage != nil {
-		groundBounds = v.groundImage.Bounds()
+	if v.GroundImage != nil {
+		groundBounds = v.GroundImage.Bounds()
 	}
-	if !v.showGround || v.groundImage == nil || groundBounds != image.Rect(0, 0, 6, 6) {
-		t.Errorf("ground = enabled:%v bounds:%v, want enabled 6x6 copy", v.showGround, groundBounds)
+	if !v.ShowGround || v.GroundImage == nil || groundBounds != image.Rect(0, 0, 6, 6) {
+		t.Errorf("ground = enabled:%v bounds:%v, want enabled 6x6 copy", v.ShowGround, groundBounds)
 	}
-	if got := v.options(80, 60); !got.Ground || got.GroundImage == nil {
+	if got := v.Options(80, 60); !got.Ground || got.GroundImage == nil {
 		t.Error("render options did not carry the ground image and enabled state")
 	}
 }
 
 func TestObjectModelViewerWithoutGroundOrAnimation(t *testing.T) {
 	v := newObjectModelViewer(&WhmModel{}, "", nil)
-	if v.anim != nil || v.playing {
-		t.Errorf("viewer without clips has animation %v and playing %v", v.anim, v.playing)
+	if v.Anim != nil || v.Playing {
+		t.Errorf("viewer without clips has animation %v and playing %v", v.Anim, v.Playing)
 	}
-	if v.showGround || v.groundImage != nil {
+	if v.ShowGround || v.GroundImage != nil {
 		t.Error("viewer without a ground image should not enable the ground")
 	}
-	v.selectAnim(0) // empty models are safe for the shared playback controls
-	if v.anim != nil || v.playing {
+	v.SelectAnim(0) // empty models are safe for the shared playback controls
+	if v.Anim != nil || v.Playing {
 		t.Error("selecting a clip on an empty model changed playback state")
 	}
 }
@@ -703,7 +703,7 @@ func TestObjectModelViewerWithoutGroundOrAnimation(t *testing.T) {
 // TestModelViewerProducesFirstFrame guards the wiring the GUI depends on: a
 func TestWhmViewerConstrainsScrollMeasurementHeight(t *testing.T) {
 	ui := &uiState{}
-	tab := &fileTab{model: newModelViewer(&WhmModel{}, "")}
+	tab := &fileTab{Model: newModelViewer(&WhmModel{}, "")}
 	for _, maxHeight := range []int{panelScrollMeasureHeight, panelScrollMeasureHeight - 210, 510} {
 		if got := whmMeasurePass(maxHeight); got != (maxHeight >= panelScrollMeasureHeight/2) {
 			t.Errorf("whmMeasurePass(%d) = %v", maxHeight, got)
@@ -718,23 +718,23 @@ func TestWhmViewerConstrainsScrollMeasurementHeight(t *testing.T) {
 
 func TestViewerMarksEmptyMaterialLoadComplete(t *testing.T) {
 	v := &modelViewer{
-		loading:   true,
-		materials: map[string]render.WhmMaterial{},
-		redraw:    false,
+		Loading:   true,
+		Materials: map[string]render.WhmMaterial{},
+		Redraw:    false,
 	}
-	tab := &fileTab{model: v, modelMaterialCh: make(chan modelMaterialResult, 1)}
-	tab.modelMaterialCh <- modelMaterialResult{materials: map[string]render.WhmMaterial{}}
+	tab := &fileTab{Model: v, ModelMaterialCh: make(chan modelMaterialResult, 1)}
+	tab.ModelMaterialCh <- modelMaterialResult{materials: map[string]render.WhmMaterial{}}
 	ui := &uiState{}
-	ui.pollViewerJobs(tab)
+	PollViewerJobs(ui, tab)
 
-	if v.loading {
+	if v.Loading {
 		t.Fatal("material load remained in progress after its result was received")
 	}
-	if !v.materialsLoaded {
+	if !v.MaterialsLoaded {
 		t.Fatal("empty material result was not remembered as a completed load")
 	}
-	if len(v.materials) != 0 {
-		t.Fatalf("loaded material map has %d entries, want empty", len(v.materials))
+	if len(v.Materials) != 0 {
+		t.Fatalf("loaded material map has %d entries, want empty", len(v.Materials))
 	}
 
 	// The viewer's scheduling condition must not issue another worker just
@@ -755,7 +755,7 @@ func TestRightDragPansCameraParallelToViewPlane(t *testing.T) {
 	v.Distance = 10
 	v.FOV = render.DefaultFov
 	start := v.Center
-	v.panCamera(20, 10, 100)
+	v.PanCamera(20, 10, 100)
 
 	if v.Center == start {
 		t.Fatal("right drag did not move the camera target")
@@ -766,13 +766,13 @@ func TestRightDragPansCameraParallelToViewPlane(t *testing.T) {
 	if v.ActiveCamera != "" {
 		t.Errorf("panning left named camera %q active", v.ActiveCamera)
 	}
-	if !v.redraw {
+	if !v.Redraw {
 		t.Error("panning did not request a new frame")
 	}
 
 	// At zero yaw and pitch, a horizontal pan has no depth component.
 	v.Center = start
-	v.panCamera(20, 0, 100)
+	v.PanCamera(20, 0, 100)
 	if v.Center.Z != start.Z || v.Center.X != start.X {
 		t.Errorf("horizontal pan moved out of screen plane: center changed from %+v to %+v", start, v.Center)
 	}
@@ -784,17 +784,17 @@ func TestRightDragPansCameraParallelToViewPlane(t *testing.T) {
 func TestModelViewerProducesFirstFrame(t *testing.T) {
 	model := renderTestModel(t)
 	v := newModelViewer(model, "")
-	if !v.redraw {
+	if !v.Redraw {
 		t.Fatal("a new viewer must start out needing a render")
 	}
 	// Drive it the way modelCanvas does: a layout clears the flag and starts a
 	// background render, then the result arrives through the channel.
-	v.redraw = false
-	v.requestRender(64, 48, render.ModelQualityFinal)
-	if !v.rendering {
+	v.Redraw = false
+	v.RequestRender(64, 48, render.ModelQualityFinal)
+	if !v.Rendering {
 		t.Fatal("requestRender did not start a render")
 	}
-	frame := <-v.frameCh
+	frame := <-v.FrameCh
 	if frame.image == nil {
 		t.Fatal("render returned no image")
 	}
@@ -814,15 +814,15 @@ func TestModelViewerProducesFirstFrame(t *testing.T) {
 func TestModelViewerCoalescesRenders(t *testing.T) {
 	model := renderTestModel(t)
 	v := newModelViewer(model, "")
-	v.requestRender(32, 32, render.ModelQualityFinal)
-	first := v.frameCh
+	v.RequestRender(32, 32, render.ModelQualityFinal)
+	first := v.FrameCh
 	for i := 0; i < 5; i++ {
-		v.requestRender(32, 32, render.ModelQualityFinal)
+		v.RequestRender(32, 32, render.ModelQualityFinal)
 	}
-	if v.frameCh != first {
+	if v.FrameCh != first {
 		t.Fatal("a second render was started while one was still running")
 	}
-	if !v.pending {
+	if !v.Pending {
 		t.Error("the coalesced request was not recorded")
 	}
 	<-first
@@ -833,28 +833,28 @@ func TestModelViewerCoalescesRenders(t *testing.T) {
 func TestModelViewerResizeInvalidates(t *testing.T) {
 	model := renderTestModel(t)
 	v := newModelViewer(model, "")
-	if v.renderW != 0 || v.renderH != 0 {
+	if v.RenderW != 0 || v.RenderH != 0 {
 		t.Fatal("a new viewer has no render size yet")
 	}
-	v.redraw = false
-	v.setRenderSize(800, 600)
-	if !v.redraw {
+	v.Redraw = false
+	v.SetRenderSize(800, 600)
+	if !v.Redraw {
 		t.Error("the first size must schedule the initial render")
 	}
-	v.redraw = false
-	v.setRenderSize(800, 600)
-	if v.redraw {
+	v.Redraw = false
+	v.SetRenderSize(800, 600)
+	if v.Redraw {
 		t.Error("an unchanged size must not schedule a render")
 	}
-	v.setRenderSize(640, 480)
-	if !v.redraw {
+	v.SetRenderSize(640, 480)
+	if !v.Redraw {
 		t.Error("a size change must schedule a render; the frame would not fit")
 	}
 	// A collapsed panel must not poison the stored size.
-	v.redraw = false
-	v.setRenderSize(0, 0)
-	if v.renderW != 640 || v.renderH != 480 {
-		t.Errorf("a zero size overwrote the render size: %dx%d", v.renderW, v.renderH)
+	v.Redraw = false
+	v.SetRenderSize(0, 0)
+	if v.RenderW != 640 || v.RenderH != 480 {
+		t.Errorf("a zero size overwrote the render size: %dx%d", v.RenderW, v.RenderH)
 	}
 }
 
@@ -866,21 +866,21 @@ func TestModelViewerSelectAnim(t *testing.T) {
 	if n == 0 {
 		t.Skip("model has no animations")
 	}
-	v.selectAnim(0)
-	first := v.anim
-	if first == nil || v.animIndex != 0 {
+	v.SelectAnim(0)
+	first := v.Anim
+	if first == nil || v.AnimIndex != 0 {
 		t.Fatal("selectAnim(0) did not pick the first clip")
 	}
-	v.selectAnim(-1)
-	if v.animIndex != n-1 {
-		t.Errorf("selectAnim(-1) gave index %d, want %d", v.animIndex, n-1)
+	v.SelectAnim(-1)
+	if v.AnimIndex != n-1 {
+		t.Errorf("selectAnim(-1) gave index %d, want %d", v.AnimIndex, n-1)
 	}
-	v.selectAnim(n)
-	if v.animIndex != 0 {
-		t.Errorf("selectAnim past the end gave index %d, want 0 (wrap)", v.animIndex)
+	v.SelectAnim(n)
+	if v.AnimIndex != 0 {
+		t.Errorf("selectAnim past the end gave index %d, want 0 (wrap)", v.AnimIndex)
 	}
-	if v.time != 0 {
-		t.Errorf("time = %v after selecting a clip, want 0", v.time)
+	if v.Time != 0 {
+		t.Errorf("time = %v after selecting a clip, want 0", v.Time)
 	}
 }
 
@@ -1905,10 +1905,10 @@ func TestTimelineTimesLandOnTheFrameThePlayheadReports(t *testing.T) {
 		}
 	}
 	// And the playhead put at that frame reads the same frame back.
-	v := &modelViewer{anim: &WhmAnimation{Name: "c", NumFrames: frames}}
+	v := &modelViewer{Anim: &WhmAnimation{Name: "c", NumFrames: frames}}
 	for _, c := range cases {
-		v.seekFrame(frameAt(c.at, frames))
-		got, _ := v.currentFrame()
+		v.SeekFrame(frameAt(c.at, frames))
+		got, _ := v.CurrentFrame()
 		if got != c.want {
 			t.Errorf("seeking to the frame for %g reads back as %d, want %d", c.at, got, c.want)
 		}
@@ -1916,21 +1916,21 @@ func TestTimelineTimesLandOnTheFrameThePlayheadReports(t *testing.T) {
 }
 
 func TestSeekingStopsPlaybackAndClampsToTheClip(t *testing.T) {
-	v := &modelViewer{anim: &WhmAnimation{Name: "land", NumFrames: 62}, playing: true}
-	v.seekFrame(61)
-	if v.playing {
+	v := &modelViewer{Anim: &WhmAnimation{Name: "land", NumFrames: 62}, Playing: true}
+	v.SeekFrame(61)
+	if v.Playing {
 		t.Error("a seek left playback running; the reader asked to stop on a frame")
 	}
-	if f, _ := v.currentFrame(); f != 61 {
+	if f, _ := v.CurrentFrame(); f != 61 {
 		t.Errorf("seeked to the last frame reads back as %d", f)
 	}
 	// Past either end is the nearest frame, not a playhead off the clip.
-	v.seekFrame(1000)
-	if f, _ := v.currentFrame(); f != 61 {
+	v.SeekFrame(1000)
+	if f, _ := v.CurrentFrame(); f != 61 {
 		t.Errorf("a seek past the end landed on %d, want the last frame", f)
 	}
-	v.seekFrame(-5)
-	if f, _ := v.currentFrame(); f != 0 {
+	v.SeekFrame(-5)
+	if f, _ := v.CurrentFrame(); f != 0 {
 		t.Errorf("a seek before the start landed on %d, want the first frame", f)
 	}
 }
@@ -1968,8 +1968,8 @@ func TestTheStripMarksTheFramesEventsFireOn(t *testing.T) {
 		// long, which is what the timeline's own seconds are read against:
 		// the moments in a .whe are seconds into the clip, not a fraction
 		// of it.
-		anim: &WhmAnimation{Name: "landing", NumFrames: 60},
-		fxTimelines: []whe.FxTimeline{
+		Anim: &WhmAnimation{Name: "landing", NumFrames: 60},
+		FxTimelines: []whe.FxTimeline{
 			{Name: "landing", Animations: []string{"landing"}, Events: []whe.FxTimelineEvent{
 				{Name: "land_dust", Time: -1},
 				{Name: "land_halo", Time: 0.5},
@@ -1979,7 +1979,7 @@ func TestTheStripMarksTheFramesEventsFireOn(t *testing.T) {
 			}},
 		},
 	}
-	got := v.clipScrubEvents("landing")
+	got := v.ClipScrubEvents("landing")
 	if len(got) != 2 {
 		t.Fatalf("landing has %d marked frames, want 2", len(got))
 	}
@@ -1992,17 +1992,17 @@ func TestTheStripMarksTheFramesEventsFireOn(t *testing.T) {
 		t.Errorf("landing is marked as %q and %q", got[0].Name, got[1].Name)
 	}
 	// Another clip's events do not leak onto this one.
-	if other := v.clipScrubEvents("idle"); len(other) != 1 || other[0].Name != "crystal_glow" {
+	if other := v.ClipScrubEvents("idle"); len(other) != 1 || other[0].Name != "crystal_glow" {
 		t.Errorf("idle is marked as %v", other)
 	}
-	if none := v.clipScrubEvents("phase_in"); len(none) != 0 {
+	if none := v.ClipScrubEvents("phase_in"); len(none) != 0 {
 		t.Errorf("a clip nothing fires on is marked %v", none)
 	}
 }
 
 func TestAModelWithoutTimelinesHasNothingToMark(t *testing.T) {
-	v := &modelViewer{anim: &WhmAnimation{Name: "any", NumFrames: 10}}
-	if got := v.clipScrubEvents("any"); len(got) != 0 {
+	v := &modelViewer{Anim: &WhmAnimation{Name: "any", NumFrames: 10}}
+	if got := v.ClipScrubEvents("any"); len(got) != 0 {
 		t.Errorf("a model with no .whe marked %d frames", len(got))
 	}
 }

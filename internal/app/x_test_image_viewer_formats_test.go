@@ -59,19 +59,19 @@ func TestOpeningAnRtxOpensTheImageViewer(t *testing.T) {
 	}
 
 	ui := newUI(probeTestTheme())
-	ui.modTree = tree
-	ui.openTreeFile(modtree.VisibleNode{Name: filepath.Base(path), FullPath: path, IsFile: true})
+	ui.ModTree = tree
+	OpenTreeFile(ui, modtree.VisibleNode{Name: filepath.Base(path), FullPath: path, IsFile: true})
 
-	if len(ui.openTabs) == 0 {
+	if len(ui.OpenTabs) == 0 {
 		t.Fatalf("clicking %s opened no tab at all", path)
 	}
-	tab := ui.openTabs[len(ui.openTabs)-1]
-	if tab.kind != "image" {
-		t.Errorf("clicking %s opened a %q tab, want an image tab", path, tab.kind)
+	tab := ui.OpenTabs[len(ui.OpenTabs)-1]
+	if tab.Kind != "image" {
+		t.Errorf("clicking %s opened a %q tab, want an image tab", path, tab.Kind)
 	}
 	// And the tab has to be the one on show, or the panel shows the module
 	// placeholder while a tab sits in the bar looking as though it worked.
-	if got := ui.activeTab(); got == nil || got.kind != "image" {
+	if got := ActiveTab(ui); got == nil || got.Kind != "image" {
 		t.Errorf("after clicking %s the active tab is %s, want the image tab",
 			path, probeTabKind(got))
 	}
@@ -81,7 +81,7 @@ func probeTabKind(t *fileTab) string {
 	if t == nil {
 		return "<none>"
 	}
-	return t.kind
+	return t.Kind
 }
 
 // probeTestTree builds the game tree, skipping rather than failing when the

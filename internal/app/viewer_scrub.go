@@ -127,11 +127,11 @@ func frameAt(at float64, numFrames int) int {
 // An event the clip fires twice is kept twice: a clip that rings a footstep at
 // a quarter and again at three quarters has two frames worth stopping at, and
 // collapsing them to the first would hide the second.
-func (v *modelViewer) clipScrubEvents(anim string) []animScrubEvent {
-	if v == nil || v.anim == nil || v.anim.NumFrames < 1 || anim == "" {
+func (v *modelViewer) ClipScrubEvents(anim string) []animScrubEvent {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 || anim == "" {
 		return nil
 	}
-	list := fxClipEvents(v.fxTimelines)[strings.ToLower(anim)]
+	list := fxClipEvents(v.FxTimelines)[strings.ToLower(anim)]
 	if len(list) == 0 {
 		return nil
 	}
@@ -139,11 +139,11 @@ func (v *modelViewer) clipScrubEvents(anim string) []animScrubEvent {
 	// that knows, and it was built from the same .whe.
 	out := make([]animScrubEvent, 0, len(list))
 	for _, e := range list {
-		at := whe.TimeNormalized(e.Time, animClipSeconds(v.anim))
+		at := whe.TimeNormalized(e.Time, animClipSeconds(v.Anim))
 		out = append(out, animScrubEvent{
-			Frame: frameAt(at, v.anim.NumFrames),
+			Frame: frameAt(at, v.Anim.NumFrames),
 			Name:  e.Name,
-			Sound: v.fxSound != nil && v.fxSound.IsSoundEvent(e.Name),
+			Sound: v.FxSound != nil && v.FxSound.IsSoundEvent(e.Name),
 			Time:  at,
 		})
 	}
@@ -166,11 +166,11 @@ func scrubHit(r image.Rectangle, p f32.Point) bool {
 // all work from the same two numbers, so a press between the bar and the
 // numbers lands on the frame the pointer is over rather than a frame beside
 // it.
-func (v *modelViewer) scrubGeometry() (left, width float32, ok bool) {
-	if v == nil || v.anim == nil || v.anim.NumFrames < 1 {
+func (v *modelViewer) ScrubGeometry() (left, width float32, ok bool) {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return 0, 0, false
 	}
-	w := float32(v.renderW)
+	w := float32(v.RenderW)
 	if w <= 0 {
 		return 0, 0, false
 	}
@@ -185,15 +185,15 @@ func (v *modelViewer) scrubGeometry() (left, width float32, ok bool) {
 // movePickedBoneKeyToX moves the picked bone key to the frame under x on the
 // strip, over the same geometry scrubSeek seeks by, so the key lands on the
 // frame the cursor is on while it is dragged.
-func (v *modelViewer) movePickedBoneKeyToX(x float32) bool {
-	if v == nil || v.anim == nil || v.anim.NumFrames < 1 {
+func (v *modelViewer) MovePickedBoneKeyToX(x float32) bool {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return false
 	}
-	left, width, ok := v.scrubGeometry()
+	left, width, ok := v.ScrubGeometry()
 	if !ok {
 		return false
 	}
-	return v.movePickedBoneKeyToFrame(scrubBarAt(x, left, width, v.anim.NumFrames))
+	return v.MovePickedBoneKeyToFrame(scrubBarAt(x, left, width, v.Anim.NumFrames))
 }
 
 // scrubSeek is the press or drag on the strip: the x is turned into a frame of
@@ -206,11 +206,11 @@ func (v *modelViewer) movePickedBoneKeyToX(x float32) bool {
 // the caller passes false whenever the strip is drawing without them. The
 // marks themselves decide which keys are offered — a picked bone hides the
 // clip's own marks, so only its keys snap while they are what is drawn.
-func (v *modelViewer) scrubSeek(x float32, snapKeys bool) bool {
-	if v == nil || v.anim == nil || v.anim.NumFrames < 1 {
+func (v *modelViewer) ScrubSeek(x float32, snapKeys bool) bool {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return false
 	}
-	left, width, ok := v.scrubGeometry()
+	left, width, ok := v.ScrubGeometry()
 	if !ok {
 		return false
 	}
@@ -219,62 +219,62 @@ func (v *modelViewer) scrubSeek(x float32, snapKeys bool) bool {
 	// to the frame it happened to hit, because selecting a keyframe is the
 	// whole point of marking them and a mark a pixel off would otherwise
 	// leave the playhead beside the key instead of on it.
-	frame := scrubBarAt(x, left, width, v.anim.NumFrames)
+	frame := scrubBarAt(x, left, width, v.Anim.NumFrames)
 	if !snapKeys {
-		v.seekFrame(frame)
+		v.SeekFrame(frame)
 		return false
 	}
 	// With a bone picked that bone's keys are what the strip marks, and a
 	// press on one of them both selects it and says the drag that may follow
 	// is a key drag.
-	if v.boneTrack() != nil {
-		if keys := v.boneKeyFrames(); len(keys) > 0 {
-			if f, ok := snapKeyFrame(x, keys, left, width, v.anim.NumFrames); ok {
+	if v.BoneTrack() != nil {
+		if keys := v.BoneKeyFrames(); len(keys) > 0 {
+			if f, ok := snapKeyFrame(x, keys, left, width, v.Anim.NumFrames); ok {
 				frame = f
-				if idx, mode, ok := v.boneKeyFrame(frame); ok {
-					v.boneKeyIndex = idx
-					v.boneKeyMode = mode
-					v.invalidate()
-					v.seekFrame(frame)
+				if idx, mode, ok := v.BoneKeyFrame(frame); ok {
+					v.BoneKeyIndex = idx
+					v.BoneKeyMode = mode
+					v.Invalidate()
+					v.SeekFrame(frame)
 					return true
 				}
 			}
 		}
-		v.seekFrame(frame)
+		v.SeekFrame(frame)
 		return false
 	}
 	// No bone is picked, so the strip marks the clip's own keyframes — the
 	// moments worth stopping at, wherever they come from.
-	if keys := clipKeyFrames(v.anim); len(keys) > 0 {
-		if f, ok := snapKeyFrame(x, keys, left, width, v.anim.NumFrames); ok {
+	if keys := clipKeyFrames(v.Anim); len(keys) > 0 {
+		if f, ok := snapKeyFrame(x, keys, left, width, v.Anim.NumFrames); ok {
 			frame = f
 		}
 	}
-	v.seekFrame(frame)
+	v.SeekFrame(frame)
 	return false
 }
 
 // seekFrame puts the playhead on a frame of the clip on show and holds it there,
 // the way the step buttons do: a click lands on a frame to be looked at, not
 // on a frame to be watched from, so playback stops until play is pressed again.
-func (v *modelViewer) seekFrame(frame int) {
-	if v == nil || v.anim == nil || v.anim.NumFrames < 1 {
+func (v *modelViewer) SeekFrame(frame int) {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return
 	}
-	frame = minInt(maxInt(frame, 0), v.anim.NumFrames-1)
-	v.playing = false
+	frame = minInt(maxInt(frame, 0), v.Anim.NumFrames-1)
+	v.Playing = false
 	// The clock is zeroed for the same reason the step buttons zero it: pressing
 	// play afterwards should start from the frame that was clicked rather than
 	// jump a whole second past it.
-	v.lastFrame = time.Time{}
+	v.LastFrame = time.Time{}
 	// The playhead is the middle of the frame, which is where a step leaves it.
-	v.time = float32((float64(frame) + 0.5) / float64(v.anim.NumFrames))
-	if v.time >= 1 {
-		v.time = 0
+	v.Time = float32((float64(frame) + 0.5) / float64(v.Anim.NumFrames))
+	if v.Time >= 1 {
+		v.Time = 0
 	}
-	v.invalidate()
+	v.Invalidate()
 	log.Printf("3D preview: seek to frame %d of %s (%d frames)",
-		frame+1, v.anim.Name, v.anim.NumFrames)
+		frame+1, v.Anim.Name, v.Anim.NumFrames)
 }
 
 // scrubBarAt is the frame a click at x lands on. The bar is split into equal
@@ -383,21 +383,21 @@ func absF32(v float32) float32 {
 // modelAnimScrubOverlay draws the frame strip over the bottom of the canvas and
 // records where it is, so the canvas's own press handler can tell a seek from
 // the start of a camera drag.
-func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
-	if v == nil || v.model == nil || v.anim == nil || v.anim.NumFrames < 1 {
+func ModelAnimScrubOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.Model
+	if v == nil || v.Model == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return layout.Dimensions{}
 	}
 	w, h := gtx.Constraints.Max.X, gtx.Constraints.Max.Y
 	if w <= 0 || h <= 0 {
 		return layout.Dimensions{}
 	}
-	n := v.anim.NumFrames
+	n := v.Anim.NumFrames
 	left := float32(scrubBarMargin)
 	width := float32(w) - 2*left
 	// Room for the bar and a number on each side of it.
 	if width < 60 || h < int(scrubBarThickness)+2*int(scrubLabelHeight)+4*int(scrubBarMargin) {
-		v.scrubRect = image.Rectangle{}
+		v.ScrubRect = image.Rectangle{}
 		return layout.Dimensions{}
 	}
 	barY := h - scrubBarMargin - scrubLabelHeight
@@ -405,7 +405,7 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 	// The strip is remembered so a press inside it seeks. The hit area is taller
 	// than the bar: a five pixel line is a poor target.
 	hit := int(scrubLabelHeight)
-	v.scrubRect = image.Rect(
+	v.ScrubRect = image.Rect(
 		int(left)-hit, int(barY)-hit,
 		int(left+width)+hit, int(barY)+hit,
 	)
@@ -416,7 +416,7 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 	origin := gtx
 
 	scrubFill(origin, 0, -scrubBarThickness/2, width, scrubBarThickness, cSaveBd)
-	played := float32(v.time) * width
+	played := float32(v.Time) * width
 	if played > 0 {
 		scrubFill(origin, 0, -scrubBarThickness/2, played, scrubBarThickness, cSelectBd)
 	}
@@ -430,7 +430,7 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 
 	// The frames something fires on, marked above the bar so they read as
 	// belonging to a frame rather than to the bar itself.
-	for _, e := range v.clipScrubEvents(v.anim.Name) {
+	for _, e := range v.ClipScrubEvents(v.Anim.Name) {
 		x := frameX(e.Frame, n, width)
 		col := cEventFX
 		if e.Sound {
@@ -442,7 +442,7 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 	// The keyframe marks are only on show with the bone list: on the
 	// animation and marker lists they name keys that no list there selects,
 	// so they are drawn off and the strip reads as frames alone.
-	showKeys := t != ui.unitModel || ui.unitListMode == 2
+	showKeys := t != ui.UnitModel || ui.UnitListMode == 2
 
 	// The clip's own keyframes, drawn through the bar in amber: taller
 	// than the frame ticks, so they read as the places worth stopping at
@@ -455,9 +455,9 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 	// tracks, and the rose marks below are the picked bone's alone. One
 	// list of marks is what the panel below talks about, so the rest are
 	// taken away rather than shown beside it.
-	if showKeys && v.boneTrack() == nil {
+	if showKeys && v.BoneTrack() == nil {
 		lastKeyX := float32(-1e9)
-		for _, f := range clipKeyFrames(v.anim) {
+		for _, f := range clipKeyFrames(v.Anim) {
 			x := frameX(f, n, width)
 			if x-lastKeyX < 4 {
 				continue
@@ -470,9 +470,9 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 	// The picked bone's own keyframes, drawn through the bar in rose. They
 	// sit on top of the clip's amber marks wherever they share a frame, and
 	// they are what the bone parameters panel's keyframe rows are talking about.
-	if showKeys && v.boneIndex >= 0 && v.boneIndex < len(v.model.Bones) {
+	if showKeys && v.BoneIndex >= 0 && v.BoneIndex < len(v.Model.Bones) {
 		lastBoneKeyX := float32(-1e9)
-		for _, f := range v.boneKeyFrames() {
+		for _, f := range v.BoneKeyFrames() {
 			x := frameX(f, n, width)
 			if x-lastBoneKeyX < 4 {
 				continue
@@ -482,8 +482,8 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 		}
 		// The picked bone key is drawn over its rose mark so it reads as the
 		// one the panel's "Set ..." buttons refer to.
-		if v.boneKeyIndex >= 0 {
-			if f, ok := v.boneKeyFrameAt(); ok {
+		if v.BoneKeyIndex >= 0 {
+			if f, ok := v.BoneKeyFrameAt(); ok {
 				x := frameX(f, n, width)
 				scrubFill(origin, x-2, -scrubBarThickness-5, 4, scrubBarThickness*2+10, cText)
 			}
@@ -491,7 +491,7 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 	}
 
 	// The frame on screen.
-	cur := int(math.Round(float64(v.time) * float64(n)))
+	cur := int(math.Round(float64(v.Time) * float64(n)))
 	cur = minInt(maxInt(cur, 0), n-1)
 	scrubFill(origin, frameX(cur, n, width)-1, -scrubBarThickness-2, 2,
 		scrubBarThickness*2+4, rgb(0xFFFFFF))
@@ -514,7 +514,7 @@ func (ui *uiState) modelAnimScrubOverlay(gtx layout.Context, t *fileTab) layout.
 		macro := op.Offset(image.Point{X: int(x) - int(scrubLabelPx)/2, Y: int(y)}).Push(g.Ops)
 		g.Constraints.Min = image.Point{}
 		g.Constraints.Max = image.Point{X: int(scrubLabelPx), Y: int(scrubLabelHeight)}
-		l := material.Label(ui.th, unit.Sp(9), itoaPlain(f+1))
+		l := material.Label(ui.Th, unit.Sp(9), itoaPlain(f+1))
 		l.Color = cTextDim
 		l.MaxLines = 1
 		l.Layout(g)
@@ -543,13 +543,13 @@ func scrubFill(gtx layout.Context, x, y, w, h float32, col color.NRGBA) {
 // ─── merged from viewer_canvas.go ───────────────────────────────────────────────
 
 // modelCanvasWithFxList stacks readouts and diagnostics over the rendered frame.
-func (ui *uiState) modelCanvasWithFxList(gtx layout.Context, t *fileTab) layout.Dimensions {
+func ModelCanvasWithFxList(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ui.modelCanvas(gtx, t) }),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ui.modelFxAttributeDialog(gtx, t.model) }),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ui.modelAnimScrubOverlay(gtx, t) }),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ui.modelFxAxesOverlay(gtx, t) }),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ui.modelGizmoOverlay(gtx, t) }),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ModelCanvas(ui, gtx, t) }),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ModelFxAttributeDialog(ui, gtx, t.Model) }),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ModelAnimScrubOverlay(ui, gtx, t) }),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ModelFxAxesOverlay(ui, gtx, t) }),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return ModelGizmoOverlay(ui, gtx, t) }),
 	)
 }
 
@@ -558,11 +558,11 @@ func sgbCameraDragRequested(modifiers key.Modifiers) bool {
 	return modifiers.Contain(key.ModAlt)
 }
 
-func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
+func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.Model
 	area := gtx.Constraints.Max
 	if area.X < 8 || area.Y < 8 {
-		v.redraw = true
+		v.Redraw = true
 		return layout.Dimensions{}
 	}
 	w, h := area.X, area.Y
@@ -581,99 +581,99 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 	if h < 1 {
 		h = 1
 	}
-	v.setRenderSize(w, h)
-	if ui.fxStartSoundLoad(v) {
+	v.SetRenderSize(w, h)
+	if FxStartSoundLoad(ui, v) {
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 	}
 	fxDrawn := false
-	if v.showFX || v.fxAttrIndex >= 0 || (v.showFXAxes && len(v.fxEffects) == 0) {
-		if ui.fxStartLoad(v) {
+	if v.ShowFX || v.FxAttrIndex >= 0 || (v.ShowFXAxes && len(v.FxEffects) == 0) {
+		if FxStartLoad(ui, v) {
 			gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 		}
-		if v.showFX {
+		if v.ShowFX {
 			// The hardware frame draws this frame's particles itself, so the
 			// software picture is only built for the path that paints one.
-			fxDrawn = v.fxAdvance(gtx.Now, w, h, v.options(w, h), ui.modelGpuUnavailable(v) != "")
-		} else if len(v.fxEffects) > 0 {
-			v.fxOrigins()
+			fxDrawn = v.FxAdvance(gtx.Now, w, h, v.Options(w, h), ModelGpuUnavailable(ui, v) != "")
+		} else if len(v.FxEffects) > 0 {
+			v.FxOrigins()
 		}
 		if fxDrawn {
-			v.redraw = true
+			v.Redraw = true
 			gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 		}
 	}
 
 	now := gtx.Now
-	if t.kind == "sgb" && t.sgbView3D && len(v.animatedEntities) > 0 {
-		if v.sgbAnimLast.IsZero() {
-			v.sgbAnimLast = now
+	if t.Kind == "sgb" && t.SgbView3D && len(v.AnimatedEntities) > 0 {
+		if v.SgbAnimLast.IsZero() {
+			v.SgbAnimLast = now
 		} else {
-			dt := now.Sub(v.sgbAnimLast).Seconds()
-			v.sgbAnimLast = now
+			dt := now.Sub(v.SgbAnimLast).Seconds()
+			v.SgbAnimLast = now
 			if dt > 0.1 {
 				dt = 0.1
 			}
-			for i := range v.animatedEntities {
-				sgb.AdvanceEntityAnimation(&v.animatedEntities[i], dt)
+			for i := range v.AnimatedEntities {
+				sgb.AdvanceEntityAnimation(&v.AnimatedEntities[i], dt)
 			}
 		}
-		v.redraw = true
+		v.Redraw = true
 		gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 	} else {
-		v.sgbAnimLast = time.Time{}
+		v.SgbAnimLast = time.Time{}
 	}
-	if v.playing && v.anim != nil {
-		if v.lastFrame.IsZero() {
-			v.lastFrame = now
+	if v.Playing && v.Anim != nil {
+		if v.LastFrame.IsZero() {
+			v.LastFrame = now
 		}
-		dt := now.Sub(v.lastFrame).Seconds()
-		v.lastFrame = now
-		if v.animPlaybackDuration > 0 {
-			v.time += float32(dt / v.animPlaybackDuration)
+		dt := now.Sub(v.LastFrame).Seconds()
+		v.LastFrame = now
+		if v.AnimPlaybackDuration > 0 {
+			v.Time += float32(dt / v.AnimPlaybackDuration)
 		} else {
-			frames := maxInt(1, v.anim.NumFrames)
-			v.time += float32(dt * animFramesPerSecond(v.anim) / float64(frames))
+			frames := maxInt(1, v.Anim.NumFrames)
+			v.Time += float32(dt * animFramesPerSecond(v.Anim) / float64(frames))
 		}
-		if v.time > 1 {
-			v.time = float32(math.Mod(float64(v.time), 1))
+		if v.Time > 1 {
+			v.Time = float32(math.Mod(float64(v.Time), 1))
 		}
-		v.poseValid = false
-		v.redraw = true
+		v.PoseValid = false
+		v.Redraw = true
 	}
-	if v.redraw {
-		v.redraw = false
-		if ui.renderModelOnGpu(gtx, t, w, h) {
+	if v.Redraw {
+		v.Redraw = false
+		if RenderModelOnGpu(ui, gtx, t, w, h) {
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		} else {
-			v.requestRender(w, h, render.ModelQualityFinal)
+			v.RequestRender(w, h, render.ModelQualityFinal)
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		}
 	}
 	// A frame finished on a worker goroutine after the last layout ran, so
 	// schedule one more frame to actually put it on screen.
-	if v.frame != nil && v.painted != v.serial {
-		v.painted = v.serial
+	if v.Frame != nil && v.Painted != v.Serial {
+		v.Painted = v.Serial
 		gtx.Execute(op.InvalidateCmd{})
 	}
-	if v.rendering {
+	if v.Rendering {
 		// Keep polling until the background render lands.
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 	}
 
-	if t.kind == "sgb" && t.sgbView3D {
-		if t.sgbCameraTag == nil {
-			t.sgbCameraTag = new(int)
+	if t.Kind == "sgb" && t.SgbView3D {
+		if t.SgbCameraTag == nil {
+			t.SgbCameraTag = new(int)
 		}
-		event.Op(gtx.Ops, t.sgbCameraTag)
+		event.Op(gtx.Ops, t.SgbCameraTag)
 		for {
-			ev, ok := gtx.Event(key.FocusFilter{Target: t.sgbCameraTag})
+			ev, ok := gtx.Event(key.FocusFilter{Target: t.SgbCameraTag})
 			if !ok {
 				break
 			}
 			if focus, ok := ev.(key.FocusEvent); ok && !focus.Focus {
-				t.sgbCameraKeys = [4]bool{}
-				t.sgbCameraVelocity = [2]float64{}
-				t.sgbCameraLastMove = time.Time{}
+				t.SgbCameraKeys = [4]bool{}
+				t.SgbCameraVelocity = [2]float64{}
+				t.SgbCameraLastMove = time.Time{}
 			}
 		}
 		arrowKeys := [...]key.Name{key.NameUpArrow, key.NameDownArrow, key.NameLeftArrow, key.NameRightArrow}
@@ -681,7 +681,7 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 		moved := false
 		for i, name := range arrowKeys {
 			for {
-				ev, ok := gtx.Event(key.Filter{Focus: t.sgbCameraTag, Name: name, Optional: allModifiers})
+				ev, ok := gtx.Event(key.Filter{Focus: t.SgbCameraTag, Name: name, Optional: allModifiers})
 				if !ok {
 					break
 				}
@@ -689,43 +689,43 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 				if !ok {
 					continue
 				}
-				t.sgbCameraKeys[i] = ke.State == key.Press && ke.Modifiers == 0
+				t.SgbCameraKeys[i] = ke.State == key.Press && ke.Modifiers == 0
 			}
 		}
 		forward, strafe := 0.0, 0.0
-		if t.sgbCameraKeys[0] {
+		if t.SgbCameraKeys[0] {
 			forward++
 		}
-		if t.sgbCameraKeys[1] {
+		if t.SgbCameraKeys[1] {
 			forward--
 		}
-		if t.sgbCameraKeys[2] {
+		if t.SgbCameraKeys[2] {
 			strafe++ // left/right intentionally follow screen-facing convention
 		}
-		if t.sgbCameraKeys[3] {
+		if t.SgbCameraKeys[3] {
 			strafe--
 		}
 		dt := 1.0 / 60.0
-		if !t.sgbCameraLastMove.IsZero() && !gtx.Now.IsZero() {
-			dt = gtx.Now.Sub(t.sgbCameraLastMove).Seconds()
+		if !t.SgbCameraLastMove.IsZero() && !gtx.Now.IsZero() {
+			dt = gtx.Now.Sub(t.SgbCameraLastMove).Seconds()
 		}
 		// Bound catch-up after a pause, then ease velocity toward the held
 		// direction or back to rest after release for acceleration/braking.
-		t.sgbCameraLastMove = gtx.Now
+		t.SgbCameraLastMove = gtx.Now
 		dt = math.Max(0, math.Min(dt, 0.05))
-		t.sgbCameraVelocity[0] = sgbApproachCameraVelocity(t.sgbCameraVelocity[0], forward, dt)
-		t.sgbCameraVelocity[1] = sgbApproachCameraVelocity(t.sgbCameraVelocity[1], strafe, dt)
-		moved = ui.sgbMoveCamera(t, t.sgbCameraVelocity[0], t.sgbCameraVelocity[1], dt)
-		if moved || t.sgbCameraVelocity != [2]float64{} {
+		t.SgbCameraVelocity[0] = sgbApproachCameraVelocity(t.SgbCameraVelocity[0], forward, dt)
+		t.SgbCameraVelocity[1] = sgbApproachCameraVelocity(t.SgbCameraVelocity[1], strafe, dt)
+		moved = SgbMoveCamera(ui, t, t.SgbCameraVelocity[0], t.SgbCameraVelocity[1], dt)
+		if moved || t.SgbCameraVelocity != [2]float64{} {
 			gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 		}
 	}
 
 	rect := clip.Rect{Max: area}.Push(gtx.Ops)
-	event.Op(gtx.Ops, &v.tag)
+	event.Op(gtx.Ops, &v.Tag)
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
-			Target:  &v.tag,
+			Target:  &v.Tag,
 			Kinds:   pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Scroll,
 			ScrollX: pointer.ScrollRange{Min: math.MinInt, Max: math.MaxInt},
 			ScrollY: pointer.ScrollRange{Min: math.MinInt, Max: math.MaxInt},
@@ -739,233 +739,233 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 		}
 		switch e.Kind {
 		case pointer.Press:
-			if e.Buttons.Contain(pointer.ButtonPrimary) && t.kind == "sgb" && t.sgbView3D {
-				if scrubHit(v.scrubRect, e.Position) {
-					t.sgbObjectDragging, t.sgbObjectRotating = false, false
-					v.seeking = true
-					v.dragging = false
-					v.scrubSeek(e.Position.X, true)
+			if e.Buttons.Contain(pointer.ButtonPrimary) && t.Kind == "sgb" && t.SgbView3D {
+				if scrubHit(v.ScrubRect, e.Position) {
+					t.SgbObjectDragging, t.SgbObjectRotating = false, false
+					v.Seeking = true
+					v.Dragging = false
+					v.ScrubSeek(e.Position.X, true)
 					continue
 				}
-				gtx.Execute(key.FocusCmd{Tag: t.sgbCameraTag})
-				v.dragging = sgbCameraDragRequested(e.Modifiers | heldModifiers())
-				v.panning = false
-				t.sgbSelecting = !v.dragging && t.sgbObjectSelected == ""
-				t.sgbSelectionDrag = false
-				t.sgbSelectionAnchor = sgbCanvasToFramePoint(area, w, h, e.Position)
-				t.sgbSelectionCurrent = t.sgbSelectionAnchor
-				if !v.dragging && len(t.sgbSelectedEntities) > 0 {
+				gtx.Execute(key.FocusCmd{Tag: t.SgbCameraTag})
+				v.Dragging = sgbCameraDragRequested(e.Modifiers | heldModifiers())
+				v.Panning = false
+				t.SgbSelecting = !v.Dragging && t.SgbObjectSelected == ""
+				t.SgbSelectionDrag = false
+				t.SgbSelectionAnchor = sgbCanvasToFramePoint(area, w, h, e.Position)
+				t.SgbSelectionCurrent = t.SgbSelectionAnchor
+				if !v.Dragging && len(t.SgbSelectedEntities) > 0 {
 					camera := engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}
-					if id, hit := sgbPickEntity(v.modelData(), t.sgbEntityMeshIDs, camera, float64(t.sgbSelectionAnchor.X), float64(t.sgbSelectionAnchor.Y)); hit && t.sgbSelectedEntities[id] {
+					if id, hit := sgbPickEntity(v.ModelData(), t.SgbEntityMeshIDs, camera, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); hit && t.SgbSelectedEntities[id] {
 						if (e.Modifiers | heldModifiers()).Contain(key.ModShift) {
-							t.sgbObjectRotating = true
-							t.sgbRotateLastX = e.Position.X
-							t.sgbObjectMoved = false
-							t.sgbSelecting = false
+							t.SgbObjectRotating = true
+							t.SgbRotateLastX = e.Position.X
+							t.SgbObjectMoved = false
+							t.SgbSelecting = false
 							continue
 						}
-						if point, onTerrain := sgbPickTerrainPoint(v.modelData(), camera, float64(t.sgbSelectionAnchor.X), float64(t.sgbSelectionAnchor.Y)); onTerrain {
-							t.sgbObjectDragging = true
-							t.sgbDragHasPoint = true
-							t.sgbDragLast = point
-							t.sgbObjectMoved = false
-							t.sgbSelecting = false
+						if point, onTerrain := sgbPickTerrainPoint(v.ModelData(), camera, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); onTerrain {
+							t.SgbObjectDragging = true
+							t.SgbDragHasPoint = true
+							t.SgbDragLast = point
+							t.SgbObjectMoved = false
+							t.SgbSelecting = false
 							continue
 						}
 					}
 				}
-				if t.sgbObjectSelected != "" && !v.dragging {
-					if point, hit := sgbPickTerrainPoint(v.modelData(), engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.sgbSelectionAnchor.X), float64(t.sgbSelectionAnchor.Y)); hit {
-						ui.placeSgbObject(t, point)
+				if t.SgbObjectSelected != "" && !v.Dragging {
+					if point, hit := sgbPickTerrainPoint(v.ModelData(), engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); hit {
+						PlaceSgbObject(ui, t, point)
 					} else {
-						ui.statusText = "Object placement — click on the terrain surface"
+						ui.StatusText = "Object placement — click on the terrain surface"
 					}
 					continue
 				}
-				if v.dragging {
-					v.lastX, v.lastY = e.Position.X, e.Position.Y
+				if v.Dragging {
+					v.LastX, v.LastY = e.Position.X, e.Position.Y
 				}
 				continue
 			}
 			if e.Buttons.Contain(pointer.ButtonSecondary) {
-				if t.kind == "sgb" && t.sgbView3D {
-					t.sgbSelecting = false
+				if t.Kind == "sgb" && t.SgbView3D {
+					t.SgbSelecting = false
 				}
-				v.panning = true
-				v.dragging = false
-				v.lastX, v.lastY = e.Position.X, e.Position.Y
+				v.Panning = true
+				v.Dragging = false
+				v.LastX, v.LastY = e.Position.X, e.Position.Y
 				continue
 			}
 			if !e.Buttons.Contain(pointer.ButtonPrimary) {
 				continue
 			}
-			if scrubHit(v.scrubRect, e.Position) {
-				v.seeking = true
-				v.dragging = false
-				picked := v.scrubSeek(e.Position.X, t != ui.unitModel || ui.unitListMode == 2)
-				v.keyDrag = picked && t == ui.unitModel
-				v.keyDragMoved = false
-				LogInfo("3D preview: strip press pos=(%.1f, %.1f) keymark=%v", e.Position.X, e.Position.Y, v.keyDrag)
+			if scrubHit(v.ScrubRect, e.Position) {
+				v.Seeking = true
+				v.Dragging = false
+				picked := v.ScrubSeek(e.Position.X, t != ui.UnitModel || ui.UnitListMode == 2)
+				v.KeyDrag = picked && t == ui.UnitModel
+				v.KeyDragMoved = false
+				LogInfo("3D preview: strip press pos=(%.1f, %.1f) keymark=%v", e.Position.X, e.Position.Y, v.KeyDrag)
 				continue
 			}
-			if t.kind == "sgb" && t.sgbView3D {
+			if t.Kind == "sgb" && t.SgbView3D {
 				continue
 			}
-			v.dragging = true
-			v.lastX, v.lastY = e.Position.X, e.Position.Y
+			v.Dragging = true
+			v.LastX, v.LastY = e.Position.X, e.Position.Y
 		case pointer.Drag:
-			if t.kind == "sgb" && t.sgbView3D && t.sgbObjectRotating && e.Buttons.Contain(pointer.ButtonPrimary) {
+			if t.Kind == "sgb" && t.SgbView3D && t.SgbObjectRotating && e.Buttons.Contain(pointer.ButtonPrimary) {
 				if !(e.Modifiers | heldModifiers()).Contain(key.ModShift) {
-					t.sgbObjectRotating = false
-					t.sgbObjectMoved = false
+					t.SgbObjectRotating = false
+					t.SgbObjectMoved = false
 					continue
 				}
-				dx := float64(e.Position.X - t.sgbRotateLastX)
-				t.sgbRotateLastX = e.Position.X
-				if rotated := sgbRotateEntities(t.sgbMap, v.modelData(), t.sgbEntityMeshIDs, v.animatedEntities, t.sgbSelectedEntities, -dx*0.01); rotated > 0 {
-					ui.geometryChangedModelGpu(v.model)
-					t.sgbObjectMoved = true
-					t.sgbDirty = true
-					v.invalidate()
+				dx := float64(e.Position.X - t.SgbRotateLastX)
+				t.SgbRotateLastX = e.Position.X
+				if rotated := sgbRotateEntities(t.SgbMap, v.ModelData(), t.SgbEntityMeshIDs, v.AnimatedEntities, t.SgbSelectedEntities, -dx*0.01); rotated > 0 {
+					GeometryChangedModelGpu(ui, v.Model)
+					t.SgbObjectMoved = true
+					t.SgbDirty = true
+					v.Invalidate()
 					gtx.Execute(op.InvalidateCmd{})
-					ui.statusText = fmt.Sprintf("Rotated %d selected map object(s) around vertical axis", rotated)
+					ui.StatusText = fmt.Sprintf("Rotated %d selected map object(s) around vertical axis", rotated)
 				}
 				continue
 			}
-			if t.kind == "sgb" && t.sgbView3D && t.sgbObjectDragging && e.Buttons.Contain(pointer.ButtonPrimary) {
+			if t.Kind == "sgb" && t.SgbView3D && t.SgbObjectDragging && e.Buttons.Contain(pointer.ButtonPrimary) {
 				pixel := sgbCanvasToFramePoint(area, w, h, e.Position)
 				camera := engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}
-				if point, hit := sgbPickTerrainPoint(v.modelData(), camera, float64(pixel.X), float64(pixel.Y)); hit {
-					if t.sgbDragHasPoint {
-						dx, dy := point.X-t.sgbDragLast.X, point.Y-t.sgbDragLast.Y
+				if point, hit := sgbPickTerrainPoint(v.ModelData(), camera, float64(pixel.X), float64(pixel.Y)); hit {
+					if t.SgbDragHasPoint {
+						dx, dy := point.X-t.SgbDragLast.X, point.Y-t.SgbDragLast.Y
 						var moved int
-						t.model.animatedEntities, moved = sgbMoveEntitiesOnSurface(t.sgbMap, v.modelData(), t.sgbEntityMeshIDs, v.animatedEntities, t.sgbSelectedEntities, dx, dy)
+						t.Model.AnimatedEntities, moved = sgbMoveEntitiesOnSurface(t.SgbMap, v.ModelData(), t.SgbEntityMeshIDs, v.AnimatedEntities, t.SgbSelectedEntities, dx, dy)
 						if moved > 0 {
-							ui.geometryChangedModelGpu(v.model)
-							t.sgbObjectMoved = true
-							t.sgbDirty = true
-							v.invalidate()
+							GeometryChangedModelGpu(ui, v.Model)
+							t.SgbObjectMoved = true
+							t.SgbDirty = true
+							v.Invalidate()
 							gtx.Execute(op.InvalidateCmd{})
-							ui.statusText = fmt.Sprintf("Moved %d selected map object(s) along the terrain", moved)
+							ui.StatusText = fmt.Sprintf("Moved %d selected map object(s) along the terrain", moved)
 						}
 					}
-					t.sgbDragLast, t.sgbDragHasPoint = point, true
+					t.SgbDragLast, t.SgbDragHasPoint = point, true
 				} else {
-					t.sgbDragHasPoint = false
+					t.SgbDragHasPoint = false
 				}
 				continue
 			}
-			if t.kind == "sgb" && t.sgbView3D && v.dragging && e.Buttons.Contain(pointer.ButtonPrimary) {
-				dx := float64(e.Position.X - v.lastX)
-				dy := float64(e.Position.Y - v.lastY)
-				v.lastX, v.lastY = e.Position.X, e.Position.Y
+			if t.Kind == "sgb" && t.SgbView3D && v.Dragging && e.Buttons.Contain(pointer.ButtonPrimary) {
+				dx := float64(e.Position.X - v.LastX)
+				dy := float64(e.Position.Y - v.LastY)
+				v.LastX, v.LastY = e.Position.X, e.Position.Y
 				v.Yaw -= dx * 0.01
 				v.Pitch = engine.ClampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
-				v.redraw = true
+				v.Redraw = true
 				gtx.Execute(op.InvalidateCmd{})
 				continue
 			}
-			if t.kind == "sgb" && t.sgbView3D && t.sgbSelecting {
-				t.sgbSelectionCurrent = sgbCanvasToFramePoint(area, w, h, e.Position)
-				dx := t.sgbSelectionCurrent.X - t.sgbSelectionAnchor.X
-				dy := t.sgbSelectionCurrent.Y - t.sgbSelectionAnchor.Y
+			if t.Kind == "sgb" && t.SgbView3D && t.SgbSelecting {
+				t.SgbSelectionCurrent = sgbCanvasToFramePoint(area, w, h, e.Position)
+				dx := t.SgbSelectionCurrent.X - t.SgbSelectionAnchor.X
+				dy := t.SgbSelectionCurrent.Y - t.SgbSelectionAnchor.Y
 				if dx*dx+dy*dy > 16 {
-					t.sgbSelectionDrag = true
+					t.SgbSelectionDrag = true
 				}
 				gtx.Execute(op.InvalidateCmd{})
 				continue
 			}
-			if v.panning {
-				dx := float64(e.Position.X - v.lastX)
-				dy := float64(e.Position.Y - v.lastY)
-				v.lastX, v.lastY = e.Position.X, e.Position.Y
-				v.panCamera(dx, dy, h)
+			if v.Panning {
+				dx := float64(e.Position.X - v.LastX)
+				dy := float64(e.Position.Y - v.LastY)
+				v.LastX, v.LastY = e.Position.X, e.Position.Y
+				v.PanCamera(dx, dy, h)
 				continue
 			}
-			if v.seeking {
-				if v.keyDrag {
-					if v.movePickedBoneKeyToX(e.Position.X) {
-						ui.unitModelWhmDirty = true
-						v.keyDragMoved = true
+			if v.Seeking {
+				if v.KeyDrag {
+					if v.MovePickedBoneKeyToX(e.Position.X) {
+						ui.UnitModelWhmDirty = true
+						v.KeyDragMoved = true
 					}
 					continue
 				}
-				v.scrubSeek(e.Position.X, t != ui.unitModel || ui.unitListMode == 2)
+				v.ScrubSeek(e.Position.X, t != ui.UnitModel || ui.UnitListMode == 2)
 				continue
 			}
-			if !v.dragging {
+			if !v.Dragging {
 				continue
 			}
-			dx := float64(e.Position.X - v.lastX)
-			dy := float64(e.Position.Y - v.lastY)
-			v.lastX, v.lastY = e.Position.X, e.Position.Y
+			dx := float64(e.Position.X - v.LastX)
+			dy := float64(e.Position.Y - v.LastY)
+			v.LastX, v.LastY = e.Position.X, e.Position.Y
 			v.Yaw -= dx * 0.01
 			v.Pitch = engine.ClampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
-			v.redraw = true
+			v.Redraw = true
 		case pointer.Scroll:
-			v.zoomBy(modelZoomByDelta(e.Scroll.Y))
-			v.redraw = true
+			v.ZoomBy(modelZoomByDelta(e.Scroll.Y))
+			v.Redraw = true
 		case pointer.Release, pointer.Cancel:
-			if t.kind == "sgb" && t.sgbView3D && t.sgbObjectRotating {
-				t.sgbObjectRotating = false
-				if e.Kind == pointer.Release && t.sgbObjectMoved {
-					v.invalidate()
+			if t.Kind == "sgb" && t.SgbView3D && t.SgbObjectRotating {
+				t.SgbObjectRotating = false
+				if e.Kind == pointer.Release && t.SgbObjectMoved {
+					v.Invalidate()
 				}
-				t.sgbObjectMoved = false
+				t.SgbObjectMoved = false
 				gtx.Execute(op.InvalidateCmd{})
 				continue
 			}
-			if t.kind == "sgb" && t.sgbView3D && t.sgbObjectDragging {
-				t.sgbObjectDragging = false
-				t.sgbDragHasPoint = false
-				t.sgbSelecting, t.sgbSelectionDrag = false, false
-				if e.Kind == pointer.Release && t.sgbObjectMoved {
-					v.invalidate()
+			if t.Kind == "sgb" && t.SgbView3D && t.SgbObjectDragging {
+				t.SgbObjectDragging = false
+				t.SgbDragHasPoint = false
+				t.SgbSelecting, t.SgbSelectionDrag = false, false
+				if e.Kind == pointer.Release && t.SgbObjectMoved {
+					v.Invalidate()
 				}
-				t.sgbObjectMoved = false
+				t.SgbObjectMoved = false
 				gtx.Execute(op.InvalidateCmd{})
 				continue
 			}
-			if t.kind == "sgb" && t.sgbView3D && v.dragging {
-				v.dragging = false
-				v.redraw = e.Kind == pointer.Release
+			if t.Kind == "sgb" && t.SgbView3D && v.Dragging {
+				v.Dragging = false
+				v.Redraw = e.Kind == pointer.Release
 				gtx.Execute(op.InvalidateCmd{})
 				continue
 			}
-			if t.kind == "sgb" && t.sgbView3D && t.sgbSelecting {
-				t.sgbSelectionCurrent = sgbCanvasToFramePoint(area, w, h, e.Position)
-				if t.sgbSelectedEntities == nil {
-					t.sgbSelectedEntities = make(map[int]bool)
+			if t.Kind == "sgb" && t.SgbView3D && t.SgbSelecting {
+				t.SgbSelectionCurrent = sgbCanvasToFramePoint(area, w, h, e.Position)
+				if t.SgbSelectedEntities == nil {
+					t.SgbSelectedEntities = make(map[int]bool)
 				}
 				if e.Kind == pointer.Release {
-					if t.sgbSelectionDrag {
-						opts := v.options(w, h)
-						selection := sgbRectangleEntities(v.modelData(), t.sgbEntityMeshIDs, render.BuildViewMatrix(opts), w, h, sgbSelectionRect(t.sgbSelectionAnchor, t.sgbSelectionCurrent))
-						t.sgbSelectedEntities = selection
-					} else if id, hit := sgbPickEntity(v.modelData(), t.sgbEntityMeshIDs, engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.sgbSelectionCurrent.X), float64(t.sgbSelectionCurrent.Y)); hit {
-						t.sgbSelectedEntities = map[int]bool{id: true}
+					if t.SgbSelectionDrag {
+						opts := v.Options(w, h)
+						selection := sgbRectangleEntities(v.ModelData(), t.SgbEntityMeshIDs, render.BuildViewMatrix(opts), w, h, sgbSelectionRect(t.SgbSelectionAnchor, t.SgbSelectionCurrent))
+						t.SgbSelectedEntities = selection
+					} else if id, hit := sgbPickEntity(v.ModelData(), t.SgbEntityMeshIDs, engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.SgbSelectionCurrent.X), float64(t.SgbSelectionCurrent.Y)); hit {
+						t.SgbSelectedEntities = map[int]bool{id: true}
 					} else {
-						clear(t.sgbSelectedEntities)
+						clear(t.SgbSelectedEntities)
 					}
-					v.invalidate()
+					v.Invalidate()
 				}
-				t.sgbSelecting, t.sgbSelectionDrag = false, false
+				t.SgbSelecting, t.SgbSelectionDrag = false, false
 				gtx.Execute(op.InvalidateCmd{})
 				continue
 			}
-			if v.keyDrag && v.keyDragMoved {
-				if f, ok := v.boneKeyFrameAt(); ok {
+			if v.KeyDrag && v.KeyDragMoved {
+				if f, ok := v.BoneKeyFrameAt(); ok {
 					LogInfo("3D preview: bone key drag ended on frame %d", f+1)
-					ui.statusText = fmt.Sprintf("Moved bone key to frame %d", f+1)
+					ui.StatusText = fmt.Sprintf("Moved bone key to frame %d", f+1)
 				}
 			}
-			v.keyDrag, v.keyDragMoved = false, false
-			v.dragging, v.panning, v.seeking = false, false, false
+			v.KeyDrag, v.KeyDragMoved = false, false
+			v.Dragging, v.Panning, v.Seeking = false, false, false
 		}
 	}
 
-	if v.gpuFrame != nil {
-		if v.dragging || v.panning || (t.kind == "sgb" && (t.sgbCameraKeys[0] || t.sgbCameraKeys[1] || t.sgbCameraKeys[2] || t.sgbCameraKeys[3] || t.sgbCameraVelocity != [2]float64{})) || (v.playing && v.anim != nil) || (t.kind == "sgb" && t.sgbView3D && len(v.animatedEntities) > 0) {
+	if v.GpuFrame != nil {
+		if v.Dragging || v.Panning || (t.Kind == "sgb" && (t.SgbCameraKeys[0] || t.SgbCameraKeys[1] || t.SgbCameraKeys[2] || t.SgbCameraKeys[3] || t.SgbCameraVelocity != [2]float64{})) || (v.Playing && v.Anim != nil) || (t.Kind == "sgb" && t.SgbView3D && len(v.AnimatedEntities) > 0) {
 			// Keep the frame refreshing while something is moving.
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		}
@@ -978,24 +978,24 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			}
 			fillRect(gtx, rgb(0x1C1E24), area)
 		} else {
-			v.gpuFrame.Paint(gtx, image.Rectangle{Max: area})
+			v.GpuFrame.Paint(gtx, image.Rectangle{Max: area})
 		}
 		// The picked marker is painted in the frame's own transform, so it
 		// lands on the model exactly where the frame put it.
-		v.gpuFrame.Overlay(gtx, image.Rectangle{Max: area}, func(gtx layout.Context) {
-			v.paintMarkerOverlay(gtx, w, h)
+		v.GpuFrame.Overlay(gtx, image.Rectangle{Max: area}, func(gtx layout.Context) {
+			v.PaintMarkerOverlay(gtx, w, h)
 		})
-		if t.kind == "sgb" && t.sgbView3D {
+		if t.Kind == "sgb" && t.SgbView3D {
 			paintSgbSelectionMarquee(gtx, t, image.Rectangle{Max: area})
 		}
 		rect.Pop()
 		return layout.Dimensions{Size: area}
 	}
-	img := v.frame
+	img := v.Frame
 	if img == nil {
 		if modelRenderingLogged.IsZero() || time.Since(modelRenderingLogged) >= time.Second {
 			modelRenderingLogged = time.Now()
-			log.Printf("3D preview: no frame on screen (skeleton=%v loading=%v)", v.showSkeleton, v.loading)
+			log.Printf("3D preview: no frame on screen (skeleton=%v loading=%v)", v.ShowSkeleton, v.Loading)
 		}
 		gtx.Execute(op.InvalidateCmd{At: now.Add(32 * time.Millisecond)})
 		rect.Pop()
@@ -1007,16 +1007,16 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 				msg := "Rendering…"
-				if v.loading {
+				if v.Loading {
 					msg = "Loading textures…"
 				}
-				l := material.Label(ui.th, unit.Sp(10), msg)
+				l := material.Label(ui.Th, unit.Sp(10), msg)
 				l.Color = cTextDim
 				return layout.Center.Layout(gtx, l.Layout)
 			}),
 		)
 	}
-	if v.dragging || v.panning || (t.kind == "sgb" && (t.sgbCameraKeys[0] || t.sgbCameraKeys[1] || t.sgbCameraKeys[2] || t.sgbCameraKeys[3] || t.sgbCameraVelocity != [2]float64{})) || (v.playing && v.anim != nil) || (t.kind == "sgb" && t.sgbView3D && len(v.animatedEntities) > 0) {
+	if v.Dragging || v.Panning || (t.Kind == "sgb" && (t.SgbCameraKeys[0] || t.SgbCameraKeys[1] || t.SgbCameraKeys[2] || t.SgbCameraKeys[3] || t.SgbCameraVelocity != [2]float64{})) || (v.Playing && v.Anim != nil) || (t.Kind == "sgb" && t.SgbView3D && len(v.AnimatedEntities) > 0) {
 		gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 	}
 	b := img.Bounds()
@@ -1029,13 +1029,13 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 	tr := op.Affine(f32.Affine2D{}.Scale(f32.Pt(dx, dy), f32.Pt(scale, scale))).Push(gtx.Ops)
 	paint.NewImageOp(img).Add(gtx.Ops)
 	paint.PaintOp{}.Add(gtx.Ops)
-	if fxDrawn && v.fxOverlay != nil {
-		paint.NewImageOp(v.fxOverlay).Add(gtx.Ops)
+	if fxDrawn && v.FxOverlay != nil {
+		paint.NewImageOp(v.FxOverlay).Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 	}
-	v.paintMarkerOverlay(gtx, w, h)
-	v.paintFXAttributeMarkers(gtx, w, h)
-	if t.kind == "sgb" && t.sgbView3D {
+	v.PaintMarkerOverlay(gtx, w, h)
+	v.PaintFXAttributeMarkers(gtx, w, h)
+	if t.Kind == "sgb" && t.SgbView3D {
 		paintSgbSelection(gtx, t, v, w, h, true)
 	}
 	tr.Pop()
@@ -1044,17 +1044,17 @@ func (ui *uiState) modelCanvas(gtx layout.Context, t *fileTab) layout.Dimensions
 }
 
 // modelGizmoOverlay puts the camera orientation gizmo in the bottom right.
-func (ui *uiState) modelGizmoOverlay(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
-	if v == nil || v.model == nil {
+func ModelGizmoOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.Model
+	if v == nil || v.Model == nil {
 		return layout.Dimensions{}
 	}
 	w, h := gtx.Constraints.Max.X, gtx.Constraints.Max.Y
 	if w <= 0 || h <= 0 {
 		return layout.Dimensions{}
 	}
-	opts := v.options(w, h)
-	measure := render.CameraAxesLayout(ui.th, opts, false)
+	opts := v.Options(w, h)
+	measure := render.CameraAxesLayout(ui.Th, opts, false)
 	gtx.Constraints.Min = image.Point{}
 	d := measure(gtx)
 	if d.Size.X == 0 || d.Size.Y == 0 {
@@ -1070,7 +1070,7 @@ func (ui *uiState) modelGizmoOverlay(gtx layout.Context, t *fileTab) layout.Dime
 	macro := op.Offset(at).Push(gtx.Ops)
 	gtx.Constraints.Min = image.Point{}
 	gtx.Constraints.Max = d.Size
-	render.CameraAxesLayout(ui.th, opts, true)(gtx)
+	render.CameraAxesLayout(ui.Th, opts, true)(gtx)
 	macro.Pop()
 	return d
 }

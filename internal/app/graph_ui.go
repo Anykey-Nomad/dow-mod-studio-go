@@ -93,24 +93,24 @@ func groupLinkRows(rows []linkRow) (out []linkRow, in []linkRow) {
 }
 
 // layoutUnitLinksList is the "Links" column.
-func (ui *uiState) layoutUnitLinksList(gtx layout.Context) layout.Dimensions {
-	sel := ui.currentUnit()
+func LayoutUnitLinksList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	sel := CurrentUnit(ui)
 	if sel == nil {
-		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions { return UnitEmptyState(ui, gtx) })
 	}
-	g := ui.startGraphLinkScan()
+	g := StartGraphLinkScan(ui)
 	if g == nil {
-		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions { return UnitEmptyState(ui, gtx) })
 	}
 	outgoing, incoming := groupLinkRows(linkRows(g, sel.Path))
 	if len(outgoing) == 0 && len(incoming) == 0 {
-		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.linkNote(gtx, ui.linkScanNote())
+				return LinkNote(ui, gtx, LinkScanNote(ui))
 			})
 		})
 	}
-	return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+	return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			var children []layout.FlexChild
 			add := func(title string, rows []linkRow) {
@@ -118,19 +118,19 @@ func (ui *uiState) layoutUnitLinksList(gtx layout.Context) layout.Dimensions {
 					return
 				}
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.linkGroupTitle(gtx, title, len(rows))
+					return LinkGroupTitle(ui, gtx, title, len(rows))
 				}))
 				for _, r := range rows {
 					r := r
 					children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.linkRow(gtx, r)
+						return LinkRow(ui, gtx, r)
 					}))
 				}
 			}
 			add("This unit refers to", outgoing)
 			add("Refers to this unit", incoming)
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.linkNote(gtx, ui.linkScanNote())
+				return LinkNote(ui, gtx, LinkScanNote(ui))
 			}))
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 		})
@@ -138,9 +138,9 @@ func (ui *uiState) layoutUnitLinksList(gtx layout.Context) layout.Dimensions {
 }
 
 // linkGroupTitle is the heading of one direction of the list.
-func (ui *uiState) linkGroupTitle(gtx layout.Context, title string, n int) layout.Dimensions {
+func LinkGroupTitle(ui *uiState, gtx layout.Context, title string, n int) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(4), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		l := material.Label(ui.th, unit.Sp(9), title+"  ("+itoa(n)+")")
+		l := material.Label(ui.Th, unit.Sp(9), title+"  ("+itoa(n)+")")
 		l.Color = cTextDim
 		return l.Layout(gtx)
 	})
@@ -149,7 +149,7 @@ func (ui *uiState) linkGroupTitle(gtx layout.Context, title string, n int) layou
 // linkRow is one relationship line: what it is, where it sits, and what it
 // names. A reference that resolved to nothing is said so, because that is the
 // line the reader is looking for.
-func (ui *uiState) linkRow(gtx layout.Context, r linkRow) layout.Dimensions {
+func LinkRow(ui *uiState, gtx layout.Context, r linkRow) layout.Dimensions {
 	name := r.target
 	if !r.found {
 		name = r.target + "  (not found)"
@@ -165,13 +165,13 @@ func (ui *uiState) linkRow(gtx layout.Context, r linkRow) layout.Dimensions {
 					w := gtx.Dp(unit.Dp(150))
 					gtx.Constraints.Min.X = w
 					gtx.Constraints.Max.X = w
-					l := material.Label(ui.th, unit.Sp(10), clipName(label, 26))
+					l := material.Label(ui.Th, unit.Sp(10), clipName(label, 26))
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				})
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), name)
+				l := material.Label(ui.Th, unit.Sp(10), name)
 				if r.found {
 					l.Color = cText
 				} else {
@@ -185,9 +185,9 @@ func (ui *uiState) linkRow(gtx layout.Context, r linkRow) layout.Dimensions {
 
 // linkNote is the small line at the foot of the list that says whether the mod
 // has been read all the way through yet.
-func (ui *uiState) linkNote(gtx layout.Context, text string) layout.Dimensions {
+func LinkNote(ui *uiState, gtx layout.Context, text string) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		l := material.Label(ui.th, unit.Sp(9), text)
+		l := material.Label(ui.Th, unit.Sp(9), text)
 		l.Color = cTextDim
 		return l.Layout(gtx)
 	})
@@ -200,13 +200,13 @@ func (ui *uiState) linkNote(gtx layout.Context, text string) layout.Dimensions {
 // live in abilities, add-ons, weapons, squads and research as much as in the
 // units themselves, and a note that said "604 units" would be leaving out most
 // of what it had just looked at.
-func (ui *uiState) linkScanNote() string {
-	g := ui.graphFor()
+func LinkScanNote(ui *uiState) string {
+	g := GraphFor(ui)
 	if g == nil {
 		return "No mod is loaded."
 	}
 	files := len(g.EntitiesOfKind(graphLinkKinds()...))
-	if ui.graphLinksRunning {
+	if ui.GraphLinksRunning {
 		return "Reading the mod… " + itoa(len(g.Links)) + " references so far."
 	}
 	if files == 0 {
@@ -267,33 +267,33 @@ func brokenLinkGroups(g *modGraph) []brokenLinkGroup {
 // layoutUnitProblemsList is the "Problems" column: every reference in the mod
 // that names a file which is not there, one row per missing file rather than
 // per occurrence.
-func (ui *uiState) layoutUnitProblemsList(gtx layout.Context) layout.Dimensions {
-	g := ui.startGraphLinkScan()
+func LayoutUnitProblemsList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	g := StartGraphLinkScan(ui)
 	if g == nil {
-		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions { return UnitEmptyState(ui, gtx) })
 	}
 	groups := brokenLinkGroups(g)
 	if len(groups) == 0 {
-		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				msg := "Every reference in the mod resolves."
-				if ui.graphLinksRunning {
+				if ui.GraphLinksRunning {
 					msg = "Reading the mod…"
 				}
-				return ui.linkNote(gtx, msg)
+				return LinkNote(ui, gtx, msg)
 			})
 		})
 	}
-	return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+	return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			var children []layout.FlexChild
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.linkNote(gtx, itoa(len(groups))+" references in the mod name a file that is not there.")
+				return LinkNote(ui, gtx, itoa(len(groups))+" references in the mod name a file that is not there.")
 			}))
 			for _, grp := range groups {
 				grp := grp
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.problemRow(gtx, grp)
+					return ProblemRow(ui, gtx, grp)
 				}))
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -302,7 +302,7 @@ func (ui *uiState) layoutUnitProblemsList(gtx layout.Context) layout.Dimensions 
 }
 
 // problemRow is one missing file and the files that still point at it.
-func (ui *uiState) problemRow(gtx layout.Context, grp brokenLinkGroup) layout.Dimensions {
+func ProblemRow(ui *uiState, gtx layout.Context, grp brokenLinkGroup) layout.Dimensions {
 	holders := itoa(len(grp.holders))
 	if len(grp.holders) == 1 {
 		holders = "1 file"
@@ -316,7 +316,7 @@ func (ui *uiState) problemRow(gtx layout.Context, grp brokenLinkGroup) layout.Di
 					w := gtx.Dp(unit.Dp(150))
 					gtx.Constraints.Min.X = w
 					gtx.Constraints.Max.X = w
-					l := material.Label(ui.th, unit.Sp(10), grp.role.Label())
+					l := material.Label(ui.Th, unit.Sp(10), grp.role.Label())
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				})
@@ -324,12 +324,12 @@ func (ui *uiState) problemRow(gtx layout.Context, grp brokenLinkGroup) layout.Di
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(10), grp.ref)
+						l := material.Label(ui.Th, unit.Sp(10), grp.ref)
 						l.Color = cProblem
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.linkNote(gtx, "still named by "+holders+": "+clipName(holdersFirst(grp.holders), 48))
+						return LinkNote(ui, gtx, "still named by "+holders+": "+clipName(holdersFirst(grp.holders), 48))
 					}),
 				)
 			}),
@@ -389,27 +389,27 @@ const graphLinkBatchSize = 128
 // A scan already running for the same tree is left alone, and a scan for a
 // different tree is stopped rather than left writing into a graph nobody reads
 // any more.
-func (ui *uiState) startGraphLinkScan() *modGraph {
-	g := ui.graphFor()
+func StartGraphLinkScan(ui *uiState) *modGraph {
+	g := GraphFor(ui)
 	if g == nil {
 		return nil
 	}
-	if ui.graphLinksRunning && ui.graphLinksGraph == g {
+	if ui.GraphLinksRunning && ui.GraphLinksGraph == g {
 		return g
 	}
-	ui.stopGraphLinkScan()
+	StopGraphLinkScan(ui)
 
-	ui.graphLinksGraph = g
+	ui.GraphLinksGraph = g
 	g.BeginLinkScan()
-	ui.graphLinksCh = make(chan graphLinkBatch, 8)
+	ui.GraphLinksCh = make(chan graphLinkBatch, 8)
 	stop := make(chan struct{})
-	ui.graphLinksStop = stop
-	ui.graphLinksRunning = true
+	ui.GraphLinksStop = stop
+	ui.GraphLinksRunning = true
 
 	// The entities are copied so the goroutine does not walk a graph the UI
 	// thread is free to replace.
 	entities := append([]*graphEntity(nil), g.EntitiesOfKind(graphLinkKinds()...)...)
-	ch := ui.graphLinksCh
+	ch := ui.GraphLinksCh
 	go func() {
 		batch := make([]graphLink, 0, graphLinkBatchSize)
 		flush := func(done bool) bool {
@@ -439,33 +439,33 @@ func (ui *uiState) startGraphLinkScan() *modGraph {
 // stopGraphLinkScan ends a running scan. The goroutine notices through its
 // stop channel and returns, so a module reload does not leave one reading a
 // tree that is being closed underneath it.
-func (ui *uiState) stopGraphLinkScan() {
-	if ui.graphLinksStop != nil {
-		close(ui.graphLinksStop)
-		ui.graphLinksStop = nil
+func StopGraphLinkScan(ui *uiState) {
+	if ui.GraphLinksStop != nil {
+		close(ui.GraphLinksStop)
+		ui.GraphLinksStop = nil
 	}
-	ui.graphLinksRunning = false
-	ui.graphLinksCh = nil
+	ui.GraphLinksRunning = false
+	ui.GraphLinksCh = nil
 }
 
 // pollGraphLinks takes whatever the scan has finished and reports whether
 // anything new arrived, so the caller can ask for a redraw.
-func (ui *uiState) pollGraphLinks() bool {
-	if ui.graphLinksCh == nil {
+func PollGraphLinks(ui *uiState) bool {
+	if ui.GraphLinksCh == nil {
 		return false
 	}
 	got := false
 	for {
 		select {
-		case batch := <-ui.graphLinksCh:
-			if ui.graphLinksGraph != nil {
-				ui.graphLinksGraph.AddScannedLinks(batch.links)
+		case batch := <-ui.GraphLinksCh:
+			if ui.GraphLinksGraph != nil {
+				ui.GraphLinksGraph.AddScannedLinks(batch.links)
 			}
 			if batch.done {
-				if ui.graphLinksGraph != nil {
-					ui.graphLinksGraph.FinishLinkScan()
+				if ui.GraphLinksGraph != nil {
+					ui.GraphLinksGraph.FinishLinkScan()
 				}
-				ui.stopGraphLinkScan()
+				StopGraphLinkScan(ui)
 			}
 			got = true
 		default:

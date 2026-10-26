@@ -36,15 +36,15 @@ func asTabBar(gtx layout.Context, w, h int) layout.Context {
 // manyTabs fills the bar with more tabs than fit, which is the only state in
 // which scrolling means anything.
 func manyTabs(ui *uiState, n int) {
-	ui.openTabs = nil
+	ui.OpenTabs = nil
 	for i := 0; i < n; i++ {
-		ui.openTabs = append(ui.openTabs, &fileTab{
-			path: fmt.Sprintf(`Data\attrib\ebps\races\necrons\troops\unit_number_%02d.rgd`, i),
-			kind: "rgd",
+		ui.OpenTabs = append(ui.OpenTabs, &fileTab{
+			Path: fmt.Sprintf(`Data\attrib\ebps\races\necrons\troops\unit_number_%02d.rgd`, i),
+			Kind: "rgd",
 		})
 	}
-	ui.ensureTabClicks()
-	ui.tabSel = 1
+	EnsureTabClicks(ui)
+	ui.TabSel = 1
 }
 
 func tabBarTestUI(t *testing.T, tabs int) *uiState {
@@ -125,20 +125,20 @@ func TestTabsAreAsWideAsTheirLabels(t *testing.T) {
 	ui := tabBarTestUI(t, 3)
 
 	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), 1400, tabBarHeightDp), 1400, tabBarHeightDp)
-	ui.layoutTabRow(gtx)
+	LayoutTabRow(ui, gtx)
 
-	if len(ui.tabRects) != 3 {
-		t.Fatalf("%d rects for 3 tabs", len(ui.tabRects))
+	if len(ui.TabRects) != 3 {
+		t.Fatalf("%d rects for 3 tabs", len(ui.TabRects))
 	}
-	for i, r := range ui.tabRects {
+	for i, r := range ui.TabRects {
 		// A tab's own text is around 100px; anything near the window's width
 		// means the label was asked to fill the space instead of being measured.
 		if r.Dx() > 200 {
-			t.Errorf("tab %d is %d px wide, want about the width of %q", i, r.Dx(), tabLabelFor(ui.openTabs[i]))
+			t.Errorf("tab %d is %d px wide, want about the width of %q", i, r.Dx(), tabLabelFor(ui.OpenTabs[i]))
 		}
 	}
-	if ui.tabRowWidth > 800 {
-		t.Errorf("3 tabs came to %d px, which is far more than their text", ui.tabRowWidth)
+	if ui.TabRowWidth > 800 {
+		t.Errorf("3 tabs came to %d px, which is far more than their text", ui.TabRowWidth)
 	}
 }
 
@@ -149,29 +149,29 @@ func TestTabBarMeasuresTheRowAndOffersToScroll(t *testing.T) {
 	ui := tabBarTestUI(t, 12)
 
 	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), w, h), w, h)
-	ui.layoutTabBar(gtx)
+	LayoutTabBar(ui, gtx)
 
-	if ui.tabRowWidth <= ui.tabBarWidth {
-		t.Fatalf("12 tabs came to %d px in a %d px bar, so there is nothing to scroll", ui.tabRowWidth, ui.tabBarWidth)
+	if ui.TabRowWidth <= ui.TabBarWidth {
+		t.Fatalf("12 tabs came to %d px in a %d px bar, so there is nothing to scroll", ui.TabRowWidth, ui.TabBarWidth)
 	}
-	if got, want := ui.tabMaxScroll(ui.tabBarWidth, ui.tabRowWidth), ui.tabRowWidth-ui.tabBarWidth; got != want {
+	if got, want := TabMaxScroll(ui, ui.TabBarWidth, ui.TabRowWidth), ui.TabRowWidth-ui.TabBarWidth; got != want {
 		t.Errorf("maxScroll = %d, want %d", got, want)
 	}
-	if ui.tabScrollX != 0 {
-		t.Errorf("a freshly drawn bar is scrolled to %d", ui.tabScrollX)
+	if ui.TabScrollX != 0 {
+		t.Errorf("a freshly drawn bar is scrolled to %d", ui.TabScrollX)
 	}
-	if len(ui.tabRects) != len(ui.openTabs) {
-		t.Fatalf("%d rects for %d tabs", len(ui.tabRects), len(ui.openTabs))
+	if len(ui.TabRects) != len(ui.OpenTabs) {
+		t.Fatalf("%d rects for %d tabs", len(ui.TabRects), len(ui.OpenTabs))
 	}
 	// The rects have to be in one piece and in order, or a right press cannot
 	// be resolved to a tab.
-	for i, r := range ui.tabRects {
+	for i, r := range ui.TabRects {
 		if r.Empty() {
 			t.Errorf("tab %d has no rect", i)
 		}
-		if i > 0 && r.Min.X <= ui.tabRects[i-1].Max.X {
+		if i > 0 && r.Min.X <= ui.TabRects[i-1].Max.X {
 			t.Errorf("tab %d starts at %d, not after tab %d ends at %d",
-				i, r.Min.X, i-1, ui.tabRects[i-1].Max.X)
+				i, r.Min.X, i-1, ui.TabRects[i-1].Max.X)
 		}
 	}
 }
@@ -182,25 +182,25 @@ func TestTabBarActuallyScrollsSideways(t *testing.T) {
 	ui := tabBarTestUI(t, 12)
 
 	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), w, h), w, h)
-	ui.layoutTabBar(gtx)
+	LayoutTabBar(ui, gtx)
 	strip := image.Rectangle{Max: image.Pt(w, tabBarHeightDp)}
 
-	left := renderFrame(t, w, h, func(gtx layout.Context) { ui.layoutTabBar(asTabBar(gtx, w, h)) })
+	left := renderFrame(t, w, h, func(gtx layout.Context) { LayoutTabBar(ui, asTabBar(gtx, w, h)) })
 
 	// A notch's worth, which is what the wheel produces.
-	ui.tabScrollX += int(wheelNotchDelta * tabWheelStepPx)
-	ui.clampTabScroll(ui.tabBarWidth, ui.tabRowWidth)
-	if ui.tabScrollX == 0 {
-		t.Fatalf("the bar refused to scroll at all (row %d, bar %d)", ui.tabRowWidth, ui.tabBarWidth)
+	ui.TabScrollX += int(wheelNotchDelta * tabWheelStepPx)
+	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	if ui.TabScrollX == 0 {
+		t.Fatalf("the bar refused to scroll at all (row %d, bar %d)", ui.TabRowWidth, ui.TabBarWidth)
 	}
 
-	scrolled := renderFrame(t, w, h, func(gtx layout.Context) { ui.layoutTabBar(asTabBar(gtx, w, h)) })
+	scrolled := renderFrame(t, w, h, func(gtx layout.Context) { LayoutTabBar(ui, asTabBar(gtx, w, h)) })
 
 	diff := imagesDifferIn(left, scrolled, strip)
 	if diff == 0 {
 		t.Error("scrolling by one notch changed nothing in the tab strip: the row is not being moved")
 	} else {
-		t.Logf("%d pixels of the %d px strip changed after scrolling %d px", diff, strip.Dx(), ui.tabScrollX)
+		t.Logf("%d pixels of the %d px strip changed after scrolling %d px", diff, strip.Dx(), ui.TabScrollX)
 	}
 }
 
@@ -212,21 +212,21 @@ func TestScrolledTabBarClipsToItsWidth(t *testing.T) {
 	ui := tabBarTestUI(t, 12)
 
 	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), w, h), w, h)
-	ui.layoutTabBar(gtx)
-	ui.tabScrollX = ui.tabMaxScroll(ui.tabBarWidth, ui.tabRowWidth)
-	last := ui.tabRects[len(ui.tabRects)-1]
+	LayoutTabBar(ui, gtx)
+	ui.TabScrollX = TabMaxScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	last := ui.TabRects[len(ui.TabRects)-1]
 
 	// Scrolled to the end, the row's right edge lands exactly on the bar's.
-	if onScreen := last.Max.X - ui.tabScrollX; onScreen != w {
+	if onScreen := last.Max.X - ui.TabScrollX; onScreen != w {
 		t.Errorf("the last tab ends at %d on screen, want the bar's %d px", onScreen, w)
 	}
 
 	// A clip that was not applied would leave the row's own background or tabs
 	// past the bar. Both are the bar's background there, so the strip right at
 	// the edge is compared with the same strip on an unscrolled bar.
-	scrolledShot := renderFrame(t, w, h, func(gtx layout.Context) { ui.layoutTabBar(asTabBar(gtx, w, h)) })
-	ui.tabScrollX = 0
-	plainShot := renderFrame(t, w, h, func(gtx layout.Context) { ui.layoutTabBar(asTabBar(gtx, w, h)) })
+	scrolledShot := renderFrame(t, w, h, func(gtx layout.Context) { LayoutTabBar(ui, asTabBar(gtx, w, h)) })
+	ui.TabScrollX = 0
+	plainShot := renderFrame(t, w, h, func(gtx layout.Context) { LayoutTabBar(ui, asTabBar(gtx, w, h)) })
 
 	// The first tab is 100px of text, so at the left of the bar the unscrolled
 	// shot is busy and the fully scrolled one is not: that is the tabs having
@@ -250,14 +250,14 @@ func TestShortTabBarDoesNotScroll(t *testing.T) {
 	ui := tabBarTestUI(t, 2)
 
 	gtx := asTabBar(testutil.NewLayoutContext(new(op.Ops), w, h), w, h)
-	ui.layoutTabBar(gtx)
-	if ui.tabRowWidth > ui.tabBarWidth {
-		t.Skipf("two tabs took %d px in a %d px bar, the fixture is too narrow", ui.tabRowWidth, ui.tabBarWidth)
+	LayoutTabBar(ui, gtx)
+	if ui.TabRowWidth > ui.TabBarWidth {
+		t.Skipf("two tabs took %d px in a %d px bar, the fixture is too narrow", ui.TabRowWidth, ui.TabBarWidth)
 	}
-	ui.tabScrollX = 500
-	ui.clampTabScroll(ui.tabBarWidth, ui.tabRowWidth)
-	if ui.tabScrollX != 0 {
-		t.Errorf("a bar that fits scrolled to %d", ui.tabScrollX)
+	ui.TabScrollX = 500
+	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	if ui.TabScrollX != 0 {
+		t.Errorf("a bar that fits scrolled to %d", ui.TabScrollX)
 	}
 }
 
@@ -268,13 +268,13 @@ func TestShortTabBarDoesNotScroll(t *testing.T) {
 func TestTabContextMenuRendersItsItem(t *testing.T) {
 	const w, h = 900, 600
 	ui := tabBarTestUI(t, 4)
-	pos := ui.tabContextPoint(layout.Context{Metric: unit.Metric{PxPerDp: 1, PxPerSp: 1}}, 300)
+	pos := TabContextPoint(ui, layout.Context{Metric: unit.Metric{PxPerDp: 1, PxPerSp: 1}}, 300)
 	menuW, menuH := tabContextMenuSizePx()
 
-	ui.tabContextPos = pos
-	closed := renderFrame(t, w, h, func(gtx layout.Context) { ui.layoutTabContextMenu(gtx) })
-	ui.tabContextVisible = true
-	open := renderFrame(t, w, h, func(gtx layout.Context) { ui.layoutTabContextMenu(gtx) })
+	ui.TabContextPos = pos
+	closed := renderFrame(t, w, h, func(gtx layout.Context) { LayoutTabContextMenu(ui, gtx) })
+	ui.TabContextVisible = true
+	open := renderFrame(t, w, h, func(gtx layout.Context) { LayoutTabContextMenu(ui, gtx) })
 
 	box := image.Rectangle{Min: pos, Max: image.Pt(pos.X+menuW, pos.Y+menuH)}
 	if diff := imagesDifferIn(closed, open, box); diff == 0 {
@@ -335,16 +335,16 @@ func TestTabContextMenuOpensAtTheClickWhenThereIsRoom(t *testing.T) {
 func TestTabContextMenuLandsWhereItWasPlaced(t *testing.T) {
 	const w, h = 900, 300
 	ui := tabBarTestUI(t, 4)
-	ui.tabContextVisible = true
-	ui.tabContextPos = image.Pt(500, 80)
+	ui.TabContextVisible = true
+	ui.TabContextPos = image.Pt(500, 80)
 	menuW, menuH := tabContextMenuSizePx()
-	want := tabContextMenuOrigin(ui.tabContextPos, w, h, menuW, menuH, tabContextInsetP)
+	want := tabContextMenuOrigin(ui.TabContextPos, w, h, menuW, menuH, tabContextInsetP)
 
 	// Painted last over a known background, so anything inside the menu's box
 	// that is not the background is the menu having landed there.
 	img := renderFrame(t, w, h, func(gtx layout.Context) {
 		fillRect(gtx, cBg, gtx.Constraints.Max)
-		ui.layoutTabContextMenu(gtx)
+		LayoutTabContextMenu(ui, gtx)
 	})
 
 	box := image.Rectangle{Min: want, Max: want.Add(image.Pt(menuW, menuH))}

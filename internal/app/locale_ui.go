@@ -42,8 +42,8 @@ const (
 // localeLabel is what the field reads when no game folder is known yet, or
 // when the chosen language has no .ucs files at all. The ids still show as
 // ids, so the field is never wrong, only the text behind them is missing.
-func (ui *uiState) localeLabel() string {
-	lang := strings.TrimSpace(ui.locale)
+func LocaleLabel(ui *uiState) string {
+	lang := strings.TrimSpace(ui.Locale)
 	if lang == "" {
 		lang = localeDefault
 	}
@@ -54,45 +54,45 @@ func (ui *uiState) localeLabel() string {
 // table. It runs when a module is opened and when the game folder is typed
 // into the settings, because both can bring a different set of .ucs files
 // into reach.
-func (ui *uiState) refreshLocales() {
-	gamePath := strings.TrimSpace(ui.gamePath)
-	moduleDir := localeModuleDir(ui.modulePath)
+func RefreshLocales(ui *uiState) {
+	gamePath := strings.TrimSpace(ui.GamePath)
+	moduleDir := localeModuleDir(ui.ModulePath)
 	langs := availableLocales(gamePath, moduleDir)
 
 	// A language remembered from a previous session may not be installed any
 	// more. Keeping it would leave the field naming a table that was never
 	// built, so it falls back to the default rather than silently showing
 	// nothing.
-	if !containsFold(langs, ui.locale) {
-		ui.locale = localeDefault
+	if !containsFold(langs, ui.Locale) {
+		ui.Locale = localeDefault
 	}
-	ui.localeList = langs
-	ui.applyLocale()
+	ui.LocaleList = langs
+	ApplyLocale(ui)
 }
 
 // applyLocale rebuilds the string table for the chosen language and reopens the
 // locale list's row count. The mod tree is deliberately left alone: switching
 // the display language must not throw away the open tabs, and only the .ucs
 // lookup depends on it.
-func (ui *uiState) applyLocale() {
-	lang := strings.TrimSpace(ui.locale)
+func ApplyLocale(ui *uiState) {
+	lang := strings.TrimSpace(ui.Locale)
 	if lang == "" {
 		lang = localeDefault
-		ui.locale = lang
+		ui.Locale = lang
 	}
-	table := setLocale(ui.gamePath, ui.modulePath, lang)
-	ui.ensureLocaleClicks(len(ui.localeList))
+	table := setLocale(ui.GamePath, ui.ModulePath, lang)
+	EnsureLocaleClicks(ui, len(ui.LocaleList))
 	if table.Files == 0 {
-		ui.statusText = fmt.Sprintf("No %s .ucs files found under %s", lang, ui.localeSearchRoot())
+		ui.StatusText = fmt.Sprintf("No %s .ucs files found under %s", lang, LocaleSearchRoot(ui))
 		return
 	}
-	ui.statusText = fmt.Sprintf("Locale %s — %d entries from %d files", lang, table.Lines, table.Files)
+	ui.StatusText = fmt.Sprintf("Locale %s — %d entries from %d files", lang, table.Lines, table.Files)
 }
 
 // localeSearchRoot names the folder the language list was read from, for the
 // status line when a language turns out to have no files.
-func (ui *uiState) localeSearchRoot() string {
-	roots := localeRoots(ui.gamePath, localeModuleDir(ui.modulePath))
+func LocaleSearchRoot(ui *uiState) string {
+	roots := localeRoots(ui.GamePath, localeModuleDir(ui.ModulePath))
 	if len(roots) == 0 {
 		return "(no game folder)"
 	}
@@ -111,33 +111,33 @@ func containsFold(list []string, want string) bool {
 
 // setLocaleLanguage picks a language, rebuilds the table and remembers the
 // choice in the settings file with everything else.
-func (ui *uiState) setLocaleLanguage(lang string) {
+func SetLocaleLanguage(ui *uiState, lang string) {
 	lang = strings.TrimSpace(lang)
 	if lang == "" {
 		return
 	}
-	if strings.EqualFold(lang, ui.locale) {
+	if strings.EqualFold(lang, ui.Locale) {
 		return
 	}
-	ui.locale = lang
-	ui.applyLocale()
-	ui.markStateDirty()
+	ui.Locale = lang
+	ApplyLocale(ui)
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) ensureLocaleClicks(n int) {
-	if len(ui.localeClicks) < n {
-		old := ui.localeClicks
+func EnsureLocaleClicks(ui *uiState, n int) {
+	if len(ui.LocaleClicks) < n {
+		old := ui.LocaleClicks
 		clicks := make([]widget.Clickable, n)
 		copy(clicks, old)
-		ui.localeClicks = clicks
-	} else if len(ui.localeClicks) > n {
-		ui.localeClicks = ui.localeClicks[:n]
+		ui.LocaleClicks = clicks
+	} else if len(ui.LocaleClicks) > n {
+		ui.LocaleClicks = ui.LocaleClicks[:n]
 	}
 }
 
 // closeLocale puts the list away.
-func (ui *uiState) closeLocale() {
-	ui.localeOpen = false
+func CloseLocale(ui *uiState) {
+	ui.LocaleOpen = false
 }
 
 // closeLocaleUnderOtherMenuBarPopups is the other half of the rule that opening
@@ -145,9 +145,9 @@ func (ui *uiState) closeLocale() {
 // one that just opened, the list has to go instead, or it stays drawn on top of
 // it. A click on the menu bar lands above the list's dismiss area, so nothing
 // else would take it away.
-func (ui *uiState) closeLocaleUnderOtherMenuBarPopups() {
-	if ui.localeOpen && (ui.menuOpen >= 0 || ui.searchVisible) {
-		ui.closeLocale()
+func CloseLocaleUnderOtherMenuBarPopups(ui *uiState) {
+	if ui.LocaleOpen && (ui.MenuOpen >= 0 || ui.SearchVisible) {
+		CloseLocale(ui)
 	}
 }
 
@@ -156,15 +156,15 @@ func (ui *uiState) closeLocaleUnderOtherMenuBarPopups() {
 // handleLocaleInput runs the language picker. The list is a plain clickable
 // list rather than an editor driven one, so it needs no key handling beyond
 // Escape.
-func (ui *uiState) handleLocaleInput(gtx layout.Context) {
-	if ui.localeTrigger.Clicked(gtx) {
+func HandleLocaleInput(ui *uiState, gtx layout.Context) {
+	if ui.LocaleTrigger.Clicked(gtx) {
 		// All three hang off the menu bar, so only one of them is open.
-		ui.closeSearch()
-		ui.menuOpen = -1
-		ui.localeOpen = !ui.localeOpen
-		ui.ensureLocaleClicks(len(ui.localeList))
+		CloseSearch(ui)
+		ui.MenuOpen = -1
+		ui.LocaleOpen = !ui.LocaleOpen
+		EnsureLocaleClicks(ui, len(ui.LocaleList))
 	}
-	if !ui.localeOpen {
+	if !ui.LocaleOpen {
 		return
 	}
 	// Escape takes the list away, like it does the menus. The list has no
@@ -178,21 +178,21 @@ func (ui *uiState) handleLocaleInput(gtx layout.Context) {
 		if !ok || e.State != key.Press {
 			continue
 		}
-		ui.closeLocale()
+		CloseLocale(ui)
 		return
 	}
-	if ui.localeDismiss.Clicked(gtx) {
-		ui.closeLocale()
+	if ui.LocaleDismiss.Clicked(gtx) {
+		CloseLocale(ui)
 		return
 	}
-	ui.ensureLocaleClicks(len(ui.localeList))
-	for i := range ui.localeClicks {
-		if i >= len(ui.localeList) {
+	EnsureLocaleClicks(ui, len(ui.LocaleList))
+	for i := range ui.LocaleClicks {
+		if i >= len(ui.LocaleList) {
 			break
 		}
-		if ui.localeClicks[i].Clicked(gtx) {
-			ui.setLocaleLanguage(ui.localeList[i])
-			ui.closeLocale()
+		if ui.LocaleClicks[i].Clicked(gtx) {
+			SetLocaleLanguage(ui, ui.LocaleList[i])
+			CloseLocale(ui)
 			return
 		}
 	}
@@ -202,24 +202,24 @@ func (ui *uiState) handleLocaleInput(gtx layout.Context) {
 
 // layoutLocaleSlot places the picker to the left of the object tools, sharing
 // their margin so the three controls sit on one baseline.
-func (ui *uiState) layoutLocaleSlot(gtx layout.Context) layout.Dimensions {
-	return layout.Inset{Right: unit.Dp(unitPanelGapDp), Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, ui.layoutLocaleField)
+func LayoutLocaleSlot(ui *uiState, gtx layout.Context) layout.Dimensions {
+	return layout.Inset{Right: unit.Dp(unitPanelGapDp), Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return LayoutLocaleField(ui, gtx) })
 }
 
 // layoutLocaleField is the closed field: the chosen language and a caret.
-func (ui *uiState) layoutLocaleField(gtx layout.Context) layout.Dimensions {
+func LayoutLocaleField(ui *uiState, gtx layout.Context) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(localeFieldHeightDp))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
-	label := ui.localeLabel()
-	hover := ui.localeTrigger.Hovered() || ui.localeOpen
+	label := LocaleLabel(ui)
+	hover := ui.LocaleTrigger.Hovered() || ui.LocaleOpen
 	bg := cContentBg
-	if ui.localeOpen {
+	if ui.LocaleOpen {
 		bg = cMenuOpen
 	} else if hover {
 		bg = cSaveBg
 	}
-	return ui.localeTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.LocaleTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		// The content is recorded and replayed rather than laid out in place.
 		// Gio paints in the order the ops were added, so a background filled
 		// after the labels are drawn lands on top of them and the field comes
@@ -229,21 +229,21 @@ func (ui *uiState) layoutLocaleField(gtx layout.Context) layout.Dimensions {
 		inner := layout.Inset{Left: unit.Dp(localeFieldPadDp), Right: unit.Dp(localeFieldPadDp - 4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), "Locale")
+					l := material.Label(ui.Th, unit.Sp(11), "Locale")
 					l.Color = cTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), label)
+					l := material.Label(ui.Th, unit.Sp(11), label)
 					l.Color = cText
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(9), "▾")
+					l := material.Label(ui.Th, unit.Sp(9), "▾")
 					l.Color = cTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
@@ -262,11 +262,11 @@ func (ui *uiState) layoutLocaleField(gtx layout.Context) layout.Dimensions {
 // layoutLocaleOverlay is the open list, drawn over the window like the search
 // results. It is laid out from the whole window rather than from the field, so
 // its right edge is measured off the window the same margin the field uses.
-func (ui *uiState) layoutLocaleOverlay(gtx layout.Context) layout.Dimensions {
-	if !ui.localeOpen {
+func LayoutLocaleOverlay(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if !ui.LocaleOpen {
 		return layout.Dimensions{}
 	}
-	ui.ensureLocaleClicks(len(ui.localeList))
+	EnsureLocaleClicks(ui, len(ui.LocaleList))
 	menuBarH := gtx.Dp(unit.Dp(24))
 	listW := gtx.Dp(unit.Dp(localeListWidthDp))
 	rowH := gtx.Dp(unit.Dp(localeRowHeightDp))
@@ -277,7 +277,7 @@ func (ui *uiState) layoutLocaleOverlay(gtx layout.Context) layout.Dimensions {
 	if maxRows < 3 {
 		maxRows = 3
 	}
-	rows := len(ui.localeList)
+	rows := len(ui.LocaleList)
 	if rows > maxRows {
 		rows = maxRows
 	}
@@ -286,7 +286,7 @@ func (ui *uiState) layoutLocaleOverlay(gtx layout.Context) layout.Dimensions {
 		// stays clickable while the list is open and can close it again.
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			defer op.Offset(image.Pt(0, menuBarH)).Push(gtx.Ops).Pop()
-			return ui.localeDismiss.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return ui.LocaleDismiss.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			})
 		}),
@@ -296,7 +296,7 @@ func (ui *uiState) layoutLocaleOverlay(gtx layout.Context) layout.Dimensions {
 			if xOff < 0 {
 				xOff = 0
 			}
-			ui.localeDropBox = image.Rectangle{Min: image.Pt(xOff, menuBarH), Max: image.Pt(xOff+listW, menuBarH+sz.Y)}
+			ui.LocaleDropBox = image.Rectangle{Min: image.Pt(xOff, menuBarH), Max: image.Pt(xOff+listW, menuBarH+sz.Y)}
 			defer op.Offset(image.Pt(xOff, menuBarH)).Push(gtx.Ops).Pop()
 			// A drop shadow, the way the menus do it, so the list reads as
 			// being above the content.
@@ -318,7 +318,7 @@ func (ui *uiState) layoutLocaleOverlay(gtx layout.Context) layout.Dimensions {
 					for i := 0; i < rows; i++ {
 						i := i
 						ch = append(ch, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.localeRow(gtx, i)
+							return LocaleRow(ui, gtx, i)
 						}))
 					}
 					return layout.Flex{Axis: layout.Vertical}.Layout(gtx, ch...)
@@ -328,13 +328,13 @@ func (ui *uiState) layoutLocaleOverlay(gtx layout.Context) layout.Dimensions {
 	)
 }
 
-func (ui *uiState) localeRow(gtx layout.Context, idx int) layout.Dimensions {
-	if idx >= len(ui.localeList) {
+func LocaleRow(ui *uiState, gtx layout.Context, idx int) layout.Dimensions {
+	if idx >= len(ui.LocaleList) {
 		return layout.Dimensions{}
 	}
-	lang := ui.localeList[idx]
-	click := &ui.localeClicks[idx]
-	active := strings.EqualFold(lang, ui.localeLabel())
+	lang := ui.LocaleList[idx]
+	click := &ui.LocaleClicks[idx]
+	active := strings.EqualFold(lang, LocaleLabel(ui))
 	bg := cPanelBg
 	switch {
 	case click.Hovered():
@@ -351,7 +351,7 @@ func (ui *uiState) localeRow(gtx layout.Context, idx int) layout.Dimensions {
 		// last and the row is a flat rectangle with nothing written on it.
 		macro := op.Record(gtx.Ops)
 		layout.Inset{Left: unit.Dp(10), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), lang)
+			l := material.Label(ui.Th, unit.Sp(11), lang)
 			l.Color = cText
 			l.MaxLines = 1
 			return l.Layout(gtx)
@@ -369,13 +369,13 @@ func (ui *uiState) localeRow(gtx layout.Context, idx int) layout.Dimensions {
 // jumpToLocaleEntry is what an Alt+click on a resolved string comes to. The id
 // has to be in the table, otherwise there is no line to go to and the status
 // line says which language is missing it.
-func (ui *uiState) jumpToLocaleEntry(id string) {
+func JumpToLocaleEntry(ui *uiState, id string) {
 	entry, ok := localeLookup(id)
 	if !ok {
-		ui.statusText = fmt.Sprintf("No %s entry for $%s", ui.localeLabel(), id)
+		ui.StatusText = fmt.Sprintf("No %s entry for $%s", LocaleLabel(ui), id)
 		return
 	}
-	ui.openLocaleFile(entry.File, entry.Line, id)
+	OpenLocaleFile(ui, entry.File, entry.Line, id)
 }
 
 // openLocaleFile opens a game's .ucs in a text tab with the caret on line,
@@ -385,46 +385,46 @@ func (ui *uiState) jumpToLocaleEntry(id string) {
 // outside the mod tree and belong to the game, so the editor is read only and
 // nothing is written back. Reading is the whole point of the jump, and
 // rewriting a 3.4 MB table as UTF-8 by accident would be a nasty surprise.
-func (ui *uiState) openLocaleFile(path string, line int, id string) {
-	if idx := ui.findTabIndex(path); idx >= 0 {
-		ui.tabSel = idx + 1
-		ui.ensureTabClicks()
-		ui.focusLocaleLine(ui.openTabs[idx], line, id)
+func OpenLocaleFile(ui *uiState, path string, line int, id string) {
+	if idx := FindTabIndex(ui, path); idx >= 0 {
+		ui.TabSel = idx + 1
+		EnsureTabClicks(ui)
+		FocusLocaleLine(ui, ui.OpenTabs[idx], line, id)
 		return
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		ui.statusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(path), err)
+		ui.StatusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(path), err)
 		return
 	}
 	text := trimBOM(decodeUCS(data))
 	t := &fileTab{
-		path:         path,
-		kind:         "text",
-		textOriginal: text,
-		textBytes:    len(data),
-		textLocale:   true,
+		Path:         path,
+		Kind:         "text",
+		TextOriginal: text,
+		TextBytes:    len(data),
+		TextLocale:   true,
 	}
-	t.textEditor.SingleLine = false
-	t.textEditor.Submit = false
-	t.textEditor.ReadOnly = true
-	t.textEditor.SetText(text)
-	ui.openTabs = append(ui.openTabs, t)
-	ui.tabSel = len(ui.openTabs)
-	ui.ensureTabClicks()
-	ui.focusLocaleLine(t, line, id)
-	ui.statusText = fmt.Sprintf("%s line %d — $%s", filepath.Base(path), line, id)
+	t.TextEditor.SingleLine = false
+	t.TextEditor.Submit = false
+	t.TextEditor.ReadOnly = true
+	t.TextEditor.SetText(text)
+	ui.OpenTabs = append(ui.OpenTabs, t)
+	ui.TabSel = len(ui.OpenTabs)
+	EnsureTabClicks(ui)
+	FocusLocaleLine(ui, t, line, id)
+	ui.StatusText = fmt.Sprintf("%s line %d — $%s", filepath.Base(path), line, id)
 }
 
 // focusLocaleLine selects the id on the given line and scrolls to it. SetCaret
 // is used rather than SelectRange because it also asks the editor to bring the
 // caret into view, which is the whole reason for jumping.
-func (ui *uiState) focusLocaleLine(t *fileTab, line int, id string) {
-	if t == nil || t.textEditor.Len() == 0 {
+func FocusLocaleLine(ui *uiState, t *fileTab, line int, id string) {
+	if t == nil || t.TextEditor.Len() == 0 {
 		return
 	}
-	start, end := localeLineRange(t.textEditor.Text(), line, id)
-	t.textEditor.SetCaret(start, end)
+	start, end := localeLineRange(t.TextEditor.Text(), line, id)
+	t.TextEditor.SetCaret(start, end)
 }
 
 // localeLineRange is the rune range of the id at the start of a line, for the
@@ -578,7 +578,7 @@ type localeEditRequest struct {
 // openLocaleEdit puts the dialog up for an id. create asks for a new id to be
 // allocated on save, which is what a field with no string of its own needs; it
 // is only meaningful when the field's id is the game's empty marker.
-func (ui *uiState) openLocaleEdit(id string, action localeRowAction, field *rgd.RgdEntry, key string) {
+func OpenLocaleEdit(ui *uiState, id string, action localeRowAction, field *rgd.RgdEntry, key string) {
 	if action != localeRowEdit && action != localeRowCreate {
 		return
 	}
@@ -587,24 +587,24 @@ func (ui *uiState) openLocaleEdit(id string, action localeRowAction, field *rgd.
 		// Asked to edit something that is not there, which is a create.
 		action = localeRowCreate
 	}
-	ui.localeEditDialog = true
-	ui.localeEditID = id
-	ui.localeEditCreate = action == localeRowCreate
-	ui.localeEditField = field
-	ui.localeEditFieldKey = key
-	ui.localeEditError = ""
-	ui.localeEditEditor.SetText(text)
+	ui.LocaleEditDialog = true
+	ui.LocaleEditID = id
+	ui.LocaleEditCreate = action == localeRowCreate
+	ui.LocaleEditField = field
+	ui.LocaleEditFieldKey = key
+	ui.LocaleEditError = ""
+	ui.LocaleEditEditor.SetText(text)
 }
 
 // closeLocaleEdit puts the dialog away.
-func (ui *uiState) closeLocaleEdit() {
-	ui.localeEditDialog = false
-	ui.localeEditID = ""
-	ui.localeEditCreate = false
-	ui.localeEditField = nil
-	ui.localeEditFieldKey = ""
-	ui.localeEditError = ""
-	ui.localeEditEditor.SetText("")
+func CloseLocaleEdit(ui *uiState) {
+	ui.LocaleEditDialog = false
+	ui.LocaleEditID = ""
+	ui.LocaleEditCreate = false
+	ui.LocaleEditField = nil
+	ui.LocaleEditFieldKey = ""
+	ui.LocaleEditError = ""
+	ui.LocaleEditEditor.SetText("")
 }
 
 // saveLocaleEdit writes the dialog's text and reloads the table, so the change
@@ -614,20 +614,20 @@ func (ui *uiState) closeLocaleEdit() {
 // be written and never read: the field would still hold $0, which is how the
 // game spells "no string", and the unit would stay untranslated in the game
 // while the app showed it translated.
-func (ui *uiState) saveLocaleEdit() (string, error) {
-	text := strings.TrimSpace(ui.localeEditEditor.Text())
+func SaveLocaleEdit(ui *uiState) (string, error) {
+	text := strings.TrimSpace(ui.LocaleEditEditor.Text())
 	if text == "" {
 		return "", fmt.Errorf("the text is empty — a localisation with no text shows as a blank in game")
 	}
-	id := ui.localeEditID
-	if ui.localeEditCreate {
+	id := ui.LocaleEditID
+	if ui.LocaleEditCreate {
 		free := allocateLocaleID()
 		if free == "" {
 			return "", fmt.Errorf("no free localisation id could be found")
 		}
 		id = free
 	}
-	path, line, err := writeLocaleEntry(ui.projectDir, ui.localeLabel(), id, text)
+	path, line, err := writeLocaleEntry(ui.ProjectDir, LocaleLabel(ui), id, text)
 	if err != nil {
 		return "", err
 	}
@@ -635,21 +635,21 @@ func (ui *uiState) saveLocaleEdit() (string, error) {
 	// just written is missing from the copy every view reads and the edit looks
 	// like it did nothing.
 	invalidateLocaleCache()
-	ui.applyLocale()
+	ApplyLocale(ui)
 
-	if ui.localeEditCreate && ui.localeEditField != nil {
+	if ui.LocaleEditCreate && ui.LocaleEditField != nil {
 		// The field is what makes the new string reachable: until it holds the
 		// id, the game still reads $0 and shows nothing. The parsed unit is
 		// rebuilt from it so the panel shows the new text straight away.
-		ui.localeEditField.WStrVal = "$" + id
-		if d := ui.currentUnitDetails(); d != nil {
+		ui.LocaleEditField.WStrVal = "$" + id
+		if d := CurrentUnitDetails(ui); d != nil {
 			d.RebuildFromFile()
 		}
-		ui.markRgdFieldDirty(ui.localeEditFieldKey)
+		MarkRgdFieldDirty(ui, ui.LocaleEditFieldKey)
 		// The same change, seen from the object window: the field that names
 		// the new string is part of a unit nobody has written back yet, and
 		// the string is worth nothing to the game until they are.
-		ui.markUnitFieldDirty(ui.localeEditField)
+		MarkUnitFieldDirty(ui, ui.LocaleEditField)
 	}
 	return fmt.Sprintf("Saved $%s to %s line %d", id, filepath.Base(path), line), nil
 }
@@ -659,18 +659,18 @@ func (ui *uiState) saveLocaleEdit() (string, error) {
 // in memory, so pointing one of its fields at a new id is a change to the
 // parsed copy, and whether it reaches the .rgd on disk is the writer's business
 // — the status line says which id was allocated so nothing about it is silent.
-func (ui *uiState) markRgdFieldDirty(key string) {
-	t := ui.activeTab()
-	if t == nil || t.kind != "rgd" {
+func MarkRgdFieldDirty(ui *uiState, key string) {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "rgd" {
 		return
 	}
-	t.rgdDirty = true
+	t.RgdDirty = true
 }
 
 // ── the dialog ──────────────────────────────────────────────────────────────
 
-func (ui *uiState) handleLocaleEditInput(gtx layout.Context) {
-	if !ui.localeEditDialog {
+func HandleLocaleEditInput(ui *uiState, gtx layout.Context) {
+	if !ui.LocaleEditDialog {
 		return
 	}
 	// Escape has to be taken before the editor's own Update, or the editor uses
@@ -684,41 +684,41 @@ func (ui *uiState) handleLocaleEditInput(gtx layout.Context) {
 		if !ok || e.State != key.Press {
 			continue
 		}
-		ui.closeLocaleEdit()
+		CloseLocaleEdit(ui)
 		return
 	}
 	for {
-		ev, ok := ui.localeEditEditor.Update(gtx)
+		ev, ok := ui.LocaleEditEditor.Update(gtx)
 		if !ok {
 			break
 		}
 		if _, ok := ev.(widget.SubmitEvent); ok {
-			ui.saveLocaleEditAndClose()
+			SaveLocaleEditAndClose(ui)
 			return
 		}
 	}
-	if ui.localeEditCancel.Clicked(gtx) {
-		ui.closeLocaleEdit()
+	if ui.LocaleEditCancel.Clicked(gtx) {
+		CloseLocaleEdit(ui)
 		return
 	}
-	if ui.localeEditSave.Clicked(gtx) {
-		ui.saveLocaleEditAndClose()
+	if ui.LocaleEditSave.Clicked(gtx) {
+		SaveLocaleEditAndClose(ui)
 	}
 }
 
-func (ui *uiState) saveLocaleEditAndClose() {
-	msg, err := ui.saveLocaleEdit()
+func SaveLocaleEditAndClose(ui *uiState) {
+	msg, err := SaveLocaleEdit(ui)
 	if err != nil {
-		ui.localeEditError = err.Error()
+		ui.LocaleEditError = err.Error()
 		return
 	}
-	ui.closeLocaleEdit()
-	ui.statusText = msg
+	CloseLocaleEdit(ui)
+	ui.StatusText = msg
 }
 
 // layoutLocaleEditDialog draws the editor over the window, the way the other
 // dialogs do: a dimmed field behind, a card in the middle.
-func (ui *uiState) layoutLocaleEditDialog(gtx layout.Context) layout.Dimensions {
+func LayoutLocaleEditDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			st := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
@@ -743,18 +743,18 @@ func (ui *uiState) layoutLocaleEditDialog(gtx layout.Context) layout.Dimensions 
 							return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(16), Left: unit.Dp(18), Right: unit.Dp(18)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										return ui.localeEditCaption(gtx)
+										return LocaleEditCaption(ui, gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										return widgetBorderTextEditor(gtx, ui.th, &ui.localeEditEditor, false, "")
+										return widgetBorderTextEditor(gtx, ui.Th, &ui.LocaleEditEditor, false, "")
 									}),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										return ui.localeEditNote(gtx)
+										return LocaleEditNote(ui, gtx)
 									}),
 									layout.Flexed(1, flexGap()),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										return ui.localeEditButtons(gtx)
+										return LocaleEditButtons(ui, gtx)
 									}),
 								)
 							})
@@ -769,16 +769,16 @@ func (ui *uiState) layoutLocaleEditDialog(gtx layout.Context) layout.Dimensions 
 // localeEditCaption says which string is being changed, and whether it is a
 // new one. An empty id is what a create starts from, because the field holds
 // the game's "$0" marker and there is no id to name yet.
-func (ui *uiState) localeEditCaption(gtx layout.Context) layout.Dimensions {
+func LocaleEditCaption(ui *uiState, gtx layout.Context) layout.Dimensions {
 	title := "Localisation text"
-	if ui.localeEditCreate {
+	if ui.LocaleEditCreate {
 		title = "New localisation"
 	}
 	rows := []struct{ label, value string }{
 		{"String", title},
-		{"Language", ui.localeLabel()},
+		{"Language", LocaleLabel(ui)},
 	}
-	if id := strings.TrimSpace(ui.localeEditID); id != "" && id != "0" {
+	if id := strings.TrimSpace(ui.LocaleEditID); id != "" && id != "0" {
 		rows = append(rows, struct{ label, value string }{"Id", "$" + id})
 	}
 	children := make([]layout.FlexChild, 0, len(rows))
@@ -787,13 +787,13 @@ func (ui *uiState) localeEditCaption(gtx layout.Context) layout.Dimensions {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), r.label)
+					l := material.Label(ui.Th, unit.Sp(11), r.label)
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), r.value)
+					l := material.Label(ui.Th, unit.Sp(11), r.value)
 					l.Color = cText
 					l.Font.Weight = font.Medium
 					return l.Layout(gtx)
@@ -807,39 +807,39 @@ func (ui *uiState) localeEditCaption(gtx layout.Context) layout.Dimensions {
 // localeEditNote says where the text is going, and says it plainly: the mod's
 // own folder, not the game's file. A translation that silently did not reach
 // the game is worse than one that was never written.
-func (ui *uiState) localeEditNote(gtx layout.Context) layout.Dimensions {
-	where := ui.projectDir
+func LocaleEditNote(ui *uiState, gtx layout.Context) layout.Dimensions {
+	where := ui.ProjectDir
 	if strings.TrimSpace(where) == "" {
 		return layout.Dimensions{}
 	}
-	lang := ui.localeLabel()
+	lang := LocaleLabel(ui)
 	note := fmt.Sprintf("Saved to the mod's own file: %s", filepath.Join(where, localeDirName, lang, localeEditFileName))
-	if ui.localeEditCreate {
+	if ui.LocaleEditCreate {
 		note += "\nA free id will be allocated and written into the unit's field."
 	}
-	l := material.Label(ui.th, unit.Sp(10), note)
+	l := material.Label(ui.Th, unit.Sp(10), note)
 	l.Color = cTextDim
 	return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, l.Layout)
 }
 
-func (ui *uiState) localeEditButtons(gtx layout.Context) layout.Dimensions {
+func LocaleEditButtons(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if ui.localeEditError == "" {
+			if ui.LocaleEditError == "" {
 				return layout.Dimensions{}
 			}
-			l := material.Label(ui.th, unit.Sp(10), ui.localeEditError)
+			l := material.Label(ui.Th, unit.Sp(10), ui.LocaleEditError)
 			l.Color = rgb(0xE8A33D)
 			l.MaxLines = 2
 			return layout.Inset{Right: unit.Dp(12)}.Layout(gtx, l.Layout)
 		}),
 		layout.Flexed(1, flexGap()),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButton(gtx, &ui.localeEditCancel, "Cancel")
+			return SmallButton(ui, gtx, &ui.LocaleEditCancel, "Cancel")
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButton(gtx, &ui.localeEditSave, "Save")
+			return SmallButton(ui, gtx, &ui.LocaleEditSave, "Save")
 		}),
 	)
 }
@@ -849,17 +849,17 @@ func (ui *uiState) localeEditButtons(gtx layout.Context) layout.Dimensions {
 // localeEditTag is the pointer target of one localised row. The rows are drawn
 // inside lists that scroll and are rebuilt every frame, so the target is keyed
 // by the field it belongs to rather than held per widget.
-func (ui *uiState) localeEditTag(key string) event.Tag {
+func LocaleEditTag(ui *uiState, key string) event.Tag {
 	if key == "" {
 		return nil
 	}
-	if ui.localeEditTags == nil {
-		ui.localeEditTags = make(map[string]event.Tag)
+	if ui.LocaleEditTags == nil {
+		ui.LocaleEditTags = make(map[string]event.Tag)
 	}
-	tag, ok := ui.localeEditTags[key]
+	tag, ok := ui.LocaleEditTags[key]
 	if !ok {
 		tag = newPointerTag(key)
-		ui.localeEditTags[key] = tag
+		ui.LocaleEditTags[key] = tag
 	}
 	return tag
 }
@@ -868,7 +868,7 @@ func (ui *uiState) localeEditTag(key string) event.Tag {
 // request for the input pass. The press is caught here rather than on a
 // clickable because only the raw event carries the modifiers, and the request
 // is left on the state because opening a dialog is not a layout's business.
-func (ui *uiState) pollLocaleEditPress(gtx layout.Context, tag event.Tag, id string) {
+func PollLocaleEditPress(ui *uiState, gtx layout.Context, tag event.Tag, id string) {
 	if tag == nil {
 		return
 	}
@@ -885,14 +885,14 @@ func (ui *uiState) pollLocaleEditPress(gtx layout.Context, tag event.Tag, id str
 		if action == localeRowNothing {
 			continue
 		}
-		ui.localePendingRequest = localeEditRequest{id: id, action: action}
+		ui.LocalePendingRequest = localeEditRequest{id: id, action: action}
 	}
 }
 
 // localeEditHover registers the hover target that puts the id in the tooltip.
 // The tooltip is the shared one the file view already uses, so a localised row
 // says the same thing wherever it is drawn.
-func (ui *uiState) localeEditHover(gtx layout.Context, tag event.Tag, tooltip string) {
+func LocaleEditHover(ui *uiState, gtx layout.Context, tag event.Tag, tooltip string) {
 	if tag == nil || tooltip == "" {
 		return
 	}
@@ -909,10 +909,10 @@ func (ui *uiState) localeEditHover(gtx layout.Context, tag event.Tag, tooltip st
 		}
 		switch e.Kind {
 		case pointer.Enter:
-			ui.rgdTooltipText = tooltip
+			ui.RgdTooltipText = tooltip
 		case pointer.Leave:
-			if ui.rgdTooltipText == tooltip {
-				ui.rgdTooltipText = ""
+			if ui.RgdTooltipText == tooltip {
+				ui.RgdTooltipText = ""
 			}
 		}
 	}
@@ -921,7 +921,7 @@ func (ui *uiState) localeEditHover(gtx layout.Context, tag event.Tag, tooltip st
 // localeRowTooltip is what a localised row says on hover: the id, which is the
 // one thing the row itself cannot show, and where the text came from so a
 // reader can tell the engine's string from the mod's override of it.
-func (ui *uiState) localeRowTooltip(id string) string {
+func LocaleRowTooltip(ui *uiState, id string) string {
 	if strings.TrimSpace(id) == "" || id == "0" {
 		return "This field has no localisation id — click to give it one"
 	}
@@ -932,7 +932,7 @@ func (ui *uiState) localeRowTooltip(id string) string {
 			lines = append(lines, "from this mod's own file")
 		}
 	} else {
-		lines = append(lines, fmt.Sprintf("not in the %s string table", ui.localeLabel()))
+		lines = append(lines, fmt.Sprintf("not in the %s string table", LocaleLabel(ui)))
 	}
 	lines = append(lines, "", "Alt+Ctrl+click to change the text")
 	return strings.Join(lines, "\n")
@@ -941,39 +941,39 @@ func (ui *uiState) localeRowTooltip(id string) string {
 // localeRowText is what a localised row shows: the text, or why there is none.
 // The id is deliberately not in it — the hover tooltip carries that, and a row
 // that led with "$705754" would be unreadable.
-func (ui *uiState) localeRowText(id string) string {
+func LocaleRowText(ui *uiState, id string) string {
 	if strings.TrimSpace(id) == "" || id == "0" {
 		return "— (no localisation — click to add one)"
 	}
 	if text := localisedString(id); text != "" {
 		return text
 	}
-	return fmt.Sprintf("not in the %s string table — click to add one", ui.localeLabel())
+	return fmt.Sprintf("not in the %s string table — click to add one", LocaleLabel(ui))
 }
 
 // localeEditableRow draws a localised field as a line of the object window: the
 // text it resolves to, the id on hover, and the presses that edit it.
-func (ui *uiState) localeEditableRow(gtx layout.Context, label, id string, field *rgd.RgdEntry, key string) layout.Dimensions {
+func LocaleEditableRow(ui *uiState, gtx layout.Context, label, id string, field *rgd.RgdEntry, key string) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return ui.localeRowBody(gtx, label, id, 22, unit.Sp(10), 64)
+			return LocaleRowBody(ui, gtx, label, id, 22, unit.Sp(10), 64)
 		}),
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			ui.localeRowAffordances(gtx, id, key)
+			LocaleRowAffordances(ui, gtx, id, key)
 			return layout.Dimensions{}
 		}),
 	)
 }
 
 // localePanelRow is the same row in the right hand panel's two column shape.
-func (ui *uiState) localePanelRow(gtx layout.Context, label, id string, field *rgd.RgdEntry) layout.Dimensions {
+func LocalePanelRow(ui *uiState, gtx layout.Context, label, id string, field *rgd.RgdEntry) layout.Dimensions {
 	key := localeRowKey(field, label)
 	return layout.Stack{}.Layout(gtx,
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return ui.localeRowBody(gtx, label, id, 24, unit.Sp(11), 40)
+			return LocaleRowBody(ui, gtx, label, id, 24, unit.Sp(11), 40)
 		}),
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			ui.localeRowAffordances(gtx, id, key)
+			LocaleRowAffordances(ui, gtx, id, key)
 			return layout.Dimensions{}
 		}),
 	)
@@ -982,8 +982,8 @@ func (ui *uiState) localePanelRow(gtx layout.Context, label, id string, field *r
 // localeRowBody is the visible part of a localised row: its label and what it
 // says. It is apart from the pointer handling so the panel and the list can
 // share the text and differ only in size.
-func (ui *uiState) localeRowBody(gtx layout.Context, label, id string, rowDp unit.Dp, size unit.Sp, maxText int) layout.Dimensions {
-	text := ui.localeRowText(id)
+func LocaleRowBody(ui *uiState, gtx layout.Context, label, id string, rowDp unit.Dp, size unit.Sp, maxText int) layout.Dimensions {
+	text := LocaleRowText(ui, id)
 	if maxText > 3 && len(text) > maxText {
 		text = text[:maxText-3] + "…"
 	}
@@ -993,14 +993,14 @@ func (ui *uiState) localeRowBody(gtx layout.Context, label, id string, rowDp uni
 	hasText := localisedString(id) != ""
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, size, label)
+			l := material.Label(ui.Th, size, label)
 			l.Color = cTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, size, text)
+			l := material.Label(ui.Th, size, text)
 			// A string is text; a missing one names something that is not
 			// there, and reads as a reference rather than as a value.
 			if hasText {
@@ -1017,13 +1017,13 @@ func (ui *uiState) localeRowBody(gtx layout.Context, label, id string, rowDp uni
 // localeRowAffordances puts the hover tooltip and the press handling on a
 // localised row. Both live in one Expanded layer over the row's own area, which
 // is what lets a press carry its modifiers: only a raw pointer event has them.
-func (ui *uiState) localeRowAffordances(gtx layout.Context, id, key string) {
-	tag := ui.localeEditTag(key)
+func LocaleRowAffordances(ui *uiState, gtx layout.Context, id, key string) {
+	tag := LocaleEditTag(ui, key)
 	if tag == nil {
 		return
 	}
-	ui.localeEditHover(gtx, tag, ui.localeRowTooltip(id))
-	ui.pollLocaleEditPress(gtx, tag, id)
+	LocaleEditHover(ui, gtx, tag, LocaleRowTooltip(ui, id))
+	PollLocaleEditPress(ui, gtx, tag, id)
 }
 
 // decodeUCSDocument splits a .ucs file's bytes into its lines.

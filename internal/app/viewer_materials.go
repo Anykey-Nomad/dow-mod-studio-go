@@ -34,13 +34,13 @@ type modelMaterialDiagnostic struct {
 // map. A .whm may name a .rsh, a compiled .rtx, or a bare base name; the
 // texture is often in a different mod than the model, so shared game art and
 // files beside the model are both part of the lookup.
-func (ui *uiState) loadModelMaterials(v *modelViewer, result chan<- modelMaterialResult) {
-	if v == nil || v.model == nil || ui.modTree == nil {
+func LoadModelMaterials(ui *uiState, v *modelViewer, result chan<- modelMaterialResult) {
+	if v == nil || v.Model == nil || ui.ModTree == nil {
 		return
 	}
-	v.loading = true
+	v.Loading = true
 	needed := map[string]bool{}
-	for _, mesh := range v.model.Meshes {
+	for _, mesh := range v.Model.Meshes {
 		if mesh.Material != "" {
 			// Keep results under the exact key the renderer uses. The resolver
 			// follows MaterialPath via the model's shared-shader channel, but
@@ -52,8 +52,8 @@ func (ui *uiState) loadModelMaterials(v *modelViewer, result chan<- modelMateria
 	for name := range needed {
 		names = append(names, name)
 	}
-	tree := ui.modTree
-	model := v.modelFile
+	tree := ui.ModTree
+	model := v.ModelFile
 	roots := materialSearchRoots(tree)
 	// Vulkan uploads block-compressed RSH mip chains directly. RTX is
 	// decoded as a compiled image instead, preserving the GPU preview by
@@ -528,14 +528,14 @@ type uvNet struct {
 // empty name. The empty one is first because it is what a model with a single
 // map, or a reader who has not yet found out that it has two, wants to be
 // editing.
-func (v *modelViewer) uvSelectionList() []string {
+func (v *modelViewer) UvSelectionList() []string {
 	out := []string{""}
-	if v == nil || v.model == nil {
+	if v == nil || v.Model == nil {
 		return out
 	}
-	seen := make(map[string]bool, len(v.model.Meshes))
-	for i := range v.model.Meshes {
-		m := v.model.Meshes[i].Material
+	seen := make(map[string]bool, len(v.Model.Meshes))
+	for i := range v.Model.Meshes {
+		m := v.Model.Meshes[i].Material
 		if m == "" || seen[m] {
 			continue
 		}
@@ -549,24 +549,24 @@ func (v *modelViewer) uvSelectionList() []string {
 // material's own, or the one they all share. The pointer is what lets a
 // button change the mapping without every reader of it having to know which
 // one is selected.
-func (v *modelViewer) uvCurrent() *render.UVMapping {
+func (v *modelViewer) UvCurrent() *render.UVMapping {
 	if v == nil {
 		return nil
 	}
-	if v.uvSelection == "" {
-		return &v.uv
+	if v.UvSelection == "" {
+		return &v.Uv
 	}
-	if v.uvMaterials == nil {
-		v.uvMaterials = make(map[string]*render.UVMapping)
+	if v.UvMaterials == nil {
+		v.UvMaterials = make(map[string]*render.UVMapping)
 	}
-	m, ok := v.uvMaterials[v.uvSelection]
+	m, ok := v.UvMaterials[v.UvSelection]
 	if !ok {
 		// A material picked for the first time starts from the shared
 		// mapping, which is almost always what it wants: the shared
 		// mapping is what every other texture is using.
-		shared := v.uv
+		shared := v.Uv
 		m = &shared
-		v.uvMaterials[v.uvSelection] = m
+		v.UvMaterials[v.UvSelection] = m
 	}
 	return m
 }
@@ -575,19 +575,19 @@ func (v *modelViewer) uvCurrent() *render.UVMapping {
 // refilled from the new choice the next time the panel is laid out, not here,
 // so that a button press does not move the numbers under a pointer that is
 // still over the old ones.
-func (v *modelViewer) selectUVMapping(material string) {
-	if v == nil || v.uvSelection == material {
+func (v *modelViewer) SelectUVMapping(material string) {
+	if v == nil || v.UvSelection == material {
 		return
 	}
-	v.uvPull()
-	v.uvSelection = material
-	v.uvSelectionDirty = true
-	v.invalidate()
+	v.UvPull()
+	v.UvSelection = material
+	v.UvSelectionDirty = true
+	v.Invalidate()
 }
 
 // uvOffset reads the two offset sliders as the shift of the map over the model,
 // in units of the map itself.
-func (v *modelViewer) uvOffset() [2]float32 {
+func (v *modelViewer) UvOffset() [2]float32 {
 	if v == nil {
 		return [2]float32{}
 	}
@@ -599,7 +599,7 @@ func (v *modelViewer) uvOffset() [2]float32 {
 
 // uvScaleValue reads the scale slider. One is the middle of its travel and is
 // what an untouched model is drawn with.
-func (v *modelViewer) uvScaleValue() float32 {
+func (v *modelViewer) UvScaleValue() float32 {
 	if v == nil {
 		return 1
 	}
@@ -609,12 +609,12 @@ func (v *modelViewer) uvScaleValue() float32 {
 // uvPush fills the sliders from the mapping they are editing. It runs when the
 // selection changes, and once at the start, so that the controls always show
 // the numbers of the mapping the frame is actually being drawn with.
-func (v *modelViewer) uvPush() {
-	m := v.uvCurrent()
+func (v *modelViewer) UvPush() {
+	m := v.UvCurrent()
 	if m == nil {
 		return
 	}
-	v.uvSelectionDirty = false
+	v.UvSelectionDirty = false
 	scale := m.Scale
 	if scale <= 0 {
 		scale = 1
@@ -626,28 +626,28 @@ func (v *modelViewer) uvPush() {
 
 // uvPull writes the sliders back into the mapping they are editing. It runs
 // after the sliders are laid out, because that is when a drag has been read.
-func (v *modelViewer) uvPull() {
-	m := v.uvCurrent()
+func (v *modelViewer) UvPull() {
+	m := v.UvCurrent()
 	if m == nil {
 		return
 	}
-	m.Offset = v.uvOffset()
-	m.Scale = v.uvScaleValue()
+	m.Offset = v.UvOffset()
+	m.Scale = v.UvScaleValue()
 }
 
 // resetUVMapping puts the selected texture's map back where the file has it. It
 // is its own button because a reader who has been dragging the sliders needs
 // one, and because "Reset view" only moves the camera. With one texture
 // selected out of several it is that one and not the model that goes back.
-func (v *modelViewer) resetUVMapping() {
+func (v *modelViewer) ResetUVMapping() {
 	if v == nil {
 		return
 	}
-	if m := v.uvCurrent(); m != nil {
+	if m := v.UvCurrent(); m != nil {
 		*m = render.UVIdentityMapping()
 	}
-	v.uvSelectionDirty = true
-	v.invalidate()
+	v.UvSelectionDirty = true
+	v.Invalidate()
 }
 
 // uvMappingNet multiplies the four operations together into uvNet.
@@ -676,9 +676,9 @@ func uvMappingNet(mirror bool, turns int, scale float32, off [2]float32) uvNet {
 }
 
 // net is the viewer's own mapping in that form.
-func (v *modelViewer) net() uvNet {
+func (v *modelViewer) Net() uvNet {
 	m := render.UVMapping{}
-	if cur := v.uvCurrent(); cur != nil {
+	if cur := v.UvCurrent(); cur != nil {
 		m = *cur
 	}
 	return uvMappingNet(m.Mirror, m.Rotate, m.Scale, m.Offset)
@@ -687,8 +687,8 @@ func (v *modelViewer) net() uvNet {
 // uvMappingSummary writes the mapping as the two expressions it works out to,
 // which is the form it can be written back down in: a line of this program's
 // own code, or the pair of numbers a model would carry in two more UV channels.
-func (v *modelViewer) uvMappingSummary() string {
-	n := v.net()
+func (v *modelViewer) UvMappingSummary() string {
+	n := v.Net()
 	return uvNetTerm(n.u, n.off[0]) + ", " + uvNetTerm(n.v, n.off[1])
 }
 
@@ -719,9 +719,9 @@ func uvNetTerm(coef [2]float32, off float32) string {
 // enough to be worth showing: a mirror and a half turn cancel on one axis and
 // swap to the other, and seeing the steps beside the result is what makes that
 // obvious rather than surprising.
-func (v *modelViewer) uvMappingSequence() string {
+func (v *modelViewer) UvMappingSequence() string {
 	m := render.UVMapping{}
-	if cur := v.uvCurrent(); cur != nil {
+	if cur := v.UvCurrent(); cur != nil {
 		m = *cur
 	}
 	var parts []string
@@ -748,9 +748,9 @@ func (v *modelViewer) uvMappingSequence() string {
 // offset, because the map repeats exactly that often: a reader who has just
 // dragged one to the far end of its travel and seen nothing happen is looking
 // at a bug in the model, not at their own mistake.
-func (v *modelViewer) uvMappingNote() string {
+func (v *modelViewer) UvMappingNote() string {
 	off := [2]float32{}
-	if cur := v.uvCurrent(); cur != nil {
+	if cur := v.UvCurrent(); cur != nil {
 		off = cur.Offset
 	}
 	if uvWholeTiles(off[0]) && uvWholeTiles(off[1]) {
@@ -770,17 +770,17 @@ func (v *modelViewer) uvMappingNote() string {
 // with the UVs at all: such a mesh is drawn from a one by one white map, so it
 // comes out as an untextured part of an otherwise textured model, and moving
 // the sliders will not change it.
-func (v *modelViewer) uvUnmappedMeshes() string {
-	if v == nil || v.model == nil || len(v.materials) == 0 {
+func (v *modelViewer) UvUnmappedMeshes() string {
+	if v == nil || v.Model == nil || len(v.Materials) == 0 {
 		return ""
 	}
 	var missing []string
-	for i := range v.model.Meshes {
-		m := v.model.Meshes[i]
+	for i := range v.Model.Meshes {
+		m := v.Model.Meshes[i]
 		if m.Material == "" {
 			continue
 		}
-		if _, ok := v.materials[m.Material]; !ok {
+		if _, ok := v.Materials[m.Material]; !ok {
 			missing = append(missing, m.Name)
 		}
 	}
@@ -792,7 +792,7 @@ func (v *modelViewer) uvUnmappedMeshes() string {
 	if len(names) > show {
 		names = names[:show]
 	}
-	out := itoaPlain(len(missing)) + " of " + itoaPlain(len(v.model.Meshes)) + " meshes: "
+	out := itoaPlain(len(missing)) + " of " + itoaPlain(len(v.Model.Meshes)) + " meshes: "
 	for i, n := range names {
 		if i > 0 {
 			out += ", "
@@ -852,13 +852,13 @@ func modelUVAdd(v float32) string {
 
 // boneTrack returns the animation track that belongs to the picked bone, or nil
 // when the picked bone has no track in the current clip.
-func (v *modelViewer) boneTrack() *WhmTrack {
-	if v.anim == nil || v.boneIndex < 0 || v.boneIndex >= len(v.model.Bones) {
+func (v *modelViewer) BoneTrack() *WhmTrack {
+	if v.Anim == nil || v.BoneIndex < 0 || v.BoneIndex >= len(v.Model.Bones) {
 		return nil
 	}
-	for i := range v.anim.Bones {
-		if v.anim.Bones[i].Bone == v.boneIndex {
-			return &v.anim.Bones[i]
+	for i := range v.Anim.Bones {
+		if v.Anim.Bones[i].Bone == v.BoneIndex {
+			return &v.Anim.Bones[i]
 		}
 	}
 	return nil
@@ -866,14 +866,14 @@ func (v *modelViewer) boneTrack() *WhmTrack {
 
 // boneKeyFrames is the set of frames on which the picked bone has a key, or nil
 // when there is nothing to snap to.
-func (v *modelViewer) boneKeyFrames() []int {
-	t := v.boneTrack()
-	if t == nil || v.anim.NumFrames < 1 {
+func (v *modelViewer) BoneKeyFrames() []int {
+	t := v.BoneTrack()
+	if t == nil || v.Anim.NumFrames < 1 {
 		return nil
 	}
 	seen := make(map[int]bool)
 	add := func(t float32) {
-		seen[frameAt(float64(t), v.anim.NumFrames)] = true
+		seen[frameAt(float64(t), v.Anim.NumFrames)] = true
 	}
 	for i := range t.PosKey {
 		add(t.PosKey[i].Time)
@@ -894,8 +894,8 @@ func (v *modelViewer) boneKeyFrames() []int {
 
 // boneKeyCount is how many keyframes the picked bone has in the current clip,
 // counting position and rotation keys together.
-func (v *modelViewer) boneKeyCount() int {
-	t := v.boneTrack()
+func (v *modelViewer) BoneKeyCount() int {
+	t := v.BoneTrack()
 	if t == nil {
 		return 0
 	}
@@ -905,42 +905,42 @@ func (v *modelViewer) boneKeyCount() int {
 // boneKeySelect picks the bone keyframe closest to the current playhead, and
 // seeks so that frame is on show. When there is no key near the playhead the
 // picked key is cleared instead.
-func (v *modelViewer) boneKeySelect() {
-	if v.boneIndex < 0 {
-		v.boneKeyIndex = -1
-		v.boneKeyMode = -1
+func (v *modelViewer) BoneKeySelect() {
+	if v.BoneIndex < 0 {
+		v.BoneKeyIndex = -1
+		v.BoneKeyMode = -1
 		return
 	}
-	frame, _ := v.currentFrame()
-	if idx, mode, ok := v.boneKeyFrame(frame); ok {
-		v.boneKeyIndex = idx
-		v.boneKeyMode = mode
-		if f, ok := v.boneKeyFrameAt(); ok {
-			v.seekFrame(f)
+	frame, _ := v.CurrentFrame()
+	if idx, mode, ok := v.BoneKeyFrame(frame); ok {
+		v.BoneKeyIndex = idx
+		v.BoneKeyMode = mode
+		if f, ok := v.BoneKeyFrameAt(); ok {
+			v.SeekFrame(f)
 		}
 	} else {
-		v.boneKeyIndex = -1
-		v.boneKeyMode = -1
+		v.BoneKeyIndex = -1
+		v.BoneKeyMode = -1
 	}
 }
 
 // setBoneKeyPositionFromPose writes the picked bone's pose position at the
 // current playhead into the picked position key, which is what the "Set pos
 // from pose" button in the bone parameters panel does.
-func (v *modelViewer) setBoneKeyPositionFromPose() {
-	if v.boneKeyMode != 0 || v.boneKeyIndex < 0 || v.boneIndex < 0 || v.anim == nil {
+func (v *modelViewer) SetBoneKeyPositionFromPose() {
+	if v.BoneKeyMode != 0 || v.BoneKeyIndex < 0 || v.BoneIndex < 0 || v.Anim == nil {
 		return
 	}
-	t := v.boneTrack()
-	if t == nil || v.boneKeyIndex >= len(t.PosKey) {
+	t := v.BoneTrack()
+	if t == nil || v.BoneKeyIndex >= len(t.PosKey) {
 		return
 	}
-	bone := v.model.Bones[v.boneIndex]
-	pose := v.pose()
-	if v.boneIndex >= len(pose.Bones) {
+	bone := v.Model.Bones[v.BoneIndex]
+	pose := v.Pose()
+	if v.BoneIndex >= len(pose.Bones) {
 		return
 	}
-	worldBone := pose.Bones[v.boneIndex]
+	worldBone := pose.Bones[v.BoneIndex]
 	var worldParent fauxgl.Matrix
 	if bone.Parent >= 0 && bone.Parent < len(pose.Bones) {
 		worldParent = pose.Bones[bone.Parent]
@@ -948,27 +948,27 @@ func (v *modelViewer) setBoneKeyPositionFromPose() {
 		worldParent = boneRootFrame
 	}
 	local := worldParent.Inverse().MulPosition(boneAtPose(worldBone))
-	t.PosKey[v.boneKeyIndex].V = [3]float32{float32(local.X), float32(local.Y), float32(local.Z)}
-	v.invalidate()
+	t.PosKey[v.BoneKeyIndex].V = [3]float32{float32(local.X), float32(local.Y), float32(local.Z)}
+	v.Invalidate()
 }
 
 // setBoneKeyRotationFromPose writes the picked bone's pose rotation at the
 // current playhead into the picked rotation key, which is what the "Set rot
 // from pose" button in the bone parameters panel does.
-func (v *modelViewer) setBoneKeyRotationFromPose() {
-	if v.boneKeyMode != 1 || v.boneKeyIndex < 0 || v.boneIndex < 0 || v.anim == nil {
+func (v *modelViewer) SetBoneKeyRotationFromPose() {
+	if v.BoneKeyMode != 1 || v.BoneKeyIndex < 0 || v.BoneIndex < 0 || v.Anim == nil {
 		return
 	}
-	track := v.boneTrack()
-	if track == nil || v.boneKeyIndex >= len(track.RotKey) {
+	track := v.BoneTrack()
+	if track == nil || v.BoneKeyIndex >= len(track.RotKey) {
 		return
 	}
-	bone := v.model.Bones[v.boneIndex]
-	pose := v.pose()
-	if v.boneIndex >= len(pose.Bones) {
+	bone := v.Model.Bones[v.BoneIndex]
+	pose := v.Pose()
+	if v.BoneIndex >= len(pose.Bones) {
 		return
 	}
-	worldBone := pose.Bones[v.boneIndex]
+	worldBone := pose.Bones[v.BoneIndex]
 	var worldParent fauxgl.Matrix
 	if bone.Parent >= 0 && bone.Parent < len(pose.Bones) {
 		worldParent = pose.Bones[bone.Parent]
@@ -976,8 +976,8 @@ func (v *modelViewer) setBoneKeyRotationFromPose() {
 		worldParent = boneRootFrame
 	}
 	localMat := worldParent.Inverse().Mul(worldBone)
-	track.RotKey[v.boneKeyIndex].V = matrixQuat(localMat)
-	v.invalidate()
+	track.RotKey[v.BoneKeyIndex].V = matrixQuat(localMat)
+	v.Invalidate()
 }
 
 // matrixQuat extracts a quaternion (x, y, z, w) from the rotation part of a
@@ -1031,8 +1031,8 @@ func boneAtPose(worldBone fauxgl.Matrix) fauxgl.Vector {
 }
 
 // boneKeyFrame picks the bone keyframe index and mode closest to the given frame.
-func (v *modelViewer) boneKeyFrame(frame int) (int, int, bool) {
-	t := v.boneTrack()
+func (v *modelViewer) BoneKeyFrame(frame int) (int, int, bool) {
+	t := v.BoneTrack()
 	if t == nil {
 		return -1, -1, false
 	}
@@ -1040,7 +1040,7 @@ func (v *modelViewer) boneKeyFrame(frame int) (int, int, bool) {
 	bestMode := 0
 	bestDist := int(1e9)
 	for i := range t.PosKey {
-		f := frameAt(float64(t.PosKey[i].Time), v.anim.NumFrames)
+		f := frameAt(float64(t.PosKey[i].Time), v.Anim.NumFrames)
 		d := engine.AbsInt(f - frame)
 		if d < bestDist {
 			bestDist = d
@@ -1049,7 +1049,7 @@ func (v *modelViewer) boneKeyFrame(frame int) (int, int, bool) {
 		}
 	}
 	for i := range t.RotKey {
-		f := frameAt(float64(t.RotKey[i].Time), v.anim.NumFrames)
+		f := frameAt(float64(t.RotKey[i].Time), v.Anim.NumFrames)
 		d := engine.AbsInt(f - frame)
 		if d < bestDist {
 			bestDist = d
@@ -1057,7 +1057,7 @@ func (v *modelViewer) boneKeyFrame(frame int) (int, int, bool) {
 			bestMode = 1
 		}
 	}
-	if bestDist > engine.AbsInt(v.anim.NumFrames) {
+	if bestDist > engine.AbsInt(v.Anim.NumFrames) {
 		return -1, -1, false
 	}
 	return bestIdx, bestMode, true
@@ -1065,26 +1065,26 @@ func (v *modelViewer) boneKeyFrame(frame int) (int, int, bool) {
 
 // boneKeyFrameAt returns the frame a bone keyframe sits on, and whether it has
 // one to sit on. This is the frame the scrub bar can snap to for this bone key.
-func (v *modelViewer) boneKeyFrameAt() (int, bool) {
-	if v.boneKeyIndex < 0 || v.boneKeyMode < 0 || v.anim == nil || v.boneTrack() == nil {
+func (v *modelViewer) BoneKeyFrameAt() (int, bool) {
+	if v.BoneKeyIndex < 0 || v.BoneKeyMode < 0 || v.Anim == nil || v.BoneTrack() == nil {
 		return 0, false
 	}
-	track := v.boneTrack()
+	track := v.BoneTrack()
 	var keyTime float32
-	switch v.boneKeyMode {
+	switch v.BoneKeyMode {
 	case 0:
-		if v.boneKeyIndex < len(track.PosKey) {
-			keyTime = track.PosKey[v.boneKeyIndex].Time
+		if v.BoneKeyIndex < len(track.PosKey) {
+			keyTime = track.PosKey[v.BoneKeyIndex].Time
 		}
 	case 1:
-		if v.boneKeyIndex < len(track.RotKey) {
-			keyTime = track.RotKey[v.boneKeyIndex].Time
+		if v.BoneKeyIndex < len(track.RotKey) {
+			keyTime = track.RotKey[v.BoneKeyIndex].Time
 		}
 	}
 	if keyTime <= 0 {
 		return 0, false
 	}
-	return frameAt(float64(keyTime), v.anim.NumFrames), true
+	return frameAt(float64(keyTime), v.Anim.NumFrames), true
 }
 
 // pose evaluates the current animation time, or the bind pose when stopped.
@@ -1095,37 +1095,37 @@ func (v *modelViewer) boneKeyFrameAt() (int, bool) {
 // bone and writes two matrices per bone into fresh slices. During playback
 // that is the largest thing the preview allocates, and it is the same answer
 // every time.
-func (v *modelViewer) pose() WhmPose {
-	if v == nil || v.model == nil {
+func (v *modelViewer) Pose() WhmPose {
+	if v == nil || v.Model == nil {
 		return WhmPose{}
 	}
-	if len(v.anims) > 0 {
-		if v.poseValid && v.poseAnim == v.anim && v.poseTime == v.time {
-			return v.poseCache
+	if len(v.Anims) > 0 {
+		if v.PoseValid && v.PoseAnim == v.Anim && v.PoseTime == v.Time {
+			return v.PoseCache
 		}
-		times := make([]float32, len(v.anims))
-		for i, anim := range v.anims {
+		times := make([]float32, len(v.Anims))
+		for i, anim := range v.Anims {
 			duration := animClipSeconds(anim)
-			if duration > 0 && v.animPlaybackDuration > 0 {
-				clipTime := math.Mod(float64(v.time)*v.animPlaybackDuration, duration) / duration
-				if !v.playing && v.animPlaybackDuration > duration {
-					clipTime = float64(v.time)
+			if duration > 0 && v.AnimPlaybackDuration > 0 {
+				clipTime := math.Mod(float64(v.Time)*v.AnimPlaybackDuration, duration) / duration
+				if !v.Playing && v.AnimPlaybackDuration > duration {
+					clipTime = float64(v.Time)
 				}
 				times[i] = float32(clipTime)
 			}
 		}
-		p := v.model.PoseAtAnimationTimes(v.anims, times)
-		v.poseCache, v.poseAnim, v.poseTime, v.poseValid = p, v.anim, v.time, true
+		p := v.Model.PoseAtAnimationTimes(v.Anims, times)
+		v.PoseCache, v.PoseAnim, v.PoseTime, v.PoseValid = p, v.Anim, v.Time, true
 		return p
 	}
-	if v.anim == nil {
-		return v.model.RestPose()
+	if v.Anim == nil {
+		return v.Model.RestPose()
 	}
-	if v.poseValid && v.poseAnim == v.anim && v.poseTime == v.time {
-		return v.poseCache
+	if v.PoseValid && v.PoseAnim == v.Anim && v.PoseTime == v.Time {
+		return v.PoseCache
 	}
-	p := v.model.PoseAt(v.anim, v.time)
-	v.poseCache, v.poseAnim, v.poseTime, v.poseValid = p, v.anim, v.time, true
+	p := v.Model.PoseAt(v.Anim, v.Time)
+	v.PoseCache, v.PoseAnim, v.PoseTime, v.PoseValid = p, v.Anim, v.Time, true
 	return p
 }
 
@@ -1138,31 +1138,31 @@ func (v *modelViewer) pose() WhmPose {
 // the button down walks to the first frame and stays there, which is what
 // winding a tape by hand does. The last frame is the same as the first, so
 // stepping past it lands on the start rather than on a frame that is not there.
-func (v *modelViewer) stepFrame(delta int) {
-	if v == nil || v.model == nil || v.anim == nil || delta == 0 {
+func (v *modelViewer) StepFrame(delta int) {
+	if v == nil || v.Model == nil || v.Anim == nil || delta == 0 {
 		return
 	}
-	frames := v.anim.NumFrames
+	frames := v.Anim.NumFrames
 	if frames <= 0 {
 		return
 	}
-	v.playing = false
+	v.Playing = false
 	// The clock is zeroed so that pressing play afterwards starts from the
 	// frame that was wound to rather than jumping a whole second ahead of it.
-	v.lastFrame = time.Time{}
+	v.LastFrame = time.Time{}
 	step := float64(delta) / float64(frames)
 	// The pose is sampled at the middle of a frame, so a play head of exactly
 	// one is the last frame, not the one after it.
-	t := float64(v.time) + step
+	t := float64(v.Time) + step
 	t = math.Mod(t, 1)
 	if t < 0 {
 		t++
 	}
-	v.time = float32(t)
-	if float64(v.time) >= 1 {
-		v.time = 0
+	v.Time = float32(t)
+	if float64(v.Time) >= 1 {
+		v.Time = 0
 	}
-	v.invalidate()
+	v.Invalidate()
 }
 
 // frameReadTolerance is how close to a frame boundary the playhead has to be
@@ -1173,8 +1173,8 @@ const frameReadTolerance = 1e-3
 // A clip with no frame count reports none, since there is nothing to count. The
 // play head is rounded rather than cut, so the frame a step lands on and the
 // frame the readout names are the same one.
-func (v *modelViewer) currentFrame() (int, int) {
-	if v == nil || v.anim == nil || v.anim.NumFrames <= 0 {
+func (v *modelViewer) CurrentFrame() (int, int) {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames <= 0 {
 		return 0, 0
 	}
 	// The playhead is a float32 and the frame count an int, so their product
@@ -1184,69 +1184,69 @@ func (v *modelViewer) currentFrame() (int, int) {
 	// saying "frame 1" while the clip sits on the second. The tolerance is a
 	// thousandth of a frame — far finer than anything a scrub can land on —
 	// and it only ever moves a reading that is already at the boundary.
-	frame := int(math.Floor(float64(v.anim.NumFrames)*float64(v.time) + frameReadTolerance))
-	return minInt(maxInt(frame, 0), v.anim.NumFrames-1), v.anim.NumFrames
+	frame := int(math.Floor(float64(v.Anim.NumFrames)*float64(v.Time) + frameReadTolerance))
+	return minInt(maxInt(frame, 0), v.Anim.NumFrames-1), v.Anim.NumFrames
 }
 
 // selectAnim switches the playing clip, wrapping around the list.
-func (v *modelViewer) selectAnim(index int) {
+func (v *modelViewer) SelectAnim(index int) {
 	if v == nil {
 		return
 	}
-	v.anims = nil
-	v.animPlaybackDuration = 0
-	if v.model == nil || len(v.model.Animations) == 0 {
-		v.anim = nil
-		v.animIndex = 0
-		v.invalidate()
+	v.Anims = nil
+	v.AnimPlaybackDuration = 0
+	if v.Model == nil || len(v.Model.Animations) == 0 {
+		v.Anim = nil
+		v.AnimIndex = 0
+		v.Invalidate()
 		return
 	}
-	n := len(v.model.Animations)
+	n := len(v.Model.Animations)
 	if index < 0 {
 		index = n - 1
 	}
 	if index >= n {
 		index = 0
 	}
-	v.animIndex = index
-	v.anim = &v.model.Animations[index]
-	v.time = 0
-	v.poseValid = false
-	v.lastFrame = time.Time{}
-	v.invalidate()
+	v.AnimIndex = index
+	v.Anim = &v.Model.Animations[index]
+	v.Time = 0
+	v.PoseValid = false
+	v.LastFrame = time.Time{}
+	v.Invalidate()
 }
 
 // selectAnimations plays clips belonging to one action together on one model.
 // It uses the longest selected clip as the shared playback clock; individual
 // clip times are sampled against their own durations.
-func (v *modelViewer) selectAnimations(anims []*WhmAnimation, playback bool) {
+func (v *modelViewer) SelectAnimations(anims []*WhmAnimation, playback bool) {
 	if v == nil {
 		return
 	}
-	v.anims = nil
-	v.anims = make([]*WhmAnimation, 0, len(anims))
+	v.Anims = nil
+	v.Anims = make([]*WhmAnimation, 0, len(anims))
 	for _, anim := range anims {
 		if anim != nil {
-			v.anims = append(v.anims, anim)
+			v.Anims = append(v.Anims, anim)
 		}
 	}
-	if len(v.anims) == 0 {
-		v.anim = nil
-		v.animPlaybackDuration = 0
-		v.poseValid = false
-		v.invalidate()
+	if len(v.Anims) == 0 {
+		v.Anim = nil
+		v.AnimPlaybackDuration = 0
+		v.PoseValid = false
+		v.Invalidate()
 		return
 	}
-	v.anim = longestAnimation(v.anims)
-	v.animIndex = animationIndex(v.model, v.anim)
-	v.animPlaybackDuration = animClipSeconds(v.anim)
+	v.Anim = longestAnimation(v.Anims)
+	v.AnimIndex = animationIndex(v.Model, v.Anim)
+	v.AnimPlaybackDuration = animClipSeconds(v.Anim)
 	if !playback {
-		v.playing = false
+		v.Playing = false
 	}
-	v.time = 0
-	v.poseValid = false
-	v.lastFrame = time.Time{}
-	v.invalidate()
+	v.Time = 0
+	v.PoseValid = false
+	v.LastFrame = time.Time{}
+	v.Invalidate()
 }
 
 func animationIndex(model *WhmModel, anim *WhmAnimation) int {

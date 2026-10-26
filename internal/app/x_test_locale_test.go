@@ -379,15 +379,15 @@ func TestAvailableLocalesAreSortedAndUnique(t *testing.T) {
 func TestRefreshLocalesFallsBackWhenTheLanguageIsGone(t *testing.T) {
 	resetLocales(t)
 	ui := newLocaleTestUI()
-	ui.gamePath, ui.modulePath = writeUCS(t, map[string][]byte{
+	ui.GamePath, ui.ModulePath = writeUCS(t, map[string][]byte{
 		"Engine/Locale/English/Engine.ucs": encodeUCS(t, "90100\tArmour"),
 	})
-	ui.locale = "Ultralanguage"
+	ui.Locale = "Ultralanguage"
 
-	ui.refreshLocales()
+	RefreshLocales(ui)
 
-	if ui.locale != localeDefault {
-		t.Errorf("locale = %q, want %q", ui.locale, localeDefault)
+	if ui.Locale != localeDefault {
+		t.Errorf("locale = %q, want %q", ui.Locale, localeDefault)
 	}
 	if got := localisedString("90100"); got != "Armour" {
 		t.Errorf("table not rebuilt for the fallback: %q", got)
@@ -401,14 +401,14 @@ func TestRefreshLocalesKeepsAModOnlyLanguage(t *testing.T) {
 		"Engine/Locale/English/Engine.ucs": encodeUCS(t, "90100\tArmour"),
 		"MyMod/Locale/Slovak/MyMod.ucs":    encodeUCS(t, "90100\tBrnena"),
 	})
-	ui.gamePath = gamePath
-	ui.modulePath = moduleDir
-	ui.locale = "Slovak"
+	ui.GamePath = gamePath
+	ui.ModulePath = moduleDir
+	ui.Locale = "Slovak"
 
-	ui.refreshLocales()
+	RefreshLocales(ui)
 
-	if ui.locale != "Slovak" {
-		t.Fatalf("locale = %q, want Slovak", ui.locale)
+	if ui.Locale != "Slovak" {
+		t.Fatalf("locale = %q, want Slovak", ui.Locale)
 	}
 	if got := localisedString("90100"); got != "Brnena" {
 		t.Errorf("text = %q, want Brnena", got)
@@ -418,19 +418,19 @@ func TestRefreshLocalesKeepsAModOnlyLanguage(t *testing.T) {
 func TestSetLocaleLanguagePersistsTheChoice(t *testing.T) {
 	resetLocales(t)
 	ui := newLocaleTestUI()
-	ui.gamePath, ui.modulePath = writeUCS(t, map[string][]byte{
+	ui.GamePath, ui.ModulePath = writeUCS(t, map[string][]byte{
 		"Engine/Locale/English/Engine.ucs": encodeUCS(t, "90100\tArmour"),
 		"Engine/Locale/Russian/Engine.ucs": encodeUCS(t, "90100\tБроня"),
 	})
-	ui.refreshLocales()
-	ui.stateDirty = false
+	RefreshLocales(ui)
+	ui.StateDirty = false
 
-	ui.setLocaleLanguage("Russian")
+	SetLocaleLanguage(ui, "Russian")
 
-	if ui.locale != "Russian" {
-		t.Errorf("locale = %q, want Russian", ui.locale)
+	if ui.Locale != "Russian" {
+		t.Errorf("locale = %q, want Russian", ui.Locale)
 	}
-	if !ui.stateDirty {
+	if !ui.StateDirty {
 		t.Error("picking a language did not mark the settings for saving")
 	}
 	if got := localisedString("90100"); got != "Броня" {
@@ -445,11 +445,11 @@ func TestLocaleSurvivesASaveAndLoad(t *testing.T) {
 	t.Cleanup(resetLocaleTables)
 
 	ui := newLocaleTestUI()
-	ui.gamePath, ui.modulePath = writeUCS(t, map[string][]byte{
+	ui.GamePath, ui.ModulePath = writeUCS(t, map[string][]byte{
 		"Engine/Locale/Russian/Engine.ucs": encodeUCS(t, "90100\tБроня"),
 	})
-	ui.locale = "Russian"
-	ui.stateDirty = true
+	ui.Locale = "Russian"
+	ui.StateDirty = true
 
 	// The settings file sits in the user's real AppData next to the theme
 	// choice, so the round trip goes through the real path — but the folder is
@@ -469,18 +469,18 @@ func TestLocaleSurvivesASaveAndLoad(t *testing.T) {
 	}
 
 	restored := newLocaleTestUI()
-	restored.applyPersistedSettings(loaded)
-	if restored.locale != "Russian" {
-		t.Errorf("restored locale = %q, want Russian", restored.locale)
+	restored.ApplyPersistedSettings(loaded)
+	if restored.Locale != "Russian" {
+		t.Errorf("restored locale = %q, want Russian", restored.Locale)
 	}
 }
 
 func TestEmptyLocaleSettingFallsBackToEnglish(t *testing.T) {
 	resetLocales(t)
 	ui := newLocaleTestUI()
-	ui.applyPersistedSettings(persistedState{DarkTheme: true})
-	if ui.locale != localeDefault {
-		t.Errorf("locale = %q, want %q", ui.locale, localeDefault)
+	ApplyPersistedSettings(ui, persistedState{DarkTheme: true})
+	if ui.Locale != localeDefault {
+		t.Errorf("locale = %q, want %q", ui.Locale, localeDefault)
 	}
 }
 
@@ -541,15 +541,15 @@ func TestOpeningAMenuOrSearchClosesTheLanguageList(t *testing.T) {
 		name  string
 		setup func(ui *uiState)
 	}{
-		{"a menu", func(ui *uiState) { ui.menuOpen = 0 }},
-		{"the search", func(ui *uiState) { ui.searchVisible = true }},
+		{"a menu", func(ui *uiState) { ui.MenuOpen = 0 }},
+		{"the search", func(ui *uiState) { ui.SearchVisible = true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ui := newLocaleTestUI()
-			ui.localeOpen = true
+			ui.LocaleOpen = true
 			tc.setup(ui)
-			ui.closeLocaleUnderOtherMenuBarPopups()
-			if ui.localeOpen {
+			CloseLocaleUnderOtherMenuBarPopups(ui)
+			if ui.LocaleOpen {
 				t.Error("the language list stayed open under " + tc.name)
 			}
 		})
@@ -560,10 +560,10 @@ func TestOpeningAMenuOrSearchClosesTheLanguageList(t *testing.T) {
 // anywhere would keep shutting it.
 func TestTheLanguageListSurvivesAFrameWithNoInput(t *testing.T) {
 	ui := newLocaleTestUI()
-	ui.menuOpen = -1
-	ui.localeOpen = true
-	ui.closeLocaleUnderOtherMenuBarPopups()
-	if !ui.localeOpen {
+	ui.MenuOpen = -1
+	ui.LocaleOpen = true
+	CloseLocaleUnderOtherMenuBarPopups(ui)
+	if !ui.LocaleOpen {
 		t.Error("the list was closed by a frame where nothing was clicked")
 	}
 }
@@ -576,27 +576,27 @@ func TestOpenLocaleFileSelectsTheIDAndIsReadOnly(t *testing.T) {
 	setLocale(gamePath, moduleDir, "English")
 	ui := newLocaleTestUI()
 
-	ui.jumpToLocaleEntry("90100")
+	JumpToLocaleEntry(ui, "90100")
 
-	if len(ui.openTabs) != 1 {
-		t.Fatalf("opened %d tabs, want 1", len(ui.openTabs))
+	if len(ui.OpenTabs) != 1 {
+		t.Fatalf("opened %d tabs, want 1", len(ui.OpenTabs))
 	}
-	tab := ui.openTabs[0]
-	if !tab.textLocale {
+	tab := ui.OpenTabs[0]
+	if !tab.TextLocale {
 		t.Error("the tab is not marked as a locale file")
 	}
-	if !tab.textEditor.ReadOnly {
+	if !tab.TextEditor.ReadOnly {
 		t.Error("a game locale file was opened editable")
 	}
-	if tab.textDirty {
+	if tab.TextDirty {
 		t.Error("a freshly opened locale file is already dirty")
 	}
 	// The file is UTF-16, so the text in the editor is UTF-8.
-	if got := tab.textEditor.Text(); !strings.Contains(got, "90100\tArmour") {
+	if got := tab.TextEditor.Text(); !strings.Contains(got, "90100\tArmour") {
 		t.Errorf("decoded text = %q", got)
 	}
-	start, end := tab.textEditor.Selection()
-	if sel := string([]rune(tab.textEditor.Text())[start:end]); sel != "90100" {
+	start, end := tab.TextEditor.Selection()
+	if sel := string([]rune(tab.TextEditor.Text())[start:end]); sel != "90100" {
 		t.Errorf("selection = %q, want 90100", sel)
 	}
 }
@@ -609,11 +609,11 @@ func TestOpenLocaleFileReusesAnOpenTab(t *testing.T) {
 	setLocale(gamePath, moduleDir, "English")
 	ui := newLocaleTestUI()
 
-	ui.jumpToLocaleEntry("90100")
-	ui.jumpToLocaleEntry("90100")
+	JumpToLocaleEntry(ui, "90100")
+	JumpToLocaleEntry(ui, "90100")
 
-	if len(ui.openTabs) != 1 {
-		t.Errorf("opened %d tabs for one file, want 1", len(ui.openTabs))
+	if len(ui.OpenTabs) != 1 {
+		t.Errorf("opened %d tabs for one file, want 1", len(ui.OpenTabs))
 	}
 }
 
@@ -625,13 +625,13 @@ func TestJumpToAnUnknownIDSaysSo(t *testing.T) {
 	setLocale(gamePath, moduleDir, "English")
 	ui := newLocaleTestUI()
 
-	ui.jumpToLocaleEntry("404")
+	JumpToLocaleEntry(ui, "404")
 
-	if len(ui.openTabs) != 0 {
+	if len(ui.OpenTabs) != 0 {
 		t.Errorf("opened a tab for an id that is not in the table")
 	}
-	if !strings.Contains(ui.statusText, "404") {
-		t.Errorf("status = %q, want it to name the id", ui.statusText)
+	if !strings.Contains(ui.StatusText, "404") {
+		t.Errorf("status = %q, want it to name the id", ui.StatusText)
 	}
 }
 
@@ -642,9 +642,9 @@ func TestLocaleTabsAreNotSavedAsModFiles(t *testing.T) {
 	})
 	setLocale(gamePath, moduleDir, "English")
 	ui := newLocaleTestUI()
-	ui.gamePath = gamePath
-	ui.modulePath = moduleDir
-	ui.jumpToLocaleEntry("90100")
+	ui.GamePath = gamePath
+	ui.ModulePath = moduleDir
+	JumpToLocaleEntry(ui, "90100")
 
 	if _, err := stateFilePath(); err != nil {
 		t.Fatalf("stateFilePath: %v", err)
@@ -673,18 +673,18 @@ func TestSavingALocaleTabIsRefused(t *testing.T) {
 	})
 	setLocale(gamePath, moduleDir, "English")
 	ui := newLocaleTestUI()
-	ui.jumpToLocaleEntry("90100")
-	before, err := os.ReadFile(ui.openTabs[0].path)
+	JumpToLocaleEntry(ui, "90100")
+	before, err := os.ReadFile(ui.OpenTabs[0].Path)
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
 
-	ui.handleTextSave(ui.openTabs[0])
+	HandleTextSave(ui, ui.OpenTabs[0])
 
-	if !strings.Contains(ui.statusText, "read only") {
-		t.Errorf("status = %q, want it to say read only", ui.statusText)
+	if !strings.Contains(ui.StatusText, "read only") {
+		t.Errorf("status = %q, want it to say read only", ui.StatusText)
 	}
-	after, err := os.ReadFile(ui.openTabs[0].path)
+	after, err := os.ReadFile(ui.OpenTabs[0].Path)
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}

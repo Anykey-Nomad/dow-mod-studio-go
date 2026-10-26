@@ -223,7 +223,7 @@ func TestMarkerArrowPointsAlongTheMarkerAxis(t *testing.T) {
 	// through: a viewer built by hand has no field of view and no distance, and
 	// every projection through it divides by zero.
 	v := newModelViewer(m, "arrow_test.whm")
-	v.markerIndex = idx
+	v.MarkerIndex = idx
 	world, ok := m.MarkerWorld(idx, pose, true)
 	if !ok {
 		t.Fatalf("marker %s has an axis but no position", m.Markers[idx].Name)
@@ -232,11 +232,11 @@ func TestMarkerArrowPointsAlongTheMarkerAxis(t *testing.T) {
 	t.Logf("marker %s at %v with forward %v", m.Markers[idx].Name, world, axis)
 
 	const w, h = 800, 600
-	tip, has := v.markerArrow(w, h)
+	tip, has := v.MarkerArrow(w, h)
 	if !has {
 		t.Skipf("marker %s produced no arrow at %dx%d; it may be off screen", m.Markers[idx].Name, w, h)
 	}
-	at, ok := v.markerHighlight(w, h)
+	at, ok := v.MarkerHighlight(w, h)
 	if !ok {
 		t.Fatalf("the ring has nowhere to draw but the arrow reports %v", tip)
 	}
@@ -244,7 +244,7 @@ func TestMarkerArrowPointsAlongTheMarkerAxis(t *testing.T) {
 	// The screen direction from the marker to the tip has to agree with the
 	// marker's own forward axis once that axis is projected, which is what
 	// makes the arrow an arrow and not just a line.
-	view := render.BuildViewMatrix(v.options(w, h))
+	view := render.BuildViewMatrix(v.Options(w, h))
 	projected := fxProject(view, world.Add(axis.MulScalar(markerArrowWorldLength)), w, h)
 	if projected == nil {
 		t.Skip("the axis end is off screen, so there is nothing to compare against")
@@ -271,16 +271,16 @@ func TestMarkerArrowIsAbsentWhenThereIsNoAxis(t *testing.T) {
 	m := arrowTestModel(t)
 	// No marker picked at all.
 	v := newModelViewer(m, "arrow_test.whm")
-	v.markerIndex = -1
-	if _, ok := v.markerArrow(100, 100); ok {
+	v.MarkerIndex = -1
+	if _, ok := v.MarkerArrow(100, 100); ok {
 		t.Errorf("an arrow was drawn with no marker picked")
 	}
 	// A marker index outside the model, which is what a stale index from a
 	// model that has since been replaced looks like.
 	v = newModelViewer(m, "arrow_test.whm")
-	v.markerIndex = len(m.Markers) + 5
-	if _, ok := v.markerArrow(100, 100); ok {
-		t.Errorf("an arrow was drawn for marker %d of %d", v.markerIndex, len(m.Markers))
+	v.MarkerIndex = len(m.Markers) + 5
+	if _, ok := v.MarkerArrow(100, 100); ok {
+		t.Errorf("an arrow was drawn for marker %d of %d", v.MarkerIndex, len(m.Markers))
 	}
 }
 

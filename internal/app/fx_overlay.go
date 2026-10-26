@@ -215,11 +215,11 @@ func modelFXLabel(v *modelViewer) string {
 		return "FX"
 	}
 	switch {
-	case v.showFX && len(v.fxEffects) > 0:
-		return fmt.Sprintf("FX %d", len(v.fxEffects))
-	case v.showFX:
+	case v.ShowFX && len(v.FxEffects) > 0:
+		return fmt.Sprintf("FX %d", len(v.FxEffects))
+	case v.ShowFX:
 		return "FX…"
-	case v.fxErr != "":
+	case v.FxErr != "":
 		return "FX !"
 	}
 	return "FX"
@@ -238,17 +238,17 @@ const (
 // scaleFX multiplies the effect scale, keeping it inside its range. It is
 // multiplicative so repeated presses walk the whole range evenly rather than
 // bunching up at the ends.
-func (v *modelViewer) scaleFX(f float64) {
+func (v *modelViewer) ScaleFX(f float64) {
 	if v == nil || f <= 0 {
 		return
 	}
-	s := v.fxScale
+	s := v.FxScale
 	if s <= 0 {
 		s = fxScaleDefaultValue
 	}
 	s = engine.ClampFloat64(s*f, modelFXScaleMin, modelFXScaleMax)
-	v.fxScale = s
-	v.invalidate()
+	v.FxScale = s
+	v.Invalidate()
 	log.Printf("3D preview: FX scale %.2f", s)
 }
 
@@ -258,7 +258,7 @@ func modelFXScaleLabel(v *modelViewer) string {
 	if v == nil {
 		return "FX x1.00"
 	}
-	s := v.fxScale
+	s := v.FxScale
 	if s <= 0 {
 		s = fxScaleDefaultValue
 	}
@@ -270,47 +270,47 @@ func modelFXScaleLabel(v *modelViewer) string {
 // sprite map decoded, which is why it happens on a worker and the button says
 // FX… until it answers. Afterwards the simulation is already built, so
 // turning them off and on again costs nothing.
-func (v *modelViewer) toggleFX() {
+func (v *modelViewer) ToggleFX() {
 	if v == nil {
 		return
 	}
-	if v.showFX {
-		v.showFX = false
-		v.fxOverlay = nil
-		v.fxLast = time.Time{}
+	if v.ShowFX {
+		v.ShowFX = false
+		v.FxOverlay = nil
+		v.FxLast = time.Time{}
 		log.Printf("3D preview: effects off")
 		return
 	}
-	v.showFX = true
-	v.fxOverlay = nil
-	v.fxLast = time.Time{}
-	log.Printf("3D preview: effects on (%d already loaded)", len(v.fxEffects))
+	v.ShowFX = true
+	v.FxOverlay = nil
+	v.FxLast = time.Time{}
+	log.Printf("3D preview: effects on (%d already loaded)", len(v.FxEffects))
 }
 
 // fxStartLoad begins resolving the model's effects, once, reporting whether it
 // started anything. The path is the one the model itself was read from, which
 // is how its blueprint is found.
-func (ui *uiState) fxStartLoad(v *modelViewer) bool {
-	if v == nil || v.model == nil || ui.modTree == nil || v.modelFile == "" {
+func FxStartLoad(ui *uiState, v *modelViewer) bool {
+	if v == nil || v.Model == nil || ui.ModTree == nil || v.ModelFile == "" {
 		return false
 	}
-	if v.fxCh != nil || len(v.fxEffects) > 0 || v.fxErr != "" {
+	if v.FxCh != nil || len(v.FxEffects) > 0 || v.FxErr != "" {
 		return false
 	}
 	ch := make(chan fxLoadResult, 1)
-	v.fxCh = ch
-	model := v.model
-	file := v.modelFile
-	tree := ui.modTree
+	v.FxCh = ch
+	model := v.Model
+	file := v.ModelFile
+	tree := ui.ModTree
 	// Whatever the sound worker decoded already is handed over, because both
 	// read the same .whe and the samples would otherwise be decoded twice.
 	// The maps of the last load ride along for the same reason, and the sound
 	// half is left to the worker that is usually decoding these very samples
 	// while the FX button is being pressed.
 	opts := fxLoadOpts{
-		decoded: v.fxSound.Decoded(),
-		prev:    v.fxTextures,
-		audio:   v.fxSound == nil && v.fxSoundCh == nil,
+		decoded: v.FxSound.Decoded(),
+		prev:    v.FxTextures,
+		audio:   v.FxSound == nil && v.FxSoundCh == nil,
 	}
 	go func() {
 		ch <- loadModelEffects(tree, model, file, opts)
@@ -329,17 +329,17 @@ func (ui *uiState) fxStartLoad(v *modelViewer) bool {
 // needs the FX toggle to have been pressed, and a reader may never press it, so
 // the sounds are read as soon as the model is on screen and the effects stay
 // behind their button.
-func (ui *uiState) fxStartSoundLoad(v *modelViewer) bool {
-	if v == nil || ui.modTree == nil || v.modelFile == "" {
+func FxStartSoundLoad(ui *uiState, v *modelViewer) bool {
+	if v == nil || ui.ModTree == nil || v.ModelFile == "" {
 		return false
 	}
-	if v.fxSoundCh != nil || v.fxSound != nil {
+	if v.FxSoundCh != nil || v.FxSound != nil {
 		return false
 	}
 	ch := make(chan fxLoadResult, 1)
-	v.fxSoundCh = ch
-	file := v.modelFile
-	tree := ui.modTree
+	v.FxSoundCh = ch
+	file := v.ModelFile
+	tree := ui.ModTree
 	go func() {
 		ch <- loadModelSounds(tree, file)
 	}()
@@ -354,34 +354,34 @@ func (ui *uiState) fxStartSoundLoad(v *modelViewer) bool {
 // from the old definitions — fxSoundTick and the labels nil-check it, so the
 // gap is silence rather than a crash — and its decoded samples are handed to
 // the new loads, so only paths that changed pay for a decode.
-func (ui *uiState) fxReload(v *modelViewer, doc *whe.Document) {
-	if v == nil || v.model == nil || ui.modTree == nil || v.modelFile == "" {
+func FxReload(ui *uiState, v *modelViewer, doc *whe.Document) {
+	if v == nil || v.Model == nil || ui.ModTree == nil || v.ModelFile == "" {
 		return
 	}
-	model, file, tree := v.model, v.modelFile, ui.modTree
-	decoded := v.fxSound.Decoded()
+	model, file, tree := v.Model, v.ModelFile, ui.ModTree
+	decoded := v.FxSound.Decoded()
 	// The sound worker is started first, so the effects worker below can see
 	// that somebody is already decoding this document's samples and leave the
 	// sounds to it. Starting the effects worker first would hide the worker
 	// that is about to start and have both of them pay for the same decode.
-	if v.fxSoundCh == nil {
-		if v.fxSound != nil {
-			v.fxSound.Close()
-			v.fxSound = nil
+	if v.FxSoundCh == nil {
+		if v.FxSound != nil {
+			v.FxSound.Close()
+			v.FxSound = nil
 		}
 		ch := make(chan fxLoadResult, 1)
-		v.fxSoundCh = ch
+		v.FxSoundCh = ch
 		go func() {
 			ch <- loadModelSoundsWhe(tree, file, doc, decoded)
 		}()
 	}
-	if v.fxCh == nil {
+	if v.FxCh == nil {
 		ch := make(chan fxLoadResult, 1)
-		v.fxCh = ch
+		v.FxCh = ch
 		opts := fxLoadOpts{
 			decoded: decoded,
-			prev:    v.fxTextures,
-			audio:   v.fxSound == nil && v.fxSoundCh == nil,
+			prev:    v.FxTextures,
+			audio:   v.FxSound == nil && v.FxSoundCh == nil,
 		}
 		go func() {
 			ch <- loadModelEffectsWhe(tree, model, file, opts, doc)
@@ -392,21 +392,21 @@ func (ui *uiState) fxReload(v *modelViewer, doc *whe.Document) {
 
 // fxApply takes the worker's answer: the effects it resolved, their maps, and
 // whatever it could not read.
-func (v *modelViewer) fxApply(res fxLoadResult) {
-	v.fxCh = nil
+func (v *modelViewer) FxApply(res fxLoadResult) {
+	v.FxCh = nil
 	if res.err != nil {
-		v.fxErr = res.err.Error()
+		v.FxErr = res.err.Error()
 	} else {
-		v.fxErr = ""
+		v.FxErr = ""
 	}
-	v.fxEffects = res.effects
-	v.fxTextures = res.textures
+	v.FxEffects = res.effects
+	v.FxTextures = res.textures
 	if len(res.timelines) > 0 {
-		v.fxTimelines = res.timelines
+		v.FxTimelines = res.timelines
 	}
 	log.Printf("3D preview: effects resolved: %d effects, %d sprite textures", len(res.effects), len(res.textures))
-	if v.fxErr != "" {
-		log.Printf("3D preview: effects unavailable: %v", v.fxErr)
+	if v.FxErr != "" {
+		log.Printf("3D preview: effects unavailable: %v", v.FxErr)
 	}
 	// The sounds ride in with the effects because they are read out of the same
 	// .whe: the timeline that says when a footstep sounds is the one that says
@@ -417,32 +417,32 @@ func (v *modelViewer) fxApply(res fxLoadResult) {
 	// usually finished first, because it starts on the model's first frame
 	// while this one waits for the FX button, and replacing a working player
 	// with an equal one would restart any sound already playing.
-	if v.fxSound == nil {
-		v.fxApplySounds(res, res.timelines)
+	if v.FxSound == nil {
+		v.FxApplySounds(res, res.timelines)
 	}
-	v.fxLast = time.Time{}
-	v.fxOverlay = nil
+	v.FxLast = time.Time{}
+	v.FxOverlay = nil
 }
 
 // fxApplySoundsOnly takes the sound half of the work on its own, for the
 // worker that reads the audio without resolving any effects.
-func (v *modelViewer) fxApplySoundsOnly(res fxLoadResult) {
-	v.fxApplySounds(res, res.timelines)
+func (v *modelViewer) FxApplySoundsOnly(res fxLoadResult) {
+	v.FxApplySounds(res, res.timelines)
 }
 
 // fxApplySounds builds the sound player from what the worker resolved, and
 // hands it the timeline so that a sound starts at the moment the clip reaches
 // it rather than every frame.
-func (v *modelViewer) fxApplySounds(res fxLoadResult, timelines []whe.FxTimeline) {
+func (v *modelViewer) FxApplySounds(res fxLoadResult, timelines []whe.FxTimeline) {
 	// The timelines are kept whatever the sounds turned out to be: the scrub
 	// bar reads them to mark the frames a clip fires something on, and a model
 	// with effects but no audio would otherwise lose them.
-	v.fxTimelines = timelines
+	v.FxTimelines = timelines
 	if len(res.soundBundles) == 0 {
 		return
 	}
-	v.fxSound = fx.NewSoundPlayer(res.soundBundles, timelines, res.sounds.Snapshot())
-	v.fxSoundOn = true
+	v.FxSound = fx.NewSoundPlayer(res.soundBundles, timelines, res.sounds.Snapshot())
+	v.FxSoundOn = true
 	log.Printf("3D preview: sounds wired: %d events, %d samples decoded",
 		len(res.soundBundles), res.sounds.Len())
 }
@@ -455,41 +455,41 @@ func (v *modelViewer) fxApplySounds(res fxLoadResult, timelines []whe.FxTimeline
 // a step forward over a footstep's moment is a sound a preview must make, and
 // waiting for play to resume would lose it. DATAMTON event moments are in
 // seconds, so the normalized playhead is converted using this clip's duration.
-func (v *modelViewer) fxSoundTick(anim string) {
-	if v == nil || v.fxSound == nil {
+func (v *modelViewer) FxSoundTick(anim string) {
+	if v == nil || v.FxSound == nil {
 		return
 	}
-	v.fxSound.SetEnabled(v.fxSoundOn)
-	duration := animClipSeconds(v.anim)
-	v.fxSound.SetClipSeconds(duration)
-	v.fxSound.Advance(anim, engine.ClampFloat64(float64(v.time)*duration, 0, duration))
+	v.FxSound.SetEnabled(v.FxSoundOn)
+	duration := animClipSeconds(v.Anim)
+	v.FxSound.SetClipSeconds(duration)
+	v.FxSound.Advance(anim, engine.ClampFloat64(float64(v.Time)*duration, 0, duration))
 }
 
 // fxOrigins moves every effect to where its marker is under the pose on show.
 // A marker on a bone follows that bone, so an effect written for a weapon
 // barrel stays on the barrel while the animation runs instead of hanging in
 // the air where the model was when it was pressed.
-func (v *modelViewer) fxOrigins() {
-	if v == nil || v.model == nil {
+func (v *modelViewer) FxOrigins() {
+	if v == nil || v.Model == nil {
 		return
 	}
-	pose := v.pose()
-	for i := range v.fxEffects {
-		e := &v.fxEffects[i]
+	pose := v.Pose()
+	for i := range v.FxEffects {
+		e := &v.FxEffects[i]
 		e.TurnAxes = [3]fauxgl.Vector{fxAxisX, fxAxisY, fxAxisZ}
 		e.TurnAngles = [3]float64{v.fxRotX * math.Pi / 180, v.fxRotY * math.Pi / 180, v.fxRotZ * math.Pi / 180}
 		// Keep a complete frame even when this effect's event does not name
 		// a marker on the model. ModelMarkerFrame uses the same Z-up basis as
 		// the model viewer; FX values stay local until transformed below.
 		e.Frame = fxFallbackFrame
-		if world, ok := v.model.MarkerWorld(e.Marker, pose, true); ok {
+		if world, ok := v.Model.MarkerWorld(e.Marker, pose, true); ok {
 			e.Origin = world
 		}
 		e.ManualOrigin = fauxgl.Vector{}
 		e.HasManualOrigin = false
 		e.ShowDirection = false
 		e.ShowMarker = false
-		if override, ok := v.fxOverrides[i]; ok {
+		if override, ok := v.FxOverrides[i]; ok {
 			e.ManualOrigin = override.Origin
 			e.HasManualOrigin = override.HasOrigin
 			e.ShowDirection = override.ShowDirection
@@ -507,7 +507,7 @@ func (v *modelViewer) fxOrigins() {
 		// the same bone a few steps along, so the ribbon keeps its length
 		// as the weapon swings.
 		if e.HasOther {
-			if world, ok := v.model.MarkerWorld(e.OtherMarker, pose, true); ok {
+			if world, ok := v.Model.MarkerWorld(e.OtherMarker, pose, true); ok {
 				e.Far = world
 			}
 		} // An authored FX direction takes precedence over a marker-derived
@@ -515,14 +515,14 @@ func (v *modelViewer) fxOrigins() {
 		// offsets. Without one, a free beam follows its marker's forward axis.
 		if e.Sim != nil && e.Sim.Axis.Length() > 1e-6 {
 			e.Axis = e.fxMarkerVector(e.Sim.Axis)
-		} else if axis, ok := v.model.MarkerBeamAxis(e.Marker, pose, true); ok {
+		} else if axis, ok := v.Model.MarkerBeamAxis(e.Marker, pose, true); ok {
 			// A beam runs along the tube it plays at, which is the marker's
 			// second frame column, not the direction MarkerAxis scores the
 			// marker as facing: see MarkerBeamAxis.
 			e.Axis = axis
 		}
 
-		if right, up, ok := v.model.MarkerBasis(e.Marker, pose, true); ok {
+		if right, up, ok := v.Model.MarkerBasis(e.Marker, pose, true); ok {
 			e.Right = right
 			e.Up = up
 		}
@@ -530,20 +530,20 @@ func (v *modelViewer) fxOrigins() {
 			// Preserve the coordinate-system swap while discarding the marker
 			// transform: this is the identity attachment frame, not raw file XYZ.
 			e.Frame = fxFallbackFrame
-		} else if x, y, z, ok := v.model.MarkerFrameAxes(e.Marker, pose, true); ok {
+		} else if x, y, z, ok := v.Model.MarkerFrameAxes(e.Marker, pose, true); ok {
 			e.Frame = [3]fauxgl.Vector{x, y, z}
 		}
 		if e.AlignToOther && e.HasOther && (e.Sim == nil || !e.Sim.NoRotate) {
 			e.Frame = fxFrameToward(e.Frame, e.Far.Sub(e.Origin))
 		}
-		if override, ok := v.fxOverrides[i]; ok {
+		if override, ok := v.FxOverrides[i]; ok {
 			e.TurnAngles = [3]float64{override.Rotation[0] * math.Pi / 180, override.Rotation[1] * math.Pi / 180, override.Rotation[2] * math.Pi / 180}
 		}
 		if e.Ground && !e.HasManualOrigin {
-			e.Origin = fxGroundOrigin(e.Origin, float64(v.model.BoundMin[2]))
+			e.Origin = fxGroundOrigin(e.Origin, float64(v.Model.BoundMin[2]))
 		}
-		if override, ok := v.fxOverrides[i]; ok && override.HasScaleDistance {
-			centre, _ := v.model.ModelCenter()
+		if override, ok := v.FxOverrides[i]; ok && override.HasScaleDistance {
+			centre, _ := v.Model.ModelCenter()
 			delta := e.Origin.Sub(centre)
 			if length := delta.Length(); length > 1e-6 {
 				e.Origin = centre.Add(delta.MulScalar(override.ScaleDistance / length))
@@ -551,7 +551,7 @@ func (v *modelViewer) fxOrigins() {
 				e.Origin = centre.Add(fauxgl.Vector{Z: override.ScaleDistance})
 			}
 		}
-		if override, ok := v.fxOverrides[i]; ok {
+		if override, ok := v.FxOverrides[i]; ok {
 			e.ShowMarker = e.ShowMarker || override.ShowMarker
 		}
 		if e.ShowDirection && e.Axis.Length() > 1e-6 {
@@ -654,19 +654,19 @@ func fxRotateAbout(v, axis fauxgl.Vector, angle float64) fauxgl.Vector {
 // built and thrown away. The flag is recomputed every frame from the same
 // conditions the renderer acts on (see modelGpuUnavailable), so a hardware
 // path that is off, or that breaks, has its picture back on the next frame.
-func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts render.RenderOptions, softwareFX bool) bool {
+func (v *modelViewer) FxAdvance(now time.Time, w, h int, opts render.RenderOptions, softwareFX bool) bool {
 	anim := ""
-	if v != nil && v.anim != nil {
-		anim = v.anim.Name
+	if v != nil && v.Anim != nil {
+		anim = v.Anim.Name
 	}
-	v.fxSelectionReset(anim)
-	if !v.showFX || len(v.fxEffects) == 0 || w < 1 || h < 1 {
-		v.fxOverlay = nil
-		v.fxScene = nil
+	v.FxSelectionReset(anim)
+	if !v.ShowFX || len(v.FxEffects) == 0 || w < 1 || h < 1 {
+		v.FxOverlay = nil
+		v.FxScene = nil
 		return false
 	}
-	if v.fxLast.IsZero() {
-		v.fxLast = now
+	if v.FxLast.IsZero() {
+		v.FxLast = now
 	}
 	// Only the effects the clip on screen fires are drawn: a .whe's timelines
 	// put the build smoke and the death smoke on their own clips, and playing
@@ -676,8 +676,8 @@ func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts render.RenderOptio
 	// of the way through the walk, and this is where the playhead is. It is
 	// advanced before the effects are looked at, because a model may declare
 	// sounds and no visible effects at all.
-	v.fxSoundTick(anim)
-	active := v.fxActiveEffects(anim)
+	v.FxSoundTick(anim)
+	active := v.FxActiveEffects(anim)
 	// A clip that no timeline names draws nothing, and says so once. It used to
 	// fall back to playing every effect the model has, on the grounds that a
 	// blank viewport is worse than a busy one. That is what took the GPU down:
@@ -686,28 +686,28 @@ func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts render.RenderOptio
 	// which a card answers by hanging and dropping the device (vkQueueSubmit
 	// error -4). Showing nothing on a clip nothing drives is cheap, correct and
 	// survivable; drawing everything is neither.
-	if len(active) == 0 && len(v.fxEffects) > 0 && anim != "" && v.fxAnim != anim {
+	if len(active) == 0 && len(v.FxEffects) > 0 && anim != "" && v.FxAnim != anim {
 		log.Printf("3D preview: no timeline drives %q; it has no effects of its own", anim)
 	}
 	if len(active) == 0 {
-		v.fxOverlay = nil
-		v.fxScene = nil
-		v.fxLast = now
+		v.FxOverlay = nil
+		v.FxScene = nil
+		v.FxLast = now
 		return false
 	}
 	// The clip on show changed: its effects start again from nothing, the way
 	// a timeline's entry events play on the frame the clip begins.
-	if v.fxAnim != anim {
-		v.fxAnim = anim
-		for i := range v.fxEffects {
-			if v.fxEffects[i].fxPlaysFor(anim) && v.fxEffects[i].Sim != nil {
-				v.fxEffects[i].Sim.Reset()
+	if v.FxAnim != anim {
+		v.FxAnim = anim
+		for i := range v.FxEffects {
+			if v.FxEffects[i].fxPlaysFor(anim) && v.FxEffects[i].Sim != nil {
+				v.FxEffects[i].Sim.Reset()
 			}
 		}
-		v.fxLast = time.Time{}
+		v.FxLast = time.Time{}
 	}
-	if v.fxLast.IsZero() {
-		v.fxLast = now
+	if v.FxLast.IsZero() {
+		v.FxLast = now
 	}
 	// The effects are stepped by the clip, not by the clock. A timeline says an
 	// event fires at a point in its animation, so an effect that belongs 60% of
@@ -719,31 +719,31 @@ func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts render.RenderOptio
 	// dt is the fallback for a clip the viewer is not playing: nothing is
 	// moving the playhead then, and an idle preview still has to let its glows
 	// breathe rather than sit frozen.
-	dt := now.Sub(v.fxLast).Seconds()
-	v.fxLast = now
-	effects := v.fxStepOnClip(active, anim, dt)
-	v.fxOrigins()
+	dt := now.Sub(v.FxLast).Seconds()
+	v.FxLast = now
+	effects := v.FxStepOnClip(active, anim, dt)
+	v.FxOrigins()
 	// The scale is applied to each effect's local geometry rather than to its
 	// marker origin or live simulation, so changing it keeps the effect attached
 	// to the same model point without resetting particles in flight.
-	scale := v.fxScale
+	scale := v.FxScale
 	if scale <= 0 {
 		scale = 1
 	}
 	effects = fxScaledEffects(effects, scale)
 	// The camera's own up, which is what a billboard ring squares itself to.
 	_, camUp := render.FxCameraBasis(opts)
-	if softwareFX && v.showFX {
-		v.fxOverlay = renderFxOverlay(effects, opts, w, h, v.fxTextures)
+	if softwareFX && v.ShowFX {
+		v.FxOverlay = renderFxOverlay(effects, opts, w, h, v.FxTextures)
 	} else {
 		// Not this frame's picture. Keeping last frame's would paint
 		// stale particles beside a hardware frame that carries its own.
-		v.fxOverlay = nil
+		v.FxOverlay = nil
 	}
-	if v.showFX {
-		v.fxScene = fxBuildGpuScene(effects, v.fxTextures, render.FxEyePosition(opts), camUp)
+	if v.ShowFX {
+		v.FxScene = fxBuildGpuScene(effects, v.FxTextures, render.FxEyePosition(opts), camUp)
 	} else {
-		v.fxScene = nil
+		v.FxScene = nil
 	}
 	return true
 }
@@ -768,9 +768,9 @@ func (v *modelViewer) fxAdvance(now time.Time, w, h int, opts render.RenderOptio
 //   - the viewer is paused mid-clip, which the FX toggle can leave it in: the
 //     wall clock keeps the effects alive, since freezing a glow because the
 //     reader stopped scrubbing is not what anyone wants to read.
-func (v *modelViewer) fxStepOnClip(active []fxOverlayEffect, anim string, dt float64) []fxOverlayEffect {
+func (v *modelViewer) FxStepOnClip(active []fxOverlayEffect, anim string, dt float64) []fxOverlayEffect {
 	clipLen := 1.0
-	if v.anim != nil {
+	if v.Anim != nil {
 		// How long one pass of the playhead actually takes, in seconds. It is
 		// the frame count over the rate, not the reciprocal of the rate: the
 		// playhead advances by dt*rate/frames, so it runs 0 to 1 over
@@ -780,20 +780,20 @@ func (v *modelViewer) fxStepOnClip(active []fxOverlayEffect, anim string, dt flo
 		// ran — which reads as the effects freezing exactly when the animation
 		// is playing, and behaving normally while it is paused, because the
 		// paused path steps by the wall clock instead.
-		clipLen = animClipSeconds(v.anim)
+		clipLen = animClipSeconds(v.Anim)
 	}
 	if clipLen <= 0 {
 		clipLen = 1
 	}
-	nowClip := float64(v.time) * clipLen
-	prevClip := v.fxClipPrev
-	started := v.fxClipPrevAnim == anim
+	nowClip := float64(v.Time) * clipLen
+	prevClip := v.FxClipPrev
+	started := v.FxClipPrevAnim == anim
 	// A different clip, or a playhead that moved back — which is both a rewind
 	// and the clip looping — is a fresh pass, so what has run does not apply.
 	if !started || nowClip+1e-9 < prevClip {
-		for i := range v.fxEffects {
-			if v.fxEffects[i].Sim != nil {
-				v.fxEffects[i].Sim.Reset()
+		for i := range v.FxEffects {
+			if v.FxEffects[i].Sim != nil {
+				v.FxEffects[i].Sim.Reset()
 			}
 		}
 		// Just short of where the playhead is, so that an event written at the
@@ -801,15 +801,15 @@ func (v *modelViewer) fxStepOnClip(active []fxOverlayEffect, anim string, dt flo
 		// previous position at the playhead itself would step over it.
 		prevClip = nowClip - 1e-9
 	}
-	v.fxClipPrev = nowClip
-	v.fxClipPrevAnim = anim
+	v.FxClipPrev = nowClip
+	v.FxClipPrevAnim = anim
 
 	// While the clip is running the playhead is the clock. While it is paused
 	// the playhead does not move, and wall time is what keeps an idle glow
 	// alive; the two agree closely when it is playing, since the viewer
 	// advances the playhead from the same clock.
 	step := nowClip - prevClip
-	if !v.playing {
+	if !v.Playing {
 		step = dt
 	}
 	var out []fxOverlayEffect
@@ -836,88 +836,88 @@ func (v *modelViewer) fxStepOnClip(active []fxOverlayEffect, anim string, dt flo
 // fxActiveEffects are the effects that play during the named animation. The
 // simulations behind every effect keep running either way, so switching back
 // to a clip shows its effects already going rather than starting cold.
-func (v *modelViewer) fxSelectionAnimName(anim string) string {
+func (v *modelViewer) FxSelectionAnimName(anim string) string {
 	if v == nil {
 		return anim
 	}
-	if anim == "" && v.anim != nil {
-		anim = v.anim.Name
+	if anim == "" && v.Anim != nil {
+		anim = v.Anim.Name
 	}
-	if !strings.EqualFold(v.fxSelectionAnim, anim) {
-		v.fxSelectionAnim = anim
-		v.fxManualOn = nil
-		v.fxManualOff = nil
-		v.fxAttrClicks = nil
-		v.fxAttrIndex = -1
-		v.fxAttrOpen = false
+	if !strings.EqualFold(v.FxSelectionAnim, anim) {
+		v.FxSelectionAnim = anim
+		v.FxManualOn = nil
+		v.FxManualOff = nil
+		v.FxAttrClicks = nil
+		v.FxAttrIndex = -1
+		v.FxAttrOpen = false
 	}
 	return anim
 }
 
-func (v *modelViewer) fxSelectionReset(anim string) {
+func (v *modelViewer) FxSelectionReset(anim string) {
 	if v != nil {
-		v.fxSelectionAnimName(anim)
+		v.FxSelectionAnimName(anim)
 	}
 }
 
-func (v *modelViewer) fxEffectSelected(index int, anim string) bool {
-	if v == nil || index < 0 || index >= len(v.fxEffects) {
+func (v *modelViewer) FxEffectSelected(index int, anim string) bool {
+	if v == nil || index < 0 || index >= len(v.FxEffects) {
 		return false
 	}
-	anim = v.fxSelectionAnimName(anim)
-	if v.fxManualOff[index] {
+	anim = v.FxSelectionAnimName(anim)
+	if v.FxManualOff[index] {
 		return false
 	}
-	return v.fxManualOn[index] || v.fxEffects[index].fxPlaysFor(anim)
+	return v.FxManualOn[index] || v.FxEffects[index].fxPlaysFor(anim)
 }
 
-func (v *modelViewer) fxEffectVisible(index int) bool {
-	if v == nil || index < 0 || index >= len(v.fxEffects) {
+func (v *modelViewer) FxEffectVisible(index int) bool {
+	if v == nil || index < 0 || index >= len(v.FxEffects) {
 		return false
 	}
-	return v.fxEffects[index].fxPlaysFor(v.fxSelectionAnim)
+	return v.FxEffects[index].fxPlaysFor(v.FxSelectionAnim)
 }
 
-func (v *modelViewer) fxSetEffectSelected(index int, anim string, selected bool) {
-	if v == nil || index < 0 || index >= len(v.fxEffects) {
+func (v *modelViewer) FxSetEffectSelected(index int, anim string, selected bool) {
+	if v == nil || index < 0 || index >= len(v.FxEffects) {
 		return
 	}
-	anim = v.fxSelectionAnimName(anim)
+	anim = v.FxSelectionAnimName(anim)
 	if selected {
-		if v.fxManualOn == nil {
-			v.fxManualOn = make(map[int]bool)
+		if v.FxManualOn == nil {
+			v.FxManualOn = make(map[int]bool)
 		}
-		v.fxManualOn[index] = true
-		if v.fxManualOff != nil {
-			delete(v.fxManualOff, index)
+		v.FxManualOn[index] = true
+		if v.FxManualOff != nil {
+			delete(v.FxManualOff, index)
 		}
 	} else {
-		if v.fxManualOn != nil {
-			delete(v.fxManualOn, index)
+		if v.FxManualOn != nil {
+			delete(v.FxManualOn, index)
 		}
-		if v.fxManualOff == nil {
-			v.fxManualOff = make(map[int]bool)
+		if v.FxManualOff == nil {
+			v.FxManualOff = make(map[int]bool)
 		}
-		v.fxManualOff[index] = true
+		v.FxManualOff[index] = true
 	}
-	v.invalidate()
+	v.Invalidate()
 }
 
 // fxActiveEffects returns this clip's timeline-selected effects plus any
 // explicitly checked effects. Timeline selection controls when an effect
 // starts, even if a manual check adds it on a clip whose timeline does not
 // name it; such an effect starts at the clip's beginning.
-func (v *modelViewer) fxActiveEffects(anim string) []fxOverlayEffect {
-	if v == nil || len(v.fxEffects) == 0 {
+func (v *modelViewer) FxActiveEffects(anim string) []fxOverlayEffect {
+	if v == nil || len(v.FxEffects) == 0 {
 		return nil
 	}
-	anim = v.fxSelectionAnimName(anim)
+	anim = v.FxSelectionAnimName(anim)
 	var out []fxOverlayEffect
-	for i := range v.fxEffects {
-		if !v.fxEffectSelected(i, anim) {
+	for i := range v.FxEffects {
+		if !v.FxEffectSelected(i, anim) {
 			continue
 		}
-		e := v.fxEffects[i]
+		e := v.FxEffects[i]
 		if e.Timed && !e.fxPlaysFor(anim) {
 			e.Timed = false
 			e.FireTimes = nil
@@ -928,14 +928,14 @@ func (v *modelViewer) fxActiveEffects(anim string) []fxOverlayEffect {
 }
 
 // fxActiveIndices returns indices in the same stable order as fxEffects.
-func (v *modelViewer) fxActiveIndices(anim string) []int {
+func (v *modelViewer) FxActiveIndices(anim string) []int {
 	var out []int
 	if v == nil {
 		return nil
 	}
-	anim = v.fxSelectionAnimName(anim)
-	for i := range v.fxEffects {
-		if v.fxEffectSelected(i, anim) {
+	anim = v.FxSelectionAnimName(anim)
+	for i := range v.FxEffects {
+		if v.FxEffectSelected(i, anim) {
 			out = append(out, i)
 		}
 	}
@@ -2753,45 +2753,45 @@ func drawFxBeamQuad(dst *image.RGBA, p0, p1, q0, q1 *fauxgl.Vector, v0, v1, v2, 
 
 const markerArrowWorldLength = 0.5
 
-func (v *modelViewer) paintMarkerOverlay(gtx layout.Context, w, h int) {
-	at, ok := v.markerHighlight(w, h)
+func (v *modelViewer) PaintMarkerOverlay(gtx layout.Context, w, h int) {
+	at, ok := v.MarkerHighlight(w, h)
 	if !ok {
 		return
 	}
 	paintMarkerRing(gtx, at)
-	if tip, ok := v.markerArrow(w, h); ok {
+	if tip, ok := v.MarkerArrow(w, h); ok {
 		paintMarkerArrow(gtx, at, tip)
 	}
 }
 
-func (v *modelViewer) markerHighlight(w, h int) (fauxgl.Vector, bool) {
-	if v == nil || v.model == nil || v.markerIndex < 0 || v.markerIndex >= len(v.model.Markers) {
+func (v *modelViewer) MarkerHighlight(w, h int) (fauxgl.Vector, bool) {
+	if v == nil || v.Model == nil || v.MarkerIndex < 0 || v.MarkerIndex >= len(v.Model.Markers) {
 		return fauxgl.Vector{}, false
 	}
-	world, ok := v.model.MarkerWorld(v.markerIndex, v.pose(), true)
+	world, ok := v.Model.MarkerWorld(v.MarkerIndex, v.Pose(), true)
 	if !ok {
 		return fauxgl.Vector{}, false
 	}
-	p := fxProject(render.BuildViewMatrix(v.options(w, h)), world, w, h)
+	p := fxProject(render.BuildViewMatrix(v.Options(w, h)), world, w, h)
 	if p == nil {
 		return fauxgl.Vector{}, false
 	}
 	return *p, true
 }
 
-func (v *modelViewer) markerArrow(w, h int) (fauxgl.Vector, bool) {
-	if v == nil || v.model == nil || v.markerIndex < 0 || v.markerIndex >= len(v.model.Markers) {
+func (v *modelViewer) MarkerArrow(w, h int) (fauxgl.Vector, bool) {
+	if v == nil || v.Model == nil || v.MarkerIndex < 0 || v.MarkerIndex >= len(v.Model.Markers) {
 		return fauxgl.Vector{}, false
 	}
-	axis, ok := v.model.MarkerAxis(v.markerIndex, v.pose(), true)
+	axis, ok := v.Model.MarkerAxis(v.MarkerIndex, v.Pose(), true)
 	if !ok {
 		return fauxgl.Vector{}, false
 	}
-	world, ok := v.model.MarkerWorld(v.markerIndex, v.pose(), true)
+	world, ok := v.Model.MarkerWorld(v.MarkerIndex, v.Pose(), true)
 	if !ok {
 		return fauxgl.Vector{}, false
 	}
-	view := render.BuildViewMatrix(v.options(w, h))
+	view := render.BuildViewMatrix(v.Options(w, h))
 	at := fxProject(view, world, w, h)
 	tip := fxProject(view, world.Add(axis.MulScalar(markerArrowWorldLength)), w, h)
 	if at == nil || tip == nil {
@@ -2850,19 +2850,19 @@ func paintMarkerRing(gtx layout.Context, at fauxgl.Vector) {
 
 // paintFXAttributeMarkers draws optional origin rings and direction arrows for
 // effects whose attribute editor has those diagnostics enabled.
-func (v *modelViewer) paintFXAttributeMarkers(gtx layout.Context, w, h int) {
-	if v == nil || v.model == nil || w < 1 || h < 1 {
+func (v *modelViewer) PaintFXAttributeMarkers(gtx layout.Context, w, h int) {
+	if v == nil || v.Model == nil || w < 1 || h < 1 {
 		return
 	}
-	view := render.BuildViewMatrix(v.options(w, h))
-	pose := v.pose()
-	for i := range v.fxEffects {
-		e := &v.fxEffects[i]
+	view := render.BuildViewMatrix(v.Options(w, h))
+	pose := v.Pose()
+	for i := range v.FxEffects {
+		e := &v.FxEffects[i]
 		if !e.ShowMarker && !e.ShowDirection {
 			continue
 		}
 		origin := e.Origin
-		if ov, ok := v.fxOverrides[i]; ok && ov.HasOrigin {
+		if ov, ok := v.FxOverrides[i]; ok && ov.HasOrigin {
 			origin = ov.Origin
 		}
 		at := fxProject(view, origin, w, h)
@@ -2875,7 +2875,7 @@ func (v *modelViewer) paintFXAttributeMarkers(gtx layout.Context, w, h int) {
 		if e.ShowDirection {
 			axis := e.Direction
 			if axis.Length() < 1e-6 && e.Marker >= 0 {
-				axis, _ = v.model.MarkerAxis(e.Marker, pose, true)
+				axis, _ = v.Model.MarkerAxis(e.Marker, pose, true)
 			}
 			if axis.Length() > 1e-6 {
 				if tip := fxProject(view, origin.Add(axis.Normalize().MulScalar(markerArrowWorldLength)), w, h); tip != nil {
@@ -2927,62 +2927,62 @@ func fxOriginAxisFrames(e fxOverlayEffect, model *WhmModel, marker int, pose Whm
 	return [2][3]fauxgl.Vector{local, {{X: 1}, {Y: 1}, {Z: 1}}}
 }
 
-func (ui *uiState) fxAxesButton(gtx layout.Context, v *modelViewer) layout.Dimensions {
+func FxAxesButton(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
 	if v == nil {
 		return layout.Dimensions{}
 	}
-	if v.fxAxesClick.Clicked(gtx) {
-		v.showFXAxes = !v.showFXAxes
-		v.invalidate()
+	if v.FxAxesClick.Clicked(gtx) {
+		v.ShowFXAxes = !v.ShowFXAxes
+		v.Invalidate()
 	}
 	label := "FX axes"
-	if v.showFXAxes {
+	if v.ShowFXAxes {
 		label = "Axes on"
 	}
-	return ui.smallButton(gtx, &v.fxAxesClick, label)
+	return SmallButton(ui, gtx, &v.FxAxesClick, label)
 }
 
-func (ui *uiState) modelFxAxesOverlay(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t == nil || t.model == nil || t.model.model == nil || !t.model.showFXAxes {
+func ModelFxAxesOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t == nil || t.Model == nil || t.Model.Model == nil || !t.Model.ShowFXAxes {
 		return layout.Dimensions{}
 	}
 	w, h := gtx.Constraints.Max.X, gtx.Constraints.Max.Y
 	if w <= 0 || h <= 0 {
 		return layout.Dimensions{}
 	}
-	return t.model.layoutFXOriginAxes(ui.th, gtx, w, h)
+	return t.Model.LayoutFXOriginAxes(ui.Th, gtx, w, h)
 }
 
-func (v *modelViewer) layoutFXOriginAxes(th *material.Theme, gtx layout.Context, w, h int) layout.Dimensions {
-	if v == nil || v.model == nil || w <= 0 || h <= 0 {
+func (v *modelViewer) LayoutFXOriginAxes(th *material.Theme, gtx layout.Context, w, h int) layout.Dimensions {
+	if v == nil || v.Model == nil || w <= 0 || h <= 0 {
 		return layout.Dimensions{}
 	}
 	anim := ""
-	if v.anim != nil {
-		anim = v.anim.Name
+	if v.Anim != nil {
+		anim = v.Anim.Name
 	}
-	v.fxSelectionAnimName(anim)
-	indices := v.fxActiveIndices(anim)
+	v.FxSelectionAnimName(anim)
+	indices := v.FxActiveIndices(anim)
 	if len(indices) == 0 {
 		return layout.Dimensions{}
 	}
-	view := render.BuildViewMatrix(v.options(w, h))
-	pose := v.pose()
+	view := render.BuildViewMatrix(v.Options(w, h))
+	pose := v.Pose()
 	origins := make(map[[21]uint64]fxOriginAxesEntry, len(indices))
 	for _, index := range indices {
-		e := &v.fxEffects[index]
+		e := &v.FxEffects[index]
 		origin := e.Origin
-		if override, ok := v.fxOverrides[index]; ok && override.HasOrigin {
+		if override, ok := v.FxOverrides[index]; ok && override.HasOrigin {
 			origin = override.Origin
-		} else if p, ok := v.model.MarkerWorld(e.Marker, pose, true); ok {
+		} else if p, ok := v.Model.MarkerWorld(e.Marker, pose, true); ok {
 			origin = p
 		}
 		if e.Ground {
-			if override, ok := v.fxOverrides[index]; !ok || !override.HasOrigin {
-				origin = fxGroundOrigin(origin, float64(v.model.BoundMin[2]))
+			if override, ok := v.FxOverrides[index]; !ok || !override.HasOrigin {
+				origin = fxGroundOrigin(origin, float64(v.Model.BoundMin[2]))
 			}
 		}
-		frames := fxOriginAxisFrames(*e, v.model, e.Marker, pose)
+		frames := fxOriginAxisFrames(*e, v.Model, e.Marker, pose)
 		if e.HasManualOrigin && !e.ShowMarker && !e.ShowDirection {
 			continue
 		}

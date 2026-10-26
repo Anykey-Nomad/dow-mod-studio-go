@@ -23,8 +23,8 @@ func TestPersistedGPUAPIDefaultsToVulkan(t *testing.T) {
 		t.Fatalf("unmarshal legacy state: %v", err)
 	}
 	ui := newLocaleTestUI()
-	ui.applyPersistedSettings(old)
-	if got := ui.gpuAPI; got != render.DefaultGPUAPI {
+	ApplyPersistedSettings(ui, old)
+	if got := ui.GpuAPI; got != render.DefaultGPUAPI {
 		t.Fatalf("legacy config selected GPU API %q, want %q", got, render.DefaultGPUAPI)
 	}
 

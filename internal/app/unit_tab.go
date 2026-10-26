@@ -44,13 +44,13 @@ const unitTabPath = ""
 
 // isUnitTab reports whether a tab is the object interface.
 func isUnitTab(t *fileTab) bool {
-	return t != nil && t.kind == unitTabKind
+	return t != nil && t.Kind == unitTabKind
 }
 
 // unitTabIndex is where the object tab sits in the tab list, or -1 when it is
 // not open.
-func (ui *uiState) unitTabIndex() int {
-	for i, t := range ui.openTabs {
+func UnitTabIndex(ui *uiState) int {
+	for i, t := range ui.OpenTabs {
 		if isUnitTab(t) {
 			return i
 		}
@@ -59,39 +59,39 @@ func (ui *uiState) unitTabIndex() int {
 }
 
 // unitTabActive reports whether the object interface is the tab on screen.
-func (ui *uiState) unitTabActive() bool {
-	return isUnitTab(ui.activeTab())
+func UnitTabActive(ui *uiState) bool {
+	return isUnitTab(ActiveTab(ui))
 }
 
 // openUnitTab shows the object interface, opening its tab the first time. It is
 // a singleton: asking for it again just brings the existing tab forward, so the
 // user cannot end up with two copies browsing the same units.
-func (ui *uiState) openUnitTab() {
-	if idx := ui.unitTabIndex(); idx >= 0 {
-		ui.tabSel = idx + 1
-		ui.ensureTabClicks()
+func OpenUnitTab(ui *uiState) {
+	if idx := UnitTabIndex(ui); idx >= 0 {
+		ui.TabSel = idx + 1
+		EnsureTabClicks(ui)
 		return
 	}
-	ui.openTabs = append(ui.openTabs, &fileTab{kind: unitTabKind, path: unitTabPath})
-	ui.tabSel = len(ui.openTabs)
-	ui.ensureTabClicks()
+	ui.OpenTabs = append(ui.OpenTabs, &fileTab{Kind: unitTabKind, Path: unitTabPath})
+	ui.TabSel = len(ui.OpenTabs)
+	EnsureTabClicks(ui)
 }
 
 // closeUnitTab removes the object tab if it is open. Closing it leaves the
 // selection alone, so reopening it lands on the same unit.
-func (ui *uiState) closeUnitTab() {
-	idx := ui.unitTabIndex()
+func CloseUnitTab(ui *uiState) {
+	idx := UnitTabIndex(ui)
 	if idx < 0 {
 		// The tab is already gone, but a dropdown it left open would still be
 		// drawn over whatever replaced it, so the state is cleared either way.
-		ui.unitRaceOpen = false
-		ui.unitListOpen = false
+		ui.UnitRaceOpen = false
+		ui.UnitListOpen = false
 		return
 	}
-	ui.closeTabAt(idx)
+	CloseTabAt(ui, idx)
 	// An open dropdown belongs to the tab that went away.
-	ui.unitRaceOpen = false
-	ui.unitListOpen = false
+	ui.UnitRaceOpen = false
+	ui.UnitListOpen = false
 }
 
 // ── the body ────────────────────────────────────────────────────────────────
@@ -104,22 +104,22 @@ func (ui *uiState) closeUnitTab() {
 // over the columns instead of being painted over by them — a strip laid out as
 // a row above the columns would be drawn first, and the columns would then
 // cover everything the list hangs below it.
-func (ui *uiState) layoutUnitTabBody(gtx layout.Context) layout.Dimensions {
+func LayoutUnitTabBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 	stripH := gtx.Dp(unit.Dp(unitPickerStripHeightDp))
 	pad := gtx.Dp(unit.Dp(unitTabPadDp))
 	return layout.Stack{}.Layout(gtx,
 		// The columns, with the strip's height kept clear at the top.
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Top: unit.Dp(stripH + pad), Left: unit.Dp(pad), Right: unit.Dp(pad), Bottom: unit.Dp(pad)}.Layout(gtx, ui.layoutUnitBody)
+			return layout.Inset{Top: unit.Dp(stripH + pad), Left: unit.Dp(pad), Right: unit.Dp(pad), Bottom: unit.Dp(pad)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return LayoutUnitBody(ui, gtx) })
 		}),
 		// While a list is open, a transparent catcher over the columns: a click
 		// that misses the strip and the list lands here and puts the list away.
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			if !ui.unitPickerOpen() {
+			if !UnitPickerOpen(ui) {
 				return layout.Dimensions{}
 			}
 			pass := pointer.PassOp{}.Push(gtx.Ops)
-			dims := ui.unitDismissClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			dims := ui.UnitDismissClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			})
 			pass.Pop()
@@ -127,7 +127,7 @@ func (ui *uiState) layoutUnitTabBody(gtx layout.Context) layout.Dimensions {
 		}),
 		// The strip, and any open list hanging below it, on top of both.
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			ui.layoutUnitPickerLayer(gtx, stripH, pad)
+			LayoutUnitPickerLayer(ui, gtx, stripH, pad)
 			// The layer reports the whole area, so the columns are laid out at
 			// full size and the strip is free to overhang them.
 			return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -143,29 +143,29 @@ func (ui *uiState) layoutUnitTabBody(gtx layout.Context) layout.Dimensions {
 // the list can be lined up with its own field. The fields carry no clickable of
 // their own — the clickable is wrapped around them at the call site — so
 // measuring them here neither draws anything twice nor counts a click twice.
-func (ui *uiState) layoutUnitPickerLayer(gtx layout.Context, stripH, pad int) {
+func LayoutUnitPickerLayer(ui *uiState, gtx layout.Context, stripH, pad int) {
 	measure := func(label, value string) int {
 		var scratch op.Ops
 		mg := gtx
 		mg.Ops = &scratch
 		mg.Constraints.Min = image.Pt(0, stripH)
 		mg.Constraints.Max = image.Pt(gtx.Constraints.Max.X, stripH)
-		return ui.unitPickerField(mg, label, value, true, false).Size.X
+		return UnitPickerField(ui, mg, label, value, true, false).Size.X
 	}
 	// How far the unit field sits from the strip's own left edge. The list is
 	// drawn at the same offset, so it hangs under the field that opened it.
-	unitX := measure("Race", ui.pickerRaceLabel()) + gtx.Dp(unit.Dp(unitColGapDp))
+	unitX := measure("Race", PickerRaceLabel(ui)) + gtx.Dp(unit.Dp(unitColGapDp))
 
 	// The strip itself, at the top of the layer with the usual padding.
 	sg := gtx
 	sg.Constraints.Min = image.Pt(0, stripH)
 	sg.Constraints.Max = image.Pt(gtx.Constraints.Max.X, stripH)
 	padOff := op.Offset(image.Pt(pad, 0)).Push(gtx.Ops)
-	ui.layoutUnitPickerRow(sg)
+	LayoutUnitPickerRow(ui, sg)
 	padOff.Pop()
 
-	if !ui.unitPickerOpen() {
-		ui.unitDropBox = image.Rectangle{}
+	if !UnitPickerOpen(ui) {
+		ui.UnitDropBox = image.Rectangle{}
 		return
 	}
 	// The list hangs below the strip, over the columns. Its height is not taken
@@ -175,14 +175,14 @@ func (ui *uiState) layoutUnitPickerLayer(gtx layout.Context, stripH, pad int) {
 	lg.Constraints.Max = image.Pt(gtx.Constraints.Max.X-pad, gtx.Constraints.Max.Y-stripH)
 	listOff := op.Offset(image.Pt(pad, stripH)).Push(gtx.Ops)
 	offset := unitX
-	if ui.unitRaceOpen {
+	if ui.UnitRaceOpen {
 		offset = 0
 	}
-	dims := ui.layoutUnitDropdown(lg, offset)
+	dims := LayoutUnitDropdown(ui, lg, offset)
 	listOff.Pop()
 	// Recorded for tests, which otherwise have no way to know where the list
 	// landed and end up probing the columns beside it.
-	ui.unitDropBox = image.Rect(pad+offset, stripH, pad+offset+dims.Size.X, stripH+dims.Size.Y)
+	ui.UnitDropBox = image.Rect(pad+offset, stripH, pad+offset+dims.Size.X, stripH+dims.Size.Y)
 }
 
 // ── the content area ────────────────────────────────────────────────────────
@@ -190,22 +190,22 @@ func (ui *uiState) layoutUnitPickerLayer(gtx layout.Context, stripH, pad int) {
 // unitTabOwnsLeftPanel reports whether the object tab is drawn over the area
 // the file tree normally occupies. It does, since the tree has nothing to say
 // about browsing units and the section menu is the left column instead.
-func (ui *uiState) unitTabOwnsLeftPanel() bool { return ui.unitTabActive() }
+func UnitTabOwnsLeftPanel(ui *uiState) bool { return UnitTabActive(ui) }
 
 // unitTabOwnsMiddlePanel is the same question for the middle panel, and the
 // answer matches: the object columns take that space too.
-func (ui *uiState) unitTabOwnsMiddlePanel() bool { return ui.unitTabActive() }
+func UnitTabOwnsMiddlePanel(ui *uiState) bool { return UnitTabActive(ui) }
 
 // unitInfoTable is the object tab's right hand panel: what the selected unit
 // is and where it came from. It deliberately repeats only the identifying rows
 // — the race, the kind and the file — because the columns already carry the
 // unit's properties, and a panel that listed them again would say nothing new.
-func (ui *uiState) unitInfoTable(gtx layout.Context) layout.Dimensions {
-	d := ui.currentUnitDetails()
+func UnitInfoTable(ui *uiState, gtx layout.Context) layout.Dimensions {
+	d := CurrentUnitDetails(ui)
 	if d == nil {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return centeredPanelLabel(gtx, ui.th, "No unit selected", unit.Sp(10), cTextDim)
+				return centeredPanelLabel(gtx, ui.Th, "No unit selected", unit.Sp(10), cTextDim)
 			}),
 		)
 	}
@@ -216,12 +216,12 @@ func (ui *uiState) unitInfoTable(gtx layout.Context) layout.Dimensions {
 		{"File", d.Entry.Path},
 	}
 	children := []layout.FlexChild{
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }),
 	}
 	for i, r := range rows {
 		r := r
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, r.label, r.value, i%2 == 1)
+			return TableRow2(ui, gtx, r.label, r.value, i%2 == 1)
 		}))
 	}
 	// The screen name is the one row here that is a localisation rather than a
@@ -231,12 +231,12 @@ func (ui *uiState) unitInfoTable(gtx layout.Context) layout.Dimensions {
 	// most wants to be able to fix from here.
 	screenNameID := d.ScreenNameID()
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.localePanelRow(gtx, "Screen name", screenNameID, localeFieldForID(d, screenNameID))
+		return LocalePanelRow(ui, gtx, "Screen name", screenNameID, localeFieldForID(d, screenNameID))
 	}))
 	if d.Error != "" {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), "Could not read this unit:\n"+d.Error)
+				l := material.Label(ui.Th, unit.Sp(10), "Could not read this unit:\n"+d.Error)
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			})
@@ -259,7 +259,7 @@ func unitTabLabelFor(t *fileTab) string {
 // no file must not be closed when a file disappears, and must not be persisted
 // as a path.
 func unitTabHasNoFile(t *fileTab) bool {
-	return isUnitTab(t) || strings.TrimSpace(t.path) == ""
+	return isUnitTab(t) || strings.TrimSpace(t.Path) == ""
 }
 
 // ─── merged from unit_names.go ───────────────────────────────────────────────
@@ -293,21 +293,21 @@ const unitNameBatchSize = 16
 // for the catalog just built. A scan already running for the same tree is left
 // alone, and a scan for a different tree is stopped rather than left to write
 // into an index nobody reads any more.
-func (ui *uiState) startUnitNameScan(tree *modtree.ModTree, cat *unitCatalog) {
+func StartUnitNameScan(ui *uiState, tree *modtree.ModTree, cat *unitCatalog) {
 	if tree == nil || cat == nil {
 		return
 	}
-	if ui.unitNamesRunning && ui.unitNamesTree == tree {
+	if ui.UnitNamesRunning && ui.UnitNamesTree == tree {
 		return
 	}
-	ui.stopUnitNameScan()
+	StopUnitNameScan(ui)
 
-	ui.unitNamesTree = tree
-	ui.unitNames = make(map[string]string)
-	ui.unitNamesCh = make(chan unitNameBatch, 8)
+	ui.UnitNamesTree = tree
+	ui.UnitNames = make(map[string]string)
+	ui.UnitNamesCh = make(chan unitNameBatch, 8)
 	stop := make(chan struct{})
-	ui.unitNamesStop = stop
-	ui.unitNamesRunning = true
+	ui.UnitNamesStop = stop
+	ui.UnitNamesRunning = true
 
 	// The paths are copied so the goroutine does not walk a catalog the UI
 	// thread is free to replace.
@@ -317,7 +317,7 @@ func (ui *uiState) startUnitNameScan(tree *modtree.ModTree, cat *unitCatalog) {
 			paths = append(paths, u.Path)
 		}
 	}
-	ch := ui.unitNamesCh
+	ch := ui.UnitNamesCh
 	go func() {
 		batch := make(map[string]string, unitNameBatchSize)
 		flush := func(done bool) bool {
@@ -348,34 +348,34 @@ func (ui *uiState) startUnitNameScan(tree *modtree.ModTree, cat *unitCatalog) {
 // stopUnitNameScan ends a running scan. The goroutine notices through its stop
 // channel and returns, so a module reload does not leave one reading a tree that
 // is being closed underneath it.
-func (ui *uiState) stopUnitNameScan() {
-	if ui.unitNamesStop != nil {
-		close(ui.unitNamesStop)
-		ui.unitNamesStop = nil
+func StopUnitNameScan(ui *uiState) {
+	if ui.UnitNamesStop != nil {
+		close(ui.UnitNamesStop)
+		ui.UnitNamesStop = nil
 	}
-	ui.unitNamesRunning = false
-	ui.unitNamesCh = nil
-	ui.unitNamesTree = nil
+	ui.UnitNamesRunning = false
+	ui.UnitNamesCh = nil
+	ui.UnitNamesTree = nil
 }
 
 // pollUnitNames takes whatever the scan has finished and reports whether
 // anything new arrived, so the caller can ask for a redraw. Nothing else is
 // animating while a module is idle, so without that a list whose names arrived
 // quietly would sit on file names until the mouse happened to move.
-func (ui *uiState) pollUnitNames() bool {
-	if ui.unitNamesCh == nil {
+func PollUnitNames(ui *uiState) bool {
+	if ui.UnitNamesCh == nil {
 		return false
 	}
 	got := false
 	for {
 		select {
-		case batch := <-ui.unitNamesCh:
+		case batch := <-ui.UnitNamesCh:
 			for path, id := range batch.names {
-				ui.unitNames[path] = id
+				ui.UnitNames[path] = id
 			}
 			if batch.done {
-				ui.unitNamesDone = true
-				ui.stopUnitNameScan()
+				ui.UnitNamesDone = true
+				StopUnitNameScan(ui)
 			}
 			got = true
 		default:
@@ -424,11 +424,11 @@ func unitScreenNameIDOf(rf *rgd.RgdFile) (string, bool) {
 // the unit has no name yet, carries none, or the string table has no entry for
 // it. The id is only a cache key here; the text is read on the UI thread, so a
 // language change needs no rescan.
-func (ui *uiState) unitLocalisedName(u unitEntry) string {
-	if len(ui.unitNames) == 0 || u.Path == "" {
+func UnitLocalisedName(ui *uiState, u unitEntry) string {
+	if len(ui.UnitNames) == 0 || u.Path == "" {
 		return ""
 	}
-	id, ok := ui.unitNames[strings.ToLower(u.Path)]
+	id, ok := ui.UnitNames[strings.ToLower(u.Path)]
 	if !ok {
 		return ""
 	}
@@ -439,8 +439,8 @@ func (ui *uiState) unitLocalisedName(u unitEntry) string {
 // the string table has one, and its .rgd file name where it does not. The file
 // name is a real fallback rather than a placeholder — it is what the game uses
 // for the unit's hotkey.
-func (ui *uiState) unitLabel(u unitEntry) string {
-	if text := ui.unitLocalisedName(u); text != "" {
+func UnitLabel(ui *uiState, u unitEntry) string {
+	if text := UnitLocalisedName(ui, u); text != "" {
 		return text
 	}
 	return u.Name
@@ -496,12 +496,12 @@ func unitFieldKey(f unitField) string {
 // unitInfoFieldSelected is the row of the info list the right column is
 // editing, or nil when there is none — no unit, an empty info list, or a row
 // that is a count rather than a field.
-func (ui *uiState) unitInfoFieldSelected() *unitField {
-	d := ui.currentUnitDetails()
+func UnitInfoFieldSelected(ui *uiState) *unitField {
+	d := CurrentUnitDetails(ui)
 	if d == nil || len(d.Fields) == 0 {
 		return nil
 	}
-	idx := clampInt(ui.unitInfoSel, 0, len(d.Fields)-1)
+	idx := clampInt(ui.UnitInfoSel, 0, len(d.Fields)-1)
 	f := d.Fields[idx]
 	if !unitInfoRowSelectable(&f) {
 		return nil
@@ -528,7 +528,7 @@ func unitInfoFieldAt(d *unitDetails, index int) *unitField {
 // selection is put back on the same field rather than the same index: a change
 // that empties a row drops it from the list, and the row after it would
 // otherwise slide into the selection.
-func (ui *uiState) applyUnitFieldText(f *unitField, text string) error {
+func ApplyUnitFieldText(ui *uiState, f *unitField, text string) error {
 	if f == nil || f.Entry == nil {
 		return fmt.Errorf("this row is a count, not a field of the file")
 	}
@@ -539,14 +539,14 @@ func (ui *uiState) applyUnitFieldText(f *unitField, text string) error {
 	if !changed {
 		return nil
 	}
-	ui.unitInfoDirty = true
-	d := ui.currentUnitDetails()
+	ui.UnitInfoDirty = true
+	d := CurrentUnitDetails(ui)
 	if d == nil {
 		return nil
 	}
 	d.RebuildFromFile()
 	if i := unitFieldIndex(d.Fields, f.Entry); i >= 0 {
-		ui.unitInfoSel = i
+		ui.UnitInfoSel = i
 	}
 	return nil
 }
@@ -555,43 +555,43 @@ func (ui *uiState) applyUnitFieldText(f *unitField, text string) error {
 // says where it went. A unit that is not dirty is left alone rather than
 // written out again: rewriting an unchanged file is what makes a tool's idea of
 // "modified" and a modder's drift apart for no reason.
-func (ui *uiState) saveUnitDetails() (string, error) {
-	d := ui.currentUnitDetails()
+func SaveUnitDetails(ui *uiState) (string, error) {
+	d := CurrentUnitDetails(ui)
 	if d == nil || d.File == nil {
 		return "", fmt.Errorf("no unit is open")
 	}
-	if !ui.unitInfoDirty {
+	if !ui.UnitInfoDirty {
 		return "", fmt.Errorf("there is nothing to save")
 	}
-	if ui.unitValError != "" {
-		return "", fmt.Errorf("correct %s first", ui.unitValError)
+	if ui.UnitValError != "" {
+		return "", fmt.Errorf("correct %s first", ui.UnitValError)
 	}
 	data, err := d.File.MarshalBinary()
 	if err != nil {
 		return "", err
 	}
-	if ui.modTree == nil {
+	if ui.ModTree == nil {
 		return "", fmt.Errorf("no mod is loaded")
 	}
-	disk, err := ui.modTree.WriteOverlayFile(d.Entry.Path, data)
+	disk, err := ui.ModTree.WriteOverlayFile(d.Entry.Path, data)
 	if err != nil {
 		return "", err
 	}
-	ui.unitInfoDirty = false
+	ui.UnitInfoDirty = false
 	return fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(d.Entry.Path), disk, len(data)), nil
 }
 
 // revertUnitDetails throws the changes away and reads the unit from the file
 // again, which is the only way back once a value has been typed wrongly: undo
 // per keystroke would need the history the editor does not keep.
-func (ui *uiState) revertUnitDetails() {
-	ui.unitDetails = nil
-	ui.unitDetailsPath = ""
-	ui.unitInfoDirty = false
-	ui.unitValError = ""
-	ui.unitValBound = ""
-	ui.unitValEditor.SetText("")
-	ui.unitInfoSel = 0
+func RevertUnitDetails(ui *uiState) {
+	ui.UnitDetails = nil
+	ui.UnitDetailsPath = ""
+	ui.UnitInfoDirty = false
+	ui.UnitValError = ""
+	ui.UnitValBound = ""
+	ui.UnitValEditor.SetText("")
+	ui.UnitInfoSel = 0
 }
 
 // markUnitFieldDirty marks the unit on screen as changed when a field of it has
@@ -603,15 +603,15 @@ func (ui *uiState) revertUnitDetails() {
 //
 // A field of another file is ignored, because a change to a file that is not on
 // screen is that file's own business.
-func (ui *uiState) markUnitFieldDirty(f *rgd.RgdEntry) {
+func MarkUnitFieldDirty(ui *uiState, f *rgd.RgdEntry) {
 	if f == nil {
 		return
 	}
-	d := ui.currentUnitDetails()
+	d := CurrentUnitDetails(ui)
 	if d == nil || d.File == nil || rgdPathOf(d.File.Root, f) == "" {
 		return
 	}
-	ui.unitInfoDirty = true
+	ui.UnitInfoDirty = true
 }
 
 // rgdPathOf is where an entry sits in its file, as the dotted path the freeze
@@ -655,22 +655,22 @@ func unitBoolText(v bool) string {
 // The editor is bound to a field rather than to a row index, because the row a
 // field sits at moves when the list is rebuilt and a bound-to-index editor
 // would then write into whatever took its place.
-func (ui *uiState) unitSyncValEditor(gtx layout.Context, f *unitField) {
+func UnitSyncValEditor(ui *uiState, gtx layout.Context, f *unitField) {
 	if f == nil || f.Entry == nil || !rgdIsEditableType(f.Entry.Type) || f.Entry.Type == rgd.RgdTypeBool {
 		return
 	}
-	ed := &ui.unitValEditor
+	ed := &ui.UnitValEditor
 	fieldKey := unitFieldKey(*f)
-	if ui.unitValBound != fieldKey {
+	if ui.UnitValBound != fieldKey {
 		ed.SetText(f.Entry.DisplayValue())
-		ui.unitValBound = fieldKey
-		ui.unitValError = ""
+		ui.UnitValBound = fieldKey
+		ui.UnitValError = ""
 	}
 	ed.SingleLine = true
 	ed.Submit = true
 	// The editor is a one line field, so a press into it has to be given focus
 	// or the reader would type into the window and wonder where it went.
-	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	submit := false
@@ -689,84 +689,84 @@ func (ui *uiState) unitSyncValEditor(gtx layout.Context, f *unitField) {
 			break
 		}
 	}
-	if err := ui.applyUnitFieldText(f, ed.Text()); err != nil {
-		ui.unitValError = err.Error()
+	if err := ApplyUnitFieldText(ui, f, ed.Text()); err != nil {
+		ui.UnitValError = err.Error()
 	} else {
-		ui.unitValError = ""
+		ui.UnitValError = ""
 	}
 	if submit {
-		ui.saveUnitFromPanel()
+		SaveUnitFromPanel(ui)
 	}
 }
 
 // saveUnitFromPanel is the Save button's action: it writes the unit and puts
 // what happened in the status line, which is where every other write in the app
 // reports itself.
-func (ui *uiState) saveUnitFromPanel() {
-	if !ui.unitInfoDirty {
-		ui.statusText = "This unit has no unsaved changes"
+func SaveUnitFromPanel(ui *uiState) {
+	if !ui.UnitInfoDirty {
+		ui.StatusText = "This unit has no unsaved changes"
 		return
 	}
-	line, err := ui.saveUnitDetails()
+	line, err := SaveUnitDetails(ui)
 	if err != nil {
-		ui.statusText = "Save failed: " + err.Error()
+		ui.StatusText = "Save failed: " + err.Error()
 		return
 	}
-	ui.statusText = line
-	ui.markStateDirty()
+	ui.StatusText = line
+	MarkStateDirty(ui)
 }
 
 // handleUnitFieldInput owns the presses of the attribute editor: the rows of
 // the info list that select a field, the boolean toggle, the editor's typing
 // and the three buttons. It runs after the section list, so a press that
 // changed section is already seen here.
-func (ui *uiState) handleUnitFieldInput(gtx layout.Context) {
-	if ui.currentUnitSection().label != "Unit info" {
+func HandleUnitFieldInput(ui *uiState, gtx layout.Context) {
+	if CurrentUnitSection(ui).label != "Unit info" {
 		return
 	}
-	d := ui.currentUnitDetails()
+	d := CurrentUnitDetails(ui)
 	if d == nil {
 		return
 	}
-	ui.ensureUnitInfoClicks(len(d.Fields))
-	for i := range ui.unitInfoClicks {
-		if i < len(ui.unitInfoClicks) && ui.unitInfoClicks[i].Clicked(gtx) {
-			ui.unitInfoSel = i
+	EnsureUnitInfoClicks(ui, len(d.Fields))
+	for i := range ui.UnitInfoClicks {
+		if i < len(ui.UnitInfoClicks) && ui.UnitInfoClicks[i].Clicked(gtx) {
+			ui.UnitInfoSel = i
 		}
 	}
-	if ui.unitOpenRgdClick.Clicked(gtx) {
-		ui.openRgd(d.Entry.Path)
+	if ui.UnitOpenRgdClick.Clicked(gtx) {
+		OpenRgd(ui, d.Entry.Path)
 		return
 	}
-	if ui.unitRevertClick.Clicked(gtx) {
-		ui.revertUnitDetails()
-		ui.statusText = "Changes to this unit thrown away"
+	if ui.UnitRevertClick.Clicked(gtx) {
+		RevertUnitDetails(ui)
+		ui.StatusText = "Changes to this unit thrown away"
 		return
 	}
-	if ui.unitSaveClick.Clicked(gtx) {
-		ui.saveUnitFromPanel()
+	if ui.UnitSaveClick.Clicked(gtx) {
+		SaveUnitFromPanel(ui)
 		return
 	}
-	f := ui.unitInfoFieldSelected()
+	f := UnitInfoFieldSelected(ui)
 	if f == nil {
 		return
 	}
 	if f.Entry.Type == rgd.RgdTypeBool {
-		if ui.unitBoolClick.Clicked(gtx) {
-			if err := ui.applyUnitFieldText(f, unitBoolText(f.Entry.BoolVal)); err != nil {
-				ui.unitValError = err.Error()
+		if ui.UnitBoolClick.Clicked(gtx) {
+			if err := ApplyUnitFieldText(ui, f, unitBoolText(f.Entry.BoolVal)); err != nil {
+				ui.UnitValError = err.Error()
 			} else {
-				ui.unitValError = ""
+				ui.UnitValError = ""
 			}
 		}
 		return
 	}
-	ui.unitSyncValEditor(gtx, f)
+	UnitSyncValEditor(ui, gtx, f)
 }
 
-func (ui *uiState) ensureUnitInfoClicks(n int) {
-	if len(ui.unitInfoClicks) != n {
-		ui.unitInfoClicks = make([]widget.Clickable, n)
+func EnsureUnitInfoClicks(ui *uiState, n int) {
+	if len(ui.UnitInfoClicks) != n {
+		ui.UnitInfoClicks = make([]widget.Clickable, n)
 	}
 }
 
@@ -775,41 +775,41 @@ func (ui *uiState) ensureUnitInfoClicks(n int) {
 // layoutUnitFieldPanel is the right column of the info section: which field the
 // list has selected, where it sits in the file, what type it is, and the editor
 // that changes it.
-func (ui *uiState) layoutUnitFieldPanel(gtx layout.Context, sec unitSection) layout.Dimensions {
-	d := ui.currentUnitDetails()
+func LayoutUnitFieldPanel(ui *uiState, gtx layout.Context, sec unitSection) layout.Dimensions {
+	d := CurrentUnitDetails(ui)
 	body := func(gtx layout.Context) layout.Dimensions {
 		if d == nil || d.Error != "" {
-			return ui.unitEmptyState(gtx)
+			return UnitEmptyState(ui, gtx)
 		}
-		f := ui.unitInfoFieldSelected()
+		f := UnitInfoFieldSelected(ui)
 		if f == nil {
-			return unitFieldNote(gtx, ui.th, "Select a row in the info list to change it.")
+			return unitFieldNote(gtx, ui.Th, "Select a row in the info list to change it.")
 		}
 		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.unitKeyValueRow(gtx, "Field", f.Label, false)
+					return UnitKeyValueRow(ui, gtx, "Field", f.Label, false)
 				})
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.unitKeyValueRow(gtx, "In file", rgdPathOf(d.File.Root, f.Entry), false)
+					return UnitKeyValueRow(ui, gtx, "In file", rgdPathOf(d.File.Root, f.Entry), false)
 				})
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.unitKeyValueRow(gtx, "Type", f.Entry.TypeLabel(), false)
+					return UnitKeyValueRow(ui, gtx, "Type", f.Entry.TypeLabel(), false)
 				})
 			}),
 		}
-		children = append(children, ui.unitFieldValueWidget(gtx, f)...)
-		children = append(children, ui.unitFieldButtons(gtx)...)
+		children = append(children, UnitFieldValueWidget(ui, gtx, f)...)
+		children = append(children, UnitFieldButtons(ui, gtx)...)
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	}
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, sec.rightTitle)
+				return LayoutUnitColumnHeader(ui, gtx, sec.rightTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -824,7 +824,7 @@ func (ui *uiState) layoutUnitFieldPanel(gtx layout.Context, sec unitSection) lay
 // both slower and easier to get wrong, and a text editor for everything else.
 // The error line is under either of them, because a value that would not parse
 // has to be shown as refused rather than simply not applied.
-func (ui *uiState) unitFieldValueWidget(gtx layout.Context, f *unitField) []layout.FlexChild {
+func UnitFieldValueWidget(ui *uiState, gtx layout.Context, f *unitField) []layout.FlexChild {
 	out := make([]layout.FlexChild, 0, 3)
 	if f.Entry.Type == rgd.RgdTypeBool {
 		out = append(out, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -833,18 +833,18 @@ func (ui *uiState) unitFieldValueWidget(gtx layout.Context, f *unitField) []layo
 				value = "True"
 			}
 			return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.toggleButton(gtx, &ui.unitBoolClick, value, f.Entry.BoolVal, cSelectBg)
+				return ToggleButton(ui, gtx, &ui.UnitBoolClick, value, f.Entry.BoolVal, cSelectBg)
 			})
 		}))
 	} else {
 		out = append(out, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRowEditor(gtx, "Value", &ui.unitValEditor, false, ui.unitValError)
+			return TableRowEditor(ui, gtx, "Value", &ui.UnitValEditor, false, ui.UnitValError)
 		}))
 	}
-	if ui.unitValError != "" {
+	if ui.UnitValError != "" {
 		out = append(out, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return unitFieldNote(gtx, ui.th, ui.unitValError)
+				return unitFieldNote(gtx, ui.Th, ui.UnitValError)
 			})
 		}))
 	}
@@ -853,30 +853,30 @@ func (ui *uiState) unitFieldValueWidget(gtx layout.Context, f *unitField) []layo
 
 // unitFieldButtons is the row of buttons under the value: save, throw away, and
 // the way out to the raw view for the fields this panel does not show.
-func (ui *uiState) unitFieldButtons(gtx layout.Context) []layout.FlexChild {
+func UnitFieldButtons(ui *uiState, gtx layout.Context) []layout.FlexChild {
 	note := "Enter saves. The change is written into this mod, not the game."
-	if ui.unitInfoDirty {
+	if ui.UnitInfoDirty {
 		note = "Unsaved changes. " + note
 	}
 	return []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.primaryButton(gtx, &ui.unitSaveClick, "Save unit")
+					return PrimaryButton(ui, gtx, &ui.UnitSaveClick, "Save unit")
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitRevertClick, "Revert", !ui.unitInfoDirty)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitRevertClick, "Revert", !ui.UnitInfoDirty)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButton(gtx, &ui.unitOpenRgdClick, "Open .rgd")
+					return SmallButton(ui, gtx, &ui.UnitOpenRgdClick, "Open .rgd")
 				}),
 			)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return unitFieldNote(gtx, ui.th, note)
+				return unitFieldNote(gtx, ui.Th, note)
 			})
 		}),
 	}
@@ -906,14 +906,14 @@ func unitInfoRowSelectable(f *unitField) bool {
 
 // layoutUnitInfoRow is one row of the info list: the section's heading where a
 // section starts, and the value line itself.
-func (ui *uiState) layoutUnitInfoRow(gtx layout.Context, index int, f *unitField) layout.Dimensions {
+func LayoutUnitInfoRow(ui *uiState, gtx layout.Context, index int, f *unitField) layout.Dimensions {
 	body := func(gtx layout.Context) layout.Dimensions {
 		if f == nil {
 			return layout.Dimensions{}
 		}
 		value := func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.unitKeyValueRowFor(gtx, f.Label, f.Value, f.IsLocID, f.LocID, f.Entry)
+				return UnitKeyValueRowFor(ui, gtx, f.Label, f.Value, f.IsLocID, f.LocID, f.Entry)
 			})
 		}
 		if !f.StartsGroup {
@@ -922,7 +922,7 @@ func (ui *uiState) layoutUnitInfoRow(gtx layout.Context, index int, f *unitField
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), f.Group)
+					l := material.Label(ui.Th, unit.Sp(11), f.Group)
 					l.Color = cTextDim
 					l.Font.Weight = font.SemiBold
 					l.MaxLines = 1
@@ -932,24 +932,24 @@ func (ui *uiState) layoutUnitInfoRow(gtx layout.Context, index int, f *unitField
 			layout.Rigid(value),
 		)
 	}
-	if !unitInfoRowSelectable(f) || index < 0 || index >= len(ui.unitInfoClicks) {
+	if !unitInfoRowSelectable(f) || index < 0 || index >= len(ui.UnitInfoClicks) {
 		return body(gtx)
 	}
-	return ui.unitInfoRowFrame(gtx, index, body)
+	return UnitInfoRowFrame(ui, gtx, index, body)
 }
 
 // unitInfoRowFrame is the selection and hover of a row, under the row itself.
 // It is the same shape the selectable rows of the weapon lists use, so a row
 // looks selected or not in the same way wherever it is.
-func (ui *uiState) unitInfoRowFrame(gtx layout.Context, index int, body layout.Widget) layout.Dimensions {
+func UnitInfoRowFrame(ui *uiState, gtx layout.Context, index int, body layout.Widget) layout.Dimensions {
 	bg := cPanelBg
 	switch {
-	case index == ui.unitInfoSel:
+	case index == ui.UnitInfoSel:
 		bg = cSelectBg
-	case ui.unitInfoClicks[index].Hovered():
+	case ui.UnitInfoClicks[index].Hovered():
 		bg = cMenuHover
 	}
-	return ui.unitInfoClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.UnitInfoClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				if bg != cPanelBg {

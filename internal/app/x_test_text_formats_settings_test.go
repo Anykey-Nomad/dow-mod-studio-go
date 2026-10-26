@@ -8,8 +8,8 @@ import (
 // The list a reader sets has to survive being written to the state file and
 // read back, or the setting quietly forgets itself between sessions.
 func TestTextFormatsSurviveTheStateFile(t *testing.T) {
-	ui := &uiState{textEditorFormats: parseTextFormats(".lua, .txt, .dsl")}
-	state := persistedState{TextFormats: formatTextFormats(ui.textEditorFormats)}
+	ui := &uiState{TextEditorFormats: parseTextFormats(".lua, .txt, .dsl")}
+	state := persistedState{TextFormats: formatTextFormats(ui.TextEditorFormats)}
 	data, err := json.Marshal(state)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -46,8 +46,8 @@ func TestAStateFileWithoutTheFormatsFallsBackToTheDefault(t *testing.T) {
 		t.Fatalf("no field read back as %v, want the %d defaults", got, len(defaultTextFormats))
 	}
 	ui := &uiState{}
-	ui.applyPersistedSettings(back)
-	if !ui.isEditorFile("script.lua") {
+	ApplyPersistedSettings(ui, back)
+	if !IsEditorFile(ui, "script.lua") {
 		t.Error("a state file with no formats field stopped .lua from opening")
 	}
 }
@@ -56,11 +56,11 @@ func TestAStateFileWithoutTheFormatsFallsBackToTheDefault(t *testing.T) {
 // list has to be the one in force afterwards.
 func TestApplyingPersistedSettingsInstallsTheFormats(t *testing.T) {
 	ui := &uiState{}
-	ui.applyPersistedSettings(persistedState{TextFormats: ".lua, .mydsl"})
-	if !ui.isEditorFile("x.mydsl") {
+	ApplyPersistedSettings(ui, persistedState{TextFormats: ".lua, .mydsl"})
+	if !IsEditorFile(ui, "x.mydsl") {
 		t.Error("the reader's own format did not open after applying the settings")
 	}
-	if ui.isEditorFile("x.txt") {
+	if IsEditorFile(ui, "x.txt") {
 		t.Error("a format left out of the reader's list still opened")
 	}
 }
@@ -69,10 +69,10 @@ func TestApplyingPersistedSettingsInstallsTheFormats(t *testing.T) {
 // the editor works before any settings have been loaded.
 func TestTheDefaultFormatsApplyToAFreshWindow(t *testing.T) {
 	ui := newUI(unitTestTheme())
-	if !ui.isEditorFile("script.lua") {
+	if !IsEditorFile(ui, "script.lua") {
 		t.Error("a fresh window does not open .lua")
 	}
-	if ui.isEditorFile("thing.unknown") {
+	if IsEditorFile(ui, "thing.unknown") {
 		t.Error("a fresh window opened a format that is not in the list")
 	}
 }

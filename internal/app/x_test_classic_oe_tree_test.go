@@ -206,16 +206,16 @@ func TestClassicOETreeJumpIndex(t *testing.T) {
 
 func TestClassicOEDoubleClick(t *testing.T) {
 	var ui uiState
-	if ui.classicOEDoubleClick("motion:phase_in") {
+	if ClassicOEDoubleClick(ui, "motion:phase_in") {
 		t.Fatal("the first press reported a double")
 	}
-	if !ui.classicOEDoubleClick("motion:phase_in") {
+	if !ClassicOEDoubleClick(ui, "motion:phase_in") {
 		t.Fatal("an immediate second press on the same row was not a double")
 	}
-	if ui.classicOEDoubleClick("motion:phase_in") {
+	if ClassicOEDoubleClick(ui, "motion:phase_in") {
 		t.Fatal("a third press repeated the double instead of starting fresh")
 	}
-	if ui.classicOEDoubleClick("action:default") {
+	if ClassicOEDoubleClick(ui, "action:default") {
 		t.Fatal("a first press on another row counted as a double")
 	}
 }

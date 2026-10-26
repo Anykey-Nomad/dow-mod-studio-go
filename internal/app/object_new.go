@@ -80,8 +80,8 @@ func newObjTemplateNameError(kind newObjKind, name string) error {
 // name that already names a file of the mod or of the game, are both errors the
 // dialog shows, because an object that overwrote somebody's would be worse than
 // one that was not created.
-func (ui *uiState) createNewObject(kind newObjKind, race, name string) (string, error) {
-	if ui.modTree == nil {
+func CreateNewObject(ui *uiState, kind newObjKind, race, name string) (string, error) {
+	if ui.ModTree == nil {
 		return "", fmt.Errorf("no module is loaded")
 	}
 	if err := newObjTemplateNameError(kind, name); err != nil {
@@ -91,7 +91,7 @@ func (ui *uiState) createNewObject(kind newObjKind, race, name string) (string, 
 		return "", fmt.Errorf("no race is selected, so there is no folder to write the %s into", kind.newObjNoun())
 	}
 	virtual := kind.newObjPath(race, name)
-	if ui.modTree.FindFile(virtual) != nil {
+	if ui.ModTree.FindFile(virtual) != nil {
 		return "", fmt.Errorf("%s already exists", name)
 	}
 	var file *rgd.RgdFile
@@ -104,24 +104,24 @@ func (ui *uiState) createNewObject(kind newObjKind, race, name string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("the %s could not be written: %v", kind.newObjNoun(), err)
 	}
-	if _, err := ui.modTree.WriteOverlayFile(virtual, data); err != nil {
+	if _, err := ui.ModTree.WriteOverlayFile(virtual, data); err != nil {
 		return "", fmt.Errorf("the %s could not be saved: %v", kind.newObjNoun(), err)
 	}
 	// The catalogue is a snapshot of the tree, so it is thrown away and read
 	// again: that is what puts the new object in the list and in the pickers.
-	ui.unitCatalog = nil
-	ui.unitDetails = nil
-	ui.unitDetailsPath = ""
-	ui.selectNewObject(race, virtual)
-	ui.statusText = fmt.Sprintf("Created %s", name)
-	ui.markStateDirty()
+	ui.UnitCatalog = nil
+	ui.UnitDetails = nil
+	ui.UnitDetailsPath = ""
+	SelectNewObject(ui, race, virtual)
+	ui.StatusText = fmt.Sprintf("Created %s", name)
+	MarkStateDirty(ui)
 	return virtual, nil
 }
 
 // selectNewObject points the object window at the file that was just written,
 // so the list opens on it rather than where it was before.
-func (ui *uiState) selectNewObject(race, virtual string) {
-	cat := ui.unitCatalogFor()
+func SelectNewObject(ui *uiState, race, virtual string) {
+	cat := UnitCatalogFor(ui)
 	if cat == nil {
 		return
 	}
@@ -129,14 +129,14 @@ func (ui *uiState) selectNewObject(race, virtual string) {
 		if !strings.EqualFold(r.Name, race) {
 			continue
 		}
-		ui.unitRaceSel = ri
-		ui.unitSel = 0
+		ui.UnitRaceSel = ri
+		ui.UnitSel = 0
 		// unitsOf is the list's own order: the race's troops, then its
 		// structures. A new building is picked out of the second half, and a
 		// new unit out of the first, without either case being written twice.
 		for i, e := range r.UnitsOf() {
 			if strings.EqualFold(e.Path, virtual) {
-				ui.unitSel = i
+				ui.UnitSel = i
 				return
 			}
 		}
@@ -164,46 +164,46 @@ func (ui *uiState) selectNewObject(race, virtual string) {
 // given kind, with the name field ready and empty. The race is the one the
 // object window was showing: the object belongs where the user was looking, and
 // making them choose again would be a second question with the same answer.
-func (ui *uiState) openNewObjDialog(kind newObjKind) {
-	race := ui.currentRace()
+func OpenNewObjDialog(ui *uiState, kind newObjKind) {
+	race := CurrentRace(ui)
 	if race == nil {
-		ui.statusText = "Choose a race before creating a " + kind.newObjNoun()
+		ui.StatusText = "Choose a race before creating a " + kind.newObjNoun()
 		return
 	}
-	ui.closeUnitPickers()
-	ui.newObjDialog = true
-	ui.newObjKind = kind
-	ui.newObjStatus = ""
-	ui.newObjNameEditor.SetText("")
+	CloseUnitPickers(ui)
+	ui.NewObjDialog = true
+	ui.NewObjKind = kind
+	ui.NewObjStatus = ""
+	ui.NewObjNameEditor.SetText("")
 }
 
 // closeNewObjDialog puts the dialog away, and the name with it: a name left in
 // the field would be offered again as though it were a fresh one.
-func (ui *uiState) closeNewObjDialog() {
-	ui.newObjDialog = false
-	ui.newObjStatus = ""
-	ui.newObjNameEditor.SetText("")
+func CloseNewObjDialog(ui *uiState) {
+	ui.NewObjDialog = false
+	ui.NewObjStatus = ""
+	ui.NewObjNameEditor.SetText("")
 }
 
 // newObjFolderLabel is where a new object of the current race and kind will be
 // written.
-func (ui *uiState) newObjFolderLabel() string {
-	race := ui.currentRace()
+func NewObjFolderLabel(ui *uiState) string {
+	race := CurrentRace(ui)
 	if race == nil {
 		return ""
 	}
-	return ui.newObjKind.newObjPath(race.Name, "name")
+	return ui.NewObjKind.newObjPath(race.Name, "name")
 }
 
 // layoutNewObjDialog draws the dialog as an overlay over the whole window: a
 // catcher that takes the click meant for the window behind it, the card, and
 // nothing else.
-func (ui *uiState) layoutNewObjDialog(gtx layout.Context) layout.Dimensions {
+func LayoutNewObjDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 	cardW := gtx.Dp(unit.Dp(420))
 	cardH := gtx.Dp(unit.Dp(228))
 	// Recorded for tests, the same as the picker list: without it a test has
 	// to guess where the card landed and probes the window around it.
-	ui.newObjCardBox = image.Rect(gtx.Constraints.Max.X/2-cardW/2, gtx.Constraints.Max.Y/2-cardH/2, gtx.Constraints.Max.X/2+cardW/2, gtx.Constraints.Max.Y/2+cardH/2)
+	ui.NewObjCardBox = image.Rect(gtx.Constraints.Max.X/2-cardW/2, gtx.Constraints.Max.Y/2-cardH/2, gtx.Constraints.Max.X/2+cardW/2, gtx.Constraints.Max.Y/2+cardH/2)
 	// A Stack puts a child smaller than itself at the given corner, and its
 	// zero value is the top left, so the card is centred by naming the
 	// alignment rather than by wrapping it: layout.Center centres within the
@@ -214,7 +214,7 @@ func (ui *uiState) layoutNewObjDialog(gtx layout.Context) layout.Dimensions {
 		// its Expanded children out last, which would paint the catcher over
 		// the card and swallow every click meant for the card.
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return ui.newObjDismissClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return ui.NewObjDismissClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			})
 		}),
@@ -231,14 +231,14 @@ func (ui *uiState) layoutNewObjDialog(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(16), Left: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									l := material.Label(ui.th, unit.Sp(14), "New "+ui.newObjKind.newObjNoun())
+									l := material.Label(ui.Th, unit.Sp(14), "New "+ui.NewObjKind.newObjNoun())
 									l.Font.Weight = font.Medium
 									l.Color = cText
 									return l.Layout(gtx)
 								}),
 								layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									l := material.Label(ui.th, unit.Sp(11), "Written to "+ui.newObjFolderLabel())
+									l := material.Label(ui.Th, unit.Sp(11), "Written to "+NewObjFolderLabel(ui))
 									l.Color = cTextDim
 									return l.Layout(gtx)
 								}),
@@ -249,20 +249,20 @@ func (ui *uiState) layoutNewObjDialog(gtx layout.Context) layout.Dimensions {
 									gtx.Constraints.Max.Y = h
 									return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 										return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-											ed := material.Editor(ui.th, &ui.newObjNameEditor, "")
+											ed := material.Editor(ui.Th, &ui.NewObjNameEditor, "")
 											ed.TextSize = unit.Sp(11)
 											ed.HintColor = cTextDim
-											ed.Hint = ui.newObjHint()
+											ed.Hint = NewObjHint(ui)
 											return ed.Layout(gtx)
 										})
 									})
 								}),
 								layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									if ui.newObjStatus == "" {
+									if ui.NewObjStatus == "" {
 										return layout.Dimensions{}
 									}
-									l := material.Label(ui.th, unit.Sp(10), ui.newObjStatus)
+									l := material.Label(ui.Th, unit.Sp(10), ui.NewObjStatus)
 									l.Color = cTreeThis
 									return l.Layout(gtx)
 								}),
@@ -275,11 +275,11 @@ func (ui *uiState) layoutNewObjDialog(gtx layout.Context) layout.Dimensions {
 									return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
 										layout.Flexed(1, flexGap()),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-											return ui.dialogButton(gtx, &ui.newObjCancel, "Cancel", false)
+											return DialogButton(ui, gtx, &ui.NewObjCancel, "Cancel", false)
 										}),
 										layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-											return ui.dialogButton(gtx, &ui.newObjOk, "Create", true)
+											return DialogButton(ui, gtx, &ui.NewObjOk, "Create", true)
 										}),
 									)
 								}),
@@ -294,8 +294,8 @@ func (ui *uiState) layoutNewObjDialog(gtx layout.Context) layout.Dimensions {
 
 // newObjHint is the example name the empty field shows. It is a real name from
 // the game, so it reads as a name rather than as a placeholder.
-func (ui *uiState) newObjHint() string {
-	if ui.newObjKind == newObjBuilding {
+func NewObjHint(ui *uiState) string {
+	if ui.NewObjKind == newObjBuilding {
 		return "chaos_hq"
 	}
 	return "chaos_hound"
@@ -303,10 +303,10 @@ func (ui *uiState) newObjHint() string {
 
 // handleNewObjDialogInput owns the dialog while it is up. It is read before
 // everything else, so a click on the window behind it reaches nothing.
-func (ui *uiState) handleNewObjDialogInput(gtx layout.Context) {
+func HandleNewObjDialogInput(ui *uiState, gtx layout.Context) {
 	submitted := false
 	for {
-		ev, ok := ui.newObjNameEditor.Update(gtx)
+		ev, ok := ui.NewObjNameEditor.Update(gtx)
 		if !ok {
 			break
 		}
@@ -316,15 +316,15 @@ func (ui *uiState) handleNewObjDialogInput(gtx layout.Context) {
 	}
 	// A click on the dimmed window behind the card is a way out, the same as
 	// Escape: both say "not now" and change nothing.
-	if ui.newObjDismissClick.Clicked(gtx) && !ui.newObjOk.Clicked(gtx) && !ui.newObjCancel.Clicked(gtx) {
-		ui.closeNewObjDialog()
+	if ui.NewObjDismissClick.Clicked(gtx) && !ui.NewObjOk.Clicked(gtx) && !ui.NewObjCancel.Clicked(gtx) {
+		CloseNewObjDialog(ui)
 		return
 	}
-	if ui.newObjCancel.Clicked(gtx) {
-		ui.closeNewObjDialog()
+	if ui.NewObjCancel.Clicked(gtx) {
+		CloseNewObjDialog(ui)
 		return
 	}
-	if !ui.newObjOk.Clicked(gtx) && !submitted {
+	if !ui.NewObjOk.Clicked(gtx) && !submitted {
 		// Escape leaves the dialog, which a dialog the keyboard can reach has
 		// to allow.
 		for {
@@ -333,26 +333,26 @@ func (ui *uiState) handleNewObjDialogInput(gtx layout.Context) {
 				break
 			}
 			if e, ok := ev.(key.Event); ok && e.State == key.Press {
-				ui.closeNewObjDialog()
+				CloseNewObjDialog(ui)
 				return
 			}
 		}
 		return
 	}
-	race := ui.currentRace()
+	race := CurrentRace(ui)
 	if race == nil {
-		ui.newObjStatus = "No race is selected, so there is nowhere to write the " + ui.newObjKind.newObjNoun()
+		ui.NewObjStatus = "No race is selected, so there is nowhere to write the " + ui.NewObjKind.newObjNoun()
 		return
 	}
-	virtual, err := ui.createNewObject(ui.newObjKind, race.Name, ui.newObjNameEditor.Text())
+	virtual, err := CreateNewObject(ui, ui.NewObjKind, race.Name, ui.NewObjNameEditor.Text())
 	if err != nil {
 		// A refused name is said in the dialog and the dialog stays up, so the
 		// name can be corrected instead of retyped.
-		ui.newObjStatus = err.Error()
+		ui.NewObjStatus = err.Error()
 		return
 	}
-	ui.closeNewObjDialog()
+	CloseNewObjDialog(ui)
 	// The file is written; opening it is what makes the next step — the model,
 	// the icon, the name id — a click away rather than a search through the mod.
-	ui.openRgd(virtual)
+	OpenRgd(ui, virtual)
 }

@@ -47,13 +47,13 @@ const unitViewportSideDp = 300
 // layoutUnitViewportArea is the whole section: the canvas on the left, the
 // camera and animation panel on the right. It is what layoutUnitBody puts where
 // the middle and right columns would be.
-func (ui *uiState) layoutUnitViewportArea(gtx layout.Context) layout.Dimensions {
-	ui.ensureUnitModel(gtx)
+func LayoutUnitViewportArea(ui *uiState, gtx layout.Context) layout.Dimensions {
+	EnsureUnitModel(ui, gtx)
 	sideW := gtx.Dp(unit.Dp(unitViewportSideDp))
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, ui.currentUnitSection().middleTitle)
+				return LayoutUnitColumnHeader(ui, gtx, CurrentUnitSection(ui).middleTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -64,9 +64,9 @@ func (ui *uiState) layoutUnitViewportArea(gtx layout.Context) layout.Dimensions 
 							// the section: it drives what is on the view, so it is
 							// as wide as the view and stops where the list panel
 							// begins. The list keeps the full height of the section.
-							layout.Flexed(1, ui.layoutUnitCanvasColumn),
+							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutUnitCanvasColumn(ui, gtx) }),
 							layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-							layout.Rigid(ui.fixedPanel(sideW, ui.layoutUnitModelSide)),
+							layout.Rigid(FixedPanel(ui, sideW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitModelSide(ui, gtx) })),
 						)
 					})
 			}),
@@ -79,12 +79,12 @@ func (ui *uiState) layoutUnitViewportArea(gtx layout.Context) layout.Dimensions 
 // running under the list panel beside it. The row keeps the height
 // unitPlaybackStripDp promises, so the canvas above it is the same size in
 // every window — the section's tests work that size out arithmetically.
-func (ui *uiState) layoutUnitCanvasColumn(gtx layout.Context) layout.Dimensions {
+func LayoutUnitCanvasColumn(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Flexed(1, ui.layoutUnitModelCanvas),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutUnitModelCanvas(ui, gtx) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitModelTransport(gtx, ui.unitModel)
+			return UnitModelTransport(ui, gtx, ui.UnitModel)
 		}),
 	)
 }
@@ -93,22 +93,22 @@ func (ui *uiState) layoutUnitCanvasColumn(gtx layout.Context) layout.Dimensions 
 // yet: a unit whose model is still being read, one that has no model file, and
 // one whose model would not decode all say so rather than showing an empty
 // panel.
-func (ui *uiState) layoutUnitModelCanvas(gtx layout.Context) layout.Dimensions {
-	if t := ui.unitModel; t != nil && t.model != nil {
-		return ui.layoutModelViewer(gtx, t)
+func LayoutUnitModelCanvas(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if t := ui.UnitModel; t != nil && t.Model != nil {
+		return LayoutModelViewer(ui, gtx, t)
 	}
 	msg := "Loading the model…"
 	switch {
-	case ui.unitModelErr == errNoUnitModel.Error():
+	case ui.UnitModelErr == errNoUnitModel.Error():
 		msg = "This unit names no model file, and none of the same name is in the mod."
-	case ui.unitModelErr != "":
-		msg = "The model could not be read:\n" + ui.unitModelErr
-	case ui.currentUnit() == nil:
-		msg = ui.unitEmptyStateText()
+	case ui.UnitModelErr != "":
+		msg = "The model could not be read:\n" + ui.UnitModelErr
+	case CurrentUnit(ui) == nil:
+		msg = UnitEmptyStateText(ui)
 	}
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), msg)
+			l := material.Label(ui.Th, unit.Sp(10), msg)
 			l.Color = cTextDim
 			l.MaxLines = 4
 			return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, l.Layout)
@@ -118,8 +118,8 @@ func (ui *uiState) layoutUnitModelCanvas(gtx layout.Context) layout.Dimensions {
 
 // unitEmptyStateText is what the viewport says when the mod has no unit to show
 // a model of.
-func (ui *uiState) unitEmptyStateText() string {
-	if d := ui.currentUnitDetails(); d != nil && d.Error != "" {
+func UnitEmptyStateText(ui *uiState) string {
+	if d := CurrentUnitDetails(ui); d != nil && d.Error != "" {
 		return "Could not read this unit:\n" + d.Error
 	}
 	return "No unit selected."
@@ -132,17 +132,17 @@ func (ui *uiState) unitEmptyStateText() string {
 // The module-listing side panel already carries the Model header over in the
 // right-hand panel of the window, so this side panel does not repeat it: the
 // static playback area sits first, then the scrollable bone/animation lists.
-func (ui *uiState) layoutUnitModelSide(gtx layout.Context) layout.Dimensions {
+func LayoutUnitModelSide(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			// The playback controls stay at the top of this side panel, ahead of
 			// the place where the Model header used to begin, so they stay visible
 			// while the bone and keyframe lists are scrolled.
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitModelSideControls(gtx)
+				return UnitModelSideControls(ui, gtx)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return ui.unitModelSideScrollArea(gtx)
+				return UnitModelSideScrollArea(ui, gtx)
 			}),
 		)
 	})
@@ -155,73 +155,73 @@ func (ui *uiState) layoutUnitModelSide(gtx layout.Context) layout.Dimensions {
 // they cannot scroll away either. The effects and ground switches moved into
 // that row as well; what is left here is the view and the axes of what the
 // preview draws.
-func (ui *uiState) unitModelSideControls(gtx layout.Context) layout.Dimensions {
-	t := ui.unitModel
-	v := ui.unitModelViewer()
+func UnitModelSideControls(ui *uiState, gtx layout.Context) layout.Dimensions {
+	t := ui.UnitModel
+	v := UnitModelViewer(ui)
 	if t == nil || v == nil {
-		return ui.unitModelSideEmpty(gtx)
+		return UnitModelSideEmpty(ui, gtx)
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelListTabs(gtx, t) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelToggles(gtx, t) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelSelectionToggle(gtx, v) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitModelListTabs(ui, gtx, t) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitModelToggles(ui, gtx, t) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitModelSelectionToggle(ui, gtx, v) }),
 	)
 }
 
-func (ui *uiState) unitModelSelectionToggle(gtx layout.Context, v *modelViewer) layout.Dimensions {
+func UnitModelSelectionToggle(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
 	if v == nil {
 		return layout.Dimensions{}
 	}
-	ui.syncUnitSelectionIndicator(v)
-	if v.selectionIndicator == nil {
+	SyncUnitSelectionIndicator(ui, v)
+	if v.SelectionIndicator == nil {
 		return layout.Dimensions{}
 	}
-	if ui.classicOESelectedUIVisible == nil {
-		ui.classicOESelectedUIVisible = &widget.Bool{Value: v.showSelection}
-	} else if ui.classicOESelectedUIVisible.Value != v.showSelection {
-		ui.classicOESelectedUIVisible.Value = v.showSelection
+	if ui.ClassicOESelectedUIVisible == nil {
+		ui.ClassicOESelectedUIVisible = &widget.Bool{Value: v.ShowSelection}
+	} else if ui.ClassicOESelectedUIVisible.Value != v.ShowSelection {
+		ui.ClassicOESelectedUIVisible.Value = v.ShowSelection
 	}
-	check := material.CheckBox(ui.th, ui.classicOESelectedUIVisible, "Show selection outline")
+	check := material.CheckBox(ui.Th, ui.ClassicOESelectedUIVisible, "Show selection outline")
 	check.TextSize = unit.Sp(9)
-	if ui.classicOESelectedUIVisible.Update(gtx) {
-		v.showSelection = ui.classicOESelectedUIVisible.Value
-		v.invalidate()
+	if ui.ClassicOESelectedUIVisible.Update(gtx) {
+		v.ShowSelection = ui.ClassicOESelectedUIVisible.Value
+		v.Invalidate()
 	}
 	return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, check.Layout)
 }
 
 // unitModelSideEmpty is what the controls area shows when no model is loaded.
-func (ui *uiState) unitModelSideEmpty(gtx layout.Context) layout.Dimensions {
-	l := material.Label(ui.th, unit.Sp(9), "No model is loaded.")
+func UnitModelSideEmpty(ui *uiState, gtx layout.Context) layout.Dimensions {
+	l := material.Label(ui.Th, unit.Sp(9), "No model is loaded.")
 	l.Color = cTextDim
 	return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, l.Layout)
 }
 
 // unitModelSideScrollArea is the scrollable body of the side panel. It holds
 // the selected model list and any controls belonging to that list.
-func (ui *uiState) unitModelSideScrollArea(gtx layout.Context) layout.Dimensions {
+func UnitModelSideScrollArea(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitBonePoseBar(gtx)
+			return UnitBonePoseBar(ui, gtx)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.panelScrollView(gtx, &ui.unitViewportScroll, func(gtx layout.Context) layout.Dimensions {
-				return ui.unitModelSideBody(gtx)
+			return PanelScrollView(ui, gtx, &ui.UnitViewportScroll, func(gtx layout.Context) layout.Dimensions {
+				return UnitModelSideBody(ui, gtx)
 			})
 		}),
 	)
 }
 
 // unitModelSideBody is the scrollable content of the side panel.
-func (ui *uiState) unitModelSideBody(gtx layout.Context) layout.Dimensions {
+func UnitModelSideBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 	// The modifier keys first: the rows below read Ctrl and Shift in this
 	// same pass, and a Ctrl held down for a click arrives as key events of
 	// its own.
-	ui.unitListTrackModifiers(gtx)
-	t := ui.unitModel
-	v := ui.unitModelViewer()
+	UnitListTrackModifiers(ui, gtx)
+	t := ui.UnitModel
+	v := UnitModelViewer(ui)
 	if t == nil || v == nil {
-		l := material.Label(ui.th, unit.Sp(9), "No model is loaded.")
+		l := material.Label(ui.Th, unit.Sp(9), "No model is loaded.")
 		l.Color = cTextDim
 		return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, l.Layout)
 	}
@@ -232,20 +232,20 @@ func (ui *uiState) unitModelSideBody(gtx layout.Context) layout.Dimensions {
 	// mostly empty. The column opens on the Playback strip directly.
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitClipOrMarkerSection(gtx, v)
+			return UnitClipOrMarkerSection(ui, gtx, v)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if ui.unitFXListMode || ui.unitMeshListMode {
+			if ui.UnitFXListMode || ui.UnitMeshListMode {
 				return layout.Dimensions{}
 			}
-			return ui.unitImportSection(gtx, v)
+			return UnitImportSection(ui, gtx, v)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if ui.unitFXListMode {
+			if ui.UnitFXListMode {
 				return layout.Dimensions{}
 			}
 			return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButton(gtx, &ui.unitOpenModelClick, "Open model in a tab")
+				return SmallButton(ui, gtx, &ui.UnitOpenModelClick, "Open model in a tab")
 			})
 		}),
 	)
@@ -274,54 +274,54 @@ func unitPlaybackRow(gtx layout.Context, content layout.Widget) layout.Dimension
 // for what the canvas shows. Everything on it is drained before it is laid
 // out, in the order the app drains them everywhere else: the switches and the
 // transport's presses, then the frames field's Enter.
-func (ui *uiState) unitModelTransport(gtx layout.Context, t *fileTab) layout.Dimensions {
+func UnitModelTransport(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	// A unit with no model still gives the row its height: the canvas above is
 	// measured against it, and a strip that came and went would move the view
 	// every time a model finished loading.
-	if t == nil || t.model == nil {
+	if t == nil || t.Model == nil {
 		return unitPlaybackRow(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), "No model is loaded.")
+			l := material.Label(ui.Th, unit.Sp(9), "No model is loaded.")
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		})
 	}
-	ui.modelControlClicks(gtx, t)
+	ModelControlClicks(ui, gtx, t)
 	// The clip's frame count sits beside the transport: the buttons wind the
 	// playhead through the clip, and this field says how many frames it is cut
 	// into. Its clicks and its Enter are drained here, before the row is laid
 	// out, the way every other button in the app is.
-	framesSetClicked := ui.unitAnimFramesSetClick.Clicked(gtx)
+	framesSetClicked := ui.UnitAnimFramesSetClick.Clicked(gtx)
 	framesSubmit := false
 	for {
-		ev, ok := ui.unitAnimFramesEd.Update(gtx)
+		ev, ok := ui.UnitAnimFramesEd.Update(gtx)
 		if !ok {
 			break
 		}
 		if _, submit := ev.(widget.SubmitEvent); submit {
 			framesSubmit = true
-			ui.unitAnimFramesEd.Blur(gtx)
+			ui.UnitAnimFramesEd.Blur(gtx)
 		}
 	}
-	ui.syncAnimFramesField(t.model)
+	SyncAnimFramesField(ui, t.Model)
 	dims := unitPlaybackRow(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitModelTransportButtons(gtx, t)
+				return UnitModelTransportButtons(ui, gtx, t)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitModelFrameLabel(gtx, t.model)
+				return UnitModelFrameLabel(ui, gtx, t.Model)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return ui.unitAnimFramesRow(gtx, t.model)
+				return UnitAnimFramesRow(ui, gtx, t.Model)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitModelPlaybackToggles(gtx, t)
+				return UnitModelPlaybackToggles(ui, gtx, t)
 			}),
 		)
 	})
 	if framesSetClicked || framesSubmit {
-		LogInfo("bone: frames pressed: %q", ui.unitAnimFramesEd.Text())
-		ui.applyAnimFrameCount(t.model)
+		LogInfo("bone: frames pressed: %q", ui.UnitAnimFramesEd.Text())
+		ApplyAnimFrameCount(ui, t.Model)
 	}
 	return dims
 }
@@ -329,25 +329,25 @@ func (ui *uiState) unitModelTransport(gtx layout.Context, t *fileTab) layout.Dim
 // unitModelTransportButtons draws the viewport's shared playback row after its
 // caller has handled modelControlClicks for this frame. It is content only —
 // the strip it sits in gives the row its padding and its height.
-func (ui *uiState) unitModelTransportButtons(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
-	none := len(v.model.Animations) == 0
+func UnitModelTransportButtons(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.Model
+	none := len(v.Model.Animations) == 0
 	gtx = modelRowHeight(gtx)
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &t.modelPlay, modelPlayLabel(v), none)
+			return SmallButtonDisabled(ui, gtx, &t.ModelPlay, modelPlayLabel(v), none)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &t.modelPrevAnim, "◀", none)
+			return SmallButtonDisabled(ui, gtx, &t.ModelPrevAnim, "◀", none)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &t.modelNextAnim, "▶", none)
+			return SmallButtonDisabled(ui, gtx, &t.ModelNextAnim, "▶", none)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &t.modelStepBack, "|◀", none)
+			return SmallButtonDisabled(ui, gtx, &t.ModelStepBack, "|◀", none)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &t.modelStepFwd, "▶|", none)
+			return SmallButtonDisabled(ui, gtx, &t.ModelStepFwd, "▶|", none)
 		}),
 	)
 }
@@ -364,11 +364,11 @@ const unitFrameLabelDp = 132
 // playhead stands on a keyframe of the clip, the readout says which key it is
 // out of how many — that is the number a reader stepping between keys needs,
 // and it cannot be told from the picture.
-func (ui *uiState) unitModelFrameLabel(gtx layout.Context, v *modelViewer) layout.Dimensions {
+func UnitModelFrameLabel(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
 	text := "no frames to step through"
-	if frame, frames := v.currentFrame(); frames > 0 {
+	if frame, frames := v.CurrentFrame(); frames > 0 {
 		text = fmt.Sprintf("frame %d of %d", frame+1, frames)
-		if keys := clipKeyFrames(v.anim); len(keys) > 0 {
+		if keys := clipKeyFrames(v.Anim); len(keys) > 0 {
 			for i, k := range keys {
 				if k == frame {
 					text += fmt.Sprintf(" · key %d/%d", i+1, len(keys))
@@ -377,7 +377,7 @@ func (ui *uiState) unitModelFrameLabel(gtx layout.Context, v *modelViewer) layou
 			}
 		}
 	}
-	l := material.Label(ui.th, unit.Sp(9), text)
+	l := material.Label(ui.Th, unit.Sp(9), text)
 	l.Color = cTextDim
 	l.MaxLines = 2
 	w := gtx.Dp(unit.Dp(unitFrameLabelDp))
@@ -391,14 +391,14 @@ func (ui *uiState) unitModelFrameLabel(gtx layout.Context, v *modelViewer) layou
 // column: how the view is framed, and the axes the effects are drawn against.
 // The effects switch and the ground plane are playback switches and live in
 // the playback row under the canvas — see unitModelPlaybackToggles.
-func (ui *uiState) unitModelToggles(gtx layout.Context, t *fileTab) layout.Dimensions {
-	ui.modelControlClicks(gtx, t)
+func UnitModelToggles(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	ModelControlClicks(ui, gtx, t)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitModelViewButtons(gtx, t, false)
+			return UnitModelViewButtons(ui, gtx, t, false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitModelFXRow(gtx, t)
+			return UnitModelFXRow(ui, gtx, t)
 		}),
 	)
 }
@@ -408,28 +408,28 @@ func (ui *uiState) unitModelToggles(gtx layout.Context, t *fileTab) layout.Dimen
 // — which is why they sit at the end of the playback row instead of in the
 // list panel. Their presses are already drained by modelControlClicks, which
 // the row's caller runs before laying anything out.
-func (ui *uiState) unitModelPlaybackToggles(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
+func UnitModelPlaybackToggles(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.Model
 	gtx = modelRowHeight(gtx)
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButton(gtx, &t.modelFX, modelFXLabel(v))
+			return SmallButton(ui, gtx, &t.ModelFX, modelFXLabel(v))
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v == nil || v.groundImage == nil)
+			return SmallButtonDisabled(ui, gtx, &t.ModelGround, modelGroundLabel(v), v == nil || v.GroundImage == nil)
 		}),
 	)
 }
 
 // unitModelViewButtons is the viewport's reset row. WHM tabs reuse it as well.
-func (ui *uiState) unitModelViewButtons(gtx layout.Context, t *fileTab, showListToggle bool) layout.Dimensions {
+func UnitModelViewButtons(ui *uiState, gtx layout.Context, t *fileTab, showListToggle bool) layout.Dimensions {
 	gtx = modelRowHeight(gtx)
 	return layout.Inset{Top: unit.Dp(2), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButton(gtx, &t.modelReset, "Reset view")
+					return SmallButton(ui, gtx, &t.ModelReset, "Reset view")
 				}),
 				layout.Flexed(1, rowGap()),
 			)
@@ -439,46 +439,46 @@ func (ui *uiState) unitModelViewButtons(gtx layout.Context, t *fileTab, showList
 // unitModelFXRow is the axes switch: where in the world the effects being
 // shown stand. The switch that turns the effects on is a playback switch and
 // sits in the playback row under the canvas.
-func (ui *uiState) unitModelFXRow(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
+func UnitModelFXRow(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.Model
 	gtx = modelRowHeight(gtx)
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAxesButton(gtx, v) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FxAxesButton(ui, gtx, v) }),
 		layout.Flexed(1, rowGap()),
 	)
 }
 
-func (ui *uiState) unitModelListTabs(gtx layout.Context, t *fileTab) layout.Dimensions {
-	ui.handleUnitModelListTabClicks(gtx, t)
+func UnitModelListTabs(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	HandleUnitModelListTabClicks(ui, gtx, t)
 	labels := []string{"Animations", "Markers", "Bones", "FX", "Meshes"}
-	selected := ui.unitListMode
-	if ui.unitFXListMode {
+	selected := ui.UnitListMode
+	if ui.UnitFXListMode {
 		selected = 3
 	}
-	if ui.unitMeshListMode {
+	if ui.UnitMeshListMode {
 		selected = 4
 	}
-	return ui.modelListTabButtons(gtx, labels, ui.unitListTabClicks[:], selected)
+	return ModelListTabButtons(ui, gtx, labels, ui.UnitListTabClicks[:], selected)
 }
 
-func (ui *uiState) handleUnitModelListTabClicks(gtx layout.Context, t *fileTab) {
-	ui.unitListTrackModifiers(gtx)
-	for i := range ui.unitListTabClicks {
-		if ui.unitListTabClicks[i].Clicked(gtx) {
-			ui.unitFXListMode = i == 3
-			ui.unitMeshListMode = i == 4
+func HandleUnitModelListTabClicks(ui *uiState, gtx layout.Context, t *fileTab) {
+	UnitListTrackModifiers(ui, gtx)
+	for i := range ui.UnitListTabClicks {
+		if ui.UnitListTabClicks[i].Clicked(gtx) {
+			ui.UnitFXListMode = i == 3
+			ui.UnitMeshListMode = i == 4
 			if i < 3 {
-				ui.unitListMode = i
+				ui.UnitListMode = i
 			}
-			ui.unitViewportScroll = panelScrollState{}
-			if t != nil && t.model != nil {
-				t.model.invalidate()
+			ui.UnitViewportScroll = panelScrollState{}
+			if t != nil && t.Model != nil {
+				t.Model.Invalidate()
 			}
 		}
 	}
 }
 
-func (ui *uiState) modelListTabButtons(gtx layout.Context, labels []string, clicks []widget.Clickable, selected int) layout.Dimensions {
+func ModelListTabButtons(ui *uiState, gtx layout.Context, labels []string, clicks []widget.Clickable, selected int) layout.Dimensions {
 	if len(clicks) < len(labels) {
 		return layout.Dimensions{}
 	}
@@ -489,7 +489,7 @@ func (ui *uiState) modelListTabButtons(gtx layout.Context, labels []string, clic
 	for i, label := range labels {
 		i, label := i, label
 		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.toggleButton(gtx, &clicks[i], label, selected == i, cSelectBg)
+			return ToggleButton(ui, gtx, &clicks[i], label, selected == i, cSelectBg)
 		}))
 	}
 	return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -498,23 +498,23 @@ func (ui *uiState) modelListTabButtons(gtx layout.Context, labels []string, clic
 }
 
 // unitModelFileLabel is the model file the viewport is showing.
-func (ui *uiState) unitModelFileLabel() string {
-	return filepath.Base(ui.unitModelPath)
+func UnitModelFileLabel(ui *uiState) string {
+	return filepath.Base(ui.UnitModelPath)
 }
 
 // unitAnimList is every clip the model carries, the one being played marked, so
 // the list is also the answer to "what can this thing do".
-func (ui *uiState) unitAnimList(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	return ui.unitAnimListWithClicks(gtx, v, &ui.unitAnimClicks)
+func UnitAnimList(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
+	return UnitAnimListWithClicks(ui, gtx, v, &ui.UnitAnimClicks)
 }
 
-func (ui *uiState) unitAnimListWithClicks(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
-	anims := v.model.Animations
+func UnitAnimListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
+	anims := v.Model.Animations
 	if len(*clicks) != len(anims) {
 		*clicks = make([]widget.Clickable, len(anims))
 	}
 	if len(anims) == 0 {
-		l := material.Label(ui.th, unit.Sp(9), "This model carries no animations.")
+		l := material.Label(ui.Th, unit.Sp(9), "This model carries no animations.")
 		l.Color = cTextDim
 		return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 	}
@@ -524,13 +524,13 @@ func (ui *uiState) unitAnimListWithClicks(gtx layout.Context, v *modelViewer, cl
 		a := anims[i]
 		c := &(*clicks)[i]
 		if c.Clicked(gtx) {
-			v.selectAnim(i)
-			v.playing = true
-			v.lastFrame = time.Time{}
+			v.SelectAnim(i)
+			v.Playing = true
+			v.LastFrame = time.Time{}
 		}
 		right := fmt.Sprintf("%d frames", a.NumFrames)
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitViewportRow(gtx, c, v.animIndex == i, a.Name, right)
+			return UnitViewportRow(ui, gtx, c, v.AnimIndex == i, a.Name, right)
 		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -544,12 +544,12 @@ func (ui *uiState) unitAnimListWithClicks(gtx layout.Context, v *modelViewer, cl
 //
 // The header says which list is on show; the button that swaps it lives in
 // the Playback strip above, which never scrolls away.
-func (ui *uiState) unitClipOrMarkerSection(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	if ui.unitMeshListMode {
-		return ui.unitMeshListSection(gtx, v)
+func UnitClipOrMarkerSection(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
+	if ui.UnitMeshListMode {
+		return UnitMeshListSection(ui, gtx, v)
 	}
-	return ui.unitModelListSectionOrFX(gtx, v, ui.unitListMode, ui.unitFXListMode,
-		&ui.unitAnimClicks, &ui.unitMarkerClicks, &ui.unitBoneClicks, &ui.unitFXClicks)
+	return UnitModelListSectionOrFX(ui, gtx, v, ui.UnitListMode, ui.UnitFXListMode,
+		&ui.UnitAnimClicks, &ui.UnitMarkerClicks, &ui.UnitBoneClicks, &ui.UnitFXClicks)
 }
 
 // unitMeshListSection is the Meshes tab of the side panel: the count header
@@ -557,57 +557,57 @@ func (ui *uiState) unitClipOrMarkerSection(gtx layout.Context, v *modelViewer) l
 // mesh hidden here is hidden in every viewer of this model. The rows carry no
 // scroller of their own — the side panel's body, which holds this section, is
 // already scrolled.
-func (ui *uiState) unitMeshListSection(gtx layout.Context, v *modelViewer) layout.Dimensions {
+func UnitMeshListSection(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
 	count := 0
-	if v != nil && v.model != nil {
-		count = len(modelMeshNames(v.model))
+	if v != nil && v.Model != nil {
+		count = len(modelMeshNames(v.Model))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return sectionHeader(gtx, ui.th, fmt.Sprintf("Meshes (%d)", count))
+			return sectionHeader(gtx, ui.Th, fmt.Sprintf("Meshes (%d)", count))
 		}),
-		layout.Rigid(ui.unitMeshRows),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitMeshRows(ui, gtx) }),
 	)
 }
 
-func (ui *uiState) unitModelListContent(gtx layout.Context, t *fileTab, mode int) layout.Dimensions {
-	ui.unitListTrackModifiers(gtx)
-	return ui.unitModelListSectionOrFX(gtx, t.model, mode, mode == 3, &t.modelAnimClicks, &t.modelMarkerClicks, &t.modelBoneClicks, &t.modelFXClicks)
+func UnitModelListContent(ui *uiState, gtx layout.Context, t *fileTab, mode int) layout.Dimensions {
+	UnitListTrackModifiers(ui, gtx)
+	return UnitModelListSectionOrFX(ui, gtx, t.Model, mode, mode == 3, &t.ModelAnimClicks, &t.ModelMarkerClicks, &t.ModelBoneClicks, &t.ModelFXClicks)
 }
 
-func (ui *uiState) unitModelListSectionOrFX(gtx layout.Context, v *modelViewer, mode int, fxMode bool, animClicks, markerClicks, boneClicks, fxClicks *[]widget.Clickable) layout.Dimensions {
+func UnitModelListSectionOrFX(ui *uiState, gtx layout.Context, v *modelViewer, mode int, fxMode bool, animClicks, markerClicks, boneClicks, fxClicks *[]widget.Clickable) layout.Dimensions {
 	if fxMode {
-		return ui.unitFXListWithHeader(gtx, v, fxClicks)
+		return UnitFXListWithHeader(ui, gtx, v, fxClicks)
 	}
-	return ui.unitModelListSection(gtx, v, mode, animClicks, markerClicks, boneClicks)
+	return UnitModelListSection(ui, gtx, v, mode, animClicks, markerClicks, boneClicks)
 }
 
-func (ui *uiState) unitFXListWithHeader(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
-	if v == nil || v.model == nil {
-		return sectionHeader(gtx, ui.th, "FX")
+func UnitFXListWithHeader(ui *uiState, gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
+	if v == nil || v.Model == nil {
+		return sectionHeader(gtx, ui.Th, "FX")
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return sectionHeader(gtx, ui.th, fmt.Sprintf("FX (%d)", len(v.fxEffects)))
+			return sectionHeader(gtx, ui.Th, fmt.Sprintf("FX (%d)", len(v.FxEffects)))
 		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelFxChecklist(gtx, v, clicks) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ModelFxChecklist(ui, gtx, v, clicks) }),
 	)
 }
 
-func (ui *uiState) unitModelListSection(gtx layout.Context, v *modelViewer, mode int, animClicks, markerClicks, boneClicks *[]widget.Clickable) layout.Dimensions {
+func UnitModelListSection(ui *uiState, gtx layout.Context, v *modelViewer, mode int, animClicks, markerClicks, boneClicks *[]widget.Clickable) layout.Dimensions {
 	labels := [3]string{"Animations", "Markers", "Bones"}
 	if mode < 0 || mode >= len(labels) {
 		mode = 0
 	}
-	list := func(gtx layout.Context) layout.Dimensions { return ui.unitAnimListWithClicks(gtx, v, animClicks) }
+	list := func(gtx layout.Context) layout.Dimensions { return UnitAnimListWithClicks(ui, gtx, v, animClicks) }
 	switch mode {
 	case 1:
-		list = func(gtx layout.Context) layout.Dimensions { return ui.unitMarkerListWithClicks(gtx, v, markerClicks) }
+		list = func(gtx layout.Context) layout.Dimensions { return UnitMarkerListWithClicks(ui, gtx, v, markerClicks) }
 	case 2:
-		list = func(gtx layout.Context) layout.Dimensions { return ui.unitBoneListWithClicks(gtx, v, boneClicks) }
+		list = func(gtx layout.Context) layout.Dimensions { return UnitBoneListWithClicks(ui, gtx, v, boneClicks) }
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, labels[mode]) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, labels[mode]) }),
 		layout.Rigid(list),
 	)
 }
@@ -616,17 +616,17 @@ func (ui *uiState) unitModelListSection(gtx layout.Context, v *modelViewer, mode
 // bone it hangs off. Picking one draws a red ring on the model at that marker,
 // which is the only way to tell a dozen identically named muzzle points apart
 // on a mesh that shows none of them.
-func (ui *uiState) unitMarkerList(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	return ui.unitMarkerListWithClicks(gtx, v, &ui.unitMarkerClicks)
+func UnitMarkerList(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
+	return UnitMarkerListWithClicks(ui, gtx, v, &ui.UnitMarkerClicks)
 }
 
-func (ui *uiState) unitMarkerListWithClicks(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
-	markers := v.model.Markers
+func UnitMarkerListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
+	markers := v.Model.Markers
 	if len(*clicks) != len(markers) {
 		*clicks = make([]widget.Clickable, len(markers))
 	}
 	if len(markers) == 0 {
-		l := material.Label(ui.th, unit.Sp(9), "This model carries no markers.")
+		l := material.Label(ui.Th, unit.Sp(9), "This model carries no markers.")
 		l.Color = cTextDim
 		return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 	}
@@ -636,19 +636,19 @@ func (ui *uiState) unitMarkerListWithClicks(gtx layout.Context, v *modelViewer, 
 		mk := markers[i]
 		c := &(*clicks)[i]
 		if c.Clicked(gtx) {
-			if v.markerIndex == i {
-				v.markerIndex = -1
+			if v.MarkerIndex == i {
+				v.MarkerIndex = -1
 			} else {
-				v.markerIndex = i
+				v.MarkerIndex = i
 			}
-			v.redraw = true
+			v.Redraw = true
 		}
 		note := mk.Parent
 		if note == "" {
 			note = "no bone"
 		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitViewportRow(gtx, c, v.markerIndex == i, mk.Name, note)
+			return UnitViewportRow(ui, gtx, c, v.MarkerIndex == i, mk.Name, note)
 		}))
 	}
 	return layout.Inset{Top: unit.Dp(4)}.Layout(gtx,
@@ -662,17 +662,17 @@ func (ui *uiState) unitMarkerListWithClicks(gtx layout.Context, v *modelViewer, 
 // colour and shows its parameters under the list: which joint is picked is a
 // question a picture of a skeleton answers badly, since every bone looks like
 // every other bone once the mesh is skinned over it.
-func (ui *uiState) unitBoneList(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	return ui.unitBoneListWithClicks(gtx, v, &ui.unitBoneClicks)
+func UnitBoneList(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
+	return UnitBoneListWithClicks(ui, gtx, v, &ui.UnitBoneClicks)
 }
 
-func (ui *uiState) unitBoneListWithClicks(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
-	bones := v.model.Bones
+func UnitBoneListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
+	bones := v.Model.Bones
 	if len(*clicks) != len(bones) {
 		*clicks = make([]widget.Clickable, len(bones))
 	}
 	if len(bones) == 0 {
-		l := material.Label(ui.th, unit.Sp(9), "This model carries no skeleton.")
+		l := material.Label(ui.Th, unit.Sp(9), "This model carries no skeleton.")
 		l.Color = cTextDim
 		return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 	}
@@ -682,12 +682,12 @@ func (ui *uiState) unitBoneListWithClicks(gtx layout.Context, v *modelViewer, cl
 		bone := bones[i]
 		c := &(*clicks)[i]
 		if c.Clicked(gtx) {
-			if v.boneIndex == i {
-				v.boneIndex = -1
+			if v.BoneIndex == i {
+				v.BoneIndex = -1
 			} else {
-				v.boneIndex = i
+				v.BoneIndex = i
 			}
-			v.redraw = true
+			v.Redraw = true
 		}
 		note := "root"
 		if bone.Parent >= 0 && bone.Parent < len(bones) && bones[bone.Parent].Name != "" {
@@ -700,12 +700,12 @@ func (ui *uiState) unitBoneListWithClicks(gtx layout.Context, v *modelViewer, cl
 			name = fmt.Sprintf("bone %d", i)
 		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitViewportRow(gtx, c, v.boneIndex == i, name, note)
+			return UnitViewportRow(ui, gtx, c, v.BoneIndex == i, name, note)
 		}))
 	}
-	if v.boneIndex >= 0 && v.boneIndex < len(bones) {
+	if v.BoneIndex >= 0 && v.BoneIndex < len(bones) {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitBoneParams(gtx, v, v.boneIndex)
+			return UnitBoneParams(ui, gtx, v, v.BoneIndex)
 		}))
 	}
 	return layout.Inset{Top: unit.Dp(4)}.Layout(gtx,
@@ -717,9 +717,9 @@ func (ui *uiState) unitBoneListWithClicks(gtx layout.Context, v *modelViewer, cl
 // unitBoneParams is the picked bone's own numbers: where its joint sits under
 // the pose on show, the rest position as the file stores it, and how many
 // keys the current clip holds for it.
-func (ui *uiState) unitBoneParams(gtx layout.Context, v *modelViewer, i int) layout.Dimensions {
-	bone := v.model.Bones[i]
-	pose := v.pose()
+func UnitBoneParams(ui *uiState, gtx layout.Context, v *modelViewer, i int) layout.Dimensions {
+	bone := v.Model.Bones[i]
+	pose := v.Pose()
 	pos := "—"
 	if i < len(pose.Bones) {
 		p := pose.Bones[i].MulPosition(fauxgl.Vector{})
@@ -729,7 +729,7 @@ func (ui *uiState) unitBoneParams(gtx layout.Context, v *modelViewer, i int) lay
 	rows := [][2]string{
 		{"Position", pos},
 		{"Rest pose", rest},
-		{"Keys here", fmt.Sprintf("%d", boneTrackKeys(v.anim, i))},
+		{"Keys here", fmt.Sprintf("%d", boneTrackKeys(v.Anim, i))},
 	}
 	children := make([]layout.FlexChild, 0, len(rows)+1)
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -739,47 +739,47 @@ func (ui *uiState) unitBoneParams(gtx layout.Context, v *modelViewer, i int) lay
 	for idx, row := range rows {
 		row, idx := row, idx
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, row[0], row[1], idx%2 == 0)
+			return TableRow2(ui, gtx, row[0], row[1], idx%2 == 0)
 		}))
 	}
 
-	if v.anim != nil {
-		t := v.boneTrack()
-		if t != nil && v.boneIndex == i && (len(t.PosKey) > 0 || len(t.RotKey) > 0) {
+	if v.Anim != nil {
+		t := v.BoneTrack()
+		if t != nil && v.BoneIndex == i && (len(t.PosKey) > 0 || len(t.RotKey) > 0) {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
 					func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) })
 			}))
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitBoneKeyListHeader(gtx, v)
+				return UnitBoneKeyListHeader(ui, gtx, v)
 			}))
-			refs := v.boneKeyRefs()
-			ui.ensureUnitBoneKeyClicks(len(refs))
-			ui.bindBoneKeySelection(v)
+			refs := v.BoneKeyRefs()
+			EnsureUnitBoneKeyClicks(ui, len(refs))
+			BindBoneKeySelection(ui, v)
 			keyIdx := 0
 			for idx, k := range t.PosKey {
-				ref := boneKeyRef{mode: 0, frame: frameAt(float64(k.Time), v.anim.NumFrames)}
-				c := &ui.unitBoneKeyClicks[keyIdx]
+				ref := boneKeyRef{mode: 0, frame: frameAt(float64(k.Time), v.Anim.NumFrames)}
+				c := &ui.UnitBoneKeyClicks[keyIdx]
 				if c.Clicked(gtx) {
-					ui.boneKeyRowClicked(v, ref, refs, ui.unitListModifiers())
+					BoneKeyRowClicked(ui, v, ref, refs, UnitListModifiers(ui))
 				}
-				selected := ui.boneKeyRowPicked(v, ref)
+				selected := BoneKeyRowPicked(ui, v, ref)
 				text := fmt.Sprintf("pos %d  frame %d  %.3f, %.3f, %.3f", idx+1, ref.frame+1, k.V[0], k.V[1], k.V[2])
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.unitBoneKeyRow(gtx, c, selected, text)
+					return UnitBoneKeyRow(ui, gtx, c, selected, text)
 				}))
 				keyIdx++
 			}
 			for idx, k := range t.RotKey {
-				ref := boneKeyRef{mode: 1, frame: frameAt(float64(k.Time), v.anim.NumFrames)}
-				c := &ui.unitBoneKeyClicks[keyIdx]
+				ref := boneKeyRef{mode: 1, frame: frameAt(float64(k.Time), v.Anim.NumFrames)}
+				c := &ui.UnitBoneKeyClicks[keyIdx]
 				if c.Clicked(gtx) {
-					ui.boneKeyRowClicked(v, ref, refs, ui.unitListModifiers())
+					BoneKeyRowClicked(ui, v, ref, refs, UnitListModifiers(ui))
 				}
-				selected := ui.boneKeyRowPicked(v, ref)
+				selected := BoneKeyRowPicked(ui, v, ref)
 				text := fmt.Sprintf("rot %d  frame %d  %.3f, %.3f, %.3f, %.3f", idx+1, ref.frame+1, k.V[0], k.V[1], k.V[2], k.V[3])
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.unitBoneKeyRow(gtx, c, selected, text)
+					return UnitBoneKeyRow(ui, gtx, c, selected, text)
 				}))
 				keyIdx++
 			}
@@ -800,17 +800,17 @@ func (ui *uiState) unitBoneParams(gtx layout.Context, v *modelViewer, i int) lay
 // full — no scrollbar, no wheel — the moment the picked bone has keys. The
 // picked count still reaches the right edge because rowGap takes all the
 // width and none of the height.
-func (ui *uiState) unitBoneKeyListHeader(gtx layout.Context, v *modelViewer) layout.Dimensions {
+func UnitBoneKeyListHeader(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), "Keyframes")
+			l := material.Label(ui.Th, unit.Sp(9), "Keyframes")
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		}),
 		layout.Flexed(1, rowGap()),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if n := len(ui.pickedBoneKeyRefs(v)); n > 1 {
-				l := material.Label(ui.th, unit.Sp(9), fmt.Sprintf("%d picked", n))
+			if n := len(PickedBoneKeyRefs(ui, v)); n > 1 {
+				l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("%d picked", n))
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			}
@@ -829,7 +829,7 @@ func (ui *uiState) unitBoneKeyListHeader(gtx layout.Context, v *modelViewer) lay
 // flag would stay false for ever. Every modifier event seen is logged on
 // change, so a multi-select that never fires shows here whether the key events
 // arrived at all and what they carried.
-func (ui *uiState) unitListTrackModifiers(gtx layout.Context) {
+func UnitListTrackModifiers(ui *uiState, gtx layout.Context) {
 	const anyMod = key.ModCtrl | key.ModShift | key.ModAlt | key.ModSuper
 	for {
 		ev, ok := gtx.Event(
@@ -843,15 +843,15 @@ func (ui *uiState) unitListTrackModifiers(gtx layout.Context) {
 		if !ok {
 			continue
 		}
-		if s := fmt.Sprintf("%q %v mods=%v", e.Name, e.State, e.Modifiers); s != ui.unitBoneKeyModLog {
+		if s := fmt.Sprintf("%q %v mods=%v", e.Name, e.State, e.Modifiers); s != ui.UnitBoneKeyModLog {
 			LogInfo("bone: modifier key %s", s)
-			ui.unitBoneKeyModLog = s
+			ui.UnitBoneKeyModLog = s
 		}
 		switch e.Name {
 		case key.NameCtrl:
-			ui.unitBoneKeyCtrlHeld = e.State != key.Release
+			ui.UnitBoneKeyCtrlHeld = e.State != key.Release
 		case key.NameShift:
-			ui.unitBoneKeyShiftHeld = e.State != key.Release
+			ui.UnitBoneKeyShiftHeld = e.State != key.Release
 		}
 	}
 }
@@ -859,12 +859,12 @@ func (ui *uiState) unitListTrackModifiers(gtx layout.Context) {
 // unitListModifiers is the state of Ctrl and Shift at the moment a row is
 // read: the tracked key events, ORed with the live OS state, since either one
 // alone can miss a press on some backends.
-func (ui *uiState) unitListModifiers() key.Modifiers {
+func UnitListModifiers(ui *uiState) key.Modifiers {
 	m := heldModifiers()
-	if ui.unitBoneKeyCtrlHeld {
+	if ui.UnitBoneKeyCtrlHeld {
 		m |= key.ModCtrl
 	}
-	if ui.unitBoneKeyShiftHeld {
+	if ui.UnitBoneKeyShiftHeld {
 		m |= key.ModShift
 	}
 	return m
@@ -875,50 +875,50 @@ func (ui *uiState) unitListModifiers() key.Modifiers {
 // carrying a set of frames over to keys that are not there. It runs where the
 // rows are built, which is the only place both the selection and the bone it
 // belongs to are on show.
-func (ui *uiState) bindBoneKeySelection(v *modelViewer) {
+func BindBoneKeySelection(ui *uiState, v *modelViewer) {
 	bound := ""
 	if v != nil {
-		bound = fmt.Sprintf("%p|%d", v.anim, v.boneIndex)
+		bound = fmt.Sprintf("%p|%d", v.Anim, v.BoneIndex)
 	}
-	if bound == ui.unitBoneKeySelBound {
+	if bound == ui.UnitBoneKeySelBound {
 		return
 	}
-	LogInfo("bone: keyframe selection bound to %q -> %q: cleared", ui.unitBoneKeySelBound, bound)
-	ui.unitBoneKeySelBound = bound
-	ui.unitBoneKeySel = nil
-	ui.unitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	LogInfo("bone: keyframe selection bound to %q -> %q: cleared", ui.UnitBoneKeySelBound, bound)
+	ui.UnitBoneKeySelBound = bound
+	ui.UnitBoneKeySel = nil
+	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
 }
 
 // pickedBoneKeyRefs is the rows of the list that are picked and whose keys
 // are still on the track, in list order. Rows whose key has gone — a deletion
 // elsewhere, a drag that carried it off its frame — leave the selection rather
 // than pointing at whatever frame now carries that number.
-func (ui *uiState) pickedBoneKeyRefs(v *modelViewer) []boneKeyRef {
-	if len(ui.unitBoneKeySel) == 0 {
+func PickedBoneKeyRefs(ui *uiState, v *modelViewer) []boneKeyRef {
+	if len(ui.UnitBoneKeySel) == 0 {
 		return nil
 	}
-	if v == nil || v.anim == nil {
-		ui.unitBoneKeySel = nil
-		ui.unitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	if v == nil || v.Anim == nil {
+		ui.UnitBoneKeySel = nil
+		ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
 		return nil
 	}
 	var out []boneKeyRef
-	for _, ref := range v.boneKeyRefs() {
-		if ui.unitBoneKeySel[ref] {
+	for _, ref := range v.BoneKeyRefs() {
+		if ui.UnitBoneKeySel[ref] {
 			out = append(out, ref)
 		}
 	}
-	if len(out) == len(ui.unitBoneKeySel) {
+	if len(out) == len(ui.UnitBoneKeySel) {
 		return out
 	}
 	fresh := make(map[boneKeyRef]bool, len(out))
 	for _, ref := range out {
 		fresh[ref] = true
 	}
-	LogInfo("bone: keyframe selection dropped %d row(s) whose keys are gone", len(ui.unitBoneKeySel)-len(out))
-	ui.unitBoneKeySel = fresh
+	LogInfo("bone: keyframe selection dropped %d row(s) whose keys are gone", len(ui.UnitBoneKeySel)-len(out))
+	ui.UnitBoneKeySel = fresh
 	if len(fresh) == 0 {
-		ui.unitBoneKeySelAnchor = boneKeyRef{mode: -1}
+		ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
 	}
 	return out
 }
@@ -927,14 +927,14 @@ func (ui *uiState) pickedBoneKeyRefs(v *modelViewer) []boneKeyRef {
 // picked on the list, and — when nothing on the list is picked — the single
 // key the strip or the playhead had picked, which is all the buttons had
 // before the list could hold a selection.
-func (ui *uiState) boneKeyActionRefs(v *modelViewer) []boneKeyRef {
-	if v == nil || v.anim == nil {
+func BoneKeyActionRefs(ui *uiState, v *modelViewer) []boneKeyRef {
+	if v == nil || v.Anim == nil {
 		return nil
 	}
-	if refs := ui.pickedBoneKeyRefs(v); len(refs) > 0 {
+	if refs := PickedBoneKeyRefs(ui, v); len(refs) > 0 {
 		return refs
 	}
-	if ref, ok := v.pickedBoneKeyRef(); ok {
+	if ref, ok := v.PickedBoneKeyRef(); ok {
 		return []boneKeyRef{ref}
 	}
 	return nil
@@ -944,11 +944,11 @@ func (ui *uiState) boneKeyActionRefs(v *modelViewer) []boneKeyRef {
 // list holds a selection that is what decides; with nothing picked on the list
 // the key the strip or the playhead picked is the one on show, which is what
 // the list highlighted before it could hold a selection at all.
-func (ui *uiState) boneKeyRowPicked(v *modelViewer, ref boneKeyRef) bool {
-	if len(ui.unitBoneKeySel) > 0 {
-		return ui.unitBoneKeySel[ref]
+func BoneKeyRowPicked(ui *uiState, v *modelViewer, ref boneKeyRef) bool {
+	if len(ui.UnitBoneKeySel) > 0 {
+		return ui.UnitBoneKeySel[ref]
 	}
-	got, ok := v.pickedBoneKeyRef()
+	got, ok := v.PickedBoneKeyRef()
 	return ok && got == ref
 }
 
@@ -959,19 +959,19 @@ func (ui *uiState) boneKeyRowPicked(v *modelViewer, ref boneKeyRef) bool {
 // modifiers did, the key the typed fields and the strip work on ends up on the
 // row that was clicked while that row is among the picked ones — and on the
 // last row still picked when it is not, or on none when nothing is left.
-func (ui *uiState) boneKeyRowClicked(v *modelViewer, ref boneKeyRef, refs []boneKeyRef, mods key.Modifiers) {
-	if v == nil || v.anim == nil {
+func BoneKeyRowClicked(ui *uiState, v *modelViewer, ref boneKeyRef, refs []boneKeyRef, mods key.Modifiers) {
+	if v == nil || v.Anim == nil {
 		return
 	}
 	ctrl, shift := mods.Contain(key.ModCtrl), mods.Contain(key.ModShift)
-	if ui.unitBoneKeySel == nil {
-		ui.unitBoneKeySel = make(map[boneKeyRef]bool)
+	if ui.UnitBoneKeySel == nil {
+		ui.UnitBoneKeySel = make(map[boneKeyRef]bool)
 	}
 	switch {
-	case shift && ui.unitBoneKeySelAnchor.mode >= 0:
+	case shift && ui.UnitBoneKeySelAnchor.mode >= 0:
 		lo, hi := -1, -1
 		for i, r := range refs {
-			if r == ui.unitBoneKeySelAnchor {
+			if r == ui.UnitBoneKeySelAnchor {
 				lo = i
 			}
 			if r == ref {
@@ -981,51 +981,51 @@ func (ui *uiState) boneKeyRowClicked(v *modelViewer, ref boneKeyRef, refs []bone
 		if lo < 0 || hi < 0 {
 			// The anchor is not on the list any more: a Shift+click with
 			// nothing to extend from picks the row it lands on.
-			ui.unitBoneKeySel = map[boneKeyRef]bool{ref: true}
-			ui.unitBoneKeySelAnchor = ref
+			ui.UnitBoneKeySel = map[boneKeyRef]bool{ref: true}
+			ui.UnitBoneKeySelAnchor = ref
 			break
 		}
 		if lo > hi {
 			lo, hi = hi, lo
 		}
-		ui.unitBoneKeySel = make(map[boneKeyRef]bool, hi-lo+1)
+		ui.UnitBoneKeySel = make(map[boneKeyRef]bool, hi-lo+1)
 		for _, r := range refs[lo : hi+1] {
-			ui.unitBoneKeySel[r] = true
+			ui.UnitBoneKeySel[r] = true
 		}
 		LogInfo("bone: Shift+click spans %d row(s), frames %d..%d", hi-lo+1, refs[lo].frame, refs[hi].frame)
 	case ctrl:
-		if ui.unitBoneKeySel[ref] {
-			delete(ui.unitBoneKeySel, ref)
+		if ui.UnitBoneKeySel[ref] {
+			delete(ui.UnitBoneKeySel, ref)
 			LogInfo("bone: Ctrl+click takes frame %d (%s) out of the selection", ref.frame, boneGroupLog(ref.mode))
 		} else {
-			ui.unitBoneKeySel[ref] = true
-			ui.unitBoneKeySelAnchor = ref
+			ui.UnitBoneKeySel[ref] = true
+			ui.UnitBoneKeySelAnchor = ref
 			LogInfo("bone: Ctrl+click adds frame %d (%s) to the selection", ref.frame, boneGroupLog(ref.mode))
 		}
 	default:
-		ui.unitBoneKeySel = map[boneKeyRef]bool{ref: true}
-		ui.unitBoneKeySelAnchor = ref
+		ui.UnitBoneKeySel = map[boneKeyRef]bool{ref: true}
+		ui.UnitBoneKeySelAnchor = ref
 	}
 	// The picked key follows the click: the clicked row while it is still
 	// among the picked ones, otherwise the last row still picked — in list
 	// order, so the choice does not depend on map iteration — and none when
 	// the selection is empty.
 	picked := boneKeyRef{mode: -1}
-	if ui.unitBoneKeySel[ref] {
+	if ui.UnitBoneKeySel[ref] {
 		picked = ref
 	} else {
 		for _, r := range refs {
-			if ui.unitBoneKeySel[r] {
+			if ui.UnitBoneKeySel[r] {
 				picked = r
 			}
 		}
 	}
-	if at := v.boneKeyIndexAtFrame(picked.frame, picked.mode); picked.mode >= 0 && at >= 0 {
-		v.boneKeyIndex, v.boneKeyMode = at, picked.mode
+	if at := v.BoneKeyIndexAtFrame(picked.frame, picked.mode); picked.mode >= 0 && at >= 0 {
+		v.BoneKeyIndex, v.BoneKeyMode = at, picked.mode
 	} else {
-		v.boneKeyIndex, v.boneKeyMode = -1, -1
+		v.BoneKeyIndex, v.BoneKeyMode = -1, -1
 	}
-	v.redraw = true
+	v.Redraw = true
 }
 
 // pickFrameKeyOnTimeline is what the step buttons do after winding the
@@ -1034,26 +1034,26 @@ func (ui *uiState) boneKeyRowClicked(v *modelViewer, ref boneKeyRef, refs []bone
 // shows picked, so stepping through the clip walks the selection along the
 // keys instead of leaving it behind where it started. A frame carrying no
 // key of this bone leaves the selection as it was.
-func (ui *uiState) pickFrameKeyOnTimeline(v *modelViewer) {
-	if v == nil || v.anim == nil || v.boneIndex < 0 || v.boneTrack() == nil {
+func PickFrameKeyOnTimeline(ui *uiState, v *modelViewer) {
+	if v == nil || v.Anim == nil || v.BoneIndex < 0 || v.BoneTrack() == nil {
 		return
 	}
-	frame, _ := v.currentFrame()
-	posAt := v.boneKeyIndexAtFrame(frame, 0)
-	rotAt := v.boneKeyIndexAtFrame(frame, 1)
+	frame, _ := v.CurrentFrame()
+	posAt := v.BoneKeyIndexAtFrame(frame, 0)
+	rotAt := v.BoneKeyIndexAtFrame(frame, 1)
 	if posAt < 0 && rotAt < 0 {
 		return
 	}
 	// The key the strip picks follows the kind that was picked before
 	// when it has a key on this frame, otherwise the other kind.
 	mode := 1
-	if rotAt < 0 || (v.boneKeyMode == 0 && posAt >= 0) {
+	if rotAt < 0 || (v.BoneKeyMode == 0 && posAt >= 0) {
 		mode = 0
 	}
 	if mode == 0 {
-		v.boneKeyIndex, v.boneKeyMode = posAt, 0
+		v.BoneKeyIndex, v.BoneKeyMode = posAt, 0
 	} else {
-		v.boneKeyIndex, v.boneKeyMode = rotAt, 1
+		v.BoneKeyIndex, v.BoneKeyMode = rotAt, 1
 	}
 	sel := map[boneKeyRef]bool{}
 	if posAt >= 0 {
@@ -1062,10 +1062,10 @@ func (ui *uiState) pickFrameKeyOnTimeline(v *modelViewer) {
 	if rotAt >= 0 {
 		sel[boneKeyRef{mode: 1, frame: frame}] = true
 	}
-	ui.unitBoneKeySel = sel
-	ui.unitBoneKeySelAnchor = boneKeyRef{mode: mode, frame: frame}
-	ui.fillBoneKeyFields(v, 0)
-	ui.fillBoneKeyFields(v, 1)
+	ui.UnitBoneKeySel = sel
+	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: mode, frame: frame}
+	FillBoneKeyFields(ui, v, 0)
+	FillBoneKeyFields(ui, v, 1)
 	LogInfo("bone: step picked frame %d: posKey=%v rotKey=%v picked=%s",
 		frame+1, posAt >= 0, rotAt >= 0, boneGroupLog(mode))
 }
@@ -1082,19 +1082,19 @@ func (ui *uiState) pickFrameKeyOnTimeline(v *modelViewer) {
 // back into the .whm. Both groups show the key a typed apply would write —
 // the picked key for its own kind, the nearest key of the other kind to the
 // frame on show for the other.
-func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
-	v := ui.unitModelViewer()
-	if ui.unitListMode != 2 || v == nil {
+func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
+	v := UnitModelViewer(ui)
+	if ui.UnitListMode != 2 || v == nil {
 		// If the bar is not laid out, its buttons cannot see a press — while
 		// the last drawn frame still shows them. The log says when this
 		// becomes the case, which turns a dead click into a visible cause.
-		if state := fmt.Sprintf("mode=%d viewer=%v", ui.unitListMode, v != nil); state != ui.unitBonePoseBarLog {
+		if state := fmt.Sprintf("mode=%d viewer=%v", ui.UnitListMode, v != nil); state != ui.UnitBonePoseBarLog {
 			LogInfo("bone: pose bar is not laid out (%s)", state)
-			ui.unitBonePoseBarLog = state
+			ui.UnitBonePoseBarLog = state
 		}
 		return layout.Dimensions{}
 	}
-	ui.unitBonePoseBarLog = ""
+	ui.UnitBonePoseBarLog = ""
 	// The buttons' clicks are drained before they are laid out
 	// below, never after. Clickable.Layout also updates the gesture, and an
 	// update that completes a click inside Layout hands the click to Layout —
@@ -1105,52 +1105,52 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 	// draining first inverts that race: a release waiting from the previous
 	// frame is read here, before Layout can swallow it. This is the order the
 	// rest of the app uses, with handleInput running ahead of Layout.
-	setClicked := ui.unitBoneKeySetClick.Clicked(gtx)
-	setAllClicked := ui.unitBoneKeySetAllClick.Clicked(gtx)
-	saveClicked := ui.unitBoneKeySaveClick.Clicked(gtx)
-	importClicked := ui.unitImpClick.Clicked(gtx)
-	addPosClicked := ui.unitBoneKeyAddPosClick.Clicked(gtx)
-	addRotClicked := ui.unitBoneKeyAddRotClick.Clicked(gtx)
-	beforeClicked := ui.unitBoneKeyBeforeClick.Clicked(gtx)
-	afterClicked := ui.unitBoneKeyAfterClick.Clicked(gtx)
-	delClicked := ui.unitBoneKeyDelClick.Clicked(gtx)
+	setClicked := ui.UnitBoneKeySetClick.Clicked(gtx)
+	setAllClicked := ui.UnitBoneKeySetAllClick.Clicked(gtx)
+	saveClicked := ui.UnitBoneKeySaveClick.Clicked(gtx)
+	importClicked := ui.UnitImpClick.Clicked(gtx)
+	addPosClicked := ui.UnitBoneKeyAddPosClick.Clicked(gtx)
+	addRotClicked := ui.UnitBoneKeyAddRotClick.Clicked(gtx)
+	beforeClicked := ui.UnitBoneKeyBeforeClick.Clicked(gtx)
+	afterClicked := ui.UnitBoneKeyAfterClick.Clicked(gtx)
+	delClicked := ui.UnitBoneKeyDelClick.Clicked(gtx)
 	mirClicked := [3]bool{
-		ui.unitBoneMirClick[0].Clicked(gtx),
-		ui.unitBoneMirClick[1].Clicked(gtx),
-		ui.unitBoneMirClick[2].Clicked(gtx),
+		ui.UnitBoneMirClick[0].Clicked(gtx),
+		ui.UnitBoneMirClick[1].Clicked(gtx),
+		ui.UnitBoneMirClick[2].Clicked(gtx),
 	}
-	shiftBackClicked := ui.unitBoneKeyShiftBack.Clicked(gtx)
-	shiftFwdClicked := ui.unitBoneKeyShiftFwd.Clicked(gtx)
-	undoClicked := ui.unitBoneKeyUndoClick.Clicked(gtx)
+	shiftBackClicked := ui.UnitBoneKeyShiftBack.Clicked(gtx)
+	shiftFwdClicked := ui.UnitBoneKeyShiftFwd.Clicked(gtx)
+	undoClicked := ui.UnitBoneKeyUndoClick.Clicked(gtx)
 	// Events first, before the fields are laid out below: an Enter pressed
 	// since the last frame applies its triple, and the group it belongs to
 	// is refilled with the values now in the key.
-	ui.updateBoneKeyEditors(gtx, v)
-	ui.syncBoneKeyFields(gtx, v)
+	UpdateBoneKeyEditors(ui, gtx, v)
+	SyncBoneKeyFields(ui, gtx, v)
 	// The frames field keeps its events drained like the typed groups:
 	// a press inside it takes the keyboard, Enter lets go of it again.
 	for {
-		ev, ok := ui.unitBoneKeyShiftEd.Update(gtx)
+		ev, ok := ui.UnitBoneKeyShiftEd.Update(gtx)
 		if !ok {
 			break
 		}
 		if _, submit := ev.(widget.SubmitEvent); submit {
-			ui.unitBoneKeyShiftEd.Blur(gtx)
+			ui.UnitBoneKeyShiftEd.Blur(gtx)
 		}
 	}
 	// What the keyframe buttons act on — the picked bone's track to add a key
 	// to, the rows of the list (or, with none picked, the key the strip picked)
 	// to take away or to add keys beside — is read here, before the layout below
 	// draws them disabled.
-	canAddKey := v != nil && v.anim != nil && v.boneIndex >= 0 && v.boneTrack() != nil
-	actionRefs := ui.boneKeyActionRefs(v)
+	canAddKey := v != nil && v.Anim != nil && v.BoneIndex >= 0 && v.BoneTrack() != nil
+	actionRefs := BoneKeyActionRefs(ui, v)
 	canDelKey := len(actionRefs) > 0
 	canAddAround := canAddKey && len(actionRefs) > 0
 	canShift := canDelKey
 	canMir := false
-	if v.anim != nil {
-		frame, _ := v.currentFrame()
-		canMir = v.boneKeyTarget(frame, 1) >= 0
+	if v.Anim != nil {
+		frame, _ := v.CurrentFrame()
+		canMir = v.BoneKeyTarget(frame, 1) >= 0
 	}
 	dims := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -1160,13 +1160,13 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
 				func(gtx layout.Context) layout.Dimensions {
-					return ui.unitBoneKeyFieldsRow(gtx, "Pos", &ui.unitBonePosEd)
+					return UnitBoneKeyFieldsRow(ui, gtx, "Pos", &ui.UnitBonePosEd)
 				})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
 				func(gtx layout.Context) layout.Dimensions {
-					return ui.unitBoneKeyFieldsRow(gtx, "Rot", &ui.unitBoneRotEd)
+					return UnitBoneKeyFieldsRow(ui, gtx, "Rot", &ui.UnitBoneRotEd)
 				})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -1179,24 +1179,24 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 				func(gtx layout.Context) layout.Dimensions {
 					children := []layout.FlexChild{
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), "Ang")
+							l := material.Label(ui.Th, unit.Sp(10), "Ang")
 							l.Color = cTextDim
 							return l.Layout(gtx)
 						}),
 					}
-					for i := range ui.unitBoneAngleSlid {
+					for i := range ui.UnitBoneAngleSlid {
 						i := i
 						children = append(children,
 							layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								l := material.Label(ui.th, unit.Sp(9), boneFieldAxes[i])
+								l := material.Label(ui.Th, unit.Sp(9), boneFieldAxes[i])
 								l.Color = cTextDim
 								return l.Layout(gtx)
 							}),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								gtx.Constraints.Min.X = gtx.Dp(unit.Dp(56))
 								gtx.Constraints.Max.X = gtx.Dp(unit.Dp(64))
-								sl := material.Slider(ui.th, &ui.unitBoneAngleSlid[i])
+								sl := material.Slider(ui.Th, &ui.UnitBoneAngleSlid[i])
 								sl.Color = rgb(0x6B6B6B)
 								// The slider's own Layout folds the drag into
 								// its Value; the write to the key happens once,
@@ -1210,7 +1210,7 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 					// Value now. While any is under the hand, store the trio
 					// in the rotation key — the bone and the mesh skinned to
 					// it turn to the new angle on this very frame.
-					ui.applyBoneAngleSliders(v)
+					ApplyBoneAngleSliders(ui, v)
 					return dims
 				})
 		}),
@@ -1223,21 +1223,21 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 				func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), "Mirror")
+							l := material.Label(ui.Th, unit.Sp(10), "Mirror")
 							l.Color = cTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneMirClick[0], "mirror X", !canMir)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneMirClick[0], "mirror X", !canMir)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneMirClick[1], "mirror Y", !canMir)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneMirClick[1], "mirror Y", !canMir)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneMirClick[2], "mirror Z", !canMir)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneMirClick[2], "mirror Z", !canMir)
 						}),
 					)
 				})
@@ -1250,24 +1250,24 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 				func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), "Shift")
+							l := material.Label(ui.Th, unit.Sp(10), "Shift")
 							l.Color = cTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.unitBoneKeyField(gtx, "f", &ui.unitBoneKeyShiftEd)
+							return UnitBoneKeyField(ui, gtx, "f", &ui.UnitBoneKeyShiftEd)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeyShiftBack, "back", !canShift)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeyShiftBack, "back", !canShift)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeyShiftFwd, "fwd", !canShift)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeyShiftFwd, "fwd", !canShift)
 						}),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(8), "frames each press moves")
+							l := material.Label(ui.Th, unit.Sp(8), "frames each press moves")
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -1284,18 +1284,18 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 				func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeyAddPosClick, "+ pos", !canAddKey)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeyAddPosClick, "+ pos", !canAddKey)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeyAddRotClick, "+ rot", !canAddKey)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeyAddRotClick, "+ rot", !canAddKey)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeyDelClick, "Delete key", !canDelKey)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeyDelClick, "Delete key", !canDelKey)
 						}),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(8), "drag a mark on the strip to move its key")
+							l := material.Label(ui.Th, unit.Sp(8), "drag a mark on the strip to move its key")
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -1313,14 +1313,14 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 				func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeyBeforeClick, "+ before", !canAddAround)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeyBeforeClick, "+ before", !canAddAround)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeyAfterClick, "+ after", !canAddAround)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeyAfterClick, "+ after", !canAddAround)
 						}),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(8), "Ctrl+click picks more rows")
+							l := material.Label(ui.Th, unit.Sp(8), "Ctrl+click picks more rows")
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -1333,15 +1333,15 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 				func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeyUndoClick, "Undo", len(ui.unitBoneUndo) == 0)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeyUndoClick, "Undo", len(ui.UnitBoneUndo) == 0)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &ui.unitBoneKeySetClick, "Set")
+							return SmallButton(ui, gtx, &ui.UnitBoneKeySetClick, "Set")
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &ui.unitBoneKeySetAllClick, "Set all")
+							return SmallButton(ui, gtx, &ui.UnitBoneKeySetAllClick, "Set all")
 						}),
 						layout.Flexed(1, layout.Spacer{Width: unit.Dp(0)}.Layout),
 					)
@@ -1357,24 +1357,24 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 				func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &ui.unitImpClick, "Import frame's timeline")
+							return SmallButton(ui, gtx, &ui.UnitImpClick, "Import frame's timeline")
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeySaveClick, "Save WHM", !ui.unitModelWhmDirty)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeySaveClick, "Save WHM", !ui.UnitModelWhmDirty)
 						}),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							text, noteColor := ui.unitImpPath, cTextDim
-							if ui.unitBoneKeyErr != "" {
-								text, noteColor = ui.unitBoneKeyErr, rgb(0xB00020)
+							text, noteColor := ui.UnitImpPath, cTextDim
+							if ui.UnitBoneKeyErr != "" {
+								text, noteColor = ui.UnitBoneKeyErr, rgb(0xB00020)
 							}
 							if text == "" {
 								return layout.Dimensions{}
 							}
-							if text == ui.unitImpPath {
+							if text == ui.UnitImpPath {
 								text = filepath.Base(text)
 							}
-							l := material.Label(ui.th, unit.Sp(9), text)
+							l := material.Label(ui.Th, unit.Sp(9), text)
 							l.Color = noteColor
 							l.MaxLines = 2
 							return l.Layout(gtx)
@@ -1388,91 +1388,91 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 	// area somewhere else, a press that never becomes a click broke between
 	// the frames, and seeing them settles where a dead click is not.
 	btnState := [26]bool{
-		ui.unitBoneKeySetClick.Hovered(), ui.unitBoneKeySetClick.Pressed(),
-		ui.unitBoneKeySetAllClick.Hovered(), ui.unitBoneKeySetAllClick.Pressed(),
-		ui.unitBoneKeySaveClick.Hovered(), ui.unitBoneKeySaveClick.Pressed(),
-		ui.unitBoneKeyAddPosClick.Hovered(), ui.unitBoneKeyAddPosClick.Pressed(),
-		ui.unitBoneKeyAddRotClick.Hovered(), ui.unitBoneKeyAddRotClick.Pressed(),
-		ui.unitBoneKeyDelClick.Hovered(), ui.unitBoneKeyDelClick.Pressed(),
-		ui.unitBoneKeyBeforeClick.Hovered(), ui.unitBoneKeyBeforeClick.Pressed(),
-		ui.unitBoneKeyAfterClick.Hovered(), ui.unitBoneKeyAfterClick.Pressed(),
-		ui.unitBoneMirClick[0].Hovered(), ui.unitBoneMirClick[0].Pressed(),
-		ui.unitBoneMirClick[1].Hovered(), ui.unitBoneMirClick[1].Pressed(),
-		ui.unitBoneMirClick[2].Hovered(), ui.unitBoneMirClick[2].Pressed(),
-		ui.unitBoneKeyShiftBack.Hovered(), ui.unitBoneKeyShiftBack.Pressed(),
-		ui.unitBoneKeyShiftFwd.Hovered(), ui.unitBoneKeyShiftFwd.Pressed(),
+		ui.UnitBoneKeySetClick.Hovered(), ui.UnitBoneKeySetClick.Pressed(),
+		ui.UnitBoneKeySetAllClick.Hovered(), ui.UnitBoneKeySetAllClick.Pressed(),
+		ui.UnitBoneKeySaveClick.Hovered(), ui.UnitBoneKeySaveClick.Pressed(),
+		ui.UnitBoneKeyAddPosClick.Hovered(), ui.UnitBoneKeyAddPosClick.Pressed(),
+		ui.UnitBoneKeyAddRotClick.Hovered(), ui.UnitBoneKeyAddRotClick.Pressed(),
+		ui.UnitBoneKeyDelClick.Hovered(), ui.UnitBoneKeyDelClick.Pressed(),
+		ui.UnitBoneKeyBeforeClick.Hovered(), ui.UnitBoneKeyBeforeClick.Pressed(),
+		ui.UnitBoneKeyAfterClick.Hovered(), ui.UnitBoneKeyAfterClick.Pressed(),
+		ui.UnitBoneMirClick[0].Hovered(), ui.UnitBoneMirClick[0].Pressed(),
+		ui.UnitBoneMirClick[1].Hovered(), ui.UnitBoneMirClick[1].Pressed(),
+		ui.UnitBoneMirClick[2].Hovered(), ui.UnitBoneMirClick[2].Pressed(),
+		ui.UnitBoneKeyShiftBack.Hovered(), ui.UnitBoneKeyShiftBack.Pressed(),
+		ui.UnitBoneKeyShiftFwd.Hovered(), ui.UnitBoneKeyShiftFwd.Pressed(),
 	}
-	if btnState != ui.unitBoneKeyBtnLog {
+	if btnState != ui.UnitBoneKeyBtnLog {
 		LogInfo("bone: buttons [Set hover press | SetAll hover press | Save hover press | +pos hover press | +rot hover press | Del hover press | Before hover press | After hover press | MirX | MirY | MirZ | Back | Fwd] = %v", btnState)
-		ui.unitBoneKeyBtnLog = btnState
+		ui.UnitBoneKeyBtnLog = btnState
 	}
 	if importClicked {
 		LogInfo("bone: Import frame's timeline pressed")
-		ui.openUnitImportDialog()
+		OpenUnitImportDialog(ui)
 	}
 	if setClicked {
-		LogInfo("bone: Set pressed: pos=[%s] rot=[%s]", boneFieldTexts(&ui.unitBonePosEd), boneFieldTexts(&ui.unitBoneRotEd))
+		LogInfo("bone: Set pressed: pos=[%s] rot=[%s]", boneFieldTexts(&ui.UnitBonePosEd), boneFieldTexts(&ui.UnitBoneRotEd))
 		// Set reads what was typed over: only a group with a changed axis is
 		// applied, so a bone with keys of just one kind does not error on the
 		// other, and an untouched group is a no-op rather than a surprise.
 		any := false
 		var firstErr string
 		for mode := 0; mode < 2; mode++ {
-			changed, _ := ui.modifiedBoneAxes(mode)
+			changed, _ := ModifiedBoneAxes(ui, mode)
 			if len(changed) == 0 {
 				continue
 			}
 			any = true
 			LogInfo("bone: Set applies the %s group, changed axes %v", boneGroupLog(mode), changed)
-			ui.applyBoneKeyFields(v, mode)
-			if ui.unitBoneKeyErr != "" && firstErr == "" {
-				firstErr = ui.unitBoneKeyErr
+			ApplyBoneKeyFields(ui, v, mode)
+			if ui.UnitBoneKeyErr != "" && firstErr == "" {
+				firstErr = ui.UnitBoneKeyErr
 			}
 		}
 		switch {
 		case !any:
-			ui.unitBoneKeyErr = "no values were changed"
+			ui.UnitBoneKeyErr = "no values were changed"
 		case firstErr != "":
-			ui.unitBoneKeyErr = firstErr
+			ui.UnitBoneKeyErr = firstErr
 		}
 	}
 	if setAllClicked {
-		LogInfo("bone: Set all pressed: pos=[%s] rot=[%s]", boneFieldTexts(&ui.unitBonePosEd), boneFieldTexts(&ui.unitBoneRotEd))
-		ui.setAllBoneKeyFields(v)
+		LogInfo("bone: Set all pressed: pos=[%s] rot=[%s]", boneFieldTexts(&ui.UnitBonePosEd), boneFieldTexts(&ui.UnitBoneRotEd))
+		SetAllBoneKeyFields(ui, v)
 	}
 	if saveClicked {
-		LogInfo("bone: Save pressed (dirty=%v)", ui.unitModelWhmDirty)
-		ui.saveUnitModelWhm()
+		LogInfo("bone: Save pressed (dirty=%v)", ui.UnitModelWhmDirty)
+		SaveUnitModelWhm(ui)
 	}
 	if addPosClicked {
-		ui.addBoneKeyAtPlayhead(v, 0)
+		AddBoneKeyAtPlayhead(ui, v, 0)
 	}
 	if addRotClicked {
-		ui.addBoneKeyAtPlayhead(v, 1)
+		AddBoneKeyAtPlayhead(ui, v, 1)
 	}
 	if beforeClicked {
-		ui.addBoneKeysAround(v, -1)
+		AddBoneKeysAround(ui, v, -1)
 	}
 	if afterClicked {
-		ui.addBoneKeysAround(v, 1)
+		AddBoneKeysAround(ui, v, 1)
 	}
 	if delClicked {
-		ui.deleteBoneKeysAction(v)
+		DeleteBoneKeysAction(ui, v)
 	}
 	for axis := 0; axis < 3; axis++ {
 		if mirClicked[axis] {
-			ui.mirrorBoneRotationAction(v, axis)
+			MirrorBoneRotationAction(ui, v, axis)
 		}
 	}
 	if shiftBackClicked {
-		ui.shiftBoneKeysAction(v, -1)
+		ShiftBoneKeysAction(ui, v, -1)
 	}
 	if shiftFwdClicked {
-		ui.shiftBoneKeysAction(v, 1)
+		ShiftBoneKeysAction(ui, v, 1)
 	}
 	if undoClicked {
-		LogInfo("bone: Undo pressed (%d step(s) on the stack)", len(ui.unitBoneUndo))
-		ui.undoBoneKeyEdit(v)
+		LogInfo("bone: Undo pressed (%d step(s) on the stack)", len(ui.UnitBoneUndo))
+		UndoBoneKeyEdit(ui, v)
 	}
 	return dims
 }
@@ -1500,24 +1500,24 @@ func boneFieldTexts(eds *[3]widget.Editor) string {
 // unitBoneKeyFieldsRow is one row of the pose bar's typed group: the group's
 // name, then X, Y and Z. Each field submits on Enter, which is what applies
 // the triple to the key it belongs to.
-func (ui *uiState) unitBoneKeyFieldsRow(gtx layout.Context, title string, eds *[3]widget.Editor) layout.Dimensions {
+func UnitBoneKeyFieldsRow(ui *uiState, gtx layout.Context, title string, eds *[3]widget.Editor) layout.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), title)
+			l := material.Label(ui.Th, unit.Sp(10), title)
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitBoneKeyField(gtx, boneFieldAxes[0], &eds[0])
+			return UnitBoneKeyField(ui, gtx, boneFieldAxes[0], &eds[0])
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitBoneKeyField(gtx, boneFieldAxes[1], &eds[1])
+			return UnitBoneKeyField(ui, gtx, boneFieldAxes[1], &eds[1])
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitBoneKeyField(gtx, boneFieldAxes[2], &eds[2])
+			return UnitBoneKeyField(ui, gtx, boneFieldAxes[2], &eds[2])
 		}),
 	)
 }
@@ -1525,12 +1525,12 @@ func (ui *uiState) unitBoneKeyFieldsRow(gtx layout.Context, title string, eds *[
 // unitBoneKeyField is one typed axis: its letter, and a small bordered editor
 // that submits on Enter. The fixed width keeps the three of a row aligned and
 // stops a long value from pushing its neighbours out of the panel.
-func (ui *uiState) unitBoneKeyField(gtx layout.Context, axis string, ed *widget.Editor) layout.Dimensions {
+func UnitBoneKeyField(ui *uiState, gtx layout.Context, axis string, ed *widget.Editor) layout.Dimensions {
 	ed.SingleLine = true
 	ed.Submit = true
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), axis)
+			l := material.Label(ui.Th, unit.Sp(9), axis)
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		}),
@@ -1541,7 +1541,7 @@ func (ui *uiState) unitBoneKeyField(gtx layout.Context, axis string, ed *widget.
 			b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 			return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					w := material.Editor(ui.th, ed, "")
+					w := material.Editor(ui.Th, ed, "")
 					w.TextSize = unit.Sp(10)
 					w.HintColor = cTextDim
 					return w.Layout(gtx)
@@ -1554,25 +1554,25 @@ func (ui *uiState) unitBoneKeyField(gtx layout.Context, axis string, ed *widget.
 // updateBoneKeyEditors drains the typed fields' events, applying an Enter:
 // the position group writes its XYZ triple into the target position key, the
 // rotation group turns its XYZ degrees into the quaternion that key holds.
-func (ui *uiState) updateBoneKeyEditors(gtx layout.Context, v *modelViewer) {
+func UpdateBoneKeyEditors(ui *uiState, gtx layout.Context, v *modelViewer) {
 	// Which field holds the caret is logged on change: typing needs it and
 	// Enter submits through it, so a caret that never lands on a field
 	// explains both of them going quiet.
 	var focus [6]bool
-	for m, eds := range [2]*[3]widget.Editor{&ui.unitBonePosEd, &ui.unitBoneRotEd} {
+	for m, eds := range [2]*[3]widget.Editor{&ui.UnitBonePosEd, &ui.UnitBoneRotEd} {
 		for i := range eds {
 			focus[m*3+i] = eds[i].Focused(gtx)
 		}
 	}
-	if focus != ui.unitBoneKeyFocusLog {
+	if focus != ui.UnitBoneKeyFocusLog {
 		LogInfo("bone: field focus — Pos X=%v Y=%v Z=%v, Rot X=%v Y=%v Z=%v",
 			focus[0], focus[1], focus[2], focus[3], focus[4], focus[5])
-		ui.unitBoneKeyFocusLog = focus
+		ui.UnitBoneKeyFocusLog = focus
 	}
 	// Tab moves the caret to the next of the six fields and Shift+Tab to the
 	// previous one, wrapping round. The editor does not take Tab itself, so it
 	// is read here, before the editors drain their own events.
-	fields := [2]*[3]widget.Editor{&ui.unitBonePosEd, &ui.unitBoneRotEd}
+	fields := [2]*[3]widget.Editor{&ui.UnitBonePosEd, &ui.UnitBoneRotEd}
 	for flat := 0; flat < 6; flat++ {
 		tag := &fields[flat/3][flat%3]
 		for {
@@ -1591,7 +1591,7 @@ func (ui *uiState) updateBoneKeyEditors(gtx layout.Context, v *modelViewer) {
 			gtx.Execute(key.FocusCmd{Tag: &fields[next/3][next%3]})
 		}
 	}
-	for mode, eds := range [2]*[3]widget.Editor{&ui.unitBonePosEd, &ui.unitBoneRotEd} {
+	for mode, eds := range [2]*[3]widget.Editor{&ui.UnitBonePosEd, &ui.UnitBoneRotEd} {
 		for i := range eds {
 			for {
 				ev, ok := eds[i].Update(gtx)
@@ -1600,12 +1600,12 @@ func (ui *uiState) updateBoneKeyEditors(gtx layout.Context, v *modelViewer) {
 				}
 				if _, submit := ev.(widget.SubmitEvent); submit {
 					LogInfo("bone: Enter in the %s group: fields=[%s]", boneGroupLog(mode), boneFieldTexts(eds))
-					ui.applyBoneKeyFields(v, mode)
+					ApplyBoneKeyFields(ui, v, mode)
 					// Enter applies, then moves the caret to the next field: the
 					// six fields run Pos X..Z then Rot X..Z and wrap round, so a
 					// row of values is typed with Enter alone.
 					flat := (mode*3 + i + 1) % 6
-					fields := [2]*[3]widget.Editor{&ui.unitBonePosEd, &ui.unitBoneRotEd}
+					fields := [2]*[3]widget.Editor{&ui.UnitBonePosEd, &ui.UnitBoneRotEd}
 					gtx.Execute(key.FocusCmd{Tag: &fields[flat/3][flat%3]})
 				}
 			}
@@ -1618,55 +1618,55 @@ func (ui *uiState) updateBoneKeyEditors(gtx layout.Context, v *modelViewer) {
 // nearest key of that kind to the frame on show when it is not. A value that
 // is not a number, or a bone with no key of that kind, is reported in the
 // note beside Save rather than thrown away silently.
-func (ui *uiState) applyBoneKeyFields(v *modelViewer, mode int) {
+func ApplyBoneKeyFields(ui *uiState, v *modelViewer, mode int) {
 	kind := "position"
 	if mode == 1 {
 		kind = "rotation"
 	}
-	val, err := ui.parseBoneGroup(mode)
+	val, err := ParseBoneGroup(ui, mode)
 	if err != nil {
-		ui.unitBoneKeyErr = err.Error()
+		ui.UnitBoneKeyErr = err.Error()
 		return
 	}
-	frame, _ := v.currentFrame()
-	target := v.boneKeyTarget(frame, mode)
+	frame, _ := v.CurrentFrame()
+	target := v.BoneKeyTarget(frame, mode)
 	LogInfo("bone: apply %s: parsed=[%.3f %.3f %.3f] frame=%d target=%d picked(idx=%d mode=%d)",
-		boneGroupLog(mode), val[0], val[1], val[2], frame, target, v.boneKeyIndex, v.boneKeyMode)
+		boneGroupLog(mode), val[0], val[1], val[2], frame, target, v.BoneKeyIndex, v.BoneKeyMode)
 	if target < 0 {
 		LogInfo("bone: apply %s: no target key in this clip", boneGroupLog(mode))
-		ui.unitBoneKeyErr = fmt.Sprintf("this bone has no %s key in the clip", kind)
+		ui.UnitBoneKeyErr = fmt.Sprintf("this bone has no %s key in the clip", kind)
 		return
 	}
-	v.boneKeyIndex, v.boneKeyMode = target, mode
-	ok := v.setBoneKeyPosition([3]float32{float32(val[0]), float32(val[1]), float32(val[2])})
+	v.BoneKeyIndex, v.BoneKeyMode = target, mode
+	ok := v.SetBoneKeyPosition([3]float32{float32(val[0]), float32(val[1]), float32(val[2])})
 	if mode == 1 {
-		ok = v.setBoneKeyRotation(quatFromEulerDeg(val[0], val[1], val[2]))
+		ok = v.SetBoneKeyRotation(quatFromEulerDeg(val[0], val[1], val[2]))
 	}
 	if !ok {
-		LogWarn("bone: apply %s: the write was refused (bone=%d mode=%d idx=%d)", boneGroupLog(mode), v.boneIndex, v.boneKeyMode, v.boneKeyIndex)
-		ui.unitBoneKeyErr = fmt.Sprintf("the %s key could not be written", kind)
+		LogWarn("bone: apply %s: the write was refused (bone=%d mode=%d idx=%d)", boneGroupLog(mode), v.BoneIndex, v.BoneKeyMode, v.BoneKeyIndex)
+		ui.UnitBoneKeyErr = fmt.Sprintf("the %s key could not be written", kind)
 		return
 	}
-	LogInfo("bone: apply %s: written ok, dirty=%v", boneGroupLog(mode), ui.unitModelWhmDirty)
-	ui.unitModelWhmDirty = true
-	ui.unitBoneKeyErr = ""
+	LogInfo("bone: apply %s: written ok, dirty=%v", boneGroupLog(mode), ui.UnitModelWhmDirty)
+	ui.UnitModelWhmDirty = true
+	ui.UnitBoneKeyErr = ""
 	// The playhead is wound to the key that was just written so the edit is
 	// on show, then the group shows what the key now holds.
-	v.windToPickedBoneKey()
+	v.WindToPickedBoneKey()
 	// The group is refilled from the key, so what is shown is what was
 	// stored: a rotation comes back as the degrees its quaternion means.
-	ui.fillBoneKeyFields(v, mode)
+	FillBoneKeyFields(ui, v, mode)
 }
 
 // parseBoneGroup reads one group of the typed fields as numbers, naming the
 // axis that would not parse. An Enter and both buttons go through it, so a
 // value is read the same way however it is applied.
-func (ui *uiState) parseBoneGroup(mode int) ([3]float64, error) {
+func ParseBoneGroup(ui *uiState, mode int) ([3]float64, error) {
 	var val [3]float64
-	eds := &ui.unitBonePosEd
+	eds := &ui.UnitBonePosEd
 	kind := "position"
 	if mode == 1 {
-		eds = &ui.unitBoneRotEd
+		eds = &ui.UnitBoneRotEd
 		kind = "rotation"
 	}
 	for i := range eds {
@@ -1688,14 +1688,14 @@ func (ui *uiState) parseBoneGroup(mode int) ([3]float64, error) {
 // write — and whether anything changed at all. A field that does not parse
 // still counts as changed, so applying it reports the problem rather than
 // skipping what was typed.
-func (ui *uiState) modifiedBoneAxes(mode int) ([]int, bool) {
-	eds := &ui.unitBonePosEd
+func ModifiedBoneAxes(ui *uiState, mode int) ([]int, bool) {
+	eds := &ui.UnitBonePosEd
 	if mode == 1 {
-		eds = &ui.unitBoneRotEd
+		eds = &ui.UnitBoneRotEd
 	}
 	var axes []int
 	for i := range eds {
-		if strings.TrimSpace(eds[i].Text()) != ui.unitBoneKeyFillText[mode][i] {
+		if strings.TrimSpace(eds[i].Text()) != ui.UnitBoneKeyFillText[mode][i] {
 			axes = append(axes, i)
 		}
 	}
@@ -1707,38 +1707,38 @@ func (ui *uiState) modifiedBoneAxes(mode int) ([]int, bool) {
 // frame becomes a Rot X of 180 on every rotation key, while the axes left
 // alone keep their own per-key values. Everything is read before anything is
 // written, so a field that does not parse leaves the keys untouched.
-func (ui *uiState) setAllBoneKeyFields(v *modelViewer) {
-	if v == nil || v.anim == nil || v.boneIndex < 0 {
-		ui.unitBoneKeyErr = "no bone is picked"
+func SetAllBoneKeyFields(ui *uiState, v *modelViewer) {
+	if v == nil || v.Anim == nil || v.BoneIndex < 0 {
+		ui.UnitBoneKeyErr = "no bone is picked"
 		return
 	}
-	t := v.boneTrack()
+	t := v.BoneTrack()
 	if t == nil {
-		ui.unitBoneKeyErr = "the bone has no track in this clip"
+		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
-	axes0, ch0 := ui.modifiedBoneAxes(0)
-	axes1, ch1 := ui.modifiedBoneAxes(1)
+	axes0, ch0 := ModifiedBoneAxes(ui, 0)
+	axes1, ch1 := ModifiedBoneAxes(ui, 1)
 	LogInfo("bone: Set all: changed pos-axes=%v rot-axes=%v", axes0, axes1)
 	if !ch0 && !ch1 {
-		ui.unitBoneKeyErr = "no values were changed"
+		ui.UnitBoneKeyErr = "no values were changed"
 		return
 	}
 	var val0, val1 [3]float64
 	var err error
 	if ch0 {
-		if val0, err = ui.parseBoneGroup(0); err != nil {
-			ui.unitBoneKeyErr = err.Error()
+		if val0, err = ParseBoneGroup(ui, 0); err != nil {
+			ui.UnitBoneKeyErr = err.Error()
 			return
 		}
 	}
 	if ch1 {
-		if val1, err = ui.parseBoneGroup(1); err != nil {
-			ui.unitBoneKeyErr = err.Error()
+		if val1, err = ParseBoneGroup(ui, 1); err != nil {
+			ui.UnitBoneKeyErr = err.Error()
 			return
 		}
 	}
-	snap, haveSnap := v.snapshotBoneTrack()
+	snap, haveSnap := v.SnapshotBoneTrack()
 	written := 0
 	if ch0 {
 		for i := range t.PosKey {
@@ -1762,23 +1762,23 @@ func (ui *uiState) setAllBoneKeyFields(v *modelViewer) {
 	}
 	if written == 0 {
 		LogInfo("bone: Set all: no keys of the changed kind to write")
-		ui.unitBoneKeyErr = "the bone has no keys of the changed kind in this clip"
+		ui.UnitBoneKeyErr = "the bone has no keys of the changed kind in this clip"
 		return
 	}
 	// The pose cache predates the writes, so the viewport evaluates it again.
-	v.poseValid = false
-	v.invalidate()
-	ui.unitModelWhmDirty = true
-	ui.unitBoneKeyErr = ""
-	ui.fillBoneKeyFields(v, 0)
-	ui.fillBoneKeyFields(v, 1)
-	ui.pushBoneUndo(snap, haveSnap)
+	v.PoseValid = false
+	v.Invalidate()
+	ui.UnitModelWhmDirty = true
+	ui.UnitBoneKeyErr = ""
+	FillBoneKeyFields(ui, v, 0)
+	FillBoneKeyFields(ui, v, 1)
+	PushBoneUndo(ui, snap, haveSnap)
 	name := "?"
-	if v.boneIndex < len(v.model.Bones) {
-		name = v.model.Bones[v.boneIndex].Name
+	if v.BoneIndex < len(v.Model.Bones) {
+		name = v.Model.Bones[v.BoneIndex].Name
 	}
-	LogInfo("bone: Set all: %d key(s) written for bone %s, dirty=%v", written, name, ui.unitModelWhmDirty)
-	ui.statusText = fmt.Sprintf("Set changed values on %d key(s) of bone %s", written, name)
+	LogInfo("bone: Set all: %d key(s) written for bone %s, dirty=%v", written, name, ui.UnitModelWhmDirty)
+	ui.StatusText = fmt.Sprintf("Set changed values on %d key(s) of bone %s", written, name)
 }
 
 // syncBoneKeyFields keeps the typed fields on the keys a typed apply would
@@ -1791,34 +1791,34 @@ func (ui *uiState) setAllBoneKeyFields(v *modelViewer) {
 // or Enter would write the old bone's values into the new one. A change of
 // frame alone only refills the groups the cursor is not in, so typing
 // survives the playhead being moved.
-func (ui *uiState) syncBoneKeyFields(gtx layout.Context, v *modelViewer) {
+func SyncBoneKeyFields(ui *uiState, gtx layout.Context, v *modelViewer) {
 	if v == nil {
 		return
 	}
-	frame, _ := v.currentFrame()
+	frame, _ := v.CurrentFrame()
 	sel := "no clip"
-	if v.anim != nil {
-		sel = fmt.Sprintf("%s|%d|%d|%d", v.anim.Name, v.boneIndex, v.boneKeyMode, v.boneKeyIndex)
+	if v.Anim != nil {
+		sel = fmt.Sprintf("%s|%d|%d|%d", v.Anim.Name, v.BoneIndex, v.BoneKeyMode, v.BoneKeyIndex)
 	}
-	selChanged := sel != ui.unitBoneKeyBound
-	if !selChanged && frame == ui.unitBoneKeyFrame {
+	selChanged := sel != ui.UnitBoneKeyBound
+	if !selChanged && frame == ui.UnitBoneKeyFrame {
 		return
 	}
-	prevSel := ui.unitBoneKeyBound
-	ui.unitBoneKeyBound = sel
-	ui.unitBoneKeyFrame = frame
+	prevSel := ui.UnitBoneKeyBound
+	ui.UnitBoneKeyBound = sel
+	ui.UnitBoneKeyFrame = frame
 	if selChanged {
 		LogInfo("bone: selection changed %q -> %q: refilling both groups", prevSel, sel)
-		ui.unitBoneKeyErr = ""
-		ui.fillBoneKeyFields(v, 0)
-		ui.fillBoneKeyFields(v, 1)
+		ui.UnitBoneKeyErr = ""
+		FillBoneKeyFields(ui, v, 0)
+		FillBoneKeyFields(ui, v, 1)
 		return
 	}
-	for mode, eds := range [2]*[3]widget.Editor{&ui.unitBonePosEd, &ui.unitBoneRotEd} {
+	for mode, eds := range [2]*[3]widget.Editor{&ui.UnitBonePosEd, &ui.UnitBoneRotEd} {
 		if eds[0].Focused(gtx) || eds[1].Focused(gtx) || eds[2].Focused(gtx) {
 			continue
 		}
-		ui.fillBoneKeyFields(v, mode)
+		FillBoneKeyFields(ui, v, mode)
 	}
 }
 
@@ -1826,17 +1826,17 @@ func (ui *uiState) syncBoneKeyFields(gtx layout.Context, v *modelViewer) {
 // apply of that kind would write, or empties the group when there is no such
 // key: an apply into nothing is not offered, and the fields say so by being
 // blank.
-func (ui *uiState) fillBoneKeyFields(v *modelViewer, mode int) {
-	eds := &ui.unitBonePosEd
+func FillBoneKeyFields(ui *uiState, v *modelViewer, mode int) {
+	eds := &ui.UnitBonePosEd
 	if mode == 1 {
-		eds = &ui.unitBoneRotEd
+		eds = &ui.UnitBoneRotEd
 	}
 	var vals [3]float64
 	ok := false
 	if v != nil {
-		frame, _ := v.currentFrame()
-		if idx := v.boneKeyTarget(frame, mode); idx >= 0 {
-			if t := v.boneTrack(); t != nil {
+		frame, _ := v.CurrentFrame()
+		if idx := v.BoneKeyTarget(frame, mode); idx >= 0 {
+			if t := v.BoneTrack(); t != nil {
 				if mode == 0 && idx < len(t.PosKey) {
 					p := t.PosKey[idx].V
 					vals = [3]float64{float64(p[0]), float64(p[1]), float64(p[2])}
@@ -1848,7 +1848,7 @@ func (ui *uiState) fillBoneKeyFields(v *modelViewer, mode int) {
 			}
 		}
 	}
-	prev := ui.unitBoneKeyFillText[mode]
+	prev := ui.UnitBoneKeyFillText[mode]
 	if mode == 1 {
 		// While a slider is under the hand the three sliders hold the
 		// trio being written and the fields follow them. Reading the
@@ -1859,25 +1859,25 @@ func (ui *uiState) fillBoneKeyFields(v *modelViewer, mode int) {
 		// jumped back and forth every frame. With no hand on a slider,
 		// everything follows the key again.
 		held := false
-		for i := range ui.unitBoneAngleSlid {
-			if ui.unitBoneAngleSlid[i].Dragging() {
+		for i := range ui.UnitBoneAngleSlid {
+			if ui.UnitBoneAngleSlid[i].Dragging() {
 				held = true
 				break
 			}
 		}
 		if held && ok {
 			vals = [3]float64{
-				boneAngleSliderDeg(ui.unitBoneAngleSlid[0].Value),
-				boneAngleSliderDeg(ui.unitBoneAngleSlid[1].Value),
-				boneAngleSliderDeg(ui.unitBoneAngleSlid[2].Value),
+				boneAngleSliderDeg(ui.UnitBoneAngleSlid[0].Value),
+				boneAngleSliderDeg(ui.UnitBoneAngleSlid[1].Value),
+				boneAngleSliderDeg(ui.UnitBoneAngleSlid[2].Value),
 			}
 		} else if !held {
-			for i := range ui.unitBoneAngleSlid {
+			for i := range ui.UnitBoneAngleSlid {
 				frac := float32(0.5)
 				if ok {
 					frac = boneAngleSliderFrac(vals[i])
 				}
-				ui.unitBoneAngleSlid[i].Value = frac
+				ui.UnitBoneAngleSlid[i].Value = frac
 			}
 		}
 	}
@@ -1891,13 +1891,13 @@ func (ui *uiState) fillBoneKeyFields(v *modelViewer, mode int) {
 		}
 		// What the field showed is what a later change is measured against:
 		// Set and Set all write only the axes typed over.
-		ui.unitBoneKeyFillText[mode][i] = text
+		ui.UnitBoneKeyFillText[mode][i] = text
 		eds[i].SetText(text)
 	}
-	if now := ui.unitBoneKeyFillText[mode]; now != prev {
+	if now := ui.UnitBoneKeyFillText[mode]; now != prev {
 		frame := -1
 		if v != nil {
-			frame, _ = v.currentFrame()
+			frame, _ = v.CurrentFrame()
 		}
 		LogInfo("bone: fill %s frame=%d: [%s] (was [%s])", boneGroupLog(mode), frame,
 			strings.Join(now[:], " "), strings.Join(prev[:], " "))
@@ -1912,36 +1912,36 @@ const maxAnimFrames = 100000
 // unitAnimFramesRow is the clip's frame count: the number typed in, the Set
 // button beside it, and on the right what that number is in the file — the
 // clip's length in seconds and the rate the two of them work out to.
-func (ui *uiState) unitAnimFramesRow(gtx layout.Context, v *modelViewer) layout.Dimensions {
+func UnitAnimFramesRow(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
 	hint := "no clip on show"
-	canSet := v != nil && v.anim != nil
+	canSet := v != nil && v.Anim != nil
 	if canSet {
-		hint = fmt.Sprintf("%.2f s · %.1f fps", animClipSeconds(v.anim), animFramesPerSecond(v.anim))
+		hint = fmt.Sprintf("%.2f s · %.1f fps", animClipSeconds(v.Anim), animFramesPerSecond(v.Anim))
 	}
 	// A count the field would not take says why where the length is shown: it
 	// is the one place the frames row has to report in, and it is on screen in
 	// every list mode.
 	hintColor := cTextDim
-	if ui.unitAnimFramesErr != "" {
-		hint = ui.unitAnimFramesErr
+	if ui.UnitAnimFramesErr != "" {
+		hint = ui.UnitAnimFramesErr
 		hintColor = rgb(0xB00020)
 	}
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), "Frames")
+			l := material.Label(ui.Th, unit.Sp(10), "Frames")
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitBoneKeyField(gtx, "", &ui.unitAnimFramesEd)
+			return UnitBoneKeyField(ui, gtx, "", &ui.UnitAnimFramesEd)
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &ui.unitAnimFramesSetClick, "Set", !canSet)
+			return SmallButtonDisabled(ui, gtx, &ui.UnitAnimFramesSetClick, "Set", !canSet)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(8), hint)
+			l := material.Label(ui.Th, unit.Sp(8), hint)
 			l.Color = hintColor
 			l.MaxLines = 2
 			return l.Layout(gtx)
@@ -1953,17 +1953,17 @@ func (ui *uiState) unitAnimFramesRow(gtx layout.Context, v *modelViewer) layout.
 // refilled when the clip or its count changes — another clip, another model, a
 // count just applied — and left alone otherwise, so a number being typed over
 // is not taken away mid-word.
-func (ui *uiState) syncAnimFramesField(v *modelViewer) {
+func SyncAnimFramesField(ui *uiState, v *modelViewer) {
 	key, text := "no clip", ""
-	if v != nil && v.anim != nil {
-		key = fmt.Sprintf("%s|%d", v.anim.Name, v.anim.NumFrames)
-		text = strconv.Itoa(v.anim.NumFrames)
+	if v != nil && v.Anim != nil {
+		key = fmt.Sprintf("%s|%d", v.Anim.Name, v.Anim.NumFrames)
+		text = strconv.Itoa(v.Anim.NumFrames)
 	}
-	if key == ui.unitAnimFramesSync {
+	if key == ui.UnitAnimFramesSync {
 		return
 	}
-	ui.unitAnimFramesSync = key
-	ui.unitAnimFramesEd.SetText(text)
+	ui.UnitAnimFramesSync = key
+	ui.UnitAnimFramesEd.SetText(text)
 }
 
 // applyAnimFrameCount is what Set beside the frames field and Enter in it do:
@@ -1978,25 +1978,25 @@ func (ui *uiState) syncAnimFramesField(v *modelViewer) {
 // rate it had only by moving the duration by the same ratio — the clip is
 // counted out at the same rate over a longer or shorter length — and the
 // header keeps showing the rate the clip had before the change.
-func (ui *uiState) applyAnimFrameCount(v *modelViewer) {
-	if v == nil || v.anim == nil {
-		ui.unitAnimFramesErr = "no clip is on show"
+func ApplyAnimFrameCount(ui *uiState, v *modelViewer) {
+	if v == nil || v.Anim == nil {
+		ui.UnitAnimFramesErr = "no clip is on show"
 		return
 	}
-	text := strings.TrimSpace(ui.unitAnimFramesEd.Text())
+	text := strings.TrimSpace(ui.UnitAnimFramesEd.Text())
 	n, err := strconv.Atoi(text)
 	if err != nil || n < 1 {
-		ui.unitAnimFramesErr = fmt.Sprintf("%q is not a frame count — a whole number of at least 1", text)
+		ui.UnitAnimFramesErr = fmt.Sprintf("%q is not a frame count — a whole number of at least 1", text)
 		return
 	}
 	if n > maxAnimFrames {
-		ui.unitAnimFramesErr = fmt.Sprintf("%d is past the %d frames a clip is given here", n, maxAnimFrames)
+		ui.UnitAnimFramesErr = fmt.Sprintf("%d is past the %d frames a clip is given here", n, maxAnimFrames)
 		return
 	}
-	old := v.anim.NumFrames
+	old := v.Anim.NumFrames
 	if n == old {
-		ui.unitAnimFramesErr = ""
-		ui.statusText = fmt.Sprintf("Clip %q is already %d frames", v.anim.Name, n)
+		ui.UnitAnimFramesErr = ""
+		ui.StatusText = fmt.Sprintf("Clip %q is already %d frames", v.Anim.Name, n)
 		return
 	}
 	// The rate is taken before the count moves and the duration is put back
@@ -2004,19 +2004,19 @@ func (ui *uiState) applyAnimFrameCount(v *modelViewer) {
 	// means the length follows the count by the same ratio. A clip with no
 	// duration of its own rates at the 20 fps fallback and is given the
 	// length that goes with it.
-	fps := animFramesPerSecond(v.anim)
-	v.anim.NumFrames = n
+	fps := animFramesPerSecond(v.Anim)
+	v.Anim.NumFrames = n
 	if fps > 0 {
-		v.anim.Duration = float32(float64(n) / fps)
+		v.Anim.Duration = float32(float64(n) / fps)
 	}
-	v.poseValid = false
-	v.invalidate()
-	ui.unitModelWhmDirty = true
-	ui.unitAnimFramesErr = ""
-	ui.statusText = fmt.Sprintf("Clip %q: %d frames (was %d) at %.1f fps — Save WHM writes it",
-		v.anim.Name, n, old, animFramesPerSecond(v.anim))
+	v.PoseValid = false
+	v.Invalidate()
+	ui.UnitModelWhmDirty = true
+	ui.UnitAnimFramesErr = ""
+	ui.StatusText = fmt.Sprintf("Clip %q: %d frames (was %d) at %.1f fps — Save WHM writes it",
+		v.Anim.Name, n, old, animFramesPerSecond(v.Anim))
 	LogInfo("bone: clip %q frames %d -> %d (%.2f s at %.1f fps, dirty=%v)",
-		v.anim.Name, old, n, animClipSeconds(v.anim), animFramesPerSecond(v.anim), ui.unitModelWhmDirty)
+		v.Anim.Name, old, n, animClipSeconds(v.Anim), animFramesPerSecond(v.Anim), ui.UnitModelWhmDirty)
 }
 
 // saveUnitModelWhm writes the edited bone keys back into the .whm: the file
@@ -2026,44 +2026,44 @@ func (ui *uiState) applyAnimFrameCount(v *modelViewer) {
 // the whole file goes back through the overlay. Everything this editor does
 // not read survives intact: only the animation's bone section is rewritten,
 // with the chunk sizes above it moved to match.
-func (ui *uiState) saveUnitModelWhm() {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil || v.animIndex < 0 || v.animIndex >= len(v.model.Animations) {
-		ui.unitBoneKeyErr = "no animation to save"
+func SaveUnitModelWhm(ui *uiState) {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil || v.AnimIndex < 0 || v.AnimIndex >= len(v.Model.Animations) {
+		ui.UnitBoneKeyErr = "no animation to save"
 		return
 	}
 	// A press can reach the handler even while the button is drawn disabled,
 	// and a save of untouched keys must not be a reason to rewrite the file.
-	if !ui.unitModelWhmDirty {
+	if !ui.UnitModelWhmDirty {
 		LogInfo("bone: Save skipped — no key was changed")
-		ui.unitBoneKeyErr = "nothing to save — no key was changed"
+		ui.UnitBoneKeyErr = "nothing to save — no key was changed"
 		return
 	}
-	if ui.modTree == nil || ui.unitModelPath == "" {
-		ui.unitBoneKeyErr = "no module is loaded"
+	if ui.ModTree == nil || ui.UnitModelPath == "" {
+		ui.UnitBoneKeyErr = "no module is loaded"
 		return
 	}
-	data, err := ui.modTree.ReadFile(ui.unitModelPath)
+	data, err := ui.ModTree.ReadFile(ui.UnitModelPath)
 	if err != nil {
-		ui.unitBoneKeyErr = "read failed: " + err.Error()
+		ui.UnitBoneKeyErr = "read failed: " + err.Error()
 		return
 	}
-	patched, err := whm.PatchAnimClip(data, &v.model.Model, v.animIndex, v.anim.NumFrames)
+	patched, err := whm.PatchAnimClip(data, &v.Model.Model, v.AnimIndex, v.Anim.NumFrames)
 	if err != nil {
-		ui.unitBoneKeyErr = "save failed: " + err.Error()
+		ui.UnitBoneKeyErr = "save failed: " + err.Error()
 		return
 	}
-	disk, err := ui.modTree.WriteOverlayFile(ui.unitModelPath, patched)
+	disk, err := ui.ModTree.WriteOverlayFile(ui.UnitModelPath, patched)
 	if err != nil {
-		ui.unitBoneKeyErr = "save failed: " + err.Error()
+		ui.UnitBoneKeyErr = "save failed: " + err.Error()
 		return
 	}
-	ui.unitModelWhmDirty = false
-	ui.unitBoneKeyErr = ""
-	LogInfo("bone: Save WHM ok: %s (%d bytes patched)", filepath.Base(ui.unitModelPath), len(patched))
-	ui.statusText = fmt.Sprintf("Saved bone keys → %s (%d bytes)", disk, len(patched))
-	ui.markStateDirty()
-	log.Printf("saved whm bone keys %q -> %q (%d bytes)", ui.unitModelPath, disk, len(patched))
+	ui.UnitModelWhmDirty = false
+	ui.UnitBoneKeyErr = ""
+	LogInfo("bone: Save WHM ok: %s (%d bytes patched)", filepath.Base(ui.UnitModelPath), len(patched))
+	ui.StatusText = fmt.Sprintf("Saved bone keys → %s (%d bytes)", disk, len(patched))
+	MarkStateDirty(ui)
+	log.Printf("saved whm bone keys %q -> %q (%d bytes)", ui.UnitModelPath, disk, len(patched))
 }
 
 // addBoneKeyAtPlayhead is what the "+ pos" and "+ rot" buttons do: the picked
@@ -2072,41 +2072,41 @@ func (ui *uiState) saveUnitModelWhm() {
 // write — and the file is marked dirty for Save WHM. A key of that kind
 // already on the frame is picked instead of a second one being created, and
 // the note beside Save says which of the two happened.
-func (ui *uiState) addBoneKeyAtPlayhead(v *modelViewer, mode int) {
+func AddBoneKeyAtPlayhead(ui *uiState, v *modelViewer, mode int) {
 	kind := "position"
 	if mode == 1 {
 		kind = "rotation"
 	}
-	if v == nil || v.anim == nil {
-		ui.unitBoneKeyErr = "no clip is on show"
+	if v == nil || v.Anim == nil {
+		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.boneIndex < 0 {
-		ui.unitBoneKeyErr = "no bone is picked"
+	if v.BoneIndex < 0 {
+		ui.UnitBoneKeyErr = "no bone is picked"
 		return
 	}
-	if v.boneTrack() == nil {
-		ui.unitBoneKeyErr = "the bone has no track in this clip"
+	if v.BoneTrack() == nil {
+		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
-	snap, haveSnap := v.snapshotBoneTrack()
-	frame, _ := v.currentFrame()
-	if !v.addBoneKeyAtFrame(frame, mode) {
+	snap, haveSnap := v.SnapshotBoneTrack()
+	frame, _ := v.CurrentFrame()
+	if !v.AddBoneKeyAtFrame(frame, mode) {
 		// The key at the frame was picked all the same, so the fields show
 		// what it holds and the note says why nothing was created.
-		ui.unitBoneKeyErr = fmt.Sprintf("frame %d already has a %s key", frame+1, kind)
-		ui.fillBoneKeyFields(v, 0)
-		ui.fillBoneKeyFields(v, 1)
+		ui.UnitBoneKeyErr = fmt.Sprintf("frame %d already has a %s key", frame+1, kind)
+		FillBoneKeyFields(ui, v, 0)
+		FillBoneKeyFields(ui, v, 1)
 		return
 	}
-	ui.unitModelWhmDirty = true
-	ui.unitBoneKeyErr = ""
-	ui.fillBoneKeyFields(v, 0)
-	ui.fillBoneKeyFields(v, 1)
-	ui.pushBoneUndo(snap, haveSnap)
-	ui.statusText = fmt.Sprintf("Added a %s key on frame %d", kind, frame+1)
+	ui.UnitModelWhmDirty = true
+	ui.UnitBoneKeyErr = ""
+	FillBoneKeyFields(ui, v, 0)
+	FillBoneKeyFields(ui, v, 1)
+	PushBoneUndo(ui, snap, haveSnap)
+	ui.StatusText = fmt.Sprintf("Added a %s key on frame %d", kind, frame+1)
 	LogInfo("bone: %s key added on frame %d for bone %q (dirty=%v)",
-		kind, frame+1, v.boneTrack().Name, ui.unitModelWhmDirty)
+		kind, frame+1, v.BoneTrack().Name, ui.UnitModelWhmDirty)
 }
 
 // deleteBoneKeysAction is what the "Delete key" button does: every row the
@@ -2115,45 +2115,45 @@ func (ui *uiState) addBoneKeyAtPlayhead(v *modelViewer, mode int) {
 // is marked dirty for Save WHM. The note and the status line say how many keys
 // went and whose they were, so removing several is something the reader can
 // count back from the log.
-func (ui *uiState) deleteBoneKeysAction(v *modelViewer) {
-	if v == nil || v.anim == nil {
-		ui.unitBoneKeyErr = "no clip is on show"
+func DeleteBoneKeysAction(ui *uiState, v *modelViewer) {
+	if v == nil || v.Anim == nil {
+		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.boneTrack() == nil {
-		ui.unitBoneKeyErr = "the bone has no track in this clip"
+	if v.BoneTrack() == nil {
+		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
-	refs := ui.boneKeyActionRefs(v)
+	refs := BoneKeyActionRefs(ui, v)
 	if len(refs) == 0 {
-		ui.unitBoneKeyErr = "no key is picked"
+		ui.UnitBoneKeyErr = "no key is picked"
 		return
 	}
-	name := v.boneTrack().Name
-	snap, haveSnap := v.snapshotBoneTrack()
+	name := v.BoneTrack().Name
+	snap, haveSnap := v.SnapshotBoneTrack()
 	removed := 0
 	for _, ref := range refs {
-		if v.deleteBoneKeyAt(ref.frame, ref.mode) {
+		if v.DeleteBoneKeyAt(ref.frame, ref.mode) {
 			removed++
 		}
 	}
 	if removed == 0 {
-		ui.unitBoneKeyErr = "no key could be removed"
+		ui.UnitBoneKeyErr = "no key could be removed"
 		return
 	}
 	// Nothing on the list is picked any more: the keys the selection named
 	// are gone, and leaving the selection behind would aim the next button at
 	// frames that now hold other keys or nothing at all.
-	ui.unitBoneKeySel = nil
-	ui.unitBoneKeySelAnchor = boneKeyRef{mode: -1}
-	ui.unitModelWhmDirty = true
-	ui.unitBoneKeyErr = ""
-	ui.fillBoneKeyFields(v, 0)
-	ui.fillBoneKeyFields(v, 1)
-	ui.pushBoneUndo(snap, haveSnap)
+	ui.UnitBoneKeySel = nil
+	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	ui.UnitModelWhmDirty = true
+	ui.UnitBoneKeyErr = ""
+	FillBoneKeyFields(ui, v, 0)
+	FillBoneKeyFields(ui, v, 1)
+	PushBoneUndo(ui, snap, haveSnap)
 	msg := fmt.Sprintf("Removed %d key(s) of bone %s", removed, name)
-	ui.statusText = msg
-	LogInfo("bone: %s (dirty=%v)", msg, ui.unitModelWhmDirty)
+	ui.StatusText = msg
+	LogInfo("bone: %s (dirty=%v)", msg, ui.UnitModelWhmDirty)
 }
 
 // addBoneKeysAround is what "+ before" and "+ after" do (dir −1 and +1): every
@@ -2166,18 +2166,18 @@ func (ui *uiState) deleteBoneKeysAction(v *modelViewer) {
 // each other each get a frame of their own instead of the second one finding
 // the first's taken. What the list shows picked afterwards is the keys that
 // were just added, since editing or taking them away is what comes next.
-func (ui *uiState) addBoneKeysAround(v *modelViewer, dir int) {
-	if v == nil || v.anim == nil {
-		ui.unitBoneKeyErr = "no clip is on show"
+func AddBoneKeysAround(ui *uiState, v *modelViewer, dir int) {
+	if v == nil || v.Anim == nil {
+		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.boneTrack() == nil {
-		ui.unitBoneKeyErr = "the bone has no track in this clip"
+	if v.BoneTrack() == nil {
+		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
-	refs := ui.boneKeyActionRefs(v)
+	refs := BoneKeyActionRefs(ui, v)
 	if len(refs) == 0 {
-		ui.unitBoneKeyErr = "no key is picked"
+		ui.UnitBoneKeyErr = "no key is picked"
 		return
 	}
 	side := "before"
@@ -2193,33 +2193,33 @@ func (ui *uiState) addBoneKeysAround(v *modelViewer, dir int) {
 	added := make([]boneKeyRef, 0, len(refs))
 	blocked := 0
 	for _, ref := range refs {
-		f := v.freeBoneKeyFrame(ref.frame, ref.mode, dir)
-		if f < 0 || !v.insertBoneKeyCopy(f, ref.mode, ref.frame) {
+		f := v.FreeBoneKeyFrame(ref.frame, ref.mode, dir)
+		if f < 0 || !v.InsertBoneKeyCopy(f, ref.mode, ref.frame) {
 			blocked++
 			continue
 		}
 		added = append(added, boneKeyRef{mode: ref.mode, frame: f})
 	}
 	if len(added) == 0 {
-		ui.unitBoneKeyErr = fmt.Sprintf("no free frame %s those keys", side)
+		ui.UnitBoneKeyErr = fmt.Sprintf("no free frame %s those keys", side)
 		LogInfo("bone: + %s: nothing was added, %d row(s) had no free frame", side, blocked)
 		return
 	}
-	ui.unitBoneKeySel = make(map[boneKeyRef]bool, len(added))
+	ui.UnitBoneKeySel = make(map[boneKeyRef]bool, len(added))
 	for _, ref := range added {
-		ui.unitBoneKeySel[ref] = true
+		ui.UnitBoneKeySel[ref] = true
 	}
-	ui.unitBoneKeySelAnchor = added[0]
-	ui.unitModelWhmDirty = true
-	ui.unitBoneKeyErr = ""
+	ui.UnitBoneKeySelAnchor = added[0]
+	ui.UnitModelWhmDirty = true
+	ui.UnitBoneKeyErr = ""
 	if blocked > 0 {
-		ui.unitBoneKeyErr = fmt.Sprintf("%d row(s) had no free frame", blocked)
+		ui.UnitBoneKeyErr = fmt.Sprintf("%d row(s) had no free frame", blocked)
 	}
-	ui.fillBoneKeyFields(v, 0)
-	ui.fillBoneKeyFields(v, 1)
+	FillBoneKeyFields(ui, v, 0)
+	FillBoneKeyFields(ui, v, 1)
 	msg := fmt.Sprintf("Added %d key(s) %s the picked rows", len(added), side)
-	ui.statusText = msg
-	LogInfo("bone: %s (dirty=%v)", msg, ui.unitModelWhmDirty)
+	ui.StatusText = msg
+	LogInfo("bone: %s (dirty=%v)", msg, ui.UnitModelWhmDirty)
 }
 
 // boneAngleDegs applies boneAngleDeg to the three axes of a rotation.
@@ -2263,37 +2263,37 @@ func boneAngleSliderDeg(frac float32) float64 {
 // all three axes at once so the axes no slider touched keep what they hold.
 // setBoneKeyRotation drops the pose cache, so the viewport turns the bone (and
 // the mesh skinned to it) to the new angle on the very frame it is written.
-func (ui *uiState) applyBoneAngleSliders(v *modelViewer) {
+func ApplyBoneAngleSliders(ui *uiState, v *modelViewer) {
 	dragging := false
-	for i := range ui.unitBoneAngleSlid {
-		if ui.unitBoneAngleSlid[i].Dragging() {
+	for i := range ui.UnitBoneAngleSlid {
+		if ui.UnitBoneAngleSlid[i].Dragging() {
 			dragging = true
 			break
 		}
 	}
 	if !dragging {
-		ui.unitBoneSliderUndoArmed = false
+		ui.UnitBoneSliderUndoArmed = false
 		return
 	}
-	if v == nil || v.anim == nil {
+	if v == nil || v.Anim == nil {
 		return
 	}
-	frame, _ := v.currentFrame()
-	target := v.boneKeyTarget(frame, 1)
+	frame, _ := v.CurrentFrame()
+	target := v.BoneKeyTarget(frame, 1)
 	if target < 0 {
-		ui.unitBoneKeyErr = "this bone has no rotation key in the clip"
+		ui.UnitBoneKeyErr = "this bone has no rotation key in the clip"
 		return
 	}
-	t := v.boneTrack()
+	t := v.BoneTrack()
 	if t == nil || target >= len(t.RotKey) {
-		ui.unitBoneKeyErr = "the rotation key could not be written"
+		ui.UnitBoneKeyErr = "the rotation key could not be written"
 		return
 	}
-	v.boneKeyIndex, v.boneKeyMode = target, 1
+	v.BoneKeyIndex, v.BoneKeyMode = target, 1
 	ang := [3]float64{
-		boneAngleSliderDeg(ui.unitBoneAngleSlid[0].Value),
-		boneAngleSliderDeg(ui.unitBoneAngleSlid[1].Value),
-		boneAngleSliderDeg(ui.unitBoneAngleSlid[2].Value),
+		boneAngleSliderDeg(ui.UnitBoneAngleSlid[0].Value),
+		boneAngleSliderDeg(ui.UnitBoneAngleSlid[1].Value),
+		boneAngleSliderDeg(ui.UnitBoneAngleSlid[2].Value),
 	}
 	// Only a real move writes, so holding still mid-drag does not redraw
 	// the viewport or add a log line every frame. The key is compared as
@@ -2306,63 +2306,63 @@ func (ui *uiState) applyBoneAngleSliders(v *modelViewer) {
 	// One undo step for the whole drag: the first write of a gesture records
 	// the angle as it was before the hand touched the slider, and the rest of
 	// the drag reuses it until the button is let go.
-	if !ui.unitBoneSliderUndoArmed {
-		if snap, ok := v.snapshotBoneTrack(); ok {
-			ui.pushBoneUndo(snap, true)
+	if !ui.UnitBoneSliderUndoArmed {
+		if snap, ok := v.SnapshotBoneTrack(); ok {
+			PushBoneUndo(ui, snap, true)
 		}
-		ui.unitBoneSliderUndoArmed = true
+		ui.UnitBoneSliderUndoArmed = true
 	}
-	if !v.setBoneKeyRotation(quatFromEulerDeg(ang[0], ang[1], ang[2])) {
-		ui.unitBoneKeyErr = "the rotation key could not be written"
+	if !v.SetBoneKeyRotation(quatFromEulerDeg(ang[0], ang[1], ang[2])) {
+		ui.UnitBoneKeyErr = "the rotation key could not be written"
 		return
 	}
-	ui.unitModelWhmDirty = true
-	ui.unitBoneKeyErr = ""
+	ui.UnitModelWhmDirty = true
+	ui.UnitBoneKeyErr = ""
 	// The typed Rot fields follow the key; the sliders are left alone
 	// (fillBoneKeyFields skips the one being dragged).
-	ui.fillBoneKeyFields(v, 1)
+	FillBoneKeyFields(ui, v, 1)
 	LogInfo("bone: angle sliders wrote key %d: rot %.3f %.3f %.3f (dirty=%v)",
-		target, ang[0], ang[1], ang[2], ui.unitModelWhmDirty)
+		target, ang[0], ang[1], ang[2], ui.UnitModelWhmDirty)
 }
 
 // mirrorBoneRotationAction is what a "mirror X/Y/Z" button does: the rotation
 // key the Rot fields show comes back with its angle about the chosen axis
 // negated and the two other axes left as they were — the angle about that
 // axis mirrored, which is then what the fields show.
-func (ui *uiState) mirrorBoneRotationAction(v *modelViewer, axis int) {
-	if v == nil || v.anim == nil {
-		ui.unitBoneKeyErr = "no clip is on show"
+func MirrorBoneRotationAction(ui *uiState, v *modelViewer, axis int) {
+	if v == nil || v.Anim == nil {
+		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.boneTrack() == nil {
-		ui.unitBoneKeyErr = "the bone has no track in this clip"
+	if v.BoneTrack() == nil {
+		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
-	frame, _ := v.currentFrame()
-	target := v.boneKeyTarget(frame, 1)
+	frame, _ := v.CurrentFrame()
+	target := v.BoneKeyTarget(frame, 1)
 	if target < 0 {
-		ui.unitBoneKeyErr = "this bone has no rotation key in the clip"
+		ui.UnitBoneKeyErr = "this bone has no rotation key in the clip"
 		return
 	}
-	v.boneKeyIndex, v.boneKeyMode = target, 1
-	t := v.boneTrack()
+	v.BoneKeyIndex, v.BoneKeyMode = target, 1
+	t := v.BoneTrack()
 	before := eulerDegFromQuat(t.RotKey[target].V)
 	after := before
 	after[axis] = -after[axis]
-	snap, haveSnap := v.snapshotBoneTrack()
-	if !v.setBoneKeyRotation(quatFromEulerDeg(after[0], after[1], after[2])) {
-		ui.unitBoneKeyErr = "the rotation key could not be written"
+	snap, haveSnap := v.SnapshotBoneTrack()
+	if !v.SetBoneKeyRotation(quatFromEulerDeg(after[0], after[1], after[2])) {
+		ui.UnitBoneKeyErr = "the rotation key could not be written"
 		return
 	}
-	ui.unitModelWhmDirty = true
-	ui.unitBoneKeyErr = ""
-	v.windToPickedBoneKey()
-	ui.fillBoneKeyFields(v, 1)
-	ui.pushBoneUndo(snap, haveSnap)
+	ui.UnitModelWhmDirty = true
+	ui.UnitBoneKeyErr = ""
+	v.WindToPickedBoneKey()
+	FillBoneKeyFields(ui, v, 1)
+	PushBoneUndo(ui, snap, haveSnap)
 	msg := fmt.Sprintf("Mirrored %s about %s", t.Name, boneFieldAxes[axis])
-	ui.statusText = msg
+	ui.StatusText = msg
 	LogInfo("bone: %s (key=%d, rot %.3f %.3f %.3f -> %.3f %.3f %.3f, dirty=%v)",
-		msg, target, before[0], before[1], before[2], after[0], after[1], after[2], ui.unitModelWhmDirty)
+		msg, target, before[0], before[1], before[2], after[0], after[1], after[2], ui.UnitModelWhmDirty)
 }
 
 // shiftBoneKeysAction is what the back/forward buttons beside the frames field
@@ -2372,73 +2372,73 @@ func (ui *uiState) mirrorBoneRotationAction(v *modelViewer, axis int) {
 // stays where it is rather than landing on top of it, and the selection
 // follows the keys to the frames they ended on, so a run of presses carries a
 // block along the strip without reselecting.
-func (ui *uiState) shiftBoneKeysAction(v *modelViewer, dir int) {
-	if v == nil || v.anim == nil {
-		ui.unitBoneKeyErr = "no clip is on show"
+func ShiftBoneKeysAction(ui *uiState, v *modelViewer, dir int) {
+	if v == nil || v.Anim == nil {
+		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.boneTrack() == nil {
-		ui.unitBoneKeyErr = "the bone has no track in this clip"
+	if v.BoneTrack() == nil {
+		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
-	refs := ui.boneKeyActionRefs(v)
+	refs := BoneKeyActionRefs(ui, v)
 	if len(refs) == 0 {
-		ui.unitBoneKeyErr = "no key is picked"
+		ui.UnitBoneKeyErr = "no key is picked"
 		return
 	}
-	n := ui.boneKeyShiftFrames()
-	pickedOld, hasPicked := v.pickedBoneKeyRef()
-	snap, haveSnap := v.snapshotBoneTrack()
-	newRefs, moved, blocked := v.shiftBoneKeys(refs, dir*n)
+	n := BoneKeyShiftFrames(ui)
+	pickedOld, hasPicked := v.PickedBoneKeyRef()
+	snap, haveSnap := v.SnapshotBoneTrack()
+	newRefs, moved, blocked := v.ShiftBoneKeys(refs, dir*n)
 	if moved == 0 && blocked == 0 {
-		ui.unitBoneKeyErr = "no key could be shifted"
+		ui.UnitBoneKeyErr = "no key could be shifted"
 		LogInfo("bone: shift %+d of %d key(s): nothing moved", dir*n, len(refs))
 		return
 	}
 	// The selection follows the keys: it now names the frames they landed
 	// on, so pressing again shifts them further without reselecting.
-	ui.unitBoneKeySel = make(map[boneKeyRef]bool, len(newRefs))
+	ui.UnitBoneKeySel = make(map[boneKeyRef]bool, len(newRefs))
 	for _, ref := range newRefs {
-		ui.unitBoneKeySel[ref] = true
+		ui.UnitBoneKeySel[ref] = true
 	}
-	ui.unitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
 	if len(newRefs) > 0 {
-		ui.unitBoneKeySelAnchor = newRefs[0]
+		ui.UnitBoneKeySelAnchor = newRefs[0]
 	}
 	// The picked key follows its row to the frame it landed on, so the
 	// strip marks and the typed fields point at it again after the move.
 	for i, r := range refs {
 		if hasPicked && r == pickedOld && i < len(newRefs) {
-			if at := v.boneKeyIndexAtFrame(newRefs[i].frame, newRefs[i].mode); at >= 0 {
-				v.boneKeyIndex, v.boneKeyMode = at, newRefs[i].mode
+			if at := v.BoneKeyIndexAtFrame(newRefs[i].frame, newRefs[i].mode); at >= 0 {
+				v.BoneKeyIndex, v.BoneKeyMode = at, newRefs[i].mode
 			}
 			break
 		}
 	}
 	if moved > 0 {
-		ui.unitModelWhmDirty = true
-		ui.pushBoneUndo(snap, haveSnap)
+		ui.UnitModelWhmDirty = true
+		PushBoneUndo(ui, snap, haveSnap)
 	}
-	ui.unitBoneKeyErr = ""
+	ui.UnitBoneKeyErr = ""
 	if blocked > 0 {
-		ui.unitBoneKeyErr = fmt.Sprintf("%d key(s) stayed put (no room)", blocked)
+		ui.UnitBoneKeyErr = fmt.Sprintf("%d key(s) stayed put (no room)", blocked)
 	}
-	ui.fillBoneKeyFields(v, 0)
-	ui.fillBoneKeyFields(v, 1)
+	FillBoneKeyFields(ui, v, 0)
+	FillBoneKeyFields(ui, v, 1)
 	side := "forward"
 	if dir < 0 {
 		side = "back"
 	}
 	msg := fmt.Sprintf("Shifted %d key(s) %d frame(s) %s", moved, n, side)
-	ui.statusText = msg
-	LogInfo("bone: %s (%d row(s) shifted, %d held back, dirty=%v)", msg, len(newRefs), blocked, ui.unitModelWhmDirty)
+	ui.StatusText = msg
+	LogInfo("bone: %s (%d row(s) shifted, %d held back, dirty=%v)", msg, len(newRefs), blocked, ui.UnitModelWhmDirty)
 }
 
 // boneKeyShiftFrames is the shift the field holds, in frames: a whole number,
 // with 1 standing in for an empty or unreadable field so the buttons still
 // move something.
-func (ui *uiState) boneKeyShiftFrames() int {
-	s := strings.TrimSpace(ui.unitBoneKeyShiftEd.Text())
+func BoneKeyShiftFrames(ui *uiState) int {
+	s := strings.TrimSpace(ui.UnitBoneKeyShiftEd.Text())
 	n, err := strconv.Atoi(s)
 	if err != nil {
 		return 1
@@ -2463,13 +2463,13 @@ const boneUndoLimit = 16
 // pushBoneUndo records a snapshot taken before an edit as the next undo step.
 // A snapshot with nothing in it (no clip or bone at the time) is dropped, and
 // the stack is capped so it cannot grow without bound.
-func (ui *uiState) pushBoneUndo(s boneTrackSnapshot, ok bool) {
+func PushBoneUndo(ui *uiState, s boneTrackSnapshot, ok bool) {
 	if !ok || (len(s.posKey) == 0 && len(s.rotKey) == 0 && s.anim == nil) {
 		return
 	}
-	ui.unitBoneUndo = append(ui.unitBoneUndo, s)
-	if len(ui.unitBoneUndo) > boneUndoLimit {
-		ui.unitBoneUndo = ui.unitBoneUndo[len(ui.unitBoneUndo)-boneUndoLimit:]
+	ui.UnitBoneUndo = append(ui.UnitBoneUndo, s)
+	if len(ui.UnitBoneUndo) > boneUndoLimit {
+		ui.UnitBoneUndo = ui.UnitBoneUndo[len(ui.UnitBoneUndo)-boneUndoLimit:]
 	}
 }
 
@@ -2478,29 +2478,29 @@ func (ui *uiState) pushBoneUndo(s boneTrackSnapshot, ok bool) {
 // (the frames it named may not exist in the restored track) and the typed
 // fields are refilled from the restored keys. It reports whether anything was
 // undone, which is what the note beside Save says.
-func (ui *uiState) undoBoneKeyEdit(v *modelViewer) bool {
-	if len(ui.unitBoneUndo) == 0 {
-		ui.unitBoneKeyErr = "nothing to undo"
+func UndoBoneKeyEdit(ui *uiState, v *modelViewer) bool {
+	if len(ui.UnitBoneUndo) == 0 {
+		ui.UnitBoneKeyErr = "nothing to undo"
 		return false
 	}
-	s := ui.unitBoneUndo[len(ui.unitBoneUndo)-1]
-	ui.unitBoneUndo = ui.unitBoneUndo[:len(ui.unitBoneUndo)-1]
-	if v == nil || !v.restoreBoneTrack(s) {
-		ui.unitBoneKeyErr = "could not restore the previous keys"
+	s := ui.UnitBoneUndo[len(ui.UnitBoneUndo)-1]
+	ui.UnitBoneUndo = ui.UnitBoneUndo[:len(ui.UnitBoneUndo)-1]
+	if v == nil || !v.RestoreBoneTrack(s) {
+		ui.UnitBoneKeyErr = "could not restore the previous keys"
 		return false
 	}
 	// The restored track may not carry the keys the selection and picked key
 	// pointed at, so both are cleared and the fields refill from what is
 	// actually there now.
-	ui.unitBoneKeySel = nil
-	ui.unitBoneKeySelAnchor = boneKeyRef{mode: -1}
-	ui.unitModelWhmDirty = true
-	ui.unitBoneKeyErr = ""
-	ui.fillBoneKeyFields(v, 0)
-	ui.fillBoneKeyFields(v, 1)
-	ui.statusText = "Restored the keys before the last edit"
+	ui.UnitBoneKeySel = nil
+	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	ui.UnitModelWhmDirty = true
+	ui.UnitBoneKeyErr = ""
+	FillBoneKeyFields(ui, v, 0)
+	FillBoneKeyFields(ui, v, 1)
+	ui.StatusText = "Restored the keys before the last edit"
 	LogInfo("bone: undo restored track of bone %d: %d pos, %d rot keys (dirty=%v)",
-		s.boneIndex, len(s.posKey), len(s.rotKey), ui.unitModelWhmDirty)
+		s.boneIndex, len(s.posKey), len(s.rotKey), ui.UnitModelWhmDirty)
 	return true
 }
 
@@ -2525,7 +2525,7 @@ func boneTrackKeys(anim *WhmAnimation, i int) int {
 // unitBoneKeyRow is one row of the picked bone's keyframe list. It shows the
 // key's number, the frame it sits on, and its current value, and clicking it
 // picks that key for editing in the buttons below the list.
-func (ui *uiState) unitBoneKeyRow(gtx layout.Context, c *widget.Clickable, selected bool, text string) layout.Dimensions {
+func UnitBoneKeyRow(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, text string) layout.Dimensions {
 	bg := cPanelBg
 	if selected {
 		bg = cSelectBg
@@ -2538,13 +2538,13 @@ func (ui *uiState) unitBoneKeyRow(gtx layout.Context, c *widget.Clickable, selec
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				if bg != cPanelBg {
-					ui.rrect(gtx, bg, gtx.Constraints.Max, unit.Dp(2))
+					Rrect(ui, gtx, bg, gtx.Constraints.Max, unit.Dp(2))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(10), text)
+					l := material.Label(ui.Th, unit.Sp(10), text)
 					l.Color = cText
 					l.MaxLines = 1
 					return l.Layout(gtx)
@@ -2556,8 +2556,8 @@ func (ui *uiState) unitBoneKeyRow(gtx layout.Context, c *widget.Clickable, selec
 
 // unitViewportRow is one selectable line of the camera panel: the name, and a
 // dimmer note on the right that says what it is.
-func (ui *uiState) unitViewportRow(gtx layout.Context, c *widget.Clickable, selected bool, name, note string) layout.Dimensions {
-	return ui.unitViewportRowIcon(gtx, c, selected, name, note, nil, false)
+func UnitViewportRow(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, name, note string) layout.Dimensions {
+	return UnitViewportRowIcon(ui, gtx, c, selected, name, note, nil, false)
 }
 
 // unitViewportRowIcon is unitViewportRow with an optional icon column before
@@ -2565,7 +2565,7 @@ func (ui *uiState) unitViewportRow(gtx layout.Context, c *widget.Clickable, sele
 // Actions folder — reserves the column whether or not a row's icon was found
 // (iconCol), so its names stay in one line; a list whose icons come and go
 // passes iconCol false and shows them as they come.
-func (ui *uiState) unitViewportRowIcon(gtx layout.Context, c *widget.Clickable, selected bool, name, note string, icon image.Image, iconCol bool) layout.Dimensions {
+func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, name, note string, icon image.Image, iconCol bool) layout.Dimensions {
 	bg := cPanelBg
 	switch {
 	case selected:
@@ -2581,7 +2581,7 @@ func (ui *uiState) unitViewportRowIcon(gtx layout.Context, c *widget.Clickable, 
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				if bg != cPanelBg {
-					ui.rrect(gtx, bg, gtx.Constraints.Max, unit.Dp(2))
+					Rrect(ui, gtx, bg, gtx.Constraints.Max, unit.Dp(2))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
@@ -2597,7 +2597,7 @@ func (ui *uiState) unitViewportRowIcon(gtx layout.Context, c *widget.Clickable, 
 							})
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), unitViewportRowText(name))
+							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(name))
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -2607,7 +2607,7 @@ func (ui *uiState) unitViewportRowIcon(gtx layout.Context, c *widget.Clickable, 
 							if note == "" {
 								return layout.Dimensions{}
 							}
-							l := material.Label(ui.th, unit.Sp(9), note)
+							l := material.Label(ui.Th, unit.Sp(9), note)
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -2634,51 +2634,51 @@ func unitViewportRowText(name string) string {
 // ensureUnitAnimClicks sizes the clip list's click targets. They are rebuilt
 // per model, so a slice of the wrong length is replaced rather than grown
 // into.
-func (ui *uiState) ensureUnitAnimClicks(n int) {
-	if len(ui.unitAnimClicks) != n {
-		ui.unitAnimClicks = make([]widget.Clickable, n)
+func EnsureUnitAnimClicks(ui *uiState, n int) {
+	if len(ui.UnitAnimClicks) != n {
+		ui.UnitAnimClicks = make([]widget.Clickable, n)
 	}
 }
 
 // ensureUnitMarkerClicks sizes the markers list's click targets, the same way
 // as the clip list's: rebuilt per model rather than grown into.
-func (ui *uiState) ensureUnitMarkerClicks(n int) {
-	if len(ui.unitMarkerClicks) != n {
-		ui.unitMarkerClicks = make([]widget.Clickable, n)
+func EnsureUnitMarkerClicks(ui *uiState, n int) {
+	if len(ui.UnitMarkerClicks) != n {
+		ui.UnitMarkerClicks = make([]widget.Clickable, n)
 	}
 }
 
 // ensureUnitBoneClicks sizes the bones list's click targets, the same way as
 // the other two lists': rebuilt per model rather than grown into.
-func (ui *uiState) ensureUnitBoneClicks(n int) {
-	if len(ui.unitBoneClicks) != n {
-		ui.unitBoneClicks = make([]widget.Clickable, n)
+func EnsureUnitBoneClicks(ui *uiState, n int) {
+	if len(ui.UnitBoneClicks) != n {
+		ui.UnitBoneClicks = make([]widget.Clickable, n)
 	}
 }
 
 // ensureUnitBoneKeyClicks sizes the bone keyframe row click targets for the
 // currently picked bone, rebuilt whenever the bone selection changes.
-func (ui *uiState) ensureUnitBoneKeyClicks(n int) {
-	if len(ui.unitBoneKeyClicks) != n {
-		ui.unitBoneKeyClicks = make([]widget.Clickable, n)
+func EnsureUnitBoneKeyClicks(ui *uiState, n int) {
+	if len(ui.UnitBoneKeyClicks) != n {
+		ui.UnitBoneKeyClicks = make([]widget.Clickable, n)
 	}
 }
 
 // unitModelLoaded reports whether the viewport has a model on screen, which is
 // what a test checks rather than what it can see.
-func (ui *uiState) unitModelLoaded() bool {
-	return ui.unitModelViewer() != nil
+func UnitModelLoaded(ui *uiState) bool {
+	return UnitModelViewer(ui) != nil
 }
 
 // unitModelAnimNames are the clips on show, which the tests compare against.
-func (ui *uiState) unitModelAnimNames() []string {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
+func UnitModelAnimNames(ui *uiState) []string {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
 		return nil
 	}
-	out := make([]string, len(v.model.Animations))
-	for i := range v.model.Animations {
-		out[i] = v.model.Animations[i].Name
+	out := make([]string, len(v.Model.Animations))
+	for i := range v.Model.Animations {
+		out[i] = v.Model.Animations[i].Name
 	}
 	return out
 }
@@ -2687,13 +2687,13 @@ func (ui *uiState) unitModelAnimNames() []string {
 // seconds. A clip with no frame count is reported as zero rather than as the
 // fallback rate, since a zero here means "nothing to wait for".
 func unitModelClipDuration(v *modelViewer) float64 {
-	if v == nil || v.anim == nil || v.anim.NumFrames <= 0 {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames <= 0 {
 		return 0
 	}
-	return float64(v.anim.NumFrames) / animFramesPerSecond(v.anim)
+	return float64(v.Anim.NumFrames) / animFramesPerSecond(v.Anim)
 }
 
-func (ui *uiState) rrect(gtx layout.Context, bg color.NRGBA, sz image.Point, r unit.Dp) {
+func Rrect(ui *uiState, gtx layout.Context, bg color.NRGBA, sz image.Point, r unit.Dp) {
 	paint.Fill(gtx.Ops, bg)
 }
 
@@ -2853,19 +2853,19 @@ func unitModelPath(tree *modtree.ModTree, src unitModelSource) string {
 // until the mouse moves. That is what made a switch on this section look many
 // seconds slower than the same switch done from another one and read afterwards:
 // the read cost the same, but one of them was waiting for input to show it.
-func (ui *uiState) ensureUnitModel(gtx layout.Context) {
-	if ui.modTree == nil {
+func EnsureUnitModel(ui *uiState, gtx layout.Context) {
+	if ui.ModTree == nil {
 		return
 	}
-	src, ok := newUnitModelSource(ui.modTree, ui.currentUnitDetails())
+	src, ok := newUnitModelSource(ui.ModTree, CurrentUnitDetails(ui))
 	if !ok {
-		ui.resetUnitModel()
+		ResetUnitModel(ui)
 		return
 	}
-	if src.unit != ui.unitModelFor || (ui.unitModel == nil && ui.unitModelCh == nil && ui.unitModelErr == "") {
-		ui.startUnitModel(src)
+	if src.unit != ui.UnitModelFor || (ui.UnitModel == nil && ui.UnitModelCh == nil && ui.UnitModelErr == "") {
+		StartUnitModel(ui, src)
 	}
-	if ui.unitModelCh != nil {
+	if ui.UnitModelCh != nil {
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(30 * time.Millisecond)})
 	}
 }
@@ -2873,13 +2873,13 @@ func (ui *uiState) ensureUnitModel(gtx layout.Context) {
 // startUnitModel kicks the read and the parse off on a worker. Both are worth
 // moving off the UI goroutine: a unit model is megabytes, and the necron warrior's
 // alone is five of them.
-func (ui *uiState) startUnitModel(src unitModelSource) {
-	ui.resetUnitModel()
-	ui.unitModelFor = src.unit
-	tree := ui.modTree
+func StartUnitModel(ui *uiState, src unitModelSource) {
+	ResetUnitModel(ui)
+	ui.UnitModelFor = src.unit
+	tree := ui.ModTree
 	ch := make(chan unitModelResult, 1)
-	ui.unitModelCh = ch
-	ui.unitModelStart = time.Now()
+	ui.UnitModelCh = ch
+	ui.UnitModelStart = time.Now()
 	go func() {
 		res := unitModelResult{unit: src.unit}
 		workStart := time.Now()
@@ -2911,35 +2911,35 @@ func (ui *uiState) startUnitModel(src unitModelSource) {
 // resetUnitModel drops the viewer and forgets which unit it was for, so the
 // next request loads again. The worker is not stopped: it writes into a
 // buffered channel nobody reads, which costs one model parse and no more.
-func (ui *uiState) resetUnitModel() {
-	if ui.unitModel != nil && ui.unitModel.model != nil {
+func ResetUnitModel(ui *uiState) {
+	if ui.UnitModel != nil && ui.UnitModel.Model != nil {
 		// The hardware renderer caches the model's buffers, and the goroutine
 		// that may be mid render holds the same pointer, so both go back.
-		if ui.modelGpu != nil && ui.unitModel.model.model != nil {
-			ui.modelGpu.Forget(&ui.unitModel.model.model.Model)
+		if ui.ModelGpu != nil && ui.UnitModel.Model.Model != nil {
+			ui.ModelGpu.Forget(&ui.UnitModel.Model.Model.Model)
 		}
-		ui.unitModel.model.close()
+		ui.UnitModel.Model.Close()
 	}
-	ui.unitModel = nil
-	ui.unitModelCh = nil
-	ui.unitModelFor = ""
-	ui.unitModelPath = ""
-	ui.unitModelErr = ""
-	ui.unitAnimClicks = nil
+	ui.UnitModel = nil
+	ui.UnitModelCh = nil
+	ui.UnitModelFor = ""
+	ui.UnitModelPath = ""
+	ui.UnitModelErr = ""
+	ui.UnitAnimClicks = nil
 
-	ui.unitMarkerClicks = nil
-	ui.unitBoneClicks = nil
-	ui.unitFXListMode = false
-	ui.unitMeshListMode = false
-	ui.unitViewportScroll = panelScrollState{}
+	ui.UnitMarkerClicks = nil
+	ui.UnitBoneClicks = nil
+	ui.UnitFXListMode = false
+	ui.UnitMeshListMode = false
+	ui.UnitViewportScroll = panelScrollState{}
 	// The typed bone key fields belong to the model that has gone with it:
 	// their bound key and any pending note are dropped so a later model
 	// cannot be shown with, or written from, this one's values.
-	ui.unitModelWhmDirty = false
-	ui.unitBoneKeyBound = ""
-	ui.unitBoneKeyErr = ""
-	ui.unitAnimFramesSync = ""
-	ui.unitAnimFramesErr = ""
+	ui.UnitModelWhmDirty = false
+	ui.UnitBoneKeyBound = ""
+	ui.UnitBoneKeyErr = ""
+	ui.UnitAnimFramesSync = ""
+	ui.UnitAnimFramesErr = ""
 }
 
 // pollUnitModel takes a finished decode and builds the viewer from it. The
@@ -2952,7 +2952,7 @@ func (ui *uiState) resetUnitModel() {
 // falls back to the pristine state's idle/stand clips when the graph has no
 // idle action of its own.
 func selectObjectAction(v *modelViewer, tree *modtree.ModTree, modelPath, actionName string) bool {
-	if v == nil || v.model == nil || tree == nil || modelPath == "" || strings.TrimSpace(actionName) == "" {
+	if v == nil || v.Model == nil || tree == nil || modelPath == "" || strings.TrimSpace(actionName) == "" {
 		return false
 	}
 	base := strings.TrimSuffix(modelPath, filepath.Ext(modelPath))
@@ -2987,12 +2987,12 @@ func selectObjectAction(v *modelViewer, tree *modtree.ModTree, modelPath, action
 			continue
 		}
 		seen[key] = true
-		animation, source := sgb.ResolveLinkedAnimation(tree, modelPath, &v.model.Model, name)
+		animation, source := sgb.ResolveLinkedAnimation(tree, modelPath, &v.Model.Model, name)
 		if animation == nil || source == nil {
 			continue
 		}
-		if source != &v.model.Model {
-			animation = sgb.BindAnimationToModel(&v.model.Model, animation)
+		if source != &v.Model.Model {
+			animation = sgb.BindAnimationToModel(&v.Model.Model, animation)
 		}
 		if animation != nil {
 			clips = append(clips, animation)
@@ -3001,8 +3001,8 @@ func selectObjectAction(v *modelViewer, tree *modtree.ModTree, modelPath, action
 	if len(clips) == 0 {
 		return false
 	}
-	v.selectAnimations(clips, true)
-	v.playing = true
+	v.SelectAnimations(clips, true)
+	v.Playing = true
 	return true
 }
 
@@ -3010,54 +3010,54 @@ func selectObjectAction(v *modelViewer, tree *modtree.ModTree, modelPath, action
 // model's .whe resolves to, combined in the viewport, and says so in the
 // status bar. It answers false when no model is on screen or the action
 // resolves to nothing, leaving the caller with its own fallback.
-func (ui *uiState) activateUnitAction(actionName string) bool {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
+func ActivateUnitAction(ui *uiState, actionName string) bool {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
 		return false
 	}
-	if !selectObjectAction(v, ui.modTree, ui.unitModelPath, actionName) {
+	if !selectObjectAction(v, ui.ModTree, ui.UnitModelPath, actionName) {
 		return false
 	}
-	ui.statusText = fmt.Sprintf("Action %q — playing %d clip(s) together",
-		strings.TrimSpace(actionName), len(v.anims))
+	ui.StatusText = fmt.Sprintf("Action %q — playing %d clip(s) together",
+		strings.TrimSpace(actionName), len(v.Anims))
 	return true
 }
 
-func (ui *uiState) pollUnitModel() {
-	if ui.unitModelCh == nil {
+func PollUnitModel(ui *uiState) {
+	if ui.UnitModelCh == nil {
 		return
 	}
 	select {
-	case res := <-ui.unitModelCh:
-		ui.unitModelCh = nil
-		if res.unit != ui.unitModelFor {
+	case res := <-ui.UnitModelCh:
+		ui.UnitModelCh = nil
+		if res.unit != ui.UnitModelFor {
 			// The reader has moved on to another unit while this one loaded.
 			return
 		}
 		if res.err != nil {
-			ui.unitModelErr = res.err.Error()
+			ui.UnitModelErr = res.err.Error()
 			return
 		}
 		// The gap between what the worker spent and what the reader waited is
 		// the answer arriving without a frame to be picked up in, which is the
 		// whole of the difference between a switch that looked slow and one
 		// that did not.
-		total := time.Since(ui.unitModelStart)
+		total := time.Since(ui.UnitModelStart)
 		LogInfo("3D preview: model of %q on screen after %v (worker %v, waiting for a frame %v)",
 			res.path, total, res.work, total-res.work)
-		tab := &fileTab{path: res.path, kind: "whm"}
-		tab.model = newObjectModelViewer(res.model, res.path, res.groundImage)
-		selectObjectAction(tab.model, ui.modTree, res.path, "idle")
+		tab := &fileTab{Path: res.path, Kind: "whm"}
+		tab.Model = newObjectModelViewer(res.model, res.path, res.groundImage)
+		selectObjectAction(tab.Model, ui.ModTree, res.path, "idle")
 		// The canvas is a third of the window wide here, so the playback strip
 		// is drawn in the panel beside it rather than under it.
-		tab.model.sideControls = true
-		ui.unitModel = tab
-		ui.unitModelPath = res.path
+		tab.Model.SideControls = true
+		ui.UnitModel = tab
+		ui.UnitModelPath = res.path
 		// A freshly read model starts clean, and its keys rebind the typed
 		// fields: the previous model's edits are not its edits.
-		ui.unitModelWhmDirty = false
-		ui.unitBoneKeyBound = ""
-		ui.unitBoneKeyErr = ""
+		ui.UnitModelWhmDirty = false
+		ui.UnitBoneKeyBound = ""
+		ui.UnitBoneKeyErr = ""
 	default:
 	}
 }
@@ -3092,11 +3092,11 @@ func unitDefaultAnim(model *WhmModel) int {
 }
 
 // unitModelViewer is the viewport's viewer, or nil when no model is up.
-func (ui *uiState) unitModelViewer() *modelViewer {
-	if ui.unitModel == nil {
+func UnitModelViewer(ui *uiState) *modelViewer {
+	if ui.UnitModel == nil {
 		return nil
 	}
-	return ui.unitModel.model
+	return ui.UnitModel.Model
 }
 
 // lookThroughCamera moves the orbit camera to where one of the model's own
@@ -3106,31 +3106,31 @@ func (ui *uiState) unitModelViewer() *modelViewer {
 // -Z at its focus point. The direction is turned into the orbit camera's pair
 // the way render.BuildViewMatrix takes it apart: the yaw around the up axis, which is
 // Z, and the height off the horizon.
-func (v *modelViewer) lookThroughCamera(cam WhmCamera) {
-	if v == nil || v.model == nil {
+func (v *modelViewer) LookThroughCamera(cam WhmCamera) {
+	if v == nil || v.Model == nil {
 		return
 	}
 	eye := boneRootFrame.MulPosition(render.Vec3From(cam.Pos))
 	focus := boneRootFrame.MulPosition(render.Vec3From(cam.FocusPoint))
 	v.CameraState = viewer.LookThroughCamera(v.CameraState, eye, focus, cam.Fov, cam.Name)
-	v.invalidate()
+	v.Invalidate()
 }
 
 // resetCamera puts the orbit camera back to the framing newModelViewer chose,
 // and forgets any camera of the model's that was being looked through.
-func (v *modelViewer) resetCamera() {
+func (v *modelViewer) ResetCamera() {
 	if v == nil {
 		return
 	}
 	camera := viewer.ResetCamera(v.CameraState)
 	v.CameraState = camera
-	v.invalidate()
+	v.Invalidate()
 }
 
 // panCamera shifts the orbit target in the camera's screen plane. Pixel motion
 // is scaled by the world-space width visible at the camera distance, so the
 // drag has consistent sensitivity across zoom levels and viewport sizes.
-func (v *modelViewer) panCamera(dx, dy float64, height int) {
+func (v *modelViewer) PanCamera(dx, dy float64, height int) {
 	if v == nil || height <= 0 || v.Distance <= 0 {
 		return
 	}
@@ -3153,7 +3153,7 @@ func (v *modelViewer) panCamera(dx, dy float64, height int) {
 	worldPerPixel := 2 * v.Distance * math.Tan(v.FOV*math.Pi/360) / float64(height)
 	v.Center = v.Center.Sub(right.MulScalar(dx * worldPerPixel)).Add(up.MulScalar(dy * worldPerPixel))
 	v.ActiveCamera = ""
-	v.invalidate()
+	v.Invalidate()
 }
 
 // ─── merged from unit_mesh_material_ui.go ───────────────────────────────────────────────
@@ -3224,10 +3224,10 @@ func equalRefs(a, b []string) bool {
 // unitMeshMatFieldText reads the editors as they stand, trimmed, in material
 // order. An empty field means "leave this one as it is", the same the patcher
 // takes it to mean.
-func (ui *uiState) unitMeshMatFieldText() []string {
-	out := make([]string, len(ui.unitMeshMatEditors))
-	for i := range ui.unitMeshMatEditors {
-		out[i] = strings.TrimSpace(ui.unitMeshMatEditors[i].Text())
+func UnitMeshMatFieldText(ui *uiState) []string {
+	out := make([]string, len(ui.UnitMeshMatEditors))
+	for i := range ui.UnitMeshMatEditors {
+		out[i] = strings.TrimSpace(ui.UnitMeshMatEditors[i].Text())
 	}
 	return out
 }
@@ -3235,37 +3235,37 @@ func (ui *uiState) unitMeshMatFieldText() []string {
 // reloadUnitModelMaterials restarts the texture lookup for the unit's viewer
 // from the material references it now carries — the same step a fresh load
 // takes, so a changed reference is resolved and drawn again.
-func (ui *uiState) reloadUnitModelMaterials(v *modelViewer) {
-	t := ui.unitModel
-	if t == nil || v == nil || v.model == nil || ui.modTree == nil {
+func ReloadUnitModelMaterials(ui *uiState, v *modelViewer) {
+	t := ui.UnitModel
+	if t == nil || v == nil || v.Model == nil || ui.ModTree == nil {
 		return
 	}
-	t.modelMaterialCh = make(chan modelMaterialResult, 1)
-	ui.loadModelMaterials(v, t.modelMaterialCh)
+	t.ModelMaterialCh = make(chan modelMaterialResult, 1)
+	LoadModelMaterials(ui, v, t.ModelMaterialCh)
 }
 
 // openUnitMeshMaterialDialog fills one field per material of the named mesh
 // with the reference it carries and puts the dialog up. A mesh with no
 // materials leaves it down: there is nothing to edit and nothing to save.
-func (ui *uiState) openUnitMeshMaterialDialog(name string) {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
+func OpenUnitMeshMaterialDialog(ui *uiState, name string) {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
 		return
 	}
-	refs := meshMaterialRefs(v.model, name)
+	refs := meshMaterialRefs(v.Model, name)
 	if len(refs) == 0 {
 		return
 	}
-	ui.unitMeshMatOpen = true
-	ui.unitMeshMatName = name
-	ui.unitMeshMatOrig = refs
-	ui.unitMeshMatErr = ""
-	ui.unitMeshMatScroll = panelScrollState{}
-	ui.unitMeshMatEditors = make([]widget.Editor, len(refs))
+	ui.UnitMeshMatOpen = true
+	ui.UnitMeshMatName = name
+	ui.UnitMeshMatOrig = refs
+	ui.UnitMeshMatErr = ""
+	ui.UnitMeshMatScroll = panelScrollState{}
+	ui.UnitMeshMatEditors = make([]widget.Editor, len(refs))
 	for i, ref := range refs {
 		ed := widget.Editor{SingleLine: true}
 		ed.SetText(ref)
-		ui.unitMeshMatEditors[i] = ed
+		ui.UnitMeshMatEditors[i] = ed
 	}
 }
 
@@ -3274,39 +3274,39 @@ func (ui *uiState) openUnitMeshMaterialDialog(name string) {
 // and leaving without saving must not keep the texture of an edit that was
 // never written. A close after a save reverts nothing, because the file says
 // what the model now says.
-func (ui *uiState) closeUnitMeshMaterialDialog(revert bool) {
+func CloseUnitMeshMaterialDialog(ui *uiState, revert bool) {
 	if revert {
-		v := ui.unitModelViewer()
-		if v != nil && v.model != nil && ui.unitMeshMatName != "" {
-			cur := meshMaterialRefs(v.model, ui.unitMeshMatName)
-			if !equalRefs(cur, ui.unitMeshMatOrig) {
-				applyMeshMaterialRefs(v.model, ui.unitMeshMatName, ui.unitMeshMatOrig)
-				ui.reloadUnitModelMaterials(v)
-				v.invalidate()
+		v := UnitModelViewer(ui)
+		if v != nil && v.Model != nil && ui.UnitMeshMatName != "" {
+			cur := meshMaterialRefs(v.Model, ui.UnitMeshMatName)
+			if !equalRefs(cur, ui.UnitMeshMatOrig) {
+				applyMeshMaterialRefs(v.Model, ui.UnitMeshMatName, ui.UnitMeshMatOrig)
+				ReloadUnitModelMaterials(ui, v)
+				v.Invalidate()
 			}
 		}
 	}
-	ui.unitMeshMatOpen = false
-	ui.unitMeshMatName = ""
-	ui.unitMeshMatOrig = nil
-	ui.unitMeshMatEditors = nil
-	ui.unitMeshMatErr = ""
-	ui.unitMeshMatScroll = panelScrollState{}
+	ui.UnitMeshMatOpen = false
+	ui.UnitMeshMatName = ""
+	ui.UnitMeshMatOrig = nil
+	ui.UnitMeshMatEditors = nil
+	ui.UnitMeshMatErr = ""
+	ui.UnitMeshMatScroll = panelScrollState{}
 }
 
 // previewUnitMeshMaterialDialog applies the fields to the model on show and
 // re-resolves its textures, so the map the path names appears behind the dim
 // without touching the file.
-func (ui *uiState) previewUnitMeshMaterialDialog() {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
-		ui.unitMeshMatErr = "no model is loaded"
+func PreviewUnitMeshMaterialDialog(ui *uiState) {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
+		ui.UnitMeshMatErr = "no model is loaded"
 		return
 	}
-	applyMeshMaterialRefs(v.model, ui.unitMeshMatName, ui.unitMeshMatFieldText())
-	ui.reloadUnitModelMaterials(v)
-	v.invalidate()
-	ui.unitMeshMatErr = ""
+	applyMeshMaterialRefs(v.Model, ui.UnitMeshMatName, UnitMeshMatFieldText(ui))
+	ReloadUnitModelMaterials(ui, v)
+	v.Invalidate()
+	ui.UnitMeshMatErr = ""
 }
 
 // saveUnitMeshMaterialDialog writes the fields into the .whm: the references
@@ -3314,47 +3314,47 @@ func (ui *uiState) previewUnitMeshMaterialDialog() {
 // model on show is set to the same so the view agrees with what was written.
 // The dialog stays up — a modder correcting a path usually tries another —
 // and Cancel after a save reverts to nothing, because the file now says this.
-func (ui *uiState) saveUnitMeshMaterialDialog() {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
-		ui.unitMeshMatErr = "no model is loaded"
+func SaveUnitMeshMaterialDialog(ui *uiState) {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
+		ui.UnitMeshMatErr = "no model is loaded"
 		return
 	}
-	if ui.modTree == nil || ui.unitModelPath == "" {
-		ui.unitMeshMatErr = "no module is loaded"
+	if ui.ModTree == nil || ui.UnitModelPath == "" {
+		ui.UnitMeshMatErr = "no module is loaded"
 		return
 	}
-	refs := ui.unitMeshMatFieldText()
-	data, err := ui.modTree.ReadFile(ui.unitModelPath)
+	refs := UnitMeshMatFieldText(ui)
+	data, err := ui.ModTree.ReadFile(ui.UnitModelPath)
 	if err != nil {
-		ui.unitMeshMatErr = "read failed: " + err.Error()
+		ui.UnitMeshMatErr = "read failed: " + err.Error()
 		return
 	}
-	patched, err := whm.PatchMeshMaterialPaths(data, ui.unitMeshMatName, refs)
+	patched, err := whm.PatchMeshMaterialPaths(data, ui.UnitMeshMatName, refs)
 	if err != nil {
-		ui.unitMeshMatErr = "save failed: " + err.Error()
+		ui.UnitMeshMatErr = "save failed: " + err.Error()
 		return
 	}
-	disk, err := ui.modTree.WriteOverlayFile(ui.unitModelPath, patched)
+	disk, err := ui.ModTree.WriteOverlayFile(ui.UnitModelPath, patched)
 	if err != nil {
-		ui.unitMeshMatErr = "save failed: " + err.Error()
+		ui.UnitMeshMatErr = "save failed: " + err.Error()
 		return
 	}
-	applyMeshMaterialRefs(v.model, ui.unitMeshMatName, refs)
-	ui.reloadUnitModelMaterials(v)
-	v.invalidate()
-	ui.unitMeshMatErr = ""
+	applyMeshMaterialRefs(v.Model, ui.UnitMeshMatName, refs)
+	ReloadUnitModelMaterials(ui, v)
+	v.Invalidate()
+	ui.UnitMeshMatErr = ""
 	// The file holds these now: Cancel after this point reverts to them.
-	ui.unitMeshMatOrig = refs
-	for i := range ui.unitMeshMatEditors {
+	ui.UnitMeshMatOrig = refs
+	for i := range ui.UnitMeshMatEditors {
 		if i < len(refs) {
-			ui.unitMeshMatEditors[i].SetText(refs[i])
+			ui.UnitMeshMatEditors[i].SetText(refs[i])
 		}
 	}
-	ui.statusText = fmt.Sprintf("Saved materials → %s", disk)
+	ui.StatusText = fmt.Sprintf("Saved materials → %s", disk)
 	LogInfo("mesh material: Save WHM ok: %s (mesh=%q, %d path(s))",
-		disk, ui.unitMeshMatName, len(refs))
-	ui.markStateDirty()
+		disk, ui.UnitMeshMatName, len(refs))
+	MarkStateDirty(ui)
 }
 
 // layoutUnitMeshMatDialog is the dialog itself: a dimmed card over the unit
@@ -3366,24 +3366,24 @@ func (ui *uiState) saveUnitMeshMaterialDialog() {
 // The card is sized to its content rather than to the window, and it takes
 // every press on its own area, so clicking the card's whitespace neither
 // leaves a dialog that fills the screen nor closes it under the user's hand.
-func (ui *uiState) layoutUnitMeshMatDialog(gtx layout.Context) layout.Dimensions {
-	cancel := ui.unitMeshMatCancel.Clicked(gtx)
-	dim := ui.unitMeshMatDim.Clicked(gtx)
+func LayoutUnitMeshMatDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
+	cancel := ui.UnitMeshMatCancel.Clicked(gtx)
+	dim := ui.UnitMeshMatDim.Clicked(gtx)
 	if cancel || dim {
-		ui.closeUnitMeshMaterialDialog(true)
+		CloseUnitMeshMaterialDialog(ui, true)
 	}
-	if ui.unitMeshMatPreview.Clicked(gtx) {
-		ui.previewUnitMeshMaterialDialog()
+	if ui.UnitMeshMatPreview.Clicked(gtx) {
+		PreviewUnitMeshMaterialDialog(ui)
 	}
-	if ui.unitMeshMatSave.Clicked(gtx) {
-		ui.saveUnitMeshMaterialDialog()
+	if ui.UnitMeshMatSave.Clicked(gtx) {
+		SaveUnitMeshMaterialDialog(ui)
 	}
-	if !ui.unitMeshMatOpen {
+	if !ui.UnitMeshMatOpen {
 		return layout.Dimensions{}
 	}
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitMeshMatDim.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return ui.UnitMeshMatDim.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				sz := gtx.Constraints.Max
 				st := clip.Rect{Max: sz}.Push(gtx.Ops)
 				paint.ColorOp{Color: rgba(0, 0, 0, 70)}.Add(gtx.Ops)
@@ -3402,7 +3402,7 @@ func (ui *uiState) layoutUnitMeshMatDialog(gtx layout.Context) layout.Dimensions
 				// tenths empty; only when the fields run past the room the
 				// window has does the card fill it, and then they scroll.
 				cardH := clampInt(
-					ui.unitMeshMatNaturalHeight(gtx, contentW)+gtx.Dp(inset.Top+inset.Bottom),
+					UnitMeshMatNaturalHeight(ui, gtx, contentW)+gtx.Dp(inset.Top+inset.Bottom),
 					gtx.Dp(unit.Dp(150)),
 					gtx.Constraints.Max.Y-gtx.Dp(unit.Dp(30)),
 				)
@@ -3418,10 +3418,10 @@ func (ui *uiState) layoutUnitMeshMatDialog(gtx layout.Context) layout.Dimensions
 							// The card takes the press before the dim beneath
 							// can have it: the fields rarely fill the card, and
 							// a click on what is left used to shut the dialog.
-							absorbDialogCardPress(gtx, &ui.unitMeshMatCardTag)
+							absorbDialogCardPress(gtx, &ui.UnitMeshMatCardTag)
 							return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitMeshMatColumn(gtx, func(gtx layout.Context) layout.Dimensions {
-									return ui.panelScrollView(gtx, &ui.unitMeshMatScroll, ui.unitMeshMatFields)
+								return UnitMeshMatColumn(ui, gtx, func(gtx layout.Context) layout.Dimensions {
+									return PanelScrollView(ui, gtx, &ui.UnitMeshMatScroll, func(gtx layout.Context) layout.Dimensions { return UnitMeshMatFields(ui, gtx) })
 								})
 							})
 						}),
@@ -3436,15 +3436,15 @@ func (ui *uiState) layoutUnitMeshMatDialog(gtx layout.Context) layout.Dimensions
 // fields, the note and the buttons — with the fields handed in, so the same
 // body can be laid out for real and laid out again to measure the height the
 // card should be.
-func (ui *uiState) unitMeshMatColumn(gtx layout.Context, fields layout.Widget) layout.Dimensions {
+func UnitMeshMatColumn(ui *uiState, gtx layout.Context, fields layout.Widget) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(ui.unitMeshMatTitle),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitMeshMatTitle(ui, gtx) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return hLine(gtx, cHeaderLine, 1)
 		}),
 		layout.Flexed(1, fields),
-		layout.Rigid(ui.unitMeshMatNote),
-		layout.Rigid(ui.unitMeshMatFooter),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitMeshMatNote(ui, gtx) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitMeshMatFooter(ui, gtx) }),
 	)
 }
 
@@ -3452,7 +3452,7 @@ func (ui *uiState) unitMeshMatColumn(gtx layout.Context, fields layout.Widget) l
 // it, with input off and the recorded operations thrown away — the height a
 // card sized to its content needs, taken the way the scroll panel takes the
 // height of its own contents.
-func (ui *uiState) unitMeshMatNaturalHeight(gtx layout.Context, contentW int) int {
+func UnitMeshMatNaturalHeight(ui *uiState, gtx layout.Context, contentW int) int {
 	if contentW <= 0 {
 		return 0
 	}
@@ -3460,21 +3460,21 @@ func (ui *uiState) unitMeshMatNaturalHeight(gtx layout.Context, contentW int) in
 	measureGTX := gtx.Disabled()
 	measureGTX.Constraints.Min = image.Pt(0, 0)
 	measureGTX.Constraints.Max = image.Pt(contentW, panelScrollMeasureHeight)
-	height := ui.unitMeshMatColumn(measureGTX, ui.unitMeshMatFields).Size.Y
+	height := UnitMeshMatColumn(ui, measureGTX, func(gtx layout.Context) layout.Dimensions { return UnitMeshMatFields(ui, gtx) }).Size.Y
 	macro.Stop()
 	return height
 }
 
 // unitMeshMatTitle names the dialog and the mesh it edits.
-func (ui *uiState) unitMeshMatTitle(gtx layout.Context) layout.Dimensions {
+func UnitMeshMatTitle(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(14), "Mesh materials")
+			l := material.Label(ui.Th, unit.Sp(14), "Mesh materials")
 			l.Color = cText
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), ui.unitMeshMatName)
+			l := material.Label(ui.Th, unit.Sp(10), ui.UnitMeshMatName)
 			l.Color = cTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
@@ -3485,22 +3485,22 @@ func (ui *uiState) unitMeshMatTitle(gtx layout.Context) layout.Dimensions {
 // unitMeshMatFields is the scrollable body: one field per material, with the
 // reference the file holds shown dimmed beneath a field that has moved away
 // from it.
-func (ui *uiState) unitMeshMatFields(gtx layout.Context) layout.Dimensions {
-	if len(ui.unitMeshMatEditors) == 0 {
-		l := material.Label(ui.th, unit.Sp(9), "This mesh carries no materials.")
+func UnitMeshMatFields(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if len(ui.UnitMeshMatEditors) == 0 {
+		l := material.Label(ui.Th, unit.Sp(9), "This mesh carries no materials.")
 		l.Color = cTextDim
 		return l.Layout(gtx)
 	}
 	var rc []layout.FlexChild
-	for i := range ui.unitMeshMatEditors {
+	for i := range ui.UnitMeshMatEditors {
 		i := i
-		ed := &ui.unitMeshMatEditors[i]
+		ed := &ui.UnitMeshMatEditors[i]
 		rc = append(rc, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), fmt.Sprintf("Material %d", i+1))
+							l := material.Label(ui.Th, unit.Sp(10), fmt.Sprintf("Material %d", i+1))
 							l.Color = cTextDim
 							return l.Layout(gtx)
 						}),
@@ -3509,17 +3509,17 @@ func (ui *uiState) unitMeshMatFields(gtx layout.Context) layout.Dimensions {
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return material.Editor(ui.th, ed, "texture path").Layout(gtx)
+						return material.Editor(ui.Th, ed, "texture path").Layout(gtx)
 					})
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					// The file's own value, shown only once the field has
 					// drifted from it: that is when a reader needs to see
 					// what is being replaced.
-					if i >= len(ui.unitMeshMatOrig) || strings.TrimSpace(ed.Text()) == ui.unitMeshMatOrig[i] {
+					if i >= len(ui.UnitMeshMatOrig) || strings.TrimSpace(ed.Text()) == ui.UnitMeshMatOrig[i] {
 						return layout.Dimensions{}
 					}
-					l := material.Label(ui.th, unit.Sp(9), "file: "+ui.unitMeshMatOrig[i])
+					l := material.Label(ui.Th, unit.Sp(9), "file: "+ui.UnitMeshMatOrig[i])
 					l.Color = cTextDim
 					l.MaxLines = 1
 					return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
@@ -3537,33 +3537,33 @@ func (ui *uiState) unitMeshMatFields(gtx layout.Context) layout.Dimensions {
 
 // unitMeshMatNote is the one line under the fields: the reason the dialog
 // exists while there is no error, and the save's complaint when there is one.
-func (ui *uiState) unitMeshMatNote(gtx layout.Context) layout.Dimensions {
+func UnitMeshMatNote(ui *uiState, gtx layout.Context) layout.Dimensions {
 	msg := "Preview draws the map behind this card; Save WHM writes the path into the file."
 	col := cTextDim
-	if ui.unitMeshMatErr != "" {
-		msg = ui.unitMeshMatErr
+	if ui.UnitMeshMatErr != "" {
+		msg = ui.UnitMeshMatErr
 		col = cProblem
 	}
-	l := material.Label(ui.th, unit.Sp(9), msg)
+	l := material.Label(ui.Th, unit.Sp(9), msg)
 	l.Color = col
 	return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 }
 
 // unitMeshMatFooter is Preview, Save WHM and Cancel. Save is disabled while
 // there is no file to write to.
-func (ui *uiState) unitMeshMatFooter(gtx layout.Context) layout.Dimensions {
-	noFile := ui.modTree == nil || ui.unitModelPath == ""
+func UnitMeshMatFooter(ui *uiState, gtx layout.Context) layout.Dimensions {
+	noFile := ui.ModTree == nil || ui.UnitModelPath == ""
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButton(gtx, &ui.unitMeshMatPreview, "Preview")
+			return SmallButton(ui, gtx, &ui.UnitMeshMatPreview, "Preview")
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &ui.unitMeshMatSave, "Save WHM", noFile)
+			return SmallButtonDisabled(ui, gtx, &ui.UnitMeshMatSave, "Save WHM", noFile)
 		}),
 		layout.Flexed(1, rowGap()),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButton(gtx, &ui.unitMeshMatCancel, "Cancel")
+			return SmallButton(ui, gtx, &ui.UnitMeshMatCancel, "Cancel")
 		}),
 	)
 }

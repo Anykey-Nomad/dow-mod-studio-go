@@ -99,19 +99,19 @@ func unitEventsWhePath(tree *modtree.ModTree, d *unitDetails) string {
 
 // ensureUnitEvents reads the .whe of the unit on screen, once per unit, and
 // remembers why it could not when there is nothing to edit.
-func (ui *uiState) ensureUnitEvents() {
-	if ui.modTree == nil {
-		ui.unitEvtTree, ui.unitEvtFor, ui.unitEvtDoc = nil, "", nil
-		ui.unitEvtPath, ui.unitEvtErr = "", "No module is open."
+func EnsureUnitEvents(ui *uiState) {
+	if ui.ModTree == nil {
+		ui.UnitEvtTree, ui.UnitEvtFor, ui.UnitEvtDoc = nil, "", nil
+		ui.UnitEvtPath, ui.UnitEvtErr = "", "No module is open."
 		return
 	}
-	u := ui.currentUnit()
+	u := CurrentUnit(ui)
 	if u == nil {
-		ui.unitEvtTree, ui.unitEvtFor, ui.unitEvtDoc = ui.modTree, "", nil
-		ui.unitEvtPath, ui.unitEvtErr = "", "No unit selected."
+		ui.UnitEvtTree, ui.UnitEvtFor, ui.UnitEvtDoc = ui.ModTree, "", nil
+		ui.UnitEvtPath, ui.UnitEvtErr = "", "No unit selected."
 		return
 	}
-	if ui.unitEvtTree == ui.modTree && ui.unitEvtTried && strings.EqualFold(ui.unitEvtFor, u.Path) {
+	if ui.UnitEvtTree == ui.ModTree && ui.UnitEvtTried && strings.EqualFold(ui.UnitEvtFor, u.Path) {
 		return
 	}
 	// Only another module invalidates the clipboard. Another unit does not:
@@ -119,58 +119,58 @@ func (ui *uiState) ensureUnitEvents() {
 	// copied in one unit pastes into the next one. That is the whole point of
 	// the snapshot, and dropping the entries here quietly emptied the buffer
 	// exactly when it was about to be used.
-	if ui.unitEvtTree != nil && ui.unitEvtTree != ui.modTree {
-		ui.unitClips.DropKind(clipEvents)
-		ui.unitClipCur = -1
+	if ui.UnitEvtTree != nil && ui.UnitEvtTree != ui.ModTree {
+		ui.UnitClips.DropKind(clipEvents)
+		ui.UnitClipCur = -1
 	}
-	ui.unitEvtTree = ui.modTree
-	ui.unitEvtFor = u.Path
-	ui.unitEvtTried = true
-	ui.unitEvtDirty = false
-	ui.unitEvtFormErr = ""
-	ui.unitEvtSel = 0
-	ui.unitEvtSelSet = map[int]bool{0: true}
-	ui.unitEvtSelAnchor = 0
-	ui.unitEvtBound = ""
-	ui.unitEvtEntryBound = ""
-	ui.unitActCondBound = ""
-	ui.unitEvtPath = unitEventsWhePath(ui.modTree, ui.currentUnitDetails())
-	if ui.unitEvtPath == "" {
-		ui.unitEvtDoc = nil
-		ui.unitEvtErr = "This unit's model has no .whe file, so it carries no event timelines."
+	ui.UnitEvtTree = ui.ModTree
+	ui.UnitEvtFor = u.Path
+	ui.UnitEvtTried = true
+	ui.UnitEvtDirty = false
+	ui.UnitEvtFormErr = ""
+	ui.UnitEvtSel = 0
+	ui.UnitEvtSelSet = map[int]bool{0: true}
+	ui.UnitEvtSelAnchor = 0
+	ui.UnitEvtBound = ""
+	ui.UnitEvtEntryBound = ""
+	ui.UnitActCondBound = ""
+	ui.UnitEvtPath = unitEventsWhePath(ui.ModTree, CurrentUnitDetails(ui))
+	if ui.UnitEvtPath == "" {
+		ui.UnitEvtDoc = nil
+		ui.UnitEvtErr = "This unit's model has no .whe file, so it carries no event timelines."
 		return
 	}
-	data, err := ui.modTree.ReadFile(ui.unitEvtPath)
+	data, err := ui.ModTree.ReadFile(ui.UnitEvtPath)
 	if err != nil {
-		ui.unitEvtDoc = nil
-		ui.unitEvtErr = "Could not read " + ui.unitEvtPath + ": " + err.Error()
+		ui.UnitEvtDoc = nil
+		ui.UnitEvtErr = "Could not read " + ui.UnitEvtPath + ": " + err.Error()
 		return
 	}
 	doc, err := whe.ParseDocument(data)
 	if err != nil {
-		ui.unitEvtDoc = nil
-		ui.unitEvtErr = err.Error()
+		ui.UnitEvtDoc = nil
+		ui.UnitEvtErr = err.Error()
 		return
 	}
-	ui.unitEvtDoc = doc
-	ui.unitEvtErr = ""
+	ui.UnitEvtDoc = doc
+	ui.UnitEvtErr = ""
 	if len(doc.Timelines()) == 0 {
-		ui.unitEvtErr = "This .whe carries no animation timelines to edit."
+		ui.UnitEvtErr = "This .whe carries no animation timelines to edit."
 		return
 	}
 	// Start on the timeline of the clip the viewport is showing, so opening
 	// the section after looking at phase_in lands on phase_in.
 	want := ""
-	if v := ui.unitModelViewer(); v != nil && v.anim != nil {
-		want = v.anim.Name
+	if v := UnitModelViewer(ui); v != nil && v.Anim != nil {
+		want = v.Anim.Name
 	}
 	for _, tl := range doc.Timelines() {
 		if want != "" && timelineMatchesClip(tl, want) {
-			ui.unitEvtTimeline = tl.Name
+			ui.UnitEvtTimeline = tl.Name
 			return
 		}
 	}
-	ui.unitEvtTimeline = doc.Timelines()[0].Name
+	ui.UnitEvtTimeline = doc.Timelines()[0].Name
 }
 
 // timelineMatchesClip reports whether a timeline drives the named clip, by its
@@ -189,13 +189,13 @@ func timelineMatchesClip(tl whe.FxTimeline, clip string) bool {
 
 // selectedUnitEventTimeline is the timeline the right column is showing, or
 // nil when there is none.
-func (ui *uiState) selectedUnitEventTimeline() *whe.FxTimeline {
-	if ui.unitEvtDoc == nil || ui.unitEvtTimeline == "" {
+func SelectedUnitEventTimeline(ui *uiState) *whe.FxTimeline {
+	if ui.UnitEvtDoc == nil || ui.UnitEvtTimeline == "" {
 		return nil
 	}
-	for _, tl := range ui.unitEvtDoc.Timelines() {
+	for _, tl := range ui.UnitEvtDoc.Timelines() {
 		tl := tl
-		if strings.EqualFold(tl.Name, ui.unitEvtTimeline) {
+		if strings.EqualFold(tl.Name, ui.UnitEvtTimeline) {
 			return &tl
 		}
 	}
@@ -204,43 +204,43 @@ func (ui *uiState) selectedUnitEventTimeline() *whe.FxTimeline {
 
 // selectUnitEventTimeline picks the timeline whose events are listed, which is
 // what pressing a row of the middle column does.
-func (ui *uiState) selectUnitEventTimeline(name string) {
-	if strings.EqualFold(ui.unitEvtTimeline, name) {
+func SelectUnitEventTimeline(ui *uiState, name string) {
+	if strings.EqualFold(ui.UnitEvtTimeline, name) {
 		return
 	}
-	ui.unitEvtTimeline = name
-	ui.unitEvtSel = 0
-	ui.unitEvtSelSet = map[int]bool{0: true}
-	ui.unitEvtSelAnchor = 0
-	ui.unitEvtBound = ""
+	ui.UnitEvtTimeline = name
+	ui.UnitEvtSel = 0
+	ui.UnitEvtSelSet = map[int]bool{0: true}
+	ui.UnitEvtSelAnchor = 0
+	ui.UnitEvtBound = ""
 }
 
-func (ui *uiState) ensureUnitEventClicks(timelines, events int) {
-	if len(ui.unitEvtTlClicks) != timelines {
-		ui.unitEvtTlClicks = make([]widget.Clickable, timelines)
+func EnsureUnitEventClicks(ui *uiState, timelines, events int) {
+	if len(ui.UnitEvtTlClicks) != timelines {
+		ui.UnitEvtTlClicks = make([]widget.Clickable, timelines)
 	}
-	if len(ui.unitEvtClicks) != events {
-		ui.unitEvtClicks = make([]widget.Clickable, events)
-	}
-}
-
-func (ui *uiState) ensureUnitEventAnimClicks(animations int) {
-	if len(ui.unitEvtAnimClicks) != animations {
-		ui.unitEvtAnimClicks = make([]widget.Clickable, animations)
+	if len(ui.UnitEvtClicks) != events {
+		ui.UnitEvtClicks = make([]widget.Clickable, events)
 	}
 }
 
-func (ui *uiState) ensureUnitMeshClicks(meshes int) {
-	if len(ui.unitMeshClicks) != meshes {
-		ui.unitMeshClicks = make([]widget.Clickable, meshes)
+func EnsureUnitEventAnimClicks(ui *uiState, animations int) {
+	if len(ui.UnitEvtAnimClicks) != animations {
+		ui.UnitEvtAnimClicks = make([]widget.Clickable, animations)
+	}
+}
+
+func EnsureUnitMeshClicks(ui *uiState, meshes int) {
+	if len(ui.UnitMeshClicks) != meshes {
+		ui.UnitMeshClicks = make([]widget.Clickable, meshes)
 	}
 }
 
 // ensureUnitMeshNameClicks sizes the name half of each mesh row to match the
 // list, so pressing a name always addresses the mesh that row shows.
-func (ui *uiState) ensureUnitMeshNameClicks(meshes int) {
-	if len(ui.unitMeshNameClicks) != meshes {
-		ui.unitMeshNameClicks = make([]widget.Clickable, meshes)
+func EnsureUnitMeshNameClicks(ui *uiState, meshes int) {
+	if len(ui.UnitMeshNameClicks) != meshes {
+		ui.UnitMeshNameClicks = make([]widget.Clickable, meshes)
 	}
 }
 
@@ -249,20 +249,20 @@ func (ui *uiState) ensureUnitMeshNameClicks(meshes int) {
 // at once. It runs whether or not a .whe is loaded, since the list acts on the
 // model rather than the document, and the order of names is the one the panel
 // lays out, so button i always belongs to mesh i.
-func (ui *uiState) handleUnitMeshToggles(gtx layout.Context) {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
+func HandleUnitMeshToggles(ui *uiState, gtx layout.Context) {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
 		return
 	}
-	names := modelMeshNames(v.model)
-	ui.ensureUnitMeshClicks(len(names))
+	names := modelMeshNames(v.Model)
+	EnsureUnitMeshClicks(ui, len(names))
 	for i := range names {
-		if i >= len(ui.unitMeshClicks) {
+		if i >= len(ui.UnitMeshClicks) {
 			break
 		}
-		if ui.unitMeshClicks[i].Clicked(gtx) {
+		if ui.UnitMeshClicks[i].Clicked(gtx) {
 			setMeshHidden(names[i], !meshHidden(names[i]))
-			v.invalidate()
+			v.Invalidate()
 		}
 	}
 }
@@ -284,37 +284,37 @@ const eyeToggleSizeDp = 18
 // header and no scroller of its own — the Events section wraps it in a
 // bounded scroller, and the Classic OE panel column scrolls it with the rest
 // — so both surfaces share exactly the same rows.
-func (ui *uiState) unitMeshRows(gtx layout.Context) layout.Dimensions {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
-		return ui.meshRowsMessage(gtx, "No model is loaded for this unit.")
+func UnitMeshRows(ui *uiState, gtx layout.Context) layout.Dimensions {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
+		return MeshRowsMessage(ui, gtx, "No model is loaded for this unit.")
 	}
-	names := modelMeshNames(v.model)
+	names := modelMeshNames(v.Model)
 	if len(names) == 0 {
-		return ui.meshRowsMessage(gtx, "This model carries no meshes.")
+		return MeshRowsMessage(ui, gtx, "This model carries no meshes.")
 	}
-	ui.ensureUnitMeshClicks(len(names))
-	ui.ensureUnitMeshNameClicks(len(names))
+	EnsureUnitMeshClicks(ui, len(names))
+	EnsureUnitMeshNameClicks(ui, len(names))
 	var rc []layout.FlexChild
 	for i := range names {
 		i := i
 		name := names[i]
 		hidden := meshHidden(name)
-		nameC := &ui.unitMeshNameClicks[i]
+		nameC := &ui.UnitMeshNameClicks[i]
 		// A second press on the name inside the window raises this mesh's
 		// material editor. The eye beside it stays a plain visibility toggle.
-		if nameC.Clicked(gtx) && ui.classicOEDoubleClick("mesh:"+strings.ToLower(name)) {
-			ui.openUnitMeshMaterialDialog(name)
+		if nameC.Clicked(gtx) && ClassicOEDoubleClick(ui, "mesh:"+strings.ToLower(name)) {
+			OpenUnitMeshMaterialDialog(ui, name)
 		}
 		rc = append(rc, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.eyeToggle(gtx, &ui.unitMeshClicks[i], !hidden)
+					return EyeToggle(ui, gtx, &ui.UnitMeshClicks[i], !hidden)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return nameC.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), name)
+							l := material.Label(ui.Th, unit.Sp(10), name)
 							if hidden {
 								l.Color = cTextDim
 							} else {
@@ -336,8 +336,8 @@ func (ui *uiState) unitMeshRows(gtx layout.Context) layout.Dimensions {
 
 // meshRowsMessage is the one dim line the mesh list shows when there is
 // nothing to list.
-func (ui *uiState) meshRowsMessage(gtx layout.Context, msg string) layout.Dimensions {
-	l := material.Label(ui.th, unit.Sp(9), msg)
+func MeshRowsMessage(ui *uiState, gtx layout.Context, msg string) layout.Dimensions {
+	l := material.Label(ui.Th, unit.Sp(9), msg)
 	l.Color = cTextDim
 	return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 }
@@ -347,19 +347,19 @@ func (ui *uiState) meshRowsMessage(gtx layout.Context, msg string) layout.Dimens
 // timeline or an action is on show. The eye is open while the mesh draws and
 // closed while it is hidden, and the hidden set is the shared one every
 // viewer reads.
-func (ui *uiState) unitMeshVisibilitySection(gtx layout.Context) layout.Dimensions {
-	v := ui.unitModelViewer()
+func UnitMeshVisibilitySection(ui *uiState, gtx layout.Context) layout.Dimensions {
+	v := UnitModelViewer(ui)
 	count := 0
-	if v != nil && v.model != nil {
-		count = len(modelMeshNames(v.model))
+	if v != nil && v.Model != nil {
+		count = len(modelMeshNames(v.Model))
 	}
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return sectionHeader(gtx, ui.th, fmt.Sprintf("Meshes (%d)", count))
+			return sectionHeader(gtx, ui.Th, fmt.Sprintf("Meshes (%d)", count))
 		}),
 	}
 	if count == 0 {
-		children = append(children, layout.Rigid(ui.unitMeshRows))
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitMeshRows(ui, gtx) }))
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	}
 	// Measure the rows unbounded, then hand the scroller at most the cap: a
@@ -369,7 +369,7 @@ func (ui *uiState) unitMeshVisibilitySection(gtx layout.Context) layout.Dimensio
 	measureGTX := gtx.Disabled()
 	measureGTX.Constraints.Min.Y = 0
 	measureGTX.Constraints.Max.Y = panelScrollMeasureHeight
-	natural := ui.unitMeshRows(measureGTX).Size.Y
+	natural := UnitMeshRows(ui, measureGTX).Size.Y
 	macro.Stop()
 	viewport := natural
 	if cap := gtx.Dp(unitMeshSectionMaxDp); viewport > cap {
@@ -377,7 +377,7 @@ func (ui *uiState) unitMeshVisibilitySection(gtx layout.Context) layout.Dimensio
 	}
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Max.Y = viewport
-		return ui.panelScrollView(gtx, &ui.unitMeshScroll, ui.unitMeshRows)
+		return PanelScrollView(ui, gtx, &ui.UnitMeshScroll, func(gtx layout.Context) layout.Dimensions { return UnitMeshRows(ui, gtx) })
 	}))
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
@@ -385,7 +385,7 @@ func (ui *uiState) unitMeshVisibilitySection(gtx layout.Context) layout.Dimensio
 // eyeToggle is one mesh's visibility button: an open eye while the mesh
 // draws, a closed eye while it is hidden. The glyph is drawn as vector shapes
 // rather than a font character, so it renders the same everywhere.
-func (ui *uiState) eyeToggle(gtx layout.Context, btn *widget.Clickable, visible bool) layout.Dimensions {
+func EyeToggle(ui *uiState, gtx layout.Context, btn *widget.Clickable, visible bool) layout.Dimensions {
 	px := gtx.Dp(eyeToggleSizeDp)
 	col := cText
 	if !visible {
@@ -484,9 +484,9 @@ func clipEventDefinition(clip *wheEventClip, name string) *whe.FxEvent {
 
 // unitEvtSelectedIndices is the selected rows of the current timeline in
 // ascending order: what Copy, Remove and the row highlight act on.
-func (ui *uiState) unitEvtSelectedIndices() []int {
-	out := make([]int, 0, len(ui.unitEvtSelSet))
-	for i := range ui.unitEvtSelSet {
+func UnitEvtSelectedIndices(ui *uiState) []int {
+	out := make([]int, 0, len(ui.UnitEvtSelSet))
+	for i := range ui.UnitEvtSelSet {
 		if i >= 0 {
 			out = append(out, i)
 		}
@@ -496,8 +496,8 @@ func (ui *uiState) unitEvtSelectedIndices() []int {
 }
 
 // unitEvtRowSelected says whether a row wears the selection colour.
-func (ui *uiState) unitEvtRowSelected(i int) bool {
-	return ui.unitEvtSelSet[i]
+func UnitEvtRowSelected(ui *uiState, i int) bool {
+	return ui.UnitEvtSelSet[i]
 }
 
 // unitEvtTrackModifiers follows Ctrl and Shift while the section is on
@@ -511,7 +511,7 @@ func (ui *uiState) unitEvtRowSelected(i int) bool {
 // reaches this section and the held flag stays false forever. Every modifier
 // event seen is logged on change, so a multi-select that never fires shows
 // here whether the key events arrived at all and what they carried.
-func (ui *uiState) unitEvtTrackModifiers(gtx layout.Context) {
+func UnitEvtTrackModifiers(ui *uiState, gtx layout.Context) {
 	const anyMod = key.ModCtrl | key.ModShift | key.ModAlt | key.ModSuper
 	for {
 		ev, ok := gtx.Event(
@@ -525,15 +525,15 @@ func (ui *uiState) unitEvtTrackModifiers(gtx layout.Context) {
 		if !ok {
 			continue
 		}
-		if s := fmt.Sprintf("%q %v mods=%v", e.Name, e.State, e.Modifiers); s != ui.unitEvtModLog {
+		if s := fmt.Sprintf("%q %v mods=%v", e.Name, e.State, e.Modifiers); s != ui.UnitEvtModLog {
 			LogInfo("evt: modifier key %s", s)
-			ui.unitEvtModLog = s
+			ui.UnitEvtModLog = s
 		}
 		switch e.Name {
 		case key.NameCtrl:
-			ui.unitEvtCtrlHeld = e.State != key.Release
+			ui.UnitEvtCtrlHeld = e.State != key.Release
 		case key.NameShift:
-			ui.unitEvtShiftHeld = e.State != key.Release
+			ui.UnitEvtShiftHeld = e.State != key.Release
 		}
 	}
 }
@@ -541,29 +541,29 @@ func (ui *uiState) unitEvtTrackModifiers(gtx layout.Context) {
 // unitEvtFieldFocused says whether a field of this section holds the caret:
 // while one does, Ctrl+C and Ctrl+V belong to the text being edited, not to
 // the event clipboard.
-func (ui *uiState) unitEvtFieldFocused(gtx layout.Context) bool {
-	if ui.textActive() {
+func UnitEvtFieldFocused(ui *uiState, gtx layout.Context) bool {
+	if TextActive(ui) {
 		return true
 	}
-	for i := range ui.unitEvtEntryEds {
-		if ui.unitEvtEntryEds[i].Focused(gtx) {
+	for i := range ui.UnitEvtEntryEds {
+		if ui.UnitEvtEntryEds[i].Focused(gtx) {
 			return true
 		}
 	}
-	if ui.unitActNameEd.Focused(gtx) {
+	if ui.UnitActNameEd.Focused(gtx) {
 		return true
 	}
-	for i := range ui.unitActCondEds {
-		if ui.unitActCondEds[i].Focused(gtx) {
+	for i := range ui.UnitActCondEds {
+		if ui.UnitActCondEds[i].Focused(gtx) {
 			return true
 		}
 	}
-	for i := range ui.unitActNameEds {
-		if ui.unitActNameEds[i].Focused(gtx) {
+	for i := range ui.UnitActNameEds {
+		if ui.UnitActNameEds[i].Focused(gtx) {
 			return true
 		}
 	}
-	for _, ed := range []*widget.Editor{&ui.unitEvtNameEd, &ui.unitEvtTimeEd, &ui.unitEvtFxEd, &ui.unitEvtSndEd, &ui.unitEvtMarkerEd, &ui.unitEvtShiftEd} {
+	for _, ed := range []*widget.Editor{&ui.UnitEvtNameEd, &ui.UnitEvtTimeEd, &ui.UnitEvtFxEd, &ui.UnitEvtSndEd, &ui.UnitEvtMarkerEd, &ui.UnitEvtShiftEd} {
 		if ed.Focused(gtx) {
 			return true
 		}
@@ -574,18 +574,18 @@ func (ui *uiState) unitEvtFieldFocused(gtx layout.Context) bool {
 // unitEvtBlurFields lets go of any caret this section holds: a row click
 // ends editing, so the selection change is not stuck behind a field that is
 // still focused and the shortcuts below become available again.
-func (ui *uiState) unitEvtBlurFields(gtx layout.Context) {
-	for i := range ui.unitEvtEntryEds {
-		ui.unitEvtEntryEds[i].Blur(gtx)
+func UnitEvtBlurFields(ui *uiState, gtx layout.Context) {
+	for i := range ui.UnitEvtEntryEds {
+		ui.UnitEvtEntryEds[i].Blur(gtx)
 	}
-	ui.unitActNameEd.Blur(gtx)
-	for i := range ui.unitActCondEds {
-		ui.unitActCondEds[i].Blur(gtx)
+	ui.UnitActNameEd.Blur(gtx)
+	for i := range ui.UnitActCondEds {
+		ui.UnitActCondEds[i].Blur(gtx)
 	}
-	for i := range ui.unitActNameEds {
-		ui.unitActNameEds[i].Blur(gtx)
+	for i := range ui.UnitActNameEds {
+		ui.UnitActNameEds[i].Blur(gtx)
 	}
-	for _, ed := range []*widget.Editor{&ui.unitEvtNameEd, &ui.unitEvtTimeEd, &ui.unitEvtFxEd, &ui.unitEvtSndEd, &ui.unitEvtMarkerEd, &ui.unitEvtShiftEd} {
+	for _, ed := range []*widget.Editor{&ui.UnitEvtNameEd, &ui.UnitEvtTimeEd, &ui.UnitEvtFxEd, &ui.UnitEvtSndEd, &ui.UnitEvtMarkerEd, &ui.UnitEvtShiftEd} {
 		ed.Blur(gtx)
 	}
 }
@@ -593,89 +593,89 @@ func (ui *uiState) unitEvtBlurFields(gtx layout.Context) {
 // handleUnitEventsInput owns the presses and typing of the Events section. It
 // runs on every frame while the section is on screen, ahead of the layout that
 // draws what it decided.
-func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
-	if ui.currentUnitSection().label != unitSectionEvents && !ui.classicOEDialogOpen() {
+func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
+	if CurrentUnitSection(ui).label != unitSectionEvents && !ClassicOEDialogOpen(ui) {
 		// Leaving the section silences whatever it was playing: a timeline
 		// that keeps sounding behind another section is a leak, not a feature.
 		// The Classic OE double-click dialog is the exception: while it is
 		// up, the editors it embeds are the section, wherever the panel sits.
-		if ui.evtPlayer.playing || ui.evtPlayer.audition != nil {
-			ui.evtPlayer.stopAll()
+		if ui.EvtPlayer.playing || ui.EvtPlayer.audition != nil {
+			ui.EvtPlayer.stopAll()
 		}
 		return
 	}
-	ui.ensureUnitEvents()
+	EnsureUnitEvents(ui)
 	// The sound transport first: its clicks are its own, and the playhead it
 	// drives must advance before the rows below are read.
-	ui.unitEvtPlayerTick(gtx)
+	UnitEvtPlayerTick(ui, gtx)
 	// The modifiers first: the clicks below are read in this same pass, and a
 	// Ctrl held down for a click arrives as key events of its own.
-	ui.unitEvtTrackModifiers(gtx)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtNameEd, evtPickName, false)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtTimeEd, evtPickNone, true)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtFxEd, evtPickFX, false)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtSndEd, evtPickSound, false)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtMarkerEd, evtPickMarker, false)
-	ui.unitEvtUpdateShiftEditor(gtx)
-	if ui.unitEvtDoc == nil {
+	UnitEvtTrackModifiers(ui, gtx)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtNameEd, evtPickName, false)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtTimeEd, evtPickNone, true)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtFxEd, evtPickFX, false)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtSndEd, evtPickSound, false)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtMarkerEd, evtPickMarker, false)
+	UnitEvtUpdateShiftEditor(ui, gtx)
+	if ui.UnitEvtDoc == nil {
 		return
 	}
 	// Fill the form from the selected row whenever the selection moves, so
 	// re-firing an existing effect is a time edit rather than a retyping.
-	ui.syncUnitEventForm()
-	timelines := ui.unitEvtDoc.Timelines()
-	tl := ui.selectedUnitEventTimeline()
+	SyncUnitEventForm(ui)
+	timelines := ui.UnitEvtDoc.Timelines()
+	tl := SelectedUnitEventTimeline(ui)
 	events := 0
 	if tl != nil {
 		events = len(tl.Events)
 	}
-	ui.ensureUnitEventClicks(len(timelines), events)
-	for i := range ui.unitEvtTlClicks {
-		if i < len(timelines) && ui.unitEvtTlClicks[i].Clicked(gtx) {
-			ui.unitEvtFocusAction = false
-			ui.selectUnitEventTimeline(timelines[i].Name)
-			tl = ui.selectedUnitEventTimeline()
+	EnsureUnitEventClicks(ui, len(timelines), events)
+	for i := range ui.UnitEvtTlClicks {
+		if i < len(timelines) && ui.UnitEvtTlClicks[i].Clicked(gtx) {
+			ui.UnitEvtFocusAction = false
+			SelectUnitEventTimeline(ui, timelines[i].Name)
+			tl = SelectedUnitEventTimeline(ui)
 			events = 0
 			if tl != nil {
 				events = len(tl.Events)
 			}
-			ui.ensureUnitEventClicks(len(timelines), events)
+			EnsureUnitEventClicks(ui, len(timelines), events)
 		}
 	}
 	// The action list under the timelines picks which action's conditions the
 	// Events column draws beside it, and moves that column onto the actions —
 	// the panel shows one or the other, never both.
-	acts := ui.unitEvtDoc.Actions()
-	ui.ensureUnitEvtActionClicks(len(acts))
-	for i := range ui.unitEvtActionClicks {
-		if i < len(acts) && ui.unitEvtActionClicks[i].Clicked(gtx) {
-			ui.unitEvtBlurFields(gtx)
+	acts := ui.UnitEvtDoc.Actions()
+	EnsureUnitEvtActionClicks(ui, len(acts))
+	for i := range ui.UnitEvtActionClicks {
+		if i < len(acts) && ui.UnitEvtActionClicks[i].Clicked(gtx) {
+			UnitEvtBlurFields(ui, gtx)
 			// The panel leaves the timeline behind completely, and a sound
 			// it was auditioning belongs to that timeline.
-			if !ui.unitEvtFocusAction {
-				ui.evtPlayer.stopAll()
+			if !ui.UnitEvtFocusAction {
+				ui.EvtPlayer.stopAll()
 			}
-			ui.unitEvtFocusAction = true
-			ui.unitEvtActionSel = i
+			ui.UnitEvtFocusAction = true
+			ui.UnitEvtActionSel = i
 			// Selecting an action also plays it: every clip its graph
 			// resolves to, combined in the viewport beside the panel.
-			ui.activateUnitAction(acts[i].Name)
+			ActivateUnitAction(ui, acts[i].Name)
 		}
 	}
 	// While an action is the panel on screen, its conditions are the fields
 	// being edited: their typing, the guard chips and the commit below.
-	if ui.unitEvtFocusAction {
-		ui.unitActConditionsInput(gtx)
+	if ui.UnitEvtFocusAction {
+		UnitActConditionsInput(ui, gtx)
 	}
-	for i := range ui.unitEvtClicks {
-		if i >= events || !ui.unitEvtClicks[i].Clicked(gtx) {
+	for i := range ui.UnitEvtClicks {
+		if i >= events || !ui.UnitEvtClicks[i].Clicked(gtx) {
 			continue
 		}
 		// A row click is a selection, and it lets go of any field being typed
 		// into so the caret does not hold the clipboard shortcuts hostage.
 		// Plain picks the one row, Ctrl toggles it in the group, and Shift
 		// takes the range from the anchor the last plain or Ctrl click left.
-		ui.unitEvtBlurFields(gtx)
+		UnitEvtBlurFields(ui, gtx)
 		// The modifiers are read from the OS at the click itself. The
 		// tracked flags depend on this section's key filters winning the
 		// Ctrl/Shift events ahead of every other filter in the frame, and a
@@ -683,118 +683,118 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 		// at all; the live key state cannot race. The tracked flags stay as
 		// the fallback where there is no live reader.
 		live := heldModifiers()
-		ctrl := ui.unitEvtCtrlHeld || live.Contain(key.ModCtrl)
-		shift := ui.unitEvtShiftHeld || live.Contain(key.ModShift)
+		ctrl := ui.UnitEvtCtrlHeld || live.Contain(key.ModCtrl)
+		shift := ui.UnitEvtShiftHeld || live.Contain(key.ModShift)
 		LogInfo("evt: row %d click ctrl=%v shift=%v (tracked %v/%v live=%v anchor=%d)",
-			i, ctrl, shift, ui.unitEvtCtrlHeld, ui.unitEvtShiftHeld, live, ui.unitEvtSelAnchor)
+			i, ctrl, shift, ui.UnitEvtCtrlHeld, ui.UnitEvtShiftHeld, live, ui.UnitEvtSelAnchor)
 		switch {
 		case ctrl:
-			if ui.unitEvtSelSet == nil {
-				ui.unitEvtSelSet = map[int]bool{}
+			if ui.UnitEvtSelSet == nil {
+				ui.UnitEvtSelSet = map[int]bool{}
 			}
-			if ui.unitEvtSelSet[i] {
-				delete(ui.unitEvtSelSet, i)
+			if ui.UnitEvtSelSet[i] {
+				delete(ui.UnitEvtSelSet, i)
 			} else {
-				ui.unitEvtSelSet[i] = true
+				ui.UnitEvtSelSet[i] = true
 			}
-			ui.unitEvtSelAnchor = i
+			ui.UnitEvtSelAnchor = i
 		case shift:
-			lo, hi := i, ui.unitEvtSelAnchor
+			lo, hi := i, ui.UnitEvtSelAnchor
 			if lo > hi {
 				lo, hi = hi, lo
 			}
-			ui.unitEvtSelSet = map[int]bool{}
+			ui.UnitEvtSelSet = map[int]bool{}
 			for j := lo; j <= hi && j < events; j++ {
-				ui.unitEvtSelSet[j] = true
+				ui.UnitEvtSelSet[j] = true
 			}
 		default:
-			ui.unitEvtSelSet = map[int]bool{i: true}
-			ui.unitEvtSelAnchor = i
+			ui.UnitEvtSelSet = map[int]bool{i: true}
+			ui.UnitEvtSelAnchor = i
 		}
-		ui.unitEvtSel = i
-		ui.unitEvtBound = ""
+		ui.UnitEvtSel = i
+		ui.UnitEvtBound = ""
 		break
 	}
 	// Rows can disappear under a Remove, so the group loses what no longer
 	// exists before anything reads it.
-	for i := range ui.unitEvtSelSet {
+	for i := range ui.UnitEvtSelSet {
 		if i >= events {
-			delete(ui.unitEvtSelSet, i)
+			delete(ui.UnitEvtSelSet, i)
 		}
 	}
-	if ui.unitEvtAddFX.Clicked(gtx) {
-		ui.addUnitEventFromForm("fx")
+	if ui.UnitEvtAddFX.Clicked(gtx) {
+		AddUnitEventFromForm(ui, "fx")
 		return
 	}
-	if ui.unitEvtAddEvent.Clicked(gtx) {
-		ui.addUnitEventFromForm("event")
+	if ui.UnitEvtAddEvent.Clicked(gtx) {
+		AddUnitEventFromForm(ui, "event")
 		return
 	}
-	if ui.unitEvtAddSound.Clicked(gtx) {
-		ui.addUnitEventFromForm("sound")
+	if ui.UnitEvtAddSound.Clicked(gtx) {
+		AddUnitEventFromForm(ui, "sound")
 		return
 	}
-	if ui.unitEvtRemove.Clicked(gtx) {
-		ui.removeSelectedUnitEvent()
+	if ui.UnitEvtRemove.Clicked(gtx) {
+		RemoveSelectedUnitEvent(ui)
 		return
 	}
 	// The animation list's per-row Remove buttons each drop one blend entry
 	// from the selected timeline. They are only laid out for a selected
 	// timeline, so with none (or while an action is shown) no press can land.
 	if tl != nil {
-		ui.ensureUnitEventAnimClicks(len(tl.Animations))
-		for i := range ui.unitEvtAnimClicks {
-			if i < len(tl.Animations) && ui.unitEvtAnimClicks[i].Clicked(gtx) {
-				ui.removeUnitTimelineAnimation(i)
+		EnsureUnitEventAnimClicks(ui, len(tl.Animations))
+		for i := range ui.UnitEvtAnimClicks {
+			if i < len(tl.Animations) && ui.UnitEvtAnimClicks[i].Clicked(gtx) {
+				RemoveUnitTimelineAnimation(ui, i)
 				return
 			}
 		}
 	}
-	if ui.unitEvtSave.Clicked(gtx) {
-		ui.saveUnitEventsFromPanel()
+	if ui.UnitEvtSave.Clicked(gtx) {
+		SaveUnitEventsFromPanel(ui)
 		return
 	}
-	if ui.unitEvtRevert.Clicked(gtx) {
-		ui.revertUnitEvents()
+	if ui.UnitEvtRevert.Clicked(gtx) {
+		RevertUnitEvents(ui)
 		return
 	}
-	if ui.unitEvtSet.Clicked(gtx) || ui.unitEvtApply.Clicked(gtx) {
-		ui.applySelectedEventForm()
+	if ui.UnitEvtSet.Clicked(gtx) || ui.UnitEvtApply.Clicked(gtx) {
+		ApplySelectedEventForm(ui)
 		return
 	}
-	if ui.unitEvtShift.Clicked(gtx) {
-		ui.shiftSelectedUnitEventTimes()
+	if ui.UnitEvtShift.Clicked(gtx) {
+		ShiftSelectedUnitEventTimes(ui)
 		return
 	}
-	if ui.unitEvtCopyAct.Clicked(gtx) {
-		ui.copySelectedUnitAction()
+	if ui.UnitEvtCopyAct.Clicked(gtx) {
+		CopySelectedUnitAction(ui)
 		return
 	}
-	if ui.unitEvtPasteAct.Clicked(gtx) {
-		ui.pasteUnitAction()
+	if ui.UnitEvtPasteAct.Clicked(gtx) {
+		PasteUnitAction(ui)
 		return
 	}
-	if ui.unitEvtCopy.Clicked(gtx) {
-		ui.copySelectedUnitEvents()
+	if ui.UnitEvtCopy.Clicked(gtx) {
+		CopySelectedUnitEvents(ui)
 		return
 	}
-	if ui.unitEvtCopyTl.Clicked(gtx) {
-		ui.copySelectedUnitTimeline()
+	if ui.UnitEvtCopyTl.Clicked(gtx) {
+		CopySelectedUnitTimeline(ui)
 		return
 	}
-	if ui.unitEvtPaste.Clicked(gtx) {
-		ui.pasteUnitEvents()
+	if ui.UnitEvtPaste.Clicked(gtx) {
+		PasteUnitEvents(ui)
 		return
 	}
-	if ui.unitClipPrev.Clicked(gtx) {
-		ui.stepUnitClip(-1)
+	if ui.UnitClipPrev.Clicked(gtx) {
+		StepUnitClip(ui, -1)
 	}
-	if ui.unitClipNext.Clicked(gtx) {
-		ui.stepUnitClip(1)
+	if ui.UnitClipNext.Clicked(gtx) {
+		StepUnitClip(ui, 1)
 	}
 	// Ctrl+C and Ctrl+V repeat those two buttons — unless a field holds the
 	// caret, for while it does the text being edited keeps its own clipboard.
-	if !ui.unitEvtFieldFocused(gtx) {
+	if !UnitEvtFieldFocused(ui, gtx) {
 		for {
 			ev, ok := gtx.Event(
 				key.Filter{Name: "C", Required: key.ModCtrl, Optional: key.ModShift},
@@ -809,18 +809,18 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 			}
 			switch e.Name {
 			case "C":
-				ui.copySelectedUnitEvents()
+				CopySelectedUnitEvents(ui)
 			case "V":
-				ui.pasteUnitEvents()
+				PasteUnitEvents(ui)
 			}
 		}
 	}
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtNameEd, evtPickName, false)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtTimeEd, evtPickNone, true)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtFxEd, evtPickFX, false)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtSndEd, evtPickSound, false)
-	ui.unitEvtUpdateEditor(gtx, &ui.unitEvtMarkerEd, evtPickMarker, false)
-	ui.unitEvtUpdateShiftEditor(gtx)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtNameEd, evtPickName, false)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtTimeEd, evtPickNone, true)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtFxEd, evtPickFX, false)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtSndEd, evtPickSound, false)
+	UnitEvtUpdateEditor(ui, gtx, &ui.UnitEvtMarkerEd, evtPickMarker, false)
+	UnitEvtUpdateShiftEditor(ui, gtx)
 }
 
 // unitEvtUpdateEditor processes one form field's typing. A press into the row
@@ -832,14 +832,14 @@ func (ui *uiState) handleUnitEventsInput(gtx layout.Context) {
 // one row the form shows. Only the moment does: Enter in the path or marker
 // field while several rows are selected must not quietly move all of their
 // times to whichever moment the primary row happened to have.
-func (ui *uiState) unitEvtUpdateEditor(gtx layout.Context, ed *widget.Editor, pick evtPickTarget, batchTime bool) {
+func UnitEvtUpdateEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, pick evtPickTarget, batchTime bool) {
 	ed.SingleLine = true
 	ed.Submit = true
-	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
 		// A field with a list opens its picker instead of taking the caret: the
 		// picker's own filter takes the typing.
 		if pick != evtPickNone {
-			ui.openEvtPicker(pick)
+			OpenEvtPicker(ui, pick)
 		} else {
 			gtx.Execute(key.FocusCmd{Tag: ed})
 		}
@@ -851,9 +851,9 @@ func (ui *uiState) unitEvtUpdateEditor(gtx layout.Context, ed *widget.Editor, pi
 		}
 		if _, submit := ev.(widget.SubmitEvent); submit {
 			if batchTime {
-				ui.applySelectedEventForm()
+				ApplySelectedEventForm(ui)
 			} else {
-				ui.applySelectedEventFormSingle()
+				ApplySelectedEventFormSingle(ui)
 			}
 			ed.Blur(gtx)
 		}
@@ -864,11 +864,11 @@ func (ui *uiState) unitEvtUpdateEditor(gtx layout.Context, ed *widget.Editor, pi
 // caret, Enter shifts the selection and consumes the number. It is kept out of
 // unitEvtUpdateEditor because submitting it is not an apply of the form — the
 // name, path and marker fields have nothing to do with a shift.
-func (ui *uiState) unitEvtUpdateShiftEditor(gtx layout.Context) {
-	ed := &ui.unitEvtShiftEd
+func UnitEvtUpdateShiftEditor(ui *uiState, gtx layout.Context) {
+	ed := &ui.UnitEvtShiftEd
 	ed.SingleLine = true
 	ed.Submit = true
-	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	for {
@@ -877,7 +877,7 @@ func (ui *uiState) unitEvtUpdateShiftEditor(gtx layout.Context) {
 			break
 		}
 		if _, submit := ev.(widget.SubmitEvent); submit {
-			ui.shiftSelectedUnitEventTimes()
+			ShiftSelectedUnitEventTimes(ui)
 			ed.Blur(gtx)
 		}
 	}
@@ -888,36 +888,36 @@ func (ui *uiState) unitEvtUpdateShiftEditor(gtx layout.Context) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // syncUnitEventForm refills the form fields when the selection changes.
-func (ui *uiState) syncUnitEventForm() {
-	tl := ui.selectedUnitEventTimeline()
-	if tl == nil || ui.unitEvtSel < 0 || ui.unitEvtSel >= len(tl.Events) {
-		ui.unitEvtBound = ""
+func SyncUnitEventForm(ui *uiState) {
+	tl := SelectedUnitEventTimeline(ui)
+	if tl == nil || ui.UnitEvtSel < 0 || ui.UnitEvtSel >= len(tl.Events) {
+		ui.UnitEvtBound = ""
 		return
 	}
-	bound := ui.unitEvtTimeline + "|" + strconv.Itoa(ui.unitEvtSel)
-	if ui.unitEvtBound == bound {
+	bound := ui.UnitEvtTimeline + "|" + strconv.Itoa(ui.UnitEvtSel)
+	if ui.UnitEvtBound == bound {
 		return
 	}
-	ev := tl.Events[ui.unitEvtSel]
-	ui.unitEvtBound = bound
-	ui.unitEvtNameEd.SetText(ev.Name)
-	ui.unitEvtTimeEd.SetText(unitEventTimeEdit(ev.Time))
-	ui.unitEvtFxEd.SetText("")
-	ui.unitEvtSndEd.SetText("")
-	ui.unitEvtMarkerEd.SetText("")
-	def, ok := ui.unitEvtDoc.Events()[strings.ToLower(ev.Name)]
+	ev := tl.Events[ui.UnitEvtSel]
+	ui.UnitEvtBound = bound
+	ui.UnitEvtNameEd.SetText(ev.Name)
+	ui.UnitEvtTimeEd.SetText(unitEventTimeEdit(ev.Time))
+	ui.UnitEvtFxEd.SetText("")
+	ui.UnitEvtSndEd.SetText("")
+	ui.UnitEvtMarkerEd.SetText("")
+	def, ok := ui.UnitEvtDoc.Events()[strings.ToLower(ev.Name)]
 	if !ok {
 		return
 	}
 	if p, has := def.First("sound"); has {
-		ui.unitEvtSndEd.SetText(p)
+		ui.UnitEvtSndEd.SetText(p)
 		return
 	}
 	if p, has := def.First("fx"); has {
-		ui.unitEvtFxEd.SetText(p)
+		ui.UnitEvtFxEd.SetText(p)
 	}
 	if m, has := def.First("marker"); has {
-		ui.unitEvtMarkerEd.SetText(m)
+		ui.UnitEvtMarkerEd.SetText(m)
 	}
 }
 
@@ -961,60 +961,60 @@ func unitEventTime(text string) (float64, error) {
 // under data/sound it resolves to. Filling in no path at all re-fires an
 // event the .whe already defines, which is how an existing effect is put on a
 // second clip.
-func (ui *uiState) addUnitEventFromForm(kind string) {
-	ui.applyUnitEvent(kind)
+func AddUnitEventFromForm(ui *uiState, kind string) {
+	ApplyUnitEvent(ui, kind)
 }
 
-func (ui *uiState) applyUnitEvent(kind string) {
-	ui.lastFormAction = kind
-	doc := ui.unitEvtDoc
+func ApplyUnitEvent(ui *uiState, kind string) {
+	ui.LastFormAction = kind
+	doc := ui.UnitEvtDoc
 	if doc == nil {
-		ui.unitEvtFormErr = "No .whe is loaded."
-		ui.lastFormAction = ""
+		ui.UnitEvtFormErr = "No .whe is loaded."
+		ui.LastFormAction = ""
 		return
 	}
-	if ui.unitEvtTimeline == "" {
-		ui.unitEvtFormErr = "Select a timeline first."
-		ui.lastFormAction = ""
+	if ui.UnitEvtTimeline == "" {
+		ui.UnitEvtFormErr = "Select a timeline first."
+		ui.LastFormAction = ""
 		return
 	}
-	name := strings.TrimSpace(ui.unitEvtNameEd.Text())
+	name := strings.TrimSpace(ui.UnitEvtNameEd.Text())
 	if name == "" {
-		ui.unitEvtFormErr = "Event name is required."
-		ui.lastFormAction = ""
+		ui.UnitEvtFormErr = "Event name is required."
+		ui.LastFormAction = ""
 		return
 	}
-	at, err := unitEventTime(ui.unitEvtTimeEd.Text())
+	at, err := unitEventTime(ui.UnitEvtTimeEd.Text())
 	if err != nil {
-		ui.unitEvtFormErr = err.Error()
-		ui.lastFormAction = ""
+		ui.UnitEvtFormErr = err.Error()
+		ui.LastFormAction = ""
 		return
 	}
 	// A sound takes its path from the sound field, an effect from the FX field;
 	// an event that is only being placed takes neither.
-	target := strings.TrimSpace(ui.unitEvtFxEd.Text())
+	target := strings.TrimSpace(ui.UnitEvtFxEd.Text())
 	if kind == "sound" {
-		target = strings.TrimSpace(ui.unitEvtSndEd.Text())
+		target = strings.TrimSpace(ui.UnitEvtSndEd.Text())
 	}
 	var definition *whe.FxEvent
 	soundPath := ""
 	switch kind {
 	case "sound":
 		if target == "" {
-			ui.unitEvtFormErr = "A sound path is required (relative to data\\sound)."
-			ui.lastFormAction = ""
+			ui.UnitEvtFormErr = "A sound path is required (relative to data\\sound)."
+			ui.LastFormAction = ""
 			return
 		}
 		if !strings.HasPrefix(strings.ToLower(name), "sound") {
 			name = "sound_" + name
-			ui.unitEvtNameEd.SetText(name)
+			ui.UnitEvtNameEd.SetText(name)
 		}
 		soundPath = target
 	case "event":
 		// Placing an event on the timeline needs no definition of its own: the
 		// event must already be defined in this .whe, which AddTimedEvent checks.
 	default:
-		marker := strings.TrimSpace(ui.unitEvtMarkerEd.Text())
+		marker := strings.TrimSpace(ui.UnitEvtMarkerEd.Text())
 		var entries []whe.FxEventEntry
 		if marker != "" {
 			entries = append(entries, whe.FxEventEntry{Key: "marker", Value: marker})
@@ -1027,51 +1027,51 @@ func (ui *uiState) applyUnitEvent(kind string) {
 		}
 	}
 
-	if err := doc.AddTimedEvent(ui.unitEvtTimeline, whe.FxTimelineEvent{Name: name, Time: at}, definition, soundPath); err != nil {
-		ui.unitEvtFormErr = err.Error()
-		ui.lastFormAction = ""
+	if err := doc.AddTimedEvent(ui.UnitEvtTimeline, whe.FxTimelineEvent{Name: name, Time: at}, definition, soundPath); err != nil {
+		ui.UnitEvtFormErr = err.Error()
+		ui.LastFormAction = ""
 		return
 	}
 
-	ui.unitEvtFormErr = ""
-	ui.unitEvtDirty = true
-	ui.lastFormAction = kind
+	ui.UnitEvtFormErr = ""
+	ui.UnitEvtDirty = true
+	ui.LastFormAction = kind
 	// Land the selection on the row that was just added.
-	if tl := ui.selectedUnitEventTimeline(); tl != nil {
+	if tl := SelectedUnitEventTimeline(ui); tl != nil {
 		for i := range tl.Events {
 			if strings.EqualFold(tl.Events[i].Name, name) && tl.Events[i].Time == at {
-				ui.unitEvtSel = i
-				ui.unitEvtSelSet = map[int]bool{i: true}
-				ui.unitEvtSelAnchor = i
+				ui.UnitEvtSel = i
+				ui.UnitEvtSelSet = map[int]bool{i: true}
+				ui.UnitEvtSelAnchor = i
 			}
 		}
-		ui.unitEvtBound = ""
+		ui.UnitEvtBound = ""
 	}
-	ui.reloadUnitModelFx()
-	ui.statusEventAdded(name, at)
+	ReloadUnitModelFx(ui)
+	StatusEventAdded(ui, name, at)
 }
 
-func (ui *uiState) statusEventAdded(name string, at float64) {
-	ui.statusText = fmt.Sprintf("Added %s at %s on %s — save to write it into the mod",
-		name, unitEventTimeLabel(at), ui.unitEvtTimeline)
+func StatusEventAdded(ui *uiState, name string, at float64) {
+	ui.StatusText = fmt.Sprintf("Added %s at %s on %s — save to write it into the mod",
+		name, unitEventTimeLabel(at), ui.UnitEvtTimeline)
 }
 
 // removeSelectedUnitEvent drops the selected rows from its timeline — every
 // row of the group, not just the one showing below. The definitions themselves
 // are kept: other clips and the blueprint may still fire them, and an orphan
 // definition is harmless where a missing one is a broken effect.
-func (ui *uiState) removeSelectedUnitEvent() {
-	doc := ui.unitEvtDoc
-	tl := ui.selectedUnitEventTimeline()
+func RemoveSelectedUnitEvent(ui *uiState) {
+	doc := ui.UnitEvtDoc
+	tl := SelectedUnitEventTimeline(ui)
 	if doc == nil || tl == nil {
-		ui.unitEvtFormErr = "Select an event to remove."
-		ui.lastFormAction = ""
+		ui.UnitEvtFormErr = "Select an event to remove."
+		ui.LastFormAction = ""
 		return
 	}
-	indices := ui.unitEvtSelectedIndices()
+	indices := UnitEvtSelectedIndices(ui)
 	if len(indices) == 0 {
-		ui.unitEvtFormErr = "Select an event to remove."
-		ui.lastFormAction = ""
+		ui.UnitEvtFormErr = "Select an event to remove."
+		ui.LastFormAction = ""
 		return
 	}
 	// Descending, so taking a row cannot shift the ones still to come.
@@ -1081,74 +1081,74 @@ func (ui *uiState) removeSelectedUnitEvent() {
 		if i < 0 || i >= len(tl.Events) {
 			continue
 		}
-		if err := doc.RemoveTimedEvent(ui.unitEvtTimeline, i); err != nil {
-			ui.unitEvtFormErr = err.Error()
-			ui.lastFormAction = ""
+		if err := doc.RemoveTimedEvent(ui.UnitEvtTimeline, i); err != nil {
+			ui.UnitEvtFormErr = err.Error()
+			ui.LastFormAction = ""
 			return
 		}
 		removed++
 	}
 	if removed == 0 {
-		ui.unitEvtFormErr = "Select an event to remove."
-		ui.lastFormAction = ""
+		ui.UnitEvtFormErr = "Select an event to remove."
+		ui.LastFormAction = ""
 		return
 	}
-	ui.unitEvtFormErr = ""
-	ui.unitEvtDirty = true
-	ui.lastFormAction = "remove"
-	ui.unitEvtSelSet = map[int]bool{}
-	if tl := ui.selectedUnitEventTimeline(); tl != nil {
-		if ui.unitEvtSel >= len(tl.Events) {
-			ui.unitEvtSel = len(tl.Events) - 1
+	ui.UnitEvtFormErr = ""
+	ui.UnitEvtDirty = true
+	ui.LastFormAction = "remove"
+	ui.UnitEvtSelSet = map[int]bool{}
+	if tl := SelectedUnitEventTimeline(ui); tl != nil {
+		if ui.UnitEvtSel >= len(tl.Events) {
+			ui.UnitEvtSel = len(tl.Events) - 1
 		}
 		// The selection lands on whichever row took the removed one's place,
 		// so the panel below and the buttons keep something to act on.
-		if ui.unitEvtSel >= 0 {
-			ui.unitEvtSelSet[ui.unitEvtSel] = true
+		if ui.UnitEvtSel >= 0 {
+			ui.UnitEvtSelSet[ui.UnitEvtSel] = true
 		}
 	}
-	ui.unitEvtBound = ""
-	ui.reloadUnitModelFx()
-	ui.statusText = fmt.Sprintf("Removed %d event(s) from %s — save to write it into the mod", removed, ui.unitEvtTimeline)
+	ui.UnitEvtBound = ""
+	ReloadUnitModelFx(ui)
+	ui.StatusText = fmt.Sprintf("Removed %d event(s) from %s — save to write it into the mod", removed, ui.UnitEvtTimeline)
 }
 
 // removeUnitTimelineAnimation drops one entry from the selected timeline's
 // animation blend list. It edits the in-memory document only — Save .whe
 // writes it into the mod, matching how every other timeline edit behaves.
-func (ui *uiState) removeUnitTimelineAnimation(index int) {
-	doc := ui.unitEvtDoc
-	tl := ui.selectedUnitEventTimeline()
+func RemoveUnitTimelineAnimation(ui *uiState, index int) {
+	doc := ui.UnitEvtDoc
+	tl := SelectedUnitEventTimeline(ui)
 	if doc == nil || tl == nil {
-		ui.unitEvtFormErr = "Select a timeline's animation to remove."
-		ui.lastFormAction = ""
+		ui.UnitEvtFormErr = "Select a timeline's animation to remove."
+		ui.LastFormAction = ""
 		return
 	}
 	if index < 0 || index >= len(tl.Animations) {
-		ui.unitEvtFormErr = "Animation selection is no longer valid."
-		ui.lastFormAction = ""
+		ui.UnitEvtFormErr = "Animation selection is no longer valid."
+		ui.LastFormAction = ""
 		return
 	}
-	if err := doc.RemoveTimelineAnimation(ui.unitEvtTimeline, index); err != nil {
-		ui.unitEvtFormErr = err.Error()
-		ui.lastFormAction = ""
+	if err := doc.RemoveTimelineAnimation(ui.UnitEvtTimeline, index); err != nil {
+		ui.UnitEvtFormErr = err.Error()
+		ui.LastFormAction = ""
 		return
 	}
-	ui.unitEvtFormErr = ""
-	ui.unitEvtDirty = true
-	ui.lastFormAction = "remove"
-	ui.reloadUnitModelFx()
-	ui.statusText = fmt.Sprintf("Removed an animation from %s — save to write it into the mod", ui.unitEvtTimeline)
+	ui.UnitEvtFormErr = ""
+	ui.UnitEvtDirty = true
+	ui.LastFormAction = "remove"
+	ReloadUnitModelFx(ui)
+	ui.StatusText = fmt.Sprintf("Removed an animation from %s — save to write it into the mod", ui.UnitEvtTimeline)
 }
 
 // stepUnitClip moves the history position through the entries that fit the
 // events field, from the entry Paste would take now.
-func (ui *uiState) stepUnitClip(dir int) {
-	_, cur, ok := ui.unitClips.Pick(clipEvents, ui.unitClipCur)
+func StepUnitClip(ui *uiState, dir int) {
+	_, cur, ok := ui.UnitClips.Pick(clipEvents, ui.UnitClipCur)
 	if !ok {
 		return
 	}
-	if next := ui.unitClips.Step(clipEvents, cur, dir); next >= 0 {
-		ui.unitClipCur = next
+	if next := ui.UnitClips.Step(clipEvents, cur, dir); next >= 0 {
+		ui.UnitClipCur = next
 	}
 }
 
@@ -1156,18 +1156,18 @@ func (ui *uiState) stepUnitClip(dir int) {
 // definitions into the shared buffer, from where Paste carries them into any
 // timeline — of this unit or of the next one, since the snapshot travels with
 // the copy rather than pointing back at the .whe it was read from.
-func (ui *uiState) copySelectedUnitEvents() {
-	tl := ui.selectedUnitEventTimeline()
+func CopySelectedUnitEvents(ui *uiState) {
+	tl := SelectedUnitEventTimeline(ui)
 	if tl == nil {
-		ui.statusText = "Select a timeline first"
+		ui.StatusText = "Select a timeline first"
 		return
 	}
-	indices := ui.unitEvtSelectedIndices()
+	indices := UnitEvtSelectedIndices(ui)
 	if len(indices) == 0 {
-		ui.statusText = "Nothing is selected to copy"
+		ui.StatusText = "Nothing is selected to copy"
 		return
 	}
-	defs := ui.unitEvtDoc.Events()
+	defs := ui.UnitEvtDoc.Events()
 	clip := &wheEventClip{Defs: map[string]whe.FxEvent{}}
 	for _, i := range indices {
 		if i < 0 || i >= len(tl.Events) {
@@ -1180,18 +1180,18 @@ func (ui *uiState) copySelectedUnitEvents() {
 		}
 	}
 	if len(clip.Events) == 0 {
-		ui.statusText = "Nothing is selected to copy"
+		ui.StatusText = "Nothing is selected to copy"
 		return
 	}
-	ui.unitClips.Push(clipEntry{
+	ui.UnitClips.Push(clipEntry{
 		Kind:   clipEvents,
-		Label:  fmt.Sprintf("%d event(s) from %s", len(clip.Events), ui.unitEvtTimeline),
+		Label:  fmt.Sprintf("%d event(s) from %s", len(clip.Events), ui.UnitEvtTimeline),
 		At:     time.Now(),
 		Events: clip,
 	})
 	// The copy just made is the one Paste takes until the history is stepped.
-	ui.unitClipCur = len(ui.unitClips.Entries) - 1
-	ui.statusText = fmt.Sprintf("Copied %d event(s) — Paste into any timeline", len(clip.Events))
+	ui.UnitClipCur = len(ui.UnitClips.Entries) - 1
+	ui.StatusText = fmt.Sprintf("Copied %d event(s) — Paste into any timeline", len(clip.Events))
 }
 
 // copySelectedUnitTimeline puts the whole selected timeline into the shared
@@ -1199,26 +1199,26 @@ func (ui *uiState) copySelectedUnitEvents() {
 // name. Copying a few rows is a paste of those rows; this is a paste of the
 // timeline itself, so it lands on the timeline of its own name — in this unit
 // or in the next one, where it is merged in or created from the copied bytes.
-func (ui *uiState) copySelectedUnitTimeline() {
-	doc := ui.unitEvtDoc
-	tl := ui.selectedUnitEventTimeline()
+func CopySelectedUnitTimeline(ui *uiState) {
+	doc := ui.UnitEvtDoc
+	tl := SelectedUnitEventTimeline(ui)
 	if doc == nil || tl == nil {
-		ui.statusText = "Select a timeline first"
+		ui.StatusText = "Select a timeline first"
 		return
 	}
 	clip, ok := timelineClipFrom(doc, tl.Name)
 	if !ok {
-		ui.statusText = "This timeline could not be read back from the .whe"
+		ui.StatusText = "This timeline could not be read back from the .whe"
 		return
 	}
-	ui.unitClips.Push(clipEntry{
+	ui.UnitClips.Push(clipEntry{
 		Kind:   clipEvents,
 		Label:  fmt.Sprintf("timeline %s (%d event(s))", clip.Timeline, len(clip.Events)),
 		At:     time.Now(),
 		Events: clip,
 	})
-	ui.unitClipCur = len(ui.unitClips.Entries) - 1
-	ui.statusText = fmt.Sprintf("Copied timeline %s (%d event(s), %d animation(s)) — Paste in any unit",
+	ui.UnitClipCur = len(ui.UnitClips.Entries) - 1
+	ui.StatusText = fmt.Sprintf("Copied timeline %s (%d event(s), %d animation(s)) — Paste in any unit",
 		clip.Timeline, len(clip.Events), len(clip.Animations))
 }
 
@@ -1381,47 +1381,47 @@ func timelinePasteMessage(res timelinePaste) string {
 // this .whe already carries, or created here from the copied payload when the
 // file has never had one — its name is the clip it drives, so that is where it
 // belongs. The copied name is never silently written under another one.
-func (ui *uiState) pasteUnitEvents() {
-	entry, _, ok := ui.unitClips.Pick(clipEvents, ui.unitClipCur)
+func PasteUnitEvents(ui *uiState) {
+	entry, _, ok := ui.UnitClips.Pick(clipEvents, ui.UnitClipCur)
 	if !ok || entry.Events == nil || len(entry.Events.Events) == 0 {
-		ui.statusText = "The event clipboard is empty — Copy first"
+		ui.StatusText = "The event clipboard is empty — Copy first"
 		return
 	}
-	doc := ui.unitEvtDoc
+	doc := ui.UnitEvtDoc
 	if doc == nil {
-		ui.statusText = "No .whe is loaded — select a unit whose model has one first"
+		ui.StatusText = "No .whe is loaded — select a unit whose model has one first"
 		return
 	}
 	clip := entry.Events
 	if clip.Timeline != "" {
 		res, err := pasteTimelineClip(doc, clip)
 		if err != nil {
-			ui.statusText = "Paste failed: " + err.Error()
+			ui.StatusText = "Paste failed: " + err.Error()
 			return
 		}
 		if res.events == 0 && res.present == 0 {
 			if res.firstSkip != "" {
-				ui.statusText = "Paste failed: " + res.firstSkip
+				ui.StatusText = "Paste failed: " + res.firstSkip
 			} else {
-				ui.statusText = fmt.Sprintf("Nothing to paste — %s carries no events", res.name)
+				ui.StatusText = fmt.Sprintf("Nothing to paste — %s carries no events", res.name)
 			}
 			return
 		}
-		ui.unitEvtDirty = true
-		ui.unitEvtBound = ""
+		ui.UnitEvtDirty = true
+		ui.UnitEvtBound = ""
 		// A .whe read as carrying no timelines may have just gained one.
-		ui.unitEvtErr = ""
-		ui.unitEvtTimeline = res.name
-		ui.unitEvtSel = 0
-		ui.unitEvtSelSet = map[int]bool{0: true}
-		ui.unitEvtSelAnchor = 0
-		ui.reloadUnitModelFx()
-		ui.statusText = timelinePasteMessage(res)
+		ui.UnitEvtErr = ""
+		ui.UnitEvtTimeline = res.name
+		ui.UnitEvtSel = 0
+		ui.UnitEvtSelSet = map[int]bool{0: true}
+		ui.UnitEvtSelAnchor = 0
+		ReloadUnitModelFx(ui)
+		ui.StatusText = timelinePasteMessage(res)
 		return
 	}
-	target := ui.unitEvtTimeline
+	target := ui.UnitEvtTimeline
 	if target == "" {
-		ui.statusText = "Select a timeline first"
+		ui.StatusText = "Select a timeline first"
 		return
 	}
 	added, skipped, present := 0, 0, 0
@@ -1454,31 +1454,31 @@ func (ui *uiState) pasteUnitEvents() {
 	}
 	if added == 0 {
 		if present > 0 {
-			ui.statusText = fmt.Sprintf("Nothing to paste — %d event(s) are already in %s", present, target)
+			ui.StatusText = fmt.Sprintf("Nothing to paste — %d event(s) are already in %s", present, target)
 			return
 		}
-		ui.statusText = "Paste failed: " + firstSkip
+		ui.StatusText = "Paste failed: " + firstSkip
 		return
 	}
-	ui.unitEvtDirty = true
-	ui.unitEvtBound = ""
+	ui.UnitEvtDirty = true
+	ui.UnitEvtBound = ""
 	// A .whe read as carrying no timelines may have just gained one.
-	ui.unitEvtErr = ""
+	ui.UnitEvtErr = ""
 	// Pasted rows land at the end of the timeline; the selection follows them
 	// so what was just pasted is what the panels below show.
-	ui.unitEvtSelSet = map[int]bool{}
-	if tl := ui.selectedUnitEventTimeline(); tl != nil {
+	ui.UnitEvtSelSet = map[int]bool{}
+	if tl := SelectedUnitEventTimeline(ui); tl != nil {
 		for _, ev := range pasted {
 			for i := len(tl.Events) - 1; i >= 0; i-- {
 				if tl.Events[i].Name == ev.Name && tl.Events[i].Time == ev.Time {
-					ui.unitEvtSelSet[i] = true
-					ui.unitEvtSel = i
+					ui.UnitEvtSelSet[i] = true
+					ui.UnitEvtSel = i
 					break
 				}
 			}
 		}
 	}
-	ui.reloadUnitModelFx()
+	ReloadUnitModelFx(ui)
 	msg := fmt.Sprintf("Pasted %d event(s) into %s", added, target)
 	if present > 0 {
 		msg += fmt.Sprintf(", %d already there", present)
@@ -1486,7 +1486,7 @@ func (ui *uiState) pasteUnitEvents() {
 	if skipped > 0 {
 		msg += fmt.Sprintf(", %d skipped: %s", skipped, firstSkip)
 	}
-	ui.statusText = msg
+	ui.StatusText = msg
 }
 
 // fxEventSlot is what makes two rows of a timeline the same event: the name
@@ -1504,15 +1504,15 @@ func fxEventSlot(ev whe.FxTimelineEvent) string {
 // applySelectedEventForm is the panel's Apply and Set: with a group selected
 // it writes the typed moment into every selected row, and with a single row
 // selected it writes the whole form — time, path and marker — into that row.
-func (ui *uiState) applySelectedEventForm() {
-	ui.applyEventForm(true)
+func ApplySelectedEventForm(ui *uiState) {
+	ApplyEventForm(ui, true)
 }
 
 // applySelectedEventFormSingle is the path, marker and name fields' own Enter:
 // those describe the one row the form shows, so they never fan out over the
 // selection.
-func (ui *uiState) applySelectedEventFormSingle() {
-	ui.applyEventForm(false)
+func ApplySelectedEventFormSingle(ui *uiState) {
+	ApplyEventForm(ui, false)
 }
 
 // applyEventForm writes the form's typed fields into the selected event of the
@@ -1521,14 +1521,14 @@ func (ui *uiState) applySelectedEventFormSingle() {
 // that — and the viewport re-resolves from the document, so the edited event
 // shows on the model before it is written out. The event's name is its identity
 // across the file, so a changed name is refused rather than half-renamed.
-func (ui *uiState) applyEventForm(allowBatchTime bool) {
-	if ui.unitEvtDoc == nil {
-		ui.unitEvtFormErr = "No .whe is loaded."
+func ApplyEventForm(ui *uiState, allowBatchTime bool) {
+	if ui.UnitEvtDoc == nil {
+		ui.UnitEvtFormErr = "No .whe is loaded."
 		return
 	}
-	tl := ui.selectedUnitEventTimeline()
-	if tl == nil || ui.unitEvtSel < 0 || ui.unitEvtSel >= len(tl.Events) {
-		ui.unitEvtFormErr = "Select an event to apply the fields to."
+	tl := SelectedUnitEventTimeline(ui)
+	if tl == nil || ui.UnitEvtSel < 0 || ui.UnitEvtSel >= len(tl.Events) {
+		ui.UnitEvtFormErr = "Select an event to apply the fields to."
 		return
 	}
 	// A group selection is the batch form of this button. The moment an event
@@ -1537,34 +1537,34 @@ func (ui *uiState) applyEventForm(allowBatchTime bool) {
 	// definition they came from — so a multi-row Apply writes the typed time
 	// to all selected rows and leaves the rest of the form to the one row it
 	// shows.
-	if indices := ui.unitEvtSelectedIndices(); allowBatchTime && len(indices) > 1 {
-		at, err := unitEventTime(ui.unitEvtTimeEd.Text())
+	if indices := UnitEvtSelectedIndices(ui); allowBatchTime && len(indices) > 1 {
+		at, err := unitEventTime(ui.UnitEvtTimeEd.Text())
 		if err != nil {
-			ui.unitEvtFormErr = err.Error()
+			ui.UnitEvtFormErr = err.Error()
 			return
 		}
-		ui.applyUnitEventTimes(indices, at)
+		ApplyUnitEventTimes(ui, indices, at)
 		return
 	}
-	ev := tl.Events[ui.unitEvtSel]
-	if name := strings.TrimSpace(ui.unitEvtNameEd.Text()); !strings.EqualFold(name, ev.Name) {
-		ui.unitEvtFormErr = "The event name is this event's identity — keep it as selected when applying."
+	ev := tl.Events[ui.UnitEvtSel]
+	if name := strings.TrimSpace(ui.UnitEvtNameEd.Text()); !strings.EqualFold(name, ev.Name) {
+		ui.UnitEvtFormErr = "The event name is this event's identity — keep it as selected when applying."
 		return
 	}
-	at, err := unitEventTime(ui.unitEvtTimeEd.Text())
+	at, err := unitEventTime(ui.UnitEvtTimeEd.Text())
 	if err != nil {
-		ui.unitEvtFormErr = err.Error()
+		ui.UnitEvtFormErr = err.Error()
 		return
 	}
-	def0 := ui.unitEvtDoc.Events()[strings.ToLower(ev.Name)]
-	path := strings.TrimSpace(ui.unitEvtFxEd.Text())
+	def0 := ui.UnitEvtDoc.Events()[strings.ToLower(ev.Name)]
+	path := strings.TrimSpace(ui.UnitEvtFxEd.Text())
 	if _, isSound := def0.First("sound"); isSound || strings.HasPrefix(strings.ToLower(ev.Name), "sound") {
-		path = strings.TrimSpace(ui.unitEvtSndEd.Text())
+		path = strings.TrimSpace(ui.UnitEvtSndEd.Text())
 	}
-	marker := strings.TrimSpace(ui.unitEvtMarkerEd.Text())
-	def, hasDef := ui.unitEvtDoc.Events()[strings.ToLower(ev.Name)]
+	marker := strings.TrimSpace(ui.UnitEvtMarkerEd.Text())
+	def, hasDef := ui.UnitEvtDoc.Events()[strings.ToLower(ev.Name)]
 	if !hasDef && (path != "" || marker != "") {
-		ui.unitEvtFormErr = "This event has no definition in the .whe — path and marker cannot be applied."
+		ui.UnitEvtFormErr = "This event has no definition in the .whe — path and marker cannot be applied."
 		return
 	}
 	pathKey := "fx"
@@ -1577,8 +1577,8 @@ func (ui *uiState) applyEventForm(allowBatchTime bool) {
 	pathChanged := path != strings.TrimSpace(pathCur)
 	markerChanged := marker != strings.TrimSpace(markerCur)
 	if !timeChanged && !pathChanged && !markerChanged {
-		ui.unitEvtFormErr = ""
-		ui.statusText = "no changes to apply"
+		ui.UnitEvtFormErr = ""
+		ui.StatusText = "no changes to apply"
 		return
 	}
 	// The time is written first and the definition after it, so a definition
@@ -1586,44 +1586,44 @@ func (ui *uiState) applyEventForm(allowBatchTime bool) {
 	// marked as an edit rather than silently dropped.
 	wrote := false
 	if timeChanged {
-		if err := ui.unitEvtDoc.SetTimedEventTime(ui.unitEvtTimeline, ui.unitEvtSel, at); err != nil {
-			ui.unitEvtFormErr = err.Error()
+		if err := ui.UnitEvtDoc.SetTimedEventTime(ui.UnitEvtTimeline, ui.UnitEvtSel, at); err != nil {
+			ui.UnitEvtFormErr = err.Error()
 			if wrote {
-				ui.reloadUnitModelFx()
+				ReloadUnitModelFx(ui)
 			}
 			return
 		}
 		wrote = true
 	}
 	if pathChanged {
-		if err := ui.unitEvtDoc.SetEventEntryByKey(ev.Name, pathKey, path); err != nil {
-			ui.unitEvtFormErr = err.Error()
+		if err := ui.UnitEvtDoc.SetEventEntryByKey(ev.Name, pathKey, path); err != nil {
+			ui.UnitEvtFormErr = err.Error()
 			if wrote {
-				ui.reloadUnitModelFx()
+				ReloadUnitModelFx(ui)
 			}
 			return
 		}
 		wrote = true
 	}
 	if markerChanged {
-		if err := ui.unitEvtDoc.SetEventEntryByKey(ev.Name, "marker", marker); err != nil {
-			ui.unitEvtFormErr = err.Error()
+		if err := ui.UnitEvtDoc.SetEventEntryByKey(ev.Name, "marker", marker); err != nil {
+			ui.UnitEvtFormErr = err.Error()
 			if wrote {
-				ui.reloadUnitModelFx()
+				ReloadUnitModelFx(ui)
 			}
 			return
 		}
 		wrote = true
 	}
-	ui.unitEvtFormErr = ""
-	ui.unitEvtDirty = true
+	ui.UnitEvtFormErr = ""
+	ui.UnitEvtDirty = true
 	// The form and the definition's value fields refill from what was just
 	// written, so what is shown is what the document holds.
-	ui.unitEvtBound = ""
-	ui.unitEvtEntryBound = ""
-	ui.unitActCondBound = ""
-	ui.reloadUnitModelFx()
-	ui.statusText = "Applied to " + ev.Name + " — Save .whe to write it into the mod"
+	ui.UnitEvtBound = ""
+	ui.UnitEvtEntryBound = ""
+	ui.UnitActCondBound = ""
+	ReloadUnitModelFx(ui)
+	ui.StatusText = "Applied to " + ev.Name + " — Save .whe to write it into the mod"
 }
 
 // unitEventShift parses the batch shift field: seconds added to every selected
@@ -1660,30 +1660,30 @@ func unitEventShiftLabel(d float64) string {
 // starts stops at 0s instead of firing at a negative time. The field is
 // emptied by a shift that moved anything, so a second press cannot move the
 // same rows again.
-func (ui *uiState) shiftSelectedUnitEventTimes() {
-	if ui.unitEvtDoc == nil {
-		ui.unitEvtFormErr = "No .whe is loaded."
+func ShiftSelectedUnitEventTimes(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.UnitEvtFormErr = "No .whe is loaded."
 		return
 	}
-	delta, err := unitEventShift(ui.unitEvtShiftEd.Text())
+	delta, err := unitEventShift(ui.UnitEvtShiftEd.Text())
 	if err != nil {
-		ui.unitEvtFormErr = err.Error()
+		ui.UnitEvtFormErr = err.Error()
 		return
 	}
-	tl := ui.selectedUnitEventTimeline()
-	indices := ui.unitEvtSelectedIndices()
-	if len(indices) == 0 && ui.unitEvtSel >= 0 {
+	tl := SelectedUnitEventTimeline(ui)
+	indices := UnitEvtSelectedIndices(ui)
+	if len(indices) == 0 && ui.UnitEvtSel >= 0 {
 		// A single row is a selection of one: the shift works without the
 		// Ctrl+click ritual the batch tools otherwise need.
-		indices = []int{ui.unitEvtSel}
+		indices = []int{ui.UnitEvtSel}
 	}
 	if tl == nil || len(indices) == 0 {
-		ui.unitEvtFormErr = "Select the events to shift."
+		ui.UnitEvtFormErr = "Select the events to shift."
 		return
 	}
 	if delta == 0 {
-		ui.unitEvtFormErr = ""
-		ui.statusText = "A shift of 0s moves nothing"
+		ui.UnitEvtFormErr = ""
+		ui.StatusText = "A shift of 0s moves nothing"
 		return
 	}
 	moved, sentinel, clamped := 0, 0, 0
@@ -1702,7 +1702,7 @@ func (ui *uiState) shiftSelectedUnitEventTimes() {
 			at = 0
 			clamped++
 		}
-		if err := ui.unitEvtDoc.SetTimedEventTime(ui.unitEvtTimeline, i, at); err != nil {
+		if err := ui.UnitEvtDoc.SetTimedEventTime(ui.UnitEvtTimeline, i, at); err != nil {
 			if firstErr == "" {
 				firstErr = err.Error()
 			}
@@ -1712,23 +1712,23 @@ func (ui *uiState) shiftSelectedUnitEventTimes() {
 	}
 	if moved == 0 {
 		if firstErr != "" {
-			ui.unitEvtFormErr = firstErr
+			ui.UnitEvtFormErr = firstErr
 			return
 		}
-		ui.unitEvtFormErr = ""
+		ui.UnitEvtFormErr = ""
 		if sentinel > 0 {
-			ui.statusText = fmt.Sprintf("Nothing shifted — %d event(s) fire on enter/leave, which have no moment to move", sentinel)
+			ui.StatusText = fmt.Sprintf("Nothing shifted — %d event(s) fire on enter/leave, which have no moment to move", sentinel)
 			return
 		}
-		ui.statusText = "Nothing shifted"
+		ui.StatusText = "Nothing shifted"
 		return
 	}
-	ui.unitEvtFormErr = ""
-	ui.unitEvtDirty = true
+	ui.UnitEvtFormErr = ""
+	ui.UnitEvtDirty = true
 	// The form refills from the row it shows, whose moment has just moved.
-	ui.unitEvtBound = ""
-	ui.unitEvtShiftEd.SetText("")
-	ui.reloadUnitModelFx()
+	ui.UnitEvtBound = ""
+	ui.UnitEvtShiftEd.SetText("")
+	ReloadUnitModelFx(ui)
 	msg := fmt.Sprintf("Shifted %d event(s) by %s", moved, unitEventShiftLabel(delta))
 	if sentinel > 0 {
 		msg += fmt.Sprintf(", %d on enter/leave left as they were", sentinel)
@@ -1739,7 +1739,7 @@ func (ui *uiState) shiftSelectedUnitEventTimes() {
 	if firstErr != "" {
 		msg += ", some refused: " + firstErr
 	}
-	ui.statusText = msg + " — Save .whe to write it into the mod"
+	ui.StatusText = msg + " — Save .whe to write it into the mod"
 }
 
 // applyUnitEventTimes writes one moment into every selected row of the
@@ -1747,11 +1747,11 @@ func (ui *uiState) shiftSelectedUnitEventTimes() {
 // that already fire at that moment are counted rather than rewritten, and a
 // row the document refuses is reported without stopping the rest: one damaged
 // row must not leave the group half-moved with no word about it.
-func (ui *uiState) applyUnitEventTimes(indices []int, at float64) {
-	doc := ui.unitEvtDoc
-	tl := ui.selectedUnitEventTimeline()
+func ApplyUnitEventTimes(ui *uiState, indices []int, at float64) {
+	doc := ui.UnitEvtDoc
+	tl := SelectedUnitEventTimeline(ui)
 	if doc == nil || tl == nil {
-		ui.unitEvtFormErr = "Select an event to apply the fields to."
+		ui.UnitEvtFormErr = "Select an event to apply the fields to."
 		return
 	}
 	moved, same := 0, 0
@@ -1764,7 +1764,7 @@ func (ui *uiState) applyUnitEventTimes(indices []int, at float64) {
 			same++
 			continue
 		}
-		if err := doc.SetTimedEventTime(ui.unitEvtTimeline, i, at); err != nil {
+		if err := doc.SetTimedEventTime(ui.UnitEvtTimeline, i, at); err != nil {
 			if firstErr == "" {
 				firstErr = err.Error()
 			}
@@ -1774,18 +1774,18 @@ func (ui *uiState) applyUnitEventTimes(indices []int, at float64) {
 	}
 	if moved == 0 {
 		if firstErr != "" {
-			ui.unitEvtFormErr = firstErr
+			ui.UnitEvtFormErr = firstErr
 			return
 		}
-		ui.unitEvtFormErr = ""
-		ui.statusText = fmt.Sprintf("All %d selected event(s) already start at %s", same, unitEventTimeLabel(at))
+		ui.UnitEvtFormErr = ""
+		ui.StatusText = fmt.Sprintf("All %d selected event(s) already start at %s", same, unitEventTimeLabel(at))
 		return
 	}
-	ui.unitEvtFormErr = ""
-	ui.unitEvtDirty = true
+	ui.UnitEvtFormErr = ""
+	ui.UnitEvtDirty = true
 	// The time field refills from the row the form shows, which has just moved.
-	ui.unitEvtBound = ""
-	ui.reloadUnitModelFx()
+	ui.UnitEvtBound = ""
+	ReloadUnitModelFx(ui)
 	msg := fmt.Sprintf("Set %s on %d event(s)", unitEventTimeLabel(at), moved)
 	if same > 0 {
 		msg += fmt.Sprintf(", %d already there", same)
@@ -1793,7 +1793,7 @@ func (ui *uiState) applyUnitEventTimes(indices []int, at float64) {
 	if firstErr != "" {
 		msg += ", some refused: " + firstErr
 	}
-	ui.statusText = msg + " — Save .whe to write it into the mod"
+	ui.StatusText = msg + " — Save .whe to write it into the mod"
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1802,66 +1802,66 @@ func (ui *uiState) applyUnitEventTimes(indices []int, at float64) {
 
 // saveUnitEvents writes the edited .whe into the mod's own overlay, leaving
 // the installed file and the SGA archive untouched.
-func (ui *uiState) saveUnitEvents() (string, error) {
-	if ui.unitEvtDoc == nil {
+func SaveUnitEvents(ui *uiState) (string, error) {
+	if ui.UnitEvtDoc == nil {
 		return "", fmt.Errorf("no .whe is loaded")
 	}
-	if ui.unitEvtPath == "" {
+	if ui.UnitEvtPath == "" {
 		return "", fmt.Errorf("no .whe path to save")
 	}
-	if !ui.unitEvtDirty {
+	if !ui.UnitEvtDirty {
 		return "", fmt.Errorf("there is nothing to save")
 	}
-	if ui.modTree == nil {
+	if ui.ModTree == nil {
 		return "", fmt.Errorf("no mod is loaded")
 	}
-	data, err := ui.unitEvtDoc.MarshalBinary()
+	data, err := ui.UnitEvtDoc.MarshalBinary()
 	if err != nil {
 		return "", err
 	}
-	disk, err := ui.modTree.WriteOverlayFile(ui.unitEvtPath, data)
+	disk, err := ui.ModTree.WriteOverlayFile(ui.UnitEvtPath, data)
 	if err != nil {
 		return "", err
 	}
-	ui.unitEvtDirty = false
-	ui.reloadUnitModelFx()
-	return fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(ui.unitEvtPath), disk, len(data)), nil
+	ui.UnitEvtDirty = false
+	ReloadUnitModelFx(ui)
+	return fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(ui.UnitEvtPath), disk, len(data)), nil
 }
 
-func (ui *uiState) saveUnitEventsFromPanel() {
-	line, err := ui.saveUnitEvents()
+func SaveUnitEventsFromPanel(ui *uiState) {
+	line, err := SaveUnitEvents(ui)
 	if err != nil {
-		ui.statusText = "Save failed: " + err.Error()
+		ui.StatusText = "Save failed: " + err.Error()
 		return
 	}
-	ui.statusText = line
-	ui.markStateDirty()
+	ui.StatusText = line
+	MarkStateDirty(ui)
 }
 
 // revertUnitEvents throws the in-memory edits away and re-reads the file from
 // the tree, which is the way back from an event added by mistake.
-func (ui *uiState) revertUnitEvents() {
-	forced := ui.unitEvtFor
-	ui.unitEvtDoc = nil
-	ui.unitEvtFor = ""
-	ui.unitEvtTried = false
-	ui.ensureUnitEvents()
-	if ui.unitEvtFor == "" {
-		ui.unitEvtFor = forced
+func RevertUnitEvents(ui *uiState) {
+	forced := ui.UnitEvtFor
+	ui.UnitEvtDoc = nil
+	ui.UnitEvtFor = ""
+	ui.UnitEvtTried = false
+	EnsureUnitEvents(ui)
+	if ui.UnitEvtFor == "" {
+		ui.UnitEvtFor = forced
 	}
-	ui.unitEvtDirty = false
-	ui.unitEvtFormErr = ""
-	ui.lastFormAction = ""
-	ui.unitEvtSel = 0
-	ui.unitEvtSelSet = map[int]bool{0: true}
-	ui.unitEvtSelAnchor = 0
-	ui.unitEvtBound = ""
-	ui.unitEvtEntryBound = ""
-	ui.unitActCondBound = ""
-	ui.statusText = "Changes to " + filepath.Base(ui.unitEvtPath) + " thrown away"
+	ui.UnitEvtDirty = false
+	ui.UnitEvtFormErr = ""
+	ui.LastFormAction = ""
+	ui.UnitEvtSel = 0
+	ui.UnitEvtSelSet = map[int]bool{0: true}
+	ui.UnitEvtSelAnchor = 0
+	ui.UnitEvtBound = ""
+	ui.UnitEvtEntryBound = ""
+	ui.UnitActCondBound = ""
+	ui.StatusText = "Changes to " + filepath.Base(ui.UnitEvtPath) + " thrown away"
 	// The document is the file's own copy again, so the viewport resolves it
 	// rather than the edits that were thrown away.
-	ui.reloadUnitModelFx()
+	ReloadUnitModelFx(ui)
 }
 
 // unitEventTimeLabel is how a moment reads in the event rows.
@@ -1879,12 +1879,12 @@ func unitEventTimeLabel(t float64) string {
 
 // unitEventsMessage is the empty state of either column: why there is nothing
 // to edit, in the same dimmed line the other sections use.
-func (ui *uiState) unitEventsMessage(gtx layout.Context, msg string) layout.Dimensions {
+func UnitEventsMessage(ui *uiState, gtx layout.Context, msg string) layout.Dimensions {
 	if msg == "" {
 		msg = "There is nothing to edit here."
 	}
 	return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		l := material.Label(ui.th, unit.Sp(10), msg)
+		l := material.Label(ui.Th, unit.Sp(10), msg)
 		l.Color = cTextDim
 		l.MaxLines = 6
 		return l.Layout(gtx)
@@ -1896,28 +1896,28 @@ func (ui *uiState) unitEventsMessage(gtx layout.Context, msg string) layout.Dime
 // .whe's actions are drawn under that list — they are file-wide and their
 // motion lines name these very timelines, so they belong beside the list of
 // them rather than inside the events of whichever timeline is picked.
-func (ui *uiState) layoutUnitEventTimelines(gtx layout.Context) layout.Dimensions {
-	ui.ensureUnitEvents()
-	sec := ui.currentUnitSection()
+func LayoutUnitEventTimelines(ui *uiState, gtx layout.Context) layout.Dimensions {
+	EnsureUnitEvents(ui)
+	sec := CurrentUnitSection(ui)
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, sec.middleTitle)
+				return LayoutUnitColumnHeader(ui, gtx, sec.middleTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-			layout.Flexed(1, ui.layoutUnitEventTimelineList),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutUnitEventTimelineList(ui, gtx) }),
 		}
-		if ui.unitEvtDoc != nil {
-			acts := ui.unitEvtDoc.Actions()
+		if ui.UnitEvtDoc != nil {
+			acts := ui.UnitEvtDoc.Actions()
 			// The block also shows for a .whe that has no actions of its own
 			// while one is on the clipboard: a copied action is the only way to
 			// give such a unit its first one.
-			_, _, hasClip := ui.unitClips.Pick(clipActions, ui.unitClipCur)
+			_, _, hasClip := ui.UnitClips.Pick(clipActions, ui.UnitClipCur)
 			if len(acts) > 0 || hasClip {
 				children = append(children,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.layoutUnitEvtActions(gtx, acts)
+						return LayoutUnitEvtActions(ui, gtx, acts)
 					}),
 				)
 			}
@@ -1936,14 +1936,14 @@ func (ui *uiState) layoutUnitEventTimelines(gtx layout.Context) layout.Dimension
 // taller than that room, so the block is measured at its natural height and
 // capped at a share of the column when it does not fit: long action lists scroll
 // inside their own region rather than squeezing the animations off the column.
-func (ui *uiState) layoutUnitEvtActions(gtx layout.Context, acts []whe.FxAction) layout.Dimensions {
-	ui.ensureUnitEvtActionClicks(len(acts))
-	ui.selectedUnitEvtAction(acts)
+func LayoutUnitEvtActions(ui *uiState, gtx layout.Context, acts []whe.FxAction) layout.Dimensions {
+	EnsureUnitEvtActionClicks(ui, len(acts))
+	SelectedUnitEvtAction(ui, acts)
 	content := func(gtx layout.Context) layout.Dimensions {
 		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return sectionHeader(gtx, ui.th, "Actions")
+					return sectionHeader(gtx, ui.Th, "Actions")
 				})
 			}),
 			// An action moves between units the way a timeline does: one is
@@ -1952,12 +1952,12 @@ func (ui *uiState) layoutUnitEvtActions(gtx layout.Context, acts []whe.FxAction)
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.unitEvtCopyAct, "Copy action", len(acts) == 0)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitEvtCopyAct, "Copy action", len(acts) == 0)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							_, _, has := ui.unitClips.Pick(clipActions, ui.unitClipCur)
-							return ui.smallButtonDisabled(gtx, &ui.unitEvtPasteAct, "Paste action", !has)
+							_, _, has := ui.UnitClips.Pick(clipActions, ui.UnitClipCur)
+							return SmallButtonDisabled(ui, gtx, &ui.UnitEvtPasteAct, "Paste action", !has)
 						}),
 					)
 				})
@@ -1966,7 +1966,7 @@ func (ui *uiState) layoutUnitEvtActions(gtx layout.Context, acts []whe.FxAction)
 		for i := range acts {
 			i := i
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitEvtActionRow(gtx, i, acts[i])
+				return LayoutUnitEvtActionRow(ui, gtx, i, acts[i])
 			}))
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -1993,37 +1993,37 @@ func (ui *uiState) layoutUnitEvtActions(gtx layout.Context, acts []whe.FxAction)
 	agtx := gtx
 	agtx.Constraints.Min.Y = height
 	agtx.Constraints.Max.Y = height
-	return ui.panelScrollView(agtx, &ui.unitEvtActionsScroll, content)
+	return PanelScrollView(ui, agtx, &ui.UnitEvtActionsScroll, content)
 }
 
 // selectedUnitEvtAction is the action whose conditions the Events column draws:
 // the one picked in the list under the timelines, kept inside that list when
 // the file changes under it.
-func (ui *uiState) selectedUnitEvtAction(acts []whe.FxAction) *whe.FxAction {
+func SelectedUnitEvtAction(ui *uiState, acts []whe.FxAction) *whe.FxAction {
 	if len(acts) == 0 {
 		return nil
 	}
-	if ui.unitEvtActionSel < 0 || ui.unitEvtActionSel >= len(acts) {
-		ui.unitEvtActionSel = 0
+	if ui.UnitEvtActionSel < 0 || ui.UnitEvtActionSel >= len(acts) {
+		ui.UnitEvtActionSel = 0
 	}
-	return &acts[ui.unitEvtActionSel]
+	return &acts[ui.UnitEvtActionSel]
 }
 
-func (ui *uiState) ensureUnitEvtActionClicks(n int) {
-	if len(ui.unitEvtActionClicks) != n {
-		ui.unitEvtActionClicks = make([]widget.Clickable, n)
+func EnsureUnitEvtActionClicks(ui *uiState, n int) {
+	if len(ui.UnitEvtActionClicks) != n {
+		ui.UnitEvtActionClicks = make([]widget.Clickable, n)
 	}
 }
 
 // layoutUnitEvtActionRow is one action of the list: its name and how many
 // choices it carries, the picked one highlighted. Pressing it shows that
 // action's conditions in the Events column.
-func (ui *uiState) layoutUnitEvtActionRow(gtx layout.Context, i int, a whe.FxAction) layout.Dimensions {
-	if i < 0 || i >= len(ui.unitEvtActionClicks) {
+func LayoutUnitEvtActionRow(ui *uiState, gtx layout.Context, i int, a whe.FxAction) layout.Dimensions {
+	if i < 0 || i >= len(ui.UnitEvtActionClicks) {
 		return layout.Dimensions{}
 	}
-	c := &ui.unitEvtActionClicks[i]
-	selected := i == ui.unitEvtActionSel
+	c := &ui.UnitEvtActionClicks[i]
+	selected := i == ui.UnitEvtActionSel
 	bg := cPanelBg
 	switch {
 	case selected:
@@ -2047,7 +2047,7 @@ func (ui *uiState) layoutUnitEvtActionRow(gtx layout.Context, i int, a whe.FxAct
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), unitViewportRowText(a.Name))
+							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(a.Name))
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -2055,7 +2055,7 @@ func (ui *uiState) layoutUnitEvtActionRow(gtx layout.Context, i int, a whe.FxAct
 						layout.Flexed(1, flexGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							note := fmt.Sprintf("%d choices", len(a.Motions)+len(a.Subactions))
-							l := material.Label(ui.th, unit.Sp(9), note)
+							l := material.Label(ui.Th, unit.Sp(9), note)
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -2073,16 +2073,16 @@ func (ui *uiState) layoutUnitEvtActionRow(gtx layout.Context, i int, a whe.FxAct
 // it calls. A unit's idle / build / death chain can then be set up once and
 // pasted onto another unit in one go, instead of reassembling it from the
 // timeline list by hand.
-func (ui *uiState) copySelectedUnitAction() {
-	doc := ui.unitEvtDoc
+func CopySelectedUnitAction(ui *uiState) {
+	doc := ui.UnitEvtDoc
 	if doc == nil {
-		ui.statusText = "No .whe is loaded"
+		ui.StatusText = "No .whe is loaded"
 		return
 	}
 	acts := doc.Actions()
-	a := ui.selectedUnitEvtAction(acts)
+	a := SelectedUnitEvtAction(ui, acts)
 	if a == nil {
-		ui.statusText = "Select an action to copy"
+		ui.StatusText = "Select an action to copy"
 		return
 	}
 	clip := &wheActionClip{Action: *a}
@@ -2092,15 +2092,15 @@ func (ui *uiState) copySelectedUnitAction() {
 		}
 	}
 	clip.Subacts = actionSubactions(doc, *a)
-	ui.unitClips.Push(clipEntry{
+	ui.UnitClips.Push(clipEntry{
 		Kind: clipActions,
 		Label: fmt.Sprintf("action %s (%d choice(s), %d timeline(s), %d sub-action(s))",
 			a.Name, len(unitActLinks(*a)), len(clip.Timelines), len(clip.Subacts)),
 		At:      time.Now(),
 		Actions: clip,
 	})
-	ui.unitClipCur = len(ui.unitClips.Entries) - 1
-	ui.statusText = fmt.Sprintf("Copied action %s with %d timeline(s) and %d sub-action(s) — Paste in any unit",
+	ui.UnitClipCur = len(ui.UnitClips.Entries) - 1
+	ui.StatusText = fmt.Sprintf("Copied action %s with %d timeline(s) and %d sub-action(s) — Paste in any unit",
 		a.Name, len(clip.Timelines), len(clip.Subacts))
 }
 
@@ -2178,20 +2178,20 @@ func actionSubactions(doc *whe.Document, a whe.FxAction) []whe.FxAction {
 // An action of the same name here is refused before anything is written rather
 // than merged: an action's choices are an if / else chain in file order, and
 // splicing one into another would change what this unit plays.
-func (ui *uiState) pasteUnitAction() {
-	entry, _, ok := ui.unitClips.Pick(clipActions, ui.unitClipCur)
+func PasteUnitAction(ui *uiState) {
+	entry, _, ok := ui.UnitClips.Pick(clipActions, ui.UnitClipCur)
 	if !ok || entry.Actions == nil {
-		ui.statusText = "The action clipboard is empty — Copy an action first"
+		ui.StatusText = "The action clipboard is empty — Copy an action first"
 		return
 	}
-	doc := ui.unitEvtDoc
+	doc := ui.UnitEvtDoc
 	if doc == nil {
-		ui.statusText = "No .whe is loaded — select a unit whose model has one first"
+		ui.StatusText = "No .whe is loaded — select a unit whose model has one first"
 		return
 	}
 	clip := entry.Actions
 	if actionIndexByName(doc, clip.Action.Name) >= 0 {
-		ui.statusText = fmt.Sprintf("action %s already exists in this .whe — reconcile it by hand instead of pasting over it",
+		ui.StatusText = fmt.Sprintf("action %s already exists in this .whe — reconcile it by hand instead of pasting over it",
 			clip.Action.Name)
 		return
 	}
@@ -2233,20 +2233,20 @@ func (ui *uiState) pasteUnitAction() {
 		// The timelines and sub-actions may already have landed, and Save .whe
 		// has to know the document no longer matches the file.
 		if createdTl+mergedTl+addedSubs > 0 {
-			ui.unitEvtDirty = true
-			ui.unitActCondBound = ""
+			ui.UnitEvtDirty = true
+			ui.UnitActCondBound = ""
 		}
-		ui.statusText = "Paste failed: " + err.Error()
+		ui.StatusText = "Paste failed: " + err.Error()
 		return
 	}
-	ui.unitEvtDirty = true
-	ui.unitActCondBound = ""
+	ui.UnitEvtDirty = true
+	ui.UnitActCondBound = ""
 	// The pasted action is what the list should show as picked, so the panel
 	// below it describes the thing that just landed.
 	if i := actionIndexByName(doc, clip.Action.Name); i >= 0 {
-		ui.unitEvtActionSel = i
+		ui.UnitEvtActionSel = i
 	}
-	ui.reloadUnitModelFx()
+	ReloadUnitModelFx(ui)
 	msg := fmt.Sprintf("Pasted action %s", clip.Action.Name)
 	if createdTl+mergedTl > 0 {
 		msg += fmt.Sprintf(" with %d timeline(s) (%d new, %d merged, %d event(s)", createdTl+mergedTl, createdTl, mergedTl, events)
@@ -2264,7 +2264,7 @@ func (ui *uiState) pasteUnitAction() {
 	if firstErr != "" {
 		msg += ", some skipped: " + firstErr
 	}
-	ui.statusText = msg + " — Save .whe to write it in"
+	ui.StatusText = msg + " — Save .whe to write it in"
 }
 
 // actionIndexByName is the position of an action in the file's DATAACTS list,
@@ -2324,50 +2324,50 @@ func unitActGuardLabel(cmp int32) string {
 // ensureUnitActConditions sizes the condition fields to the picked action's
 // choices and refills them whenever the pick or the file changes under them,
 // so what the fields show is what the document holds.
-func (ui *uiState) ensureUnitActConditions() {
-	if ui.unitEvtDoc == nil {
-		ui.unitActCondEds = nil
-		ui.unitActNameEds = nil
-		ui.unitActCondStaged = nil
-		ui.unitActGuardClicks = nil
-		ui.unitActCondBound = ""
+func EnsureUnitActConditions(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.UnitActCondEds = nil
+		ui.UnitActNameEds = nil
+		ui.UnitActCondStaged = nil
+		ui.UnitActGuardClicks = nil
+		ui.UnitActCondBound = ""
 		return
 	}
-	a := ui.selectedUnitEvtAction(ui.unitEvtDoc.Actions())
+	a := SelectedUnitEvtAction(ui, ui.UnitEvtDoc.Actions())
 	if a == nil {
-		ui.unitActCondEds = nil
-		ui.unitActNameEds = nil
-		ui.unitActCondStaged = nil
-		ui.unitActGuardClicks = nil
-		ui.unitActCondBound = ""
+		ui.UnitActCondEds = nil
+		ui.UnitActNameEds = nil
+		ui.UnitActCondStaged = nil
+		ui.UnitActGuardClicks = nil
+		ui.UnitActCondBound = ""
 		return
 	}
 	links := unitActLinks(*a)
-	if len(ui.unitActCondEds) != len(links) || len(ui.unitActGuardClicks) != len(links) || len(ui.unitActNameEds) != len(links) {
-		ui.unitActCondEds = make([]widget.Editor, len(links))
-		ui.unitActNameEds = make([]widget.Editor, len(links))
-		ui.unitActCondStaged = make([]int32, len(links))
-		ui.unitActGuardClicks = make([]widget.Clickable, len(links))
-		ui.unitActCondBound = ""
+	if len(ui.UnitActCondEds) != len(links) || len(ui.UnitActGuardClicks) != len(links) || len(ui.UnitActNameEds) != len(links) {
+		ui.UnitActCondEds = make([]widget.Editor, len(links))
+		ui.UnitActNameEds = make([]widget.Editor, len(links))
+		ui.UnitActCondStaged = make([]int32, len(links))
+		ui.UnitActGuardClicks = make([]widget.Clickable, len(links))
+		ui.UnitActCondBound = ""
 	}
-	bound := strconv.Itoa(ui.unitEvtActionSel) + "|" + a.Name
+	bound := strconv.Itoa(ui.UnitEvtActionSel) + "|" + a.Name
 	for _, ln := range links {
 		bound += "|" + ln.Name
 	}
-	if ui.unitActCondBound == bound {
-		if ui.unitActSel >= len(links) {
-			ui.unitActSel = 0
+	if ui.UnitActCondBound == bound {
+		if ui.UnitActSel >= len(links) {
+			ui.UnitActSel = 0
 		}
 		return
 	}
-	ui.unitActCondBound = bound
-	if ui.unitActSel >= len(links) {
-		ui.unitActSel = 0
+	ui.UnitActCondBound = bound
+	if ui.UnitActSel >= len(links) {
+		ui.UnitActSel = 0
 	}
 	for i, ln := range links {
-		ui.unitActCondStaged[i] = ln.Compare
-		ui.unitActCondEds[i].SetText(ln.Condition)
-		ui.unitActNameEds[i].SetText(ln.Name)
+		ui.UnitActCondStaged[i] = ln.Compare
+		ui.UnitActCondEds[i].SetText(ln.Condition)
+		ui.UnitActNameEds[i].SetText(ln.Name)
 	}
 }
 
@@ -2375,59 +2375,59 @@ func (ui *uiState) ensureUnitActConditions() {
 // guard chips cycle a choice's if / else if / else / always step, the
 // condition and name fields take the typing, Apply or Enter commits them,
 // and the chain tools add, move and delete choices around the caret.
-func (ui *uiState) unitActConditionsInput(gtx layout.Context) {
-	ui.ensureUnitActConditions()
-	ui.unitActUpdateNameEditor(gtx)
-	if ui.unitActRename.Clicked(gtx) {
-		ui.renameSelectedUnitAction()
+func UnitActConditionsInput(ui *uiState, gtx layout.Context) {
+	EnsureUnitActConditions(ui)
+	UnitActUpdateNameEditor(ui, gtx)
+	if ui.UnitActRename.Clicked(gtx) {
+		RenameSelectedUnitAction(ui)
 	}
-	for i := range ui.unitActGuardClicks {
-		if i >= len(ui.unitActCondStaged) || !ui.unitActGuardClicks[i].Clicked(gtx) {
+	for i := range ui.UnitActGuardClicks {
+		if i >= len(ui.UnitActCondStaged) || !ui.UnitActGuardClicks[i].Clicked(gtx) {
 			continue
 		}
-		ui.unitActSel = i
-		cmp := ui.unitActCondStaged[i]
+		ui.UnitActSel = i
+		cmp := ui.UnitActCondStaged[i]
 		if cmp < whe.FxCompareIf || cmp >= whe.FxCompareNone {
 			// A press starts the chain over from if — including for a compare
 			// value outside the four the format defines.
-			ui.unitActCondStaged[i] = whe.FxCompareIf
+			ui.UnitActCondStaged[i] = whe.FxCompareIf
 			continue
 		}
-		ui.unitActCondStaged[i] = cmp + 1
+		ui.UnitActCondStaged[i] = cmp + 1
 	}
-	for i := range ui.unitActCondEds {
-		ui.unitActUpdateEditor(gtx, &ui.unitActCondEds[i], i)
+	for i := range ui.UnitActCondEds {
+		UnitActUpdateEditor(ui, gtx, &ui.UnitActCondEds[i], i)
 	}
-	for i := range ui.unitActNameEds {
-		ui.unitActUpdateEditor(gtx, &ui.unitActNameEds[i], i)
+	for i := range ui.UnitActNameEds {
+		UnitActUpdateEditor(ui, gtx, &ui.UnitActNameEds[i], i)
 	}
 	// Whichever field holds the caret is the selected choice: the move, add
 	// and delete buttons of the footer act on it.
-	for i := range ui.unitActCondEds {
-		if ui.unitActCondEds[i].Focused(gtx) || (i < len(ui.unitActNameEds) && ui.unitActNameEds[i].Focused(gtx)) {
-			ui.unitActSel = i
+	for i := range ui.UnitActCondEds {
+		if ui.UnitActCondEds[i].Focused(gtx) || (i < len(ui.UnitActNameEds) && ui.UnitActNameEds[i].Focused(gtx)) {
+			ui.UnitActSel = i
 		}
 	}
-	if ui.unitActApply.Clicked(gtx) {
-		ui.applyUnitActConditions()
+	if ui.UnitActApply.Clicked(gtx) {
+		ApplyUnitActConditions(ui)
 	}
-	if ui.unitActAddIf.Clicked(gtx) {
-		ui.unitActAddChoice(actAddIf)
+	if ui.UnitActAddIf.Clicked(gtx) {
+		UnitActAddChoice(ui, actAddIf)
 	}
-	if ui.unitActAddElseIf.Clicked(gtx) {
-		ui.unitActAddChoice(actAddElseIf)
+	if ui.UnitActAddElseIf.Clicked(gtx) {
+		UnitActAddChoice(ui, actAddElseIf)
 	}
-	if ui.unitActAddElse.Clicked(gtx) {
-		ui.unitActAddChoice(actAddElse)
+	if ui.UnitActAddElse.Clicked(gtx) {
+		UnitActAddChoice(ui, actAddElse)
 	}
-	if ui.unitActMoveUp.Clicked(gtx) {
-		ui.unitActMoveChoice(-1)
+	if ui.UnitActMoveUp.Clicked(gtx) {
+		UnitActMoveChoice(ui, -1)
 	}
-	if ui.unitActMoveDown.Clicked(gtx) {
-		ui.unitActMoveChoice(1)
+	if ui.UnitActMoveDown.Clicked(gtx) {
+		UnitActMoveChoice(ui, 1)
 	}
-	if ui.unitActDelete.Clicked(gtx) {
-		ui.unitActDeleteChoice()
+	if ui.UnitActDelete.Clicked(gtx) {
+		UnitActDeleteChoice(ui)
 	}
 }
 
@@ -2435,25 +2435,25 @@ func (ui *uiState) unitActConditionsInput(gtx layout.Context) {
 // caret, Enter renames, and the field refills from the picked action whenever
 // the selection moves — but not while it holds the caret, so what is being
 // typed is never overwritten.
-func (ui *uiState) unitActUpdateNameEditor(gtx layout.Context) {
-	ed := &ui.unitActNameEd
+func UnitActUpdateNameEditor(ui *uiState, gtx layout.Context) {
+	ed := &ui.UnitActNameEd
 	ed.SingleLine = true
 	ed.Submit = true
-	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	if !ed.Focused(gtx) {
 		var act whe.FxAction
 		have := false
-		if ui.unitEvtDoc != nil {
-			if a := ui.selectedUnitEvtAction(ui.unitEvtDoc.Actions()); a != nil {
+		if ui.UnitEvtDoc != nil {
+			if a := SelectedUnitEvtAction(ui, ui.UnitEvtDoc.Actions()); a != nil {
 				act = *a
 				have = true
 			}
 		}
-		bound := strconv.Itoa(ui.unitEvtActionSel) + "|" + act.Name
-		if bound != ui.unitActNameBound {
-			ui.unitActNameBound = bound
+		bound := strconv.Itoa(ui.UnitEvtActionSel) + "|" + act.Name
+		if bound != ui.UnitActNameBound {
+			ui.UnitActNameBound = bound
 			if have {
 				ed.SetText(act.Name)
 			} else {
@@ -2467,7 +2467,7 @@ func (ui *uiState) unitActUpdateNameEditor(gtx layout.Context) {
 			break
 		}
 		if _, submit := ev.(widget.SubmitEvent); submit {
-			ui.renameSelectedUnitAction()
+			RenameSelectedUnitAction(ui)
 			ed.Blur(gtx)
 		}
 	}
@@ -2478,52 +2478,52 @@ func (ui *uiState) unitActUpdateNameEditor(gtx layout.Context) {
 // file that called it, so a chain another action drives keeps working; a name
 // another action already has is refused by the document rather than merged.
 // Save .whe writes it into the mod.
-func (ui *uiState) renameSelectedUnitAction() {
-	doc := ui.unitEvtDoc
+func RenameSelectedUnitAction(ui *uiState) {
+	doc := ui.UnitEvtDoc
 	if doc == nil {
-		ui.unitActErr = "No .whe is loaded."
+		ui.UnitActErr = "No .whe is loaded."
 		return
 	}
 	acts := doc.Actions()
-	if ui.unitEvtActionSel < 0 || ui.unitEvtActionSel >= len(acts) {
-		ui.unitActErr = "Select an action to rename."
+	if ui.UnitEvtActionSel < 0 || ui.UnitEvtActionSel >= len(acts) {
+		ui.UnitActErr = "Select an action to rename."
 		return
 	}
-	old := acts[ui.unitEvtActionSel].Name
-	next := strings.TrimSpace(ui.unitActNameEd.Text())
+	old := acts[ui.UnitEvtActionSel].Name
+	next := strings.TrimSpace(ui.UnitActNameEd.Text())
 	if next == "" {
-		ui.unitActErr = "An action needs a name."
+		ui.UnitActErr = "An action needs a name."
 		return
 	}
 	if strings.EqualFold(next, old) {
-		ui.unitActErr = ""
-		ui.statusText = "The action is already called " + old
+		ui.UnitActErr = ""
+		ui.StatusText = "The action is already called " + old
 		return
 	}
 	if err := doc.RenameAction(old, next); err != nil {
-		ui.unitActErr = err.Error()
+		ui.UnitActErr = err.Error()
 		return
 	}
-	ui.unitActErr = ""
-	ui.unitEvtDirty = true
+	ui.UnitActErr = ""
+	ui.UnitEvtDirty = true
 	// The conditions and the name field refill from what was just written.
-	ui.unitActCondBound = ""
-	ui.unitActNameBound = ""
+	ui.UnitActCondBound = ""
+	ui.UnitActNameBound = ""
 	if i := actionIndexByName(doc, next); i >= 0 {
-		ui.unitEvtActionSel = i
+		ui.UnitEvtActionSel = i
 	}
-	ui.reloadUnitModelFx()
-	ui.statusText = fmt.Sprintf("Renamed action %s to %s — Save .whe to write it into the mod", old, next)
+	ReloadUnitModelFx(ui)
+	ui.StatusText = fmt.Sprintf("Renamed action %s to %s — Save .whe to write it into the mod", old, next)
 }
 
 // unitActUpdateEditor processes one field of a choice line: a click takes
 // the caret and selects that line, and Enter commits the conditions the way
 // Apply does, never dropping a line break into the value.
-func (ui *uiState) unitActUpdateEditor(gtx layout.Context, ed *widget.Editor, row int) {
+func UnitActUpdateEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, row int) {
 	ed.SingleLine = true
 	ed.Submit = true
-	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
-		ui.unitActSel = row
+	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
+		ui.UnitActSel = row
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	for {
@@ -2532,8 +2532,8 @@ func (ui *uiState) unitActUpdateEditor(gtx layout.Context, ed *widget.Editor, ro
 			break
 		}
 		if _, submit := ev.(widget.SubmitEvent); submit {
-			ui.unitActSel = row
-			ui.applyUnitActConditions()
+			ui.UnitActSel = row
+			ApplyUnitActConditions(ui)
 			ed.Blur(gtx)
 		}
 	}
@@ -2544,41 +2544,41 @@ func (ui *uiState) unitActUpdateEditor(gtx layout.Context, ed *widget.Editor, ro
 // rebuilt, the document is marked dirty, and the fields refill from what was
 // written so what is shown is what the document holds. Nothing touches the
 // file: Save .whe does that.
-func (ui *uiState) applyUnitActConditions() {
-	if ui.unitEvtDoc == nil {
-		ui.unitActErr = "No .whe is loaded."
+func ApplyUnitActConditions(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.UnitActErr = "No .whe is loaded."
 		return
 	}
-	acts := ui.unitEvtDoc.Actions()
-	if ui.unitEvtActionSel < 0 || ui.unitEvtActionSel >= len(acts) {
-		ui.unitActErr = "Select an action to apply the conditions to."
+	acts := ui.UnitEvtDoc.Actions()
+	if ui.UnitEvtActionSel < 0 || ui.UnitEvtActionSel >= len(acts) {
+		ui.UnitActErr = "Select an action to apply the conditions to."
 		return
 	}
-	a := acts[ui.unitEvtActionSel]
+	a := acts[ui.UnitEvtActionSel]
 	links := unitActLinks(a)
 	if len(links) == 0 {
 		// Nothing to flush — an action with no choices yet only waits for
 		// its first Add.
-		ui.unitActErr = ""
+		ui.UnitActErr = ""
 		return
 	}
-	if len(ui.unitActCondEds) != len(links) || len(ui.unitActCondStaged) != len(links) {
-		ui.unitActErr = "The condition fields are out of step with the file — pick the action again."
+	if len(ui.UnitActCondEds) != len(links) || len(ui.UnitActCondStaged) != len(links) {
+		ui.UnitActErr = "The condition fields are out of step with the file — pick the action again."
 		return
 	}
 	changed := false
 	for i, ln := range links {
-		cmp := ui.unitActCondStaged[i]
+		cmp := ui.UnitActCondStaged[i]
 		cond := ""
 		if (whe.FxActionLink{Compare: cmp}).HasCondition() {
-			cond = strings.TrimSpace(ui.unitActCondEds[i].Text())
+			cond = strings.TrimSpace(ui.UnitActCondEds[i].Text())
 		}
 		name := ln.Name
-		if i < len(ui.unitActNameEds) {
-			name = strings.TrimSpace(ui.unitActNameEds[i].Text())
+		if i < len(ui.UnitActNameEds) {
+			name = strings.TrimSpace(ui.UnitActNameEds[i].Text())
 		}
 		if name == "" {
-			ui.unitActErr = "Every choice must name the motion or action it runs — fill in the name of line " + strconv.Itoa(i+1) + "."
+			ui.UnitActErr = "Every choice must name the motion or action it runs — fill in the name of line " + strconv.Itoa(i+1) + "."
 			return
 		}
 		if ln.Compare == cmp && ln.Condition == cond && ln.Name == name {
@@ -2592,20 +2592,20 @@ func (ui *uiState) applyUnitActConditions() {
 		}
 	}
 	if !changed {
-		ui.unitActErr = ""
-		ui.statusText = "no changes to apply"
+		ui.UnitActErr = ""
+		ui.StatusText = "no changes to apply"
 		return
 	}
-	if err := ui.unitEvtDoc.SetAction(ui.unitEvtActionSel, a); err != nil {
-		ui.unitActErr = err.Error()
+	if err := ui.UnitEvtDoc.SetAction(ui.UnitEvtActionSel, a); err != nil {
+		ui.UnitActErr = err.Error()
 		return
 	}
-	ui.unitActErr = ""
-	ui.unitEvtDirty = true
+	ui.UnitActErr = ""
+	ui.UnitEvtDirty = true
 	// The fields refill from what was just written.
-	ui.unitActCondBound = ""
-	ui.ensureUnitActConditions()
-	ui.statusText = "Applied conditions to " + a.Name + " — Save .whe to write it into the mod"
+	ui.UnitActCondBound = ""
+	EnsureUnitActConditions(ui)
+	ui.StatusText = "Applied conditions to " + a.Name + " — Save .whe to write it into the mod"
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2828,44 +2828,44 @@ func actDeleteLink(a *whe.FxAction, at int) (int, bool) {
 // structural change on the selected action's choices. Every step goes
 // through SetAction and marks the document dirty, so it lands in the file
 // with the same Save .whe the text edits take.
-func (ui *uiState) unitActMutate(what string, change func(a *whe.FxAction) (int, bool)) {
-	if ui.unitEvtDoc == nil {
-		ui.unitActErr = "No .whe is loaded."
+func UnitActMutate(ui *uiState, what string, change func(a *whe.FxAction) (int, bool)) {
+	if ui.UnitEvtDoc == nil {
+		ui.UnitActErr = "No .whe is loaded."
 		return
 	}
 	// The typed fields go in first: a structural change refills them from
 	// the document, and unsaved typing would be dropped under it.
-	ui.applyUnitActConditions()
-	if ui.unitActErr != "" {
+	ApplyUnitActConditions(ui)
+	if ui.UnitActErr != "" {
 		return
 	}
-	acts := ui.unitEvtDoc.Actions()
-	if ui.unitEvtActionSel < 0 || ui.unitEvtActionSel >= len(acts) {
-		ui.unitActErr = "Select an action first."
+	acts := ui.UnitEvtDoc.Actions()
+	if ui.UnitEvtActionSel < 0 || ui.UnitEvtActionSel >= len(acts) {
+		ui.UnitActErr = "Select an action first."
 		return
 	}
-	a := acts[ui.unitEvtActionSel]
-	if rows := len(a.Motions) + len(a.Subactions); rows > 0 && (ui.unitActSel < 0 || ui.unitActSel >= rows) {
-		ui.unitActSel = 0
+	a := acts[ui.UnitEvtActionSel]
+	if rows := len(a.Motions) + len(a.Subactions); rows > 0 && (ui.UnitActSel < 0 || ui.UnitActSel >= rows) {
+		ui.UnitActSel = 0
 	}
 	newAt, ok := change(&a)
 	if !ok {
-		ui.unitActErr = what + " is not possible here."
+		ui.UnitActErr = what + " is not possible here."
 		return
 	}
-	if err := ui.unitEvtDoc.SetAction(ui.unitEvtActionSel, a); err != nil {
-		ui.unitActErr = err.Error()
+	if err := ui.UnitEvtDoc.SetAction(ui.UnitEvtActionSel, a); err != nil {
+		ui.UnitActErr = err.Error()
 		return
 	}
-	ui.unitActErr = ""
-	ui.unitEvtDirty = true
-	ui.unitActCondBound = ""
-	ui.ensureUnitActConditions()
-	ui.unitActSel = newAt
-	ui.statusText = what + " — Save .whe to write it into the mod"
+	ui.UnitActErr = ""
+	ui.UnitEvtDirty = true
+	ui.UnitActCondBound = ""
+	EnsureUnitActConditions(ui)
+	ui.UnitActSel = newAt
+	ui.StatusText = what + " — Save .whe to write it into the mod"
 }
 
-func (ui *uiState) unitActAddChoice(kind int) {
+func UnitActAddChoice(ui *uiState, kind int) {
 	what := "Added if"
 	switch kind {
 	case actAddElseIf:
@@ -2873,24 +2873,24 @@ func (ui *uiState) unitActAddChoice(kind int) {
 	case actAddElse:
 		what = "Added else"
 	}
-	ui.unitActMutate(what, func(a *whe.FxAction) (int, bool) {
-		return actAddLink(a, kind, ui.unitActSel)
+	UnitActMutate(ui, what, func(a *whe.FxAction) (int, bool) {
+		return actAddLink(a, kind, ui.UnitActSel)
 	})
 }
 
-func (ui *uiState) unitActMoveChoice(dir int) {
+func UnitActMoveChoice(ui *uiState, dir int) {
 	what := "Moved down"
 	if dir < 0 {
 		what = "Moved up"
 	}
-	ui.unitActMutate(what, func(a *whe.FxAction) (int, bool) {
-		list, j, motion, ok := actLocate(*a, ui.unitActSel)
+	UnitActMutate(ui, what, func(a *whe.FxAction) (int, bool) {
+		list, j, motion, ok := actLocate(*a, ui.UnitActSel)
 		if !ok {
-			return ui.unitActSel, false
+			return ui.UnitActSel, false
 		}
 		moved, nj, ok := actMoveLink(list, j, dir)
 		if !ok {
-			return ui.unitActSel, false
+			return ui.UnitActSel, false
 		}
 		if motion {
 			a.Motions = moved
@@ -2901,23 +2901,23 @@ func (ui *uiState) unitActMoveChoice(dir int) {
 	})
 }
 
-func (ui *uiState) unitActDeleteChoice() {
-	ui.unitActMutate("Deleted", func(a *whe.FxAction) (int, bool) {
-		return actDeleteLink(a, ui.unitActSel)
+func UnitActDeleteChoice(ui *uiState) {
+	UnitActMutate(ui, "Deleted", func(a *whe.FxAction) (int, bool) {
+		return actDeleteLink(a, ui.UnitActSel)
 	})
 }
 
 // unitActMoveEnabled reports whether the move buttons act: the selected
 // choice has a neighbour of the kind it may swap with.
-func (ui *uiState) unitActMoveEnabled(dir int) bool {
-	if ui.unitEvtDoc == nil {
+func UnitActMoveEnabled(ui *uiState, dir int) bool {
+	if ui.UnitEvtDoc == nil {
 		return false
 	}
-	a := ui.selectedUnitEvtAction(ui.unitEvtDoc.Actions())
+	a := SelectedUnitEvtAction(ui, ui.UnitEvtDoc.Actions())
 	if a == nil {
 		return false
 	}
-	list, j, _, ok := actLocate(*a, ui.unitActSel)
+	list, j, _, ok := actLocate(*a, ui.UnitActSel)
 	if !ok {
 		return false
 	}
@@ -2930,10 +2930,10 @@ func (ui *uiState) unitActMoveEnabled(dir int) bool {
 // guard chip is pressed to cycle if → else if → else → always, and the line
 // is committed with Apply and written with Save .whe like every other edit
 // of this section.
-func (ui *uiState) unitActionConditions(gtx layout.Context, a whe.FxAction) layout.Dimensions {
-	ui.ensureUnitActConditions()
+func UnitActionConditions(ui *uiState, gtx layout.Context, a whe.FxAction) layout.Dimensions {
+	EnsureUnitActConditions(ui)
 	if len(a.Motions)+len(a.Subactions) == 0 {
-		l := material.Label(ui.th, unit.Sp(9), "This action carries no motion and calls no action.")
+		l := material.Label(ui.Th, unit.Sp(9), "This action carries no motion and calls no action.")
 		l.Color = cTextDim
 		return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 	}
@@ -2941,13 +2941,13 @@ func (ui *uiState) unitActionConditions(gtx layout.Context, a whe.FxAction) layo
 	for i, m := range a.Motions {
 		i, ln := i, m
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutUnitActConditionRow(gtx, i, ln)
+			return LayoutUnitActConditionRow(ui, gtx, i, ln)
 		}))
 	}
 	for i, s := range a.Subactions {
 		i, ln := len(a.Motions)+i, s
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutUnitActConditionRow(gtx, i, ln)
+			return LayoutUnitActConditionRow(ui, gtx, i, ln)
 		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
@@ -2960,11 +2960,11 @@ func (ui *uiState) unitActionConditions(gtx layout.Context, a whe.FxAction) layo
 // it, so it is indented the way a nested line of code is, and each line
 // sits in its own card so the chain reads as steps rather than one wall of
 // text.
-func (ui *uiState) layoutUnitActConditionRow(gtx layout.Context, i int, ln whe.FxActionLink) layout.Dimensions {
-	if i < 0 || i >= len(ui.unitActCondEds) || i >= len(ui.unitActCondStaged) || i >= len(ui.unitActGuardClicks) || i >= len(ui.unitActNameEds) {
+func LayoutUnitActConditionRow(ui *uiState, gtx layout.Context, i int, ln whe.FxActionLink) layout.Dimensions {
+	if i < 0 || i >= len(ui.UnitActCondEds) || i >= len(ui.UnitActCondStaged) || i >= len(ui.UnitActGuardClicks) || i >= len(ui.UnitActNameEds) {
 		return layout.Dimensions{}
 	}
-	cmp := ui.unitActCondStaged[i]
+	cmp := ui.UnitActCondStaged[i]
 	hasCond := (whe.FxActionLink{Compare: cmp}).HasCondition()
 	indent := unit.Dp(0)
 	switch cmp {
@@ -2974,28 +2974,28 @@ func (ui *uiState) layoutUnitActConditionRow(gtx layout.Context, i int, ln whe.F
 	line := func(gtx layout.Context) layout.Dimensions {
 		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitActGuardChip(gtx, i, unitActGuardLabel(cmp))
+				return UnitActGuardChip(ui, gtx, i, unitActGuardLabel(cmp))
 			}),
 		}
 		if hasCond {
 			children = append(children,
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return ui.unitActFieldEditor(gtx, &ui.unitActCondEds[i], "condition")
+					return UnitActFieldEditor(ui, gtx, &ui.UnitActCondEds[i], "condition")
 				}),
 			)
 		}
 		children = append(children,
 			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), "\u2192")
+				l := material.Label(ui.Th, unit.Sp(10), "\u2192")
 				l.Color = cTextDim
 				l.MaxLines = 1
 				return l.Layout(gtx)
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 			layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
-				return ui.unitActFieldEditor(gtx, &ui.unitActNameEds[i], "motion or action")
+				return UnitActFieldEditor(ui, gtx, &ui.UnitActNameEds[i], "motion or action")
 			}),
 		)
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
@@ -3030,7 +3030,7 @@ func (ui *uiState) layoutUnitActConditionRow(gtx layout.Context, i int, ln whe.F
 	rowGTX.Constraints.Min.Y = h + gtx.Dp(unit.Dp(12))
 	rowGTX.Constraints.Max.Y = h + gtx.Dp(unit.Dp(12))
 	bg := cTabOff
-	if i == ui.unitActSel {
+	if i == ui.UnitActSel {
 		bg = cSelectBg
 	}
 	return layout.Inset{Left: indent, Bottom: unit.Dp(4)}.Layout(rowGTX, func(gtx layout.Context) layout.Dimensions {
@@ -3051,7 +3051,7 @@ func (ui *uiState) layoutUnitActConditionRow(gtx layout.Context, i int, ln whe.F
 // unitActFieldEditor is an inline field of one choice line — the same
 // bordered field the event definition rows use, clamped to one line's height
 // so it sits on the line beside the arrow without stretching the row.
-func (ui *uiState) unitActFieldEditor(gtx layout.Context, ed *widget.Editor, hint string) layout.Dimensions {
+func UnitActFieldEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, hint string) layout.Dimensions {
 	ed.SingleLine = true
 	ed.Submit = true
 	gtx.Constraints.Min.Y = gtx.Dp(36)
@@ -3059,7 +3059,7 @@ func (ui *uiState) unitActFieldEditor(gtx layout.Context, ed *widget.Editor, hin
 	b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 	return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			w := material.Editor(ui.th, ed, hint)
+			w := material.Editor(ui.Th, ed, hint)
 			w.TextSize = unit.Sp(10)
 			w.HintColor = cTextDim
 			return w.Layout(gtx)
@@ -3072,16 +3072,16 @@ func (ui *uiState) unitActFieldEditor(gtx layout.Context, ed *widget.Editor, hin
 // ambient constraints for its size, and inside a card row those numbers
 // belong to the row, not to the chip — the chip must carry its own width so
 // the arrow and the fields after it are not pushed off the line.
-func (ui *uiState) unitActGuardChip(gtx layout.Context, i int, label string) layout.Dimensions {
-	if i < 0 || i >= len(ui.unitActGuardClicks) {
+func UnitActGuardChip(ui *uiState, gtx layout.Context, i int, label string) layout.Dimensions {
+	if i < 0 || i >= len(ui.UnitActGuardClicks) {
 		return layout.Dimensions{}
 	}
-	c := &ui.unitActGuardClicks[i]
+	c := &ui.UnitActGuardClicks[i]
 	// Measure the label on its own; the discarded pass draws nothing.
 	macro := op.Record(gtx.Ops)
 	lgtx := gtx.Disabled()
 	lgtx.Constraints.Min = image.Point{}
-	l := material.Label(ui.th, unit.Sp(11), label)
+	l := material.Label(ui.Th, unit.Sp(11), label)
 	l.Color = cText
 	ldims := l.Layout(lgtx)
 	macro.Stop()
@@ -3117,7 +3117,7 @@ func (ui *uiState) unitActGuardChip(gtx layout.Context, i int, label string) lay
 					padTop = 0
 				}
 				off := op.Offset(image.Pt(gtx.Dp(padX), padTop)).Push(gtx.Ops)
-				l := material.Label(ui.th, unit.Sp(11), label)
+				l := material.Label(ui.Th, unit.Sp(11), label)
 				l.Color = cText
 				dims := l.Layout(gtx)
 				off.Pop()
@@ -3136,26 +3136,26 @@ func (ui *uiState) unitActGuardChip(gtx layout.Context, i int, label string) lay
 // being worked on: the commit for the condition fields above, and the same
 // Save .whe / Revert pair the timeline form carries — an action edit is
 // written to the file exactly the way a timeline edit is.
-func (ui *uiState) unitActPanelFooter(gtx layout.Context) layout.Dimensions {
+func UnitActPanelFooter(ui *uiState, gtx layout.Context) layout.Dimensions {
 	hasAction := false
 	rows := 0
 	selName := ""
-	if ui.unitEvtDoc != nil {
-		if a := ui.selectedUnitEvtAction(ui.unitEvtDoc.Actions()); a != nil {
+	if ui.UnitEvtDoc != nil {
+		if a := SelectedUnitEvtAction(ui, ui.UnitEvtDoc.Actions()); a != nil {
 			hasAction = true
 			rows = len(a.Motions) + len(a.Subactions)
-			if ui.unitActSel >= 0 && ui.unitActSel < rows {
-				if list, j, _, ok := actLocate(*a, ui.unitActSel); ok {
+			if ui.UnitActSel >= 0 && ui.UnitActSel < rows {
+				if list, j, _, ok := actLocate(*a, ui.UnitActSel); ok {
 					selName = list[j].Name
 				}
 			}
 		}
 	}
 	var children []layout.FlexChild
-	if ui.unitActErr != "" {
-		err := ui.unitActErr
+	if ui.UnitActErr != "" {
+		err := ui.UnitActErr
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), err)
+			l := material.Label(ui.Th, unit.Sp(9), err)
 			l.Color = rgb(0xC98A8A)
 			l.MaxLines = 4
 			return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
@@ -3174,31 +3174,31 @@ func (ui *uiState) unitActPanelFooter(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitActAddIf, "Add if", !hasAction)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitActAddIf, "Add if", !hasAction)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitActAddElseIf, "+elif", !hasAction)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitActAddElseIf, "+elif", !hasAction)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitActAddElse, "+else", !hasAction)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitActAddElse, "+else", !hasAction)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitActMoveUp, "\u25b2", !ui.unitActMoveEnabled(-1))
+					return SmallButtonDisabled(ui, gtx, &ui.UnitActMoveUp, "\u25b2", !UnitActMoveEnabled(ui, -1))
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitActMoveDown, "\u25bc", !ui.unitActMoveEnabled(1))
+					return SmallButtonDisabled(ui, gtx, &ui.UnitActMoveDown, "\u25bc", !UnitActMoveEnabled(ui, 1))
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitActDelete, "Delete", rows == 0)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitActDelete, "Delete", rows == 0)
 				}),
 				layout.Flexed(1, rowGap()),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(9), selLabel)
+					l := material.Label(ui.Th, unit.Sp(9), selLabel)
 					l.Color = cTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
@@ -3209,25 +3209,25 @@ func (ui *uiState) unitActPanelFooter(gtx layout.Context) layout.Dimensions {
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButtonDisabled(gtx, &ui.unitActApply, "Apply", !hasAction)
+				return SmallButtonDisabled(ui, gtx, &ui.UnitActApply, "Apply", !hasAction)
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.primaryButton(gtx, &ui.unitEvtSave, "Save .whe")
+				return PrimaryButton(ui, gtx, &ui.UnitEvtSave, "Save .whe")
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButtonDisabled(gtx, &ui.unitEvtRevert, "Revert", !ui.unitEvtDirty)
+				return SmallButtonDisabled(ui, gtx, &ui.UnitEvtRevert, "Revert", !ui.UnitEvtDirty)
 			}),
 		)
 	}))
 	note := "Saved into this mod's own .whe; the game's files are never written."
-	if ui.unitEvtDirty {
+	if ui.UnitEvtDirty {
 		note = "Unsaved changes. " + note
 	}
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return unitFieldNote(gtx, ui.th, note)
+			return unitFieldNote(gtx, ui.Th, note)
 		})
 	}))
 	inset := layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}
@@ -3241,24 +3241,24 @@ func (ui *uiState) unitActPanelFooter(gtx layout.Context) layout.Dimensions {
 // when it runs, each guarded by its step of the if / else if / else chain —
 // and none of the timeline's events. The panel shows one or the other, so a
 // timeline being edited gives the whole panel to its events instead.
-func (ui *uiState) unitEvtActionPanelBody(gtx layout.Context) []layout.FlexChild {
-	acts := ui.unitEvtDoc.Actions()
-	a := ui.selectedUnitEvtAction(acts)
+func UnitEvtActionPanelBody(ui *uiState, gtx layout.Context) []layout.FlexChild {
+	acts := ui.UnitEvtDoc.Actions()
+	a := SelectedUnitEvtAction(ui, acts)
 	if a == nil {
 		return []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitEventsMessage(gtx, "This .whe carries no actions.")
+				return UnitEventsMessage(ui, gtx, "This .whe carries no actions.")
 			}),
 		}
 	}
 	act := *a
 	text := "Action  " + act.Name
-	if ui.unitEvtDirty {
+	if ui.UnitEvtDirty {
 		text += "  • unsaved"
 	}
 	return []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), text)
+			l := material.Label(ui.Th, unit.Sp(9), text)
 			l.Color = cTextDim
 			l.MaxLines = 2
 			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
@@ -3271,7 +3271,7 @@ func (ui *uiState) unitEvtActionPanelBody(gtx layout.Context) []layout.FlexChild
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Max.X = gtx.Dp(112)
-					l := material.Label(ui.th, unit.Sp(9), "Name")
+					l := material.Label(ui.Th, unit.Sp(9), "Name")
 					l.Color = cTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
@@ -3283,7 +3283,7 @@ func (ui *uiState) unitEvtActionPanelBody(gtx layout.Context) []layout.FlexChild
 					b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 					return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							w := material.Editor(ui.th, &ui.unitActNameEd, act.Name)
+							w := material.Editor(ui.Th, &ui.UnitActNameEd, act.Name)
 							w.TextSize = unit.Sp(10)
 							w.HintColor = cTextDim
 							return w.Layout(gtx)
@@ -3292,26 +3292,26 @@ func (ui *uiState) unitEvtActionPanelBody(gtx layout.Context) []layout.FlexChild
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButton(gtx, &ui.unitActRename, "Rename")
+					return SmallButton(ui, gtx, &ui.UnitActRename, "Rename")
 				}),
 			)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return sectionHeader(gtx, ui.th, "Conditions")
+				return sectionHeader(gtx, ui.Th, "Conditions")
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), "One line per choice — press a guard to cycle it, type the condition inline. Apply or Enter writes the document; Save .whe writes the file.")
+			l := material.Label(ui.Th, unit.Sp(9), "One line per choice — press a guard to cycle it, type the condition inline. Apply or Enter writes the document; Save .whe writes the file.")
 			l.Color = cTextDim
 			l.MaxLines = 3
 			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitActionConditions(gtx, act)
+			return UnitActionConditions(ui, gtx, act)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), "Pick a timeline above to edit its events instead.")
+			l := material.Label(ui.Th, unit.Sp(9), "Pick a timeline above to edit its events instead.")
 			l.Color = cTextDim
 			l.MaxLines = 2
 			return layout.Inset{Top: unit.Dp(8)}.Layout(gtx, l.Layout)
@@ -3319,27 +3319,27 @@ func (ui *uiState) unitEvtActionPanelBody(gtx layout.Context) []layout.FlexChild
 	}
 }
 
-func (ui *uiState) layoutUnitEventTimelineList(gtx layout.Context) layout.Dimensions {
-	if ui.unitEvtDoc == nil {
-		return ui.unitEventsMessage(gtx, ui.unitEvtErr)
+func LayoutUnitEventTimelineList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if ui.UnitEvtDoc == nil {
+		return UnitEventsMessage(ui, gtx, ui.UnitEvtErr)
 	}
-	tls := ui.unitEvtDoc.Timelines()
+	tls := ui.UnitEvtDoc.Timelines()
 	if len(tls) == 0 {
-		return ui.unitEventsMessage(gtx, "This .whe carries no animation timelines.")
+		return UnitEventsMessage(ui, gtx, "This .whe carries no animation timelines.")
 	}
-	selected := ui.selectedUnitEventTimeline()
+	selected := SelectedUnitEventTimeline(ui)
 	selEvents := 0
 	if selected != nil {
 		selEvents = len(selected.Events)
 	}
-	ui.ensureUnitEventClicks(len(tls), selEvents)
+	EnsureUnitEventClicks(ui, len(tls), selEvents)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			text := ui.unitEvtPath
-			if ui.unitEvtDirty {
+			text := ui.UnitEvtPath
+			if ui.UnitEvtDirty {
 				text += "  \u2022 unsaved"
 			}
-			l := material.Label(ui.th, unit.Sp(9), text)
+			l := material.Label(ui.Th, unit.Sp(9), text)
 			l.Color = cTextDim
 			l.MaxLines = 2
 			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
@@ -3351,11 +3351,11 @@ func (ui *uiState) layoutUnitEventTimelineList(gtx layout.Context) layout.Dimens
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButtonDisabled(gtx, &ui.unitEvtCopyTl, "Copy timeline", selected == nil)
+						return SmallButtonDisabled(ui, gtx, &ui.UnitEvtCopyTl, "Copy timeline", selected == nil)
 					}),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), "copies it whole, for another unit")
+							l := material.Label(ui.Th, unit.Sp(9), "copies it whole, for another unit")
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -3365,8 +3365,8 @@ func (ui *uiState) layoutUnitEventTimelineList(gtx layout.Context) layout.Dimens
 			})
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutListWithScrollbar(gtx, &ui.unitEvtScroll, &ui.unitEvtList, unitRowHeightDp-4, len(tls), func(gtx layout.Context, i int) layout.Dimensions {
-				return ui.layoutUnitEventTimelineRow(gtx, i, tls[i])
+			return LayoutListWithScrollbar(ui, gtx, &ui.UnitEvtScroll, &ui.UnitEvtList, unitRowHeightDp-4, len(tls), func(gtx layout.Context, i int) layout.Dimensions {
+				return LayoutUnitEventTimelineRow(ui, gtx, i, tls[i])
 			})
 		}),
 	)
@@ -3377,34 +3377,34 @@ func (ui *uiState) layoutUnitEventTimelineList(gtx layout.Context) layout.Dimens
 // events and the form that edits one while a timeline is picked, and the
 // picked action's conditions while an action is — never both tool sets at
 // once, since an action carries no timeline and no event of its own.
-func (ui *uiState) layoutUnitEventPanel(gtx layout.Context) layout.Dimensions {
-	ui.ensureUnitEvents()
-	sec := ui.currentUnitSection()
+func LayoutUnitEventPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
+	EnsureUnitEvents(ui)
+	sec := CurrentUnitSection(ui)
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, sec.rightTitle)
+				return LayoutUnitColumnHeader(ui, gtx, sec.rightTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 		}
-		if !ui.unitEvtFocusAction {
+		if !ui.UnitEvtFocusAction {
 			children = append(children,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutUnitEvtTransport(gtx)
+					return LayoutUnitEvtTransport(ui, gtx)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			)
 		}
 		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ui.panelScrollView(gtx, &ui.unitEvtPanelScroll, func(gtx layout.Context) layout.Dimensions {
-				return ui.unitEventPanelBody(gtx)
+			return PanelScrollView(ui, gtx, &ui.UnitEvtPanelScroll, func(gtx layout.Context) layout.Dimensions {
+				return UnitEventPanelBody(ui, gtx)
 			})
 		}))
-		if !ui.unitEvtFocusAction {
+		if !ui.UnitEvtFocusAction {
 			children = append(children,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.unitEventPanelForm(gtx)
+					return UnitEventPanelForm(ui, gtx)
 				}),
 			)
 		} else {
@@ -3414,7 +3414,7 @@ func (ui *uiState) layoutUnitEventPanel(gtx layout.Context) layout.Dimensions {
 			children = append(children,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.unitActPanelFooter(gtx)
+					return UnitActPanelFooter(ui, gtx)
 				}),
 			)
 		}
@@ -3423,7 +3423,7 @@ func (ui *uiState) layoutUnitEventPanel(gtx layout.Context) layout.Dimensions {
 		children = append(children,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitMeshVisibilitySection(gtx)
+				return UnitMeshVisibilitySection(ui, gtx)
 			}),
 		)
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -3431,34 +3431,34 @@ func (ui *uiState) layoutUnitEventPanel(gtx layout.Context) layout.Dimensions {
 }
 
 // unitEventPanelBody is the scrollable content of the right column.
-func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
-	if ui.unitEvtDoc == nil {
-		return ui.unitEventsMessage(gtx, ui.unitEvtErr)
+func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if ui.UnitEvtDoc == nil {
+		return UnitEventsMessage(ui, gtx, ui.UnitEvtErr)
 	}
 	inset := layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}
-	tl := ui.selectedUnitEventTimeline()
+	tl := SelectedUnitEventTimeline(ui)
 	var children []layout.FlexChild
 	// The panel carries one editor at a time. While an action is being worked
 	// on it shows that action's conditions and none of the timeline's events,
 	// and the other way round: stacking the two put both editors in one panel
 	// and left the reader hunting for the one they were in.
-	if ui.unitEvtFocusAction {
-		children = ui.unitEvtActionPanelBody(gtx)
+	if ui.UnitEvtFocusAction {
+		children = UnitEvtActionPanelBody(ui, gtx)
 	} else if tl == nil {
-		msg := ui.unitEvtErr
+		msg := ui.UnitEvtErr
 		if msg == "" {
 			msg = "Select a timeline in the middle column."
 		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitEventsMessage(gtx, msg)
+			return UnitEventsMessage(ui, gtx, msg)
 		}))
 		// A copied timeline needs no target picked: it carries its own name, so
 		// a .whe whose timelines do not include it can still receive it whole.
-		if entry, _, ok := ui.unitClips.Pick(clipEvents, ui.unitClipCur); ok && entry.Events != nil && entry.Events.Timeline != "" {
+		if entry, _, ok := ui.UnitClips.Pick(clipEvents, ui.UnitClipCur); ok && entry.Events != nil && entry.Events.Timeline != "" {
 			name := entry.Events.Timeline
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButton(gtx, &ui.unitEvtPaste, "Paste timeline "+name)
+					return SmallButton(ui, gtx, &ui.UnitEvtPaste, "Paste timeline "+name)
 				})
 			}))
 		}
@@ -3469,10 +3469,10 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 		// Which file and timeline this is, and whether it has unsaved changes.
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			text := "Timeline  " + tl.Name
-			if ui.unitEvtDirty {
+			if ui.UnitEvtDirty {
 				text += "  • unsaved"
 			}
-			l := material.Label(ui.th, unit.Sp(9), text)
+			l := material.Label(ui.Th, unit.Sp(9), text)
 			l.Color = cTextDim
 			l.MaxLines = 2
 			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
@@ -3483,13 +3483,13 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 		// writes the change into the mod.
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return sectionHeader(gtx, ui.th, "Animations")
+				return sectionHeader(gtx, ui.Th, "Animations")
 			})
 		}))
-		ui.ensureUnitEventAnimClicks(len(tl.Animations))
+		EnsureUnitEventAnimClicks(ui, len(tl.Animations))
 		if len(tl.Animations) == 0 {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), "This motion blends no animations — it chains to other motions instead.")
+				l := material.Label(ui.Th, unit.Sp(10), "This motion blends no animations — it chains to other motions instead.")
 				l.Color = cTextDim
 				l.MaxLines = 2
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
@@ -3501,13 +3501,13 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-								l := material.Label(ui.th, unit.Sp(10), tl.Animations[i])
+								l := material.Label(ui.Th, unit.Sp(10), tl.Animations[i])
 								l.Color = cText
 								l.MaxLines = 1
 								return l.Layout(gtx)
 							}),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								return ui.smallButton(gtx, &ui.unitEvtAnimClicks[i], "Remove")
+								return SmallButton(ui, gtx, &ui.UnitEvtAnimClicks[i], "Remove")
 							}),
 						)
 					})
@@ -3520,32 +3520,32 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 		if tl.Tail.Present {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return sectionHeader(gtx, ui.th, "Motion")
+					return sectionHeader(gtx, ui.Th, "Motion")
 				})
 			}))
 			for _, row := range whe.MotionTailRows(tl.Tail) {
 				row := row
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.unitKeyValueRow(gtx, row[0], row[1], false)
+						return UnitKeyValueRow(ui, gtx, row[0], row[1], false)
 					})
 				}))
 			}
 		}
-		ui.ensureUnitEventClicks(len(ui.unitEvtDoc.Timelines()), len(tl.Events))
+		EnsureUnitEventClicks(ui, len(ui.UnitEvtDoc.Timelines()), len(tl.Events))
 		defText := "No events on this timeline yet. Add one below."
 		if len(tl.Events) == 0 {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), defText)
+				l := material.Label(ui.Th, unit.Sp(10), defText)
 				l.Color = cTextDim
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}))
 		} else {
-			defs := ui.unitEvtDoc.Events()
+			defs := ui.UnitEvtDoc.Events()
 			for i := range tl.Events {
 				i := i
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutUnitEventRow(gtx, i, tl.Events[i], defs)
+					return LayoutUnitEventRow(ui, gtx, i, tl.Events[i], defs)
 				}))
 			}
 		}
@@ -3559,10 +3559,10 @@ func (ui *uiState) unitEventPanelBody(gtx layout.Context) layout.Dimensions {
 // ensureUnitEvtEntryEditors sizes the value fields to the selected event's
 // definition. Fields are only ever added: the panel draws one row per entry,
 // and the ones past the end sit unused rather than the values being cut off.
-func (ui *uiState) ensureUnitEvtEntryEditors(n int) {
-	for len(ui.unitEvtEntryEds) < n {
-		ui.unitEvtEntryEds = append(ui.unitEvtEntryEds, widget.Editor{SingleLine: true, Submit: true})
-		ui.unitEvtEntryFillText = append(ui.unitEvtEntryFillText, "")
+func EnsureUnitEvtEntryEditors(ui *uiState, n int) {
+	for len(ui.UnitEvtEntryEds) < n {
+		ui.UnitEvtEntryEds = append(ui.UnitEvtEntryEds, widget.Editor{SingleLine: true, Submit: true})
+		ui.UnitEvtEntryFillText = append(ui.UnitEvtEntryFillText, "")
 	}
 }
 
@@ -3570,17 +3570,17 @@ func (ui *uiState) ensureUnitEvtEntryEditors(n int) {
 // selected — whatever the cursor is doing, the fields must show the event
 // that is now picked. A value changed by Enter is refilled by the apply
 // itself, so this only has to notice the selection.
-func (ui *uiState) syncUnitEvtEntryEditors(name string, def whe.FxEvent) {
+func SyncUnitEvtEntryEditors(ui *uiState, name string, def whe.FxEvent) {
 	bound := strings.ToLower(name) + "#" + strconv.Itoa(len(def.Entries))
-	if bound == ui.unitEvtEntryBound {
+	if bound == ui.UnitEvtEntryBound {
 		return
 	}
-	ui.unitEvtEntryBound = bound
+	ui.UnitEvtEntryBound = bound
 	for i := range def.Entries {
-		if i < len(ui.unitEvtEntryEds) {
-			ui.unitEvtEntryEds[i].SetText(def.Entries[i].Value)
-			if i < len(ui.unitEvtEntryFillText) {
-				ui.unitEvtEntryFillText[i] = strings.TrimSpace(def.Entries[i].Value)
+		if i < len(ui.UnitEvtEntryEds) {
+			ui.UnitEvtEntryEds[i].SetText(def.Entries[i].Value)
+			if i < len(ui.UnitEvtEntryFillText) {
+				ui.UnitEvtEntryFillText[i] = strings.TrimSpace(def.Entries[i].Value)
 			}
 		}
 	}
@@ -3589,16 +3589,16 @@ func (ui *uiState) syncUnitEvtEntryEditors(name string, def whe.FxEvent) {
 // updateUnitEvtEntryEditors drains the value fields: Enter writes the typed
 // value into the document and lets go of the field, the same way the bone
 // key fields do.
-func (ui *uiState) updateUnitEvtEntryEditors(gtx layout.Context, name string) {
-	for i := range ui.unitEvtEntryEds {
+func UpdateUnitEvtEntryEditors(ui *uiState, gtx layout.Context, name string) {
+	for i := range ui.UnitEvtEntryEds {
 		for {
-			ev, ok := ui.unitEvtEntryEds[i].Update(gtx)
+			ev, ok := ui.UnitEvtEntryEds[i].Update(gtx)
 			if !ok {
 				break
 			}
 			if _, submit := ev.(widget.SubmitEvent); submit {
-				ui.applyUnitEvtEntry(name, i, ui.unitEvtEntryEds[i].Text())
-				ui.unitEvtEntryEds[i].Blur(gtx)
+				ApplyUnitEvtEntry(ui, name, i, ui.UnitEvtEntryEds[i].Text())
+				ui.UnitEvtEntryEds[i].Blur(gtx)
 			}
 		}
 	}
@@ -3608,88 +3608,88 @@ func (ui *uiState) updateUnitEvtEntryEditors(gtx layout.Context, name string) {
 // the DATAEVNT payload is rebuilt, the document is marked dirty, and the
 // viewport re-resolves from the document so the change is on screen before
 // the file is saved.
-func (ui *uiState) applyUnitEvtEntry(name string, index int, value string) {
-	if ui.unitEvtDoc == nil {
-		ui.statusText = "No .whe is loaded"
+func ApplyUnitEvtEntry(ui *uiState, name string, index int, value string) {
+	if ui.UnitEvtDoc == nil {
+		ui.StatusText = "No .whe is loaded"
 		return
 	}
-	if err := ui.unitEvtDoc.SetEventEntry(name, index, strings.TrimSpace(value)); err != nil {
-		ui.statusText = "Edit failed: " + err.Error()
+	if err := ui.UnitEvtDoc.SetEventEntry(name, index, strings.TrimSpace(value)); err != nil {
+		ui.StatusText = "Edit failed: " + err.Error()
 		return
 	}
-	ui.unitEvtDirty = true
+	ui.UnitEvtDirty = true
 	// The field takes back what was stored, so what is shown is what the chunk
 	// now holds rather than what was typed — and the fill text moves with it,
 	// so the axis counts as untouched until it is changed again.
-	if def, ok := ui.unitEvtDoc.Events()[strings.ToLower(name)]; ok && index < len(def.Entries) && index < len(ui.unitEvtEntryEds) {
-		ui.unitEvtEntryEds[index].SetText(def.Entries[index].Value)
-		if index < len(ui.unitEvtEntryFillText) {
-			ui.unitEvtEntryFillText[index] = strings.TrimSpace(def.Entries[index].Value)
+	if def, ok := ui.UnitEvtDoc.Events()[strings.ToLower(name)]; ok && index < len(def.Entries) && index < len(ui.UnitEvtEntryEds) {
+		ui.UnitEvtEntryEds[index].SetText(def.Entries[index].Value)
+		if index < len(ui.UnitEvtEntryFillText) {
+			ui.UnitEvtEntryFillText[index] = strings.TrimSpace(def.Entries[index].Value)
 		}
 	}
-	ui.statusText = "Edited " + name + " — Save .whe to write it into the mod"
-	ui.reloadUnitModelFx()
+	ui.StatusText = "Edited " + name + " — Save .whe to write it into the mod"
+	ReloadUnitModelFx(ui)
 }
 
 // setUnitEvtEntryValues applies every value field the user typed over, the
 // way the bone panel's Set does: Enter in a field is meant to do the same,
 // but a button does not depend on the field having focus. Fields left as they
 // were filled are skipped, and the viewport re-resolves once at the end.
-func (ui *uiState) setUnitEvtEntryValues(name string) {
-	if ui.unitEvtDoc == nil {
-		ui.statusText = "No .whe is loaded"
+func SetUnitEvtEntryValues(ui *uiState, name string) {
+	if ui.UnitEvtDoc == nil {
+		ui.StatusText = "No .whe is loaded"
 		return
 	}
-	def, ok := ui.unitEvtDoc.Events()[strings.ToLower(name)]
+	def, ok := ui.UnitEvtDoc.Events()[strings.ToLower(name)]
 	if !ok {
-		ui.statusText = "No definition of " + name + " in this .whe"
+		ui.StatusText = "No definition of " + name + " in this .whe"
 		return
 	}
 	changed := 0
 	for i := range def.Entries {
-		if i >= len(ui.unitEvtEntryEds) {
+		if i >= len(ui.UnitEvtEntryEds) {
 			break
 		}
-		text := strings.TrimSpace(ui.unitEvtEntryEds[i].Text())
-		if i < len(ui.unitEvtEntryFillText) && text == ui.unitEvtEntryFillText[i] {
+		text := strings.TrimSpace(ui.UnitEvtEntryEds[i].Text())
+		if i < len(ui.UnitEvtEntryFillText) && text == ui.UnitEvtEntryFillText[i] {
 			continue
 		}
-		if err := ui.unitEvtDoc.SetEventEntry(name, i, text); err != nil {
-			ui.statusText = "Edit failed: " + err.Error()
+		if err := ui.UnitEvtDoc.SetEventEntry(name, i, text); err != nil {
+			ui.StatusText = "Edit failed: " + err.Error()
 			if changed > 0 {
-				ui.reloadUnitModelFx()
+				ReloadUnitModelFx(ui)
 			}
 			return
 		}
-		ui.unitEvtDirty = true
-		if i < len(ui.unitEvtEntryFillText) {
-			ui.unitEvtEntryFillText[i] = text
+		ui.UnitEvtDirty = true
+		if i < len(ui.UnitEvtEntryFillText) {
+			ui.UnitEvtEntryFillText[i] = text
 		}
-		ui.unitEvtEntryEds[i].SetText(text)
+		ui.UnitEvtEntryEds[i].SetText(text)
 		changed++
 	}
 	if changed == 0 {
-		ui.statusText = "no values were changed"
+		ui.StatusText = "no values were changed"
 		return
 	}
-	ui.statusText = "Edited " + name + " — Save .whe to write it into the mod"
-	ui.reloadUnitModelFx()
+	ui.StatusText = "Edited " + name + " — Save .whe to write it into the mod"
+	ReloadUnitModelFx(ui)
 }
 
 // unitEvtEntryRow is one row of the selected event's definition: the entry's
 // key, then its value in a field that submits on Enter. The key is clipped so
 // a long name cannot push the value off the panel.
-func (ui *uiState) unitEvtEntryRow(gtx layout.Context, i int, key string) layout.Dimensions {
-	if i < 0 || i >= len(ui.unitEvtEntryEds) {
+func UnitEvtEntryRow(ui *uiState, gtx layout.Context, i int, key string) layout.Dimensions {
+	if i < 0 || i >= len(ui.UnitEvtEntryEds) {
 		return layout.Dimensions{}
 	}
-	ed := &ui.unitEvtEntryEds[i]
+	ed := &ui.UnitEvtEntryEds[i]
 	ed.SingleLine = true
 	ed.Submit = true
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Max.X = gtx.Dp(112)
-			l := material.Label(ui.th, unit.Sp(9), key)
+			l := material.Label(ui.Th, unit.Sp(9), key)
 			l.Color = cTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
@@ -3701,7 +3701,7 @@ func (ui *uiState) unitEvtEntryRow(gtx layout.Context, i int, key string) layout
 			b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 			return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					w := material.Editor(ui.th, ed, "")
+					w := material.Editor(ui.Th, ed, "")
 					w.TextSize = unit.Sp(10)
 					w.HintColor = cTextDim
 					return w.Layout(gtx)
@@ -3716,33 +3716,33 @@ func (ui *uiState) unitEvtEntryRow(gtx layout.Context, i int, key string) layout
 // the model before it is saved. The document is only handed over when it is
 // the same file the viewport's model sits beside — a .whe read for another
 // reason would put its events on this model.
-func (ui *uiState) reloadUnitModelFx() {
-	v := ui.unitModelViewer()
+func ReloadUnitModelFx(ui *uiState) {
+	v := UnitModelViewer(ui)
 	if v == nil {
 		return
 	}
 	var doc *whe.Document
-	if ui.unitEvtDoc != nil && ui.unitEvtPath != "" && v.modelFile != "" {
+	if ui.UnitEvtDoc != nil && ui.UnitEvtPath != "" && v.ModelFile != "" {
 		base := func(p string) string {
 			if j := strings.LastIndexAny(p, "/\\"); j >= 0 {
 				return p[j+1:]
 			}
 			return p
 		}
-		name := base(v.modelFile)
+		name := base(v.ModelFile)
 		if k := strings.LastIndexByte(name, '.'); k >= 0 {
 			name = name[:k]
 		}
-		if strings.EqualFold(base(ui.unitEvtPath), name+".whe") {
-			doc = ui.unitEvtDoc
+		if strings.EqualFold(base(ui.UnitEvtPath), name+".whe") {
+			doc = ui.UnitEvtDoc
 		}
 	}
-	ui.fxReload(v, doc)
+	FxReload(ui, v, doc)
 }
 
 // unitEventPanelForm draws the static input form and action buttons at the bottom of the right column.
-func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
-	tl := ui.selectedUnitEventTimeline()
+func UnitEventPanelForm(ui *uiState, gtx layout.Context) layout.Dimensions {
+	tl := SelectedUnitEventTimeline(ui)
 	if tl == nil {
 		return layout.Dimensions{}
 	}
@@ -3751,10 +3751,10 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 	// The add form.
 	children = append(children,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRowEditor(gtx, "Event name", &ui.unitEvtNameEd, false, "")
+			return TableRowEditor(ui, gtx, "Event name", &ui.UnitEvtNameEd, false, "")
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRowEditor(gtx, "Time (s / enter / leave)", &ui.unitEvtTimeEd, true, "")
+			return TableRowEditor(ui, gtx, "Time (s / enter / leave)", &ui.UnitEvtTimeEd, true, "")
 		}),
 		// The same moment, moved rather than set: a number of seconds added to
 		// every selected row, with the button beside the field that reads it.
@@ -3762,7 +3762,7 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Max.X = gtx.Dp(112)
-					l := material.Label(ui.th, unit.Sp(9), "Shift (s)")
+					l := material.Label(ui.Th, unit.Sp(9), "Shift (s)")
 					l.Color = cTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
@@ -3774,7 +3774,7 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 					b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 					return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							w := material.Editor(ui.th, &ui.unitEvtShiftEd, "e.g. 0.1 or -0.1")
+							w := material.Editor(ui.Th, &ui.UnitEvtShiftEd, "e.g. 0.1 or -0.1")
 							w.TextSize = unit.Sp(10)
 							w.HintColor = cTextDim
 							return w.Layout(gtx)
@@ -3783,50 +3783,50 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitEvtShift, "Shift", len(ui.unitEvtSelSet) == 0)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitEvtShift, "Shift", len(ui.UnitEvtSelSet) == 0)
 				}),
 			)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRowEditor(gtx, "FX path", &ui.unitEvtFxEd, false, "")
+			return TableRowEditor(ui, gtx, "FX path", &ui.UnitEvtFxEd, false, "")
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRowEditor(gtx, "Sound path", &ui.unitEvtSndEd, false, "")
+			return TableRowEditor(ui, gtx, "Sound path", &ui.UnitEvtSndEd, false, "")
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRowEditor(gtx, "Marker (FX only)", &ui.unitEvtMarkerEd, true, "")
+			return TableRowEditor(ui, gtx, "Marker (FX only)", &ui.UnitEvtMarkerEd, true, "")
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			noSel := ui.unitEvtSel < 0 || ui.unitEvtSel >= len(tl.Events)
+			noSel := ui.UnitEvtSel < 0 || ui.UnitEvtSel >= len(tl.Events)
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitEvtSet, "Set", noSel)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitEvtSet, "Set", noSel)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitEvtApply, "Apply", noSel)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitEvtApply, "Apply", noSel)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.evtPlayer.playEv, "▶ Sound", !ui.unitEvtSelectedIsSound())
+					return SmallButtonDisabled(ui, gtx, &ui.EvtPlayer.playEv, "▶ Sound", !UnitEvtSelectedIsSound(ui))
 				}),
 			)
 		}),
 	)
 	// While several rows are selected the moment field is a batch edit, so the
 	// panel says so where the button that does it sits.
-	if n := len(ui.unitEvtSelectedIndices()); n > 1 {
+	if n := len(UnitEvtSelectedIndices(ui)); n > 1 {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return unitFieldNote(gtx, ui.th, fmt.Sprintf("%d rows selected — Apply sets the typed time on all of them, Shift moves it.", n))
+				return unitFieldNote(gtx, ui.Th, fmt.Sprintf("%d rows selected — Apply sets the typed time on all of them, Shift moves it.", n))
 			})
 		}))
 	}
-	if ui.unitEvtFormErr != "" {
-		err := ui.unitEvtFormErr
+	if ui.UnitEvtFormErr != "" {
+		err := ui.UnitEvtFormErr
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(9), err)
+				l := material.Label(ui.Th, unit.Sp(9), err)
 				l.Color = rgb(0xC98A8A)
 				l.MaxLines = 4
 				return l.Layout(gtx)
@@ -3838,44 +3838,44 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButton(gtx, &ui.unitEvtAddEvent, "Add event")
+					return SmallButton(ui, gtx, &ui.UnitEvtAddEvent, "Add event")
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButton(gtx, &ui.unitEvtAddFX, "Add FX")
+					return SmallButton(ui, gtx, &ui.UnitEvtAddFX, "Add FX")
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButton(gtx, &ui.unitEvtAddSound, "Add sound")
+					return SmallButton(ui, gtx, &ui.UnitEvtAddSound, "Add sound")
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitEvtRemove, "Remove", len(tl.Events) == 0 || len(ui.unitEvtSelSet) == 0)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitEvtRemove, "Remove", len(tl.Events) == 0 || len(ui.UnitEvtSelSet) == 0)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitEvtCopy, "Copy", len(ui.unitEvtSelSet) == 0)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitEvtCopy, "Copy", len(ui.UnitEvtSelSet) == 0)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					_, _, has := ui.unitClips.Pick(clipEvents, ui.unitClipCur)
-					return ui.smallButtonDisabled(gtx, &ui.unitEvtPaste, "Paste", !has)
+					_, _, has := ui.UnitClips.Pick(clipEvents, ui.UnitClipCur)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitEvtPaste, "Paste", !has)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					_, cur, ok := ui.unitClips.Pick(clipEvents, ui.unitClipCur)
-					first := !ok || ui.unitClips.Step(clipEvents, cur, -1) == cur
-					return ui.smallButtonDisabled(gtx, &ui.unitClipPrev, "\u25c2", first)
+					_, cur, ok := ui.UnitClips.Pick(clipEvents, ui.UnitClipCur)
+					first := !ok || ui.UnitClips.Step(clipEvents, cur, -1) == cur
+					return SmallButtonDisabled(ui, gtx, &ui.UnitClipPrev, "\u25c2", first)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					_, cur, ok := ui.unitClips.Pick(clipEvents, ui.unitClipCur)
-					last := !ok || ui.unitClips.Step(clipEvents, cur, 1) == cur
-					return ui.smallButtonDisabled(gtx, &ui.unitClipNext, "\u25b8", last)
+					_, cur, ok := ui.UnitClips.Pick(clipEvents, ui.UnitClipCur)
+					last := !ok || ui.UnitClips.Step(clipEvents, cur, 1) == cur
+					return SmallButtonDisabled(ui, gtx, &ui.UnitClipNext, "\u25b8", last)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), ui.unitClips.Label(clipEvents, ui.unitClipCur))
+						l := material.Label(ui.Th, unit.Sp(9), ui.UnitClips.Label(clipEvents, ui.UnitClipCur))
 						l.Color = cTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
@@ -3888,22 +3888,22 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.primaryButton(gtx, &ui.unitEvtSave, "Save .whe")
+					return PrimaryButton(ui, gtx, &ui.UnitEvtSave, "Save .whe")
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &ui.unitEvtRevert, "Revert", !ui.unitEvtDirty)
+					return SmallButtonDisabled(ui, gtx, &ui.UnitEvtRevert, "Revert", !ui.UnitEvtDirty)
 				}),
 			)
 		})
 	}))
 	note := "Saved into this mod's own .whe; the game's files are never written."
-	if ui.unitEvtDirty {
+	if ui.UnitEvtDirty {
 		note = "Unsaved changes. " + note
 	}
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return unitFieldNote(gtx, ui.th, note)
+			return unitFieldNote(gtx, ui.Th, note)
 		})
 	}))
 
@@ -3915,12 +3915,12 @@ func (ui *uiState) unitEventPanelForm(gtx layout.Context) layout.Dimensions {
 
 // layoutUnitEventRow is one event of the timeline: when it fires, what it
 // fires, and what kind of event it is.
-func (ui *uiState) layoutUnitEventRow(gtx layout.Context, i int, ev whe.FxTimelineEvent, defs map[string]whe.FxEvent) layout.Dimensions {
-	if i < 0 || i >= len(ui.unitEvtClicks) {
+func LayoutUnitEventRow(ui *uiState, gtx layout.Context, i int, ev whe.FxTimelineEvent, defs map[string]whe.FxEvent) layout.Dimensions {
+	if i < 0 || i >= len(ui.UnitEvtClicks) {
 		return layout.Dimensions{}
 	}
-	c := &ui.unitEvtClicks[i]
-	selected := ui.unitEvtRowSelected(i)
+	c := &ui.UnitEvtClicks[i]
+	selected := UnitEvtRowSelected(ui, i)
 	bg := cPanelBg
 	switch {
 	case selected:
@@ -3945,21 +3945,21 @@ func (ui *uiState) layoutUnitEventRow(gtx layout.Context, i int, ev whe.FxTimeli
 				return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), unitEventTimeLabel(ev.Time))
+							l := material.Label(ui.Th, unit.Sp(9), unitEventTimeLabel(ev.Time))
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), unitViewportRowText(ev.Name))
+							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(ev.Name))
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, flexGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), kind)
+							l := material.Label(ui.Th, unit.Sp(9), kind)
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -3992,12 +3992,12 @@ func unitEventKindTag(name string, defs map[string]whe.FxEvent) string {
 
 // layoutUnitEventTimelineRow is one selectable timeline: its name, and the
 // clips it drives.
-func (ui *uiState) layoutUnitEventTimelineRow(gtx layout.Context, i int, tl whe.FxTimeline) layout.Dimensions {
-	if i < 0 || i >= len(ui.unitEvtTlClicks) {
+func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.FxTimeline) layout.Dimensions {
+	if i < 0 || i >= len(ui.UnitEvtTlClicks) {
 		return layout.Dimensions{}
 	}
-	c := &ui.unitEvtTlClicks[i]
-	selected := strings.EqualFold(ui.unitEvtTimeline, tl.Name)
+	c := &ui.UnitEvtTlClicks[i]
+	selected := strings.EqualFold(ui.UnitEvtTimeline, tl.Name)
 	bg := cPanelBg
 	switch {
 	case selected:
@@ -4022,7 +4022,7 @@ func (ui *uiState) layoutUnitEventTimelineRow(gtx layout.Context, i int, tl whe.
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), unitViewportRowText(tl.Name))
+							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(tl.Name))
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -4033,7 +4033,7 @@ func (ui *uiState) layoutUnitEventTimelineRow(gtx layout.Context, i int, tl whe.
 							if clips != "" {
 								note += "  \u00b7  " + clips
 							}
-							l := material.Label(ui.th, unit.Sp(9), note)
+							l := material.Label(ui.Th, unit.Sp(9), note)
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -4085,39 +4085,39 @@ type evtPicker struct {
 }
 
 // openEvtPicker shows the list for one field, with every value of it ready.
-func (ui *uiState) openEvtPicker(t evtPickTarget) {
-	p := &ui.evtPick
+func OpenEvtPicker(ui *uiState, t evtPickTarget) {
+	p := &ui.EvtPick
 	p.open = true
 	p.target = t
-	p.all = ui.evtPickerItems(t)
+	p.all = EvtPickerItems(ui, t)
 	p.ed.SingleLine = true
 	p.ed.Submit = true
 	p.ed.SetText("")
 	p.filter = ""
-	ui.refreshEvtPickerHits()
+	RefreshEvtPickerHits(ui)
 }
 
 // evtPickerItems lists the values a target can take, sorted and without
 // repeats.
-func (ui *uiState) evtPickerItems(t evtPickTarget) []string {
+func EvtPickerItems(ui *uiState, t evtPickTarget) []string {
 	var out []string
 	switch t {
 	case evtPickName:
-		if ui.unitEvtDoc != nil {
-			for _, def := range ui.unitEvtDoc.Events() {
+		if ui.UnitEvtDoc != nil {
+			for _, def := range ui.UnitEvtDoc.Events() {
 				out = append(out, def.Name)
 			}
 		}
 	case evtPickMarker:
-		if v := ui.unitModelViewer(); v != nil && v.model != nil {
-			for _, m := range v.model.Markers {
+		if v := UnitModelViewer(ui); v != nil && v.Model != nil {
+			for _, m := range v.Model.Markers {
 				out = append(out, m.Name)
 			}
 		}
 	case evtPickFX:
-		out = evtTreeFolderFiles(ui.modTree, `\art\fx\`, []string{".lua"}, true)
+		out = evtTreeFolderFiles(ui.ModTree, `\art\fx\`, []string{".lua"}, true)
 	case evtPickSound:
-		out = evtTreeFolderFiles(ui.modTree, `\sound\`, []string{".fda", ".wav"}, false)
+		out = evtTreeFolderFiles(ui.ModTree, `\sound\`, []string{".fda", ".wav"}, false)
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
 	uniq := out[:0]
@@ -4173,8 +4173,8 @@ func evtTreeFolderFiles(tree *modtree.ModTree, folder string, exts []string, kee
 }
 
 // refreshEvtPickerHits filters the list by what is in the filter box.
-func (ui *uiState) refreshEvtPickerHits() {
-	p := &ui.evtPick
+func RefreshEvtPickerHits(ui *uiState) {
+	p := &ui.EvtPick
 	q := strings.ToLower(strings.TrimSpace(p.filter))
 	p.hits = p.hits[:0]
 	for _, s := range p.all {
@@ -4191,8 +4191,8 @@ func (ui *uiState) refreshEvtPickerHits() {
 // handleEvtPickerInput is the picker's input: typing narrows the list, a row
 // picks its value, Use typed and Enter take the filter text as it is, and
 // Cancel closes without writing anything.
-func (ui *uiState) handleEvtPickerInput(gtx layout.Context) {
-	p := &ui.evtPick
+func HandleEvtPickerInput(ui *uiState, gtx layout.Context) {
+	p := &ui.EvtPick
 	submitted := false
 	for {
 		ev, ok := p.ed.Update(gtx)
@@ -4205,7 +4205,7 @@ func (ui *uiState) handleEvtPickerInput(gtx layout.Context) {
 	}
 	if text := strings.TrimSpace(p.ed.Text()); text != p.filter {
 		p.filter = text
-		ui.refreshEvtPickerHits()
+		RefreshEvtPickerHits(ui)
 	}
 	if p.cancel.Clicked(gtx) {
 		p.open = false
@@ -4213,53 +4213,53 @@ func (ui *uiState) handleEvtPickerInput(gtx layout.Context) {
 	}
 	if p.target == evtPickSound && p.browse.Clicked(gtx) {
 		p.open = false
-		ui.openSoundFilePicker()
+		OpenSoundFilePicker(ui)
 		return
 	}
 	for i := range p.clicks {
 		if p.clicks[i].Clicked(gtx) && i < len(p.hits) {
-			ui.applyEvtPick(p.target, p.hits[i])
+			ApplyEvtPick(ui, p.target, p.hits[i])
 			return
 		}
 	}
 	if p.useTyped.Clicked(gtx) || submitted {
-		ui.applyEvtPick(p.target, p.filter)
+		ApplyEvtPick(ui, p.target, p.filter)
 	}
 }
 
 // applyEvtPick writes the chosen value into the field it was opened from and
 // closes the picker. A chosen event name also fills in the FX, sound and marker
 // its definition holds, so the form shows what picking it will fire.
-func (ui *uiState) applyEvtPick(t evtPickTarget, value string) {
+func ApplyEvtPick(ui *uiState, t evtPickTarget, value string) {
 	value = strings.TrimSpace(value)
-	ui.evtPick.open = false
+	ui.EvtPick.open = false
 	if value == "" {
 		return
 	}
 	switch t {
 	case evtPickName:
-		ui.unitEvtNameEd.SetText(value)
-		ui.unitEvtFxEd.SetText("")
-		ui.unitEvtSndEd.SetText("")
-		ui.unitEvtMarkerEd.SetText("")
-		if ui.unitEvtDoc != nil {
-			if def, ok := ui.unitEvtDoc.Events()[strings.ToLower(value)]; ok {
+		ui.UnitEvtNameEd.SetText(value)
+		ui.UnitEvtFxEd.SetText("")
+		ui.UnitEvtSndEd.SetText("")
+		ui.UnitEvtMarkerEd.SetText("")
+		if ui.UnitEvtDoc != nil {
+			if def, ok := ui.UnitEvtDoc.Events()[strings.ToLower(value)]; ok {
 				if p, has := def.First("sound"); has {
-					ui.unitEvtSndEd.SetText(p)
+					ui.UnitEvtSndEd.SetText(p)
 				} else if p, has := def.First("fx"); has {
-					ui.unitEvtFxEd.SetText(p)
+					ui.UnitEvtFxEd.SetText(p)
 				}
 				if m, has := def.First("marker"); has {
-					ui.unitEvtMarkerEd.SetText(m)
+					ui.UnitEvtMarkerEd.SetText(m)
 				}
 			}
 		}
 	case evtPickFX:
-		ui.unitEvtFxEd.SetText(value)
+		ui.UnitEvtFxEd.SetText(value)
 	case evtPickSound:
-		ui.unitEvtSndEd.SetText(value)
+		ui.UnitEvtSndEd.SetText(value)
 	case evtPickMarker:
-		ui.unitEvtMarkerEd.SetText(value)
+		ui.UnitEvtMarkerEd.SetText(value)
 	}
 }
 
@@ -4267,19 +4267,19 @@ func (ui *uiState) applyEvtPick(t evtPickTarget, value string) {
 // mod file tree, the sounds the game and the mod hold, and takes .fda or .wav.
 // The conversion of a .wav happens here, on the editor's side, not in the
 // dialog.
-func (ui *uiState) openSoundFilePicker() {
-	ui.openFilePicker(pickConfig{
+func OpenSoundFilePicker(ui *uiState) {
+	OpenFilePicker(ui, pickConfig{
 		title:    "Choose a sound",
 		subtitle: "An .fda from the mod file tree; a .wav is converted to .fda in this mod",
 		hint:     `Data\sound\...`,
 		exts:     []string{".fda", ".wav"},
 		modTree:  true,
 		onPick: func(path string) (bool, string) {
-			field, err := ui.soundFieldFor(path)
+			field, err := SoundFieldFor(ui, path)
 			if err != nil {
 				return false, err.Error()
 			}
-			ui.unitEvtSndEd.SetText(field)
+			ui.UnitEvtSndEd.SetText(field)
 			return true, ""
 		},
 	})
@@ -4311,7 +4311,7 @@ func soundRelUnderData(p string) string {
 // under data\sound without the extension. A .wav is first encoded to .fda at
 // the same place in the mod folder, which is what the game plays; an .fda
 // must already sit under data\sound.
-func (ui *uiState) soundFieldFor(path string) (string, error) {
+func SoundFieldFor(ui *uiState, path string) (string, error) {
 	ext := pickExt(path)
 	rel := soundRelUnderData(path)
 	if rel == "" {
@@ -4323,10 +4323,10 @@ func (ui *uiState) soundFieldFor(path string) (string, error) {
 	if ext == ".wav" {
 		var raw []byte
 		var err error
-		if filepath.IsAbs(path) || ui.modTree == nil {
+		if filepath.IsAbs(path) || ui.ModTree == nil {
 			raw, err = os.ReadFile(path)
 		} else {
-			raw, err = ui.modTree.ReadFile(path)
+			raw, err = ui.ModTree.ReadFile(path)
 		}
 		if err != nil {
 			return "", fmt.Errorf("read %s: %v", path, err)
@@ -4340,10 +4340,10 @@ func (ui *uiState) soundFieldFor(path string) (string, error) {
 			return "", err
 		}
 		target := `Data\sound\` + rel + ".fda"
-		if _, err := writeFDAOverlay(ui.modTree, target, fdaData); err != nil {
+		if _, err := writeFDAOverlay(ui.ModTree, target, fdaData); err != nil {
 			return "", err
 		}
-		ui.statusText = fmt.Sprintf("Converted %s to %s", filepath.Base(path), target)
+		ui.StatusText = fmt.Sprintf("Converted %s to %s", filepath.Base(path), target)
 	}
 	return rel, nil
 }
@@ -4365,8 +4365,8 @@ func evtPickerTitle(t evtPickTarget) string {
 
 // layoutEvtPicker draws the picker over the window, the same card the
 // Import dialog uses.
-func (ui *uiState) layoutEvtPicker(gtx layout.Context) layout.Dimensions {
-	p := &ui.evtPick
+func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
+	p := &ui.EvtPick
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := gtx.Constraints.Max
@@ -4398,7 +4398,7 @@ func (ui *uiState) layoutEvtPicker(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Top: unit.Dp(14), Bottom: unit.Dp(14), Left: unit.Dp(14), Right: unit.Dp(14)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(14), evtPickerTitle(p.target))
+										l := material.Label(ui.Th, unit.Sp(14), evtPickerTitle(p.target))
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
@@ -4409,7 +4409,7 @@ func (ui *uiState) layoutEvtPicker(gtx layout.Context) layout.Dimensions {
 										gtx.Constraints.Max.Y = h
 										return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 											return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												ed := material.Editor(ui.th, &p.ed, "")
+												ed := material.Editor(ui.Th, &p.ed, "")
 												ed.TextSize = unit.Sp(11)
 												ed.HintColor = cTextDim
 												ed.Hint = "filter, or type a value"
@@ -4423,15 +4423,15 @@ func (ui *uiState) layoutEvtPicker(gtx layout.Context) layout.Dimensions {
 										if len(p.all) > 0 {
 											note = strconv.Itoa(len(p.hits)) + " of " + strconv.Itoa(len(p.all)) + " shown"
 										}
-										l := material.Label(ui.th, unit.Sp(9), note)
+										l := material.Label(ui.Th, unit.Sp(9), note)
 										l.Color = cTextDim
 										l.MaxLines = 1
 										return l.Layout(gtx)
 									}),
 									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-										return ui.layoutListWithScrollbar(gtx, nil, &p.list, unitRowHeightDp, len(p.hits), func(gtx layout.Context, i int) layout.Dimensions {
+										return LayoutListWithScrollbar(ui, gtx, nil, &p.list, unitRowHeightDp, len(p.hits), func(gtx layout.Context, i int) layout.Dimensions {
 											return p.clicks[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(10), p.hits[i])
+												l := material.Label(ui.Th, unit.Sp(10), p.hits[i])
 												l.Color = cText
 												l.MaxLines = 1
 												return layout.Inset{Top: unit.Dp(3), Bottom: unit.Dp(3), Left: unit.Dp(6)}.Layout(gtx, l.Layout)
@@ -4444,18 +4444,18 @@ func (ui *uiState) layoutEvtPicker(gtx layout.Context) layout.Dimensions {
 										if p.target == evtPickSound {
 											children = append(children,
 												layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-													return ui.smallButton(gtx, &p.browse, "Browse file...")
+													return SmallButton(ui, gtx, &p.browse, "Browse file...")
 												}),
 												layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 											)
 										}
 										children = append(children,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.smallButton(gtx, &p.useTyped, "Use typed")
+												return SmallButton(ui, gtx, &p.useTyped, "Use typed")
 											}),
 											layout.Flexed(1, layout.Spacer{Width: unit.Dp(0)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.smallButton(gtx, &p.cancel, "Cancel")
+												return SmallButton(ui, gtx, &p.cancel, "Cancel")
 											}),
 										)
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
@@ -4560,8 +4560,8 @@ func (p *unitEvtPlayer) stopAll() {
 
 // evtPlayerStopAll is the section's exit hook: it only touches anything when
 // something is actually sounding, so the per-frame call is free.
-func (ui *uiState) evtPlayerStopAll() {
-	ui.evtPlayer.stopAll()
+func EvtPlayerStopAll(ui *uiState) {
+	ui.EvtPlayer.stopAll()
 }
 
 // unitEvtStartVoice hands one decoded sample to a fresh oto player, the same
@@ -4586,16 +4586,16 @@ func unitEvtStartVoice(s *fx.SoundSample) (*fx.SoundVoice, error) {
 // same rules the game uses, and returns the decoded sample for it. The first
 // file of the bundle plays: a folder of variants sounds different each time in
 // the game, but a preview the user is checking wants the same answer twice.
-func (ui *uiState) unitEvtLoadSound(p string) (*fx.SoundSample, string, error) {
-	pl := &ui.evtPlayer
+func UnitEvtLoadSound(ui *uiState, p string) (*fx.SoundSample, string, error) {
+	pl := &ui.EvtPlayer
 	if pl.cache == nil {
 		pl.cache = map[string]*fx.SoundSample{}
 	}
-	if ui.modTree == nil {
+	if ui.ModTree == nil {
 		return nil, "", fmt.Errorf("no mod is loaded")
 	}
-	roots := materialSearchRoots(ui.modTree)
-	b, ok := fx.ResolveSound(ui.modTree, roots, p)
+	roots := materialSearchRoots(ui.ModTree)
+	b, ok := fx.ResolveSound(ui.ModTree, roots, p)
 	if !ok || len(b.Files) == 0 {
 		return nil, "", whe.SoundMissing(p)
 	}
@@ -4603,7 +4603,7 @@ func (ui *uiState) unitEvtLoadSound(p string) (*fx.SoundSample, string, error) {
 	if s, done := pl.cache[file]; done {
 		return s, file, nil
 	}
-	s, err := fxSoundDecodeForPlayback(ui.modTree, roots, file)
+	s, err := fxSoundDecodeForPlayback(ui.ModTree, roots, file)
 	if err != nil {
 		return nil, file, err
 	}
@@ -4613,15 +4613,15 @@ func (ui *uiState) unitEvtLoadSound(p string) (*fx.SoundSample, string, error) {
 
 // unitEvtSelectedIsSound says whether the selected event plays audio, which is
 // what the Play sound button acts on and lights for.
-func (ui *uiState) unitEvtSelectedIsSound() bool {
-	if ui.unitEvtDoc == nil {
+func UnitEvtSelectedIsSound(ui *uiState) bool {
+	if ui.UnitEvtDoc == nil {
 		return false
 	}
-	tl := ui.selectedUnitEventTimeline()
-	if tl == nil || ui.unitEvtSel < 0 || ui.unitEvtSel >= len(tl.Events) {
+	tl := SelectedUnitEventTimeline(ui)
+	if tl == nil || ui.UnitEvtSel < 0 || ui.UnitEvtSel >= len(tl.Events) {
 		return false
 	}
-	def, ok := ui.unitEvtDoc.Events()[strings.ToLower(tl.Events[ui.unitEvtSel].Name)]
+	def, ok := ui.UnitEvtDoc.Events()[strings.ToLower(tl.Events[ui.UnitEvtSel].Name)]
 	if !ok {
 		return false
 	}
@@ -4632,58 +4632,58 @@ func (ui *uiState) unitEvtSelectedIsSound() bool {
 // unitEvtPlaySelectedSound plays the selected event's sound. The path typed
 // into the form wins over the saved one, so a retyped path can be auditioned
 // before Set writes it into the document.
-func (ui *uiState) unitEvtPlaySelectedSound() {
-	tl := ui.selectedUnitEventTimeline()
-	if tl == nil || ui.unitEvtDoc == nil || ui.unitEvtSel < 0 || ui.unitEvtSel >= len(tl.Events) {
-		ui.statusText = "Select a sound event first"
+func UnitEvtPlaySelectedSound(ui *uiState) {
+	tl := SelectedUnitEventTimeline(ui)
+	if tl == nil || ui.UnitEvtDoc == nil || ui.UnitEvtSel < 0 || ui.UnitEvtSel >= len(tl.Events) {
+		ui.StatusText = "Select a sound event first"
 		return
 	}
-	ev := tl.Events[ui.unitEvtSel]
-	def, ok := ui.unitEvtDoc.Events()[strings.ToLower(ev.Name)]
+	ev := tl.Events[ui.UnitEvtSel]
+	def, ok := ui.UnitEvtDoc.Events()[strings.ToLower(ev.Name)]
 	if !ok {
-		ui.statusText = ev.Name + " has no definition in this .whe"
+		ui.StatusText = ev.Name + " has no definition in this .whe"
 		return
 	}
 	path, _ := def.First("sound")
-	if typed := strings.TrimSpace(ui.unitEvtSndEd.Text()); typed != "" {
+	if typed := strings.TrimSpace(ui.UnitEvtSndEd.Text()); typed != "" {
 		path = typed
 	}
 	path = strings.TrimSpace(path)
 	if path == "" {
-		ui.statusText = ev.Name + " names no sound"
+		ui.StatusText = ev.Name + " names no sound"
 		return
 	}
-	p := &ui.evtPlayer
+	p := &ui.EvtPlayer
 	if p.audition != nil {
 		p.audition.Stop()
 		p.audition = nil
 	}
-	s, file, err := ui.unitEvtLoadSound(path)
+	s, file, err := UnitEvtLoadSound(ui, path)
 	if err != nil {
-		ui.statusText = "Play failed: " + err.Error()
+		ui.StatusText = "Play failed: " + err.Error()
 		return
 	}
 	v, err := unitEvtStartVoice(s)
 	if err != nil {
-		ui.statusText = "Play failed: " + err.Error()
+		ui.StatusText = "Play failed: " + err.Error()
 		return
 	}
 	p.audition = v
-	ui.statusText = "Playing " + filepath.Base(file)
+	ui.StatusText = "Playing " + filepath.Base(file)
 }
 
 // unitEvtTimelinePlay starts the selected timeline from the beginning: every
 // sound its events name, sorted by moment, the entry sentinel at zero and the
 // exit sentinel at the last timed event, which is as close to "on leaving" as
 // a timeline with no declared length can get.
-func (ui *uiState) unitEvtTimelinePlay(gtx layout.Context) {
-	tl := ui.selectedUnitEventTimeline()
-	p := &ui.evtPlayer
-	if tl == nil || ui.unitEvtDoc == nil {
-		ui.statusText = "Select a timeline first"
+func UnitEvtTimelinePlay(ui *uiState, gtx layout.Context) {
+	tl := SelectedUnitEventTimeline(ui)
+	p := &ui.EvtPlayer
+	if tl == nil || ui.UnitEvtDoc == nil {
+		ui.StatusText = "Select a timeline first"
 		return
 	}
-	defs := ui.unitEvtDoc.Events()
+	defs := ui.UnitEvtDoc.Events()
 	var order []unitEvtFire
 	var duration float64
 	for _, ev := range tl.Events {
@@ -4702,7 +4702,7 @@ func (ui *uiState) unitEvtTimelinePlay(gtx layout.Context) {
 		order = append(order, unitEvtFire{at: at, name: ev.Name, path: strings.TrimSpace(path)})
 	}
 	if len(order) == 0 {
-		ui.statusText = "No sounds fire on " + tl.Name
+		ui.StatusText = "No sounds fire on " + tl.Name
 		return
 	}
 	sort.SliceStable(order, func(i, j int) bool { return order[i].at < order[j].at })
@@ -4724,12 +4724,12 @@ func (ui *uiState) unitEvtTimelinePlay(gtx layout.Context) {
 	p.playing = true
 	p.paused = false
 	p.forTimeline = tl.Name
-	p.forDoc = ui.unitEvtDoc
+	p.forDoc = ui.UnitEvtDoc
 	p.last = gtx.Now
 	if p.last.IsZero() {
 		p.last = time.Now()
 	}
-	ui.statusText = fmt.Sprintf("Playing %s: %d sounds over %.2fs", tl.Name, len(order), duration)
+	ui.StatusText = fmt.Sprintf("Playing %s: %d sounds over %.2fs", tl.Name, len(order), duration)
 }
 
 // unitEvtPlayerSeek winds the playhead to a fraction of the timeline's length.
@@ -4753,24 +4753,24 @@ func (p *unitEvtPlayer) seek(frac float64) {
 // advances the playhead, and starts whatever the playhead has crossed. While a
 // timeline plays it asks for the next frame, which is what keeps the clock
 // running when the user touches nothing.
-func (ui *uiState) unitEvtPlayerTick(gtx layout.Context) {
-	p := &ui.evtPlayer
-	if p.playing && (p.forDoc != ui.unitEvtDoc || p.forTimeline != ui.unitEvtTimeline) {
+func UnitEvtPlayerTick(ui *uiState, gtx layout.Context) {
+	p := &ui.EvtPlayer
+	if p.playing && (p.forDoc != ui.UnitEvtDoc || p.forTimeline != ui.UnitEvtTimeline) {
 		p.stopAll()
 	}
 	if p.tlStop.Clicked(gtx) {
 		p.stopAll()
-		ui.statusText = "Playback stopped"
+		ui.StatusText = "Playback stopped"
 	}
 	if p.tlPlay.Clicked(gtx) {
 		if p.playing {
 			p.paused = !p.paused
 		} else {
-			ui.unitEvtTimelinePlay(gtx)
+			UnitEvtTimelinePlay(ui, gtx)
 		}
 	}
 	if p.playEv.Clicked(gtx) {
-		ui.unitEvtPlaySelectedSound()
+		UnitEvtPlaySelectedSound(ui)
 	}
 	if p.audition != nil && !time.Now().Before(p.audition.EndsAt) {
 		p.audition.Stop()
@@ -4799,7 +4799,7 @@ func (ui *uiState) unitEvtPlayerTick(gtx layout.Context) {
 	for p.next < len(p.order) && p.order[p.next].at <= p.pos {
 		f := p.order[p.next]
 		p.next++
-		s, _, err := ui.unitEvtLoadSound(f.path)
+		s, _, err := UnitEvtLoadSound(ui, f.path)
 		if err != nil {
 			log.Printf("evt play: %s: %v", f.name, err)
 			continue
@@ -4823,9 +4823,9 @@ func (ui *uiState) unitEvtPlayerTick(gtx layout.Context) {
 
 // layoutUnitEvtTransport is the row above the events: play/pause, stop, the
 // playhead's time, and the scrub strip.
-func (ui *uiState) layoutUnitEvtTransport(gtx layout.Context) layout.Dimensions {
-	p := &ui.evtPlayer
-	noTl := ui.unitEvtDoc == nil || ui.selectedUnitEventTimeline() == nil
+func LayoutUnitEvtTransport(ui *uiState, gtx layout.Context) layout.Dimensions {
+	p := &ui.EvtPlayer
+	noTl := ui.UnitEvtDoc == nil || SelectedUnitEventTimeline(ui) == nil
 	btn := "Play"
 	if p.playing {
 		if p.paused {
@@ -4837,11 +4837,11 @@ func (ui *uiState) layoutUnitEvtTransport(gtx layout.Context) layout.Dimensions 
 	return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButtonDisabled(gtx, &p.tlPlay, btn, noTl)
+				return SmallButtonDisabled(ui, gtx, &p.tlPlay, btn, noTl)
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButtonDisabled(gtx, &p.tlStop, "Stop", !p.playing)
+				return SmallButtonDisabled(ui, gtx, &p.tlStop, "Stop", !p.playing)
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -4849,14 +4849,14 @@ func (ui *uiState) layoutUnitEvtTransport(gtx layout.Context) layout.Dimensions 
 				if p.playing || p.pos > 0 {
 					text = fmt.Sprintf("%.2f / %.2f s", p.pos, p.duration)
 				}
-				l := material.Label(ui.th, unit.Sp(9), text)
+				l := material.Label(ui.Th, unit.Sp(9), text)
 				l.Color = cTextDim
 				l.MaxLines = 1
 				return l.Layout(gtx)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutUnitEvtScrub(gtx, 10)
+					return LayoutUnitEvtScrub(ui, gtx, 10)
 				})
 			}),
 		)
@@ -4866,8 +4866,8 @@ func (ui *uiState) layoutUnitEvtTransport(gtx layout.Context) layout.Dimensions 
 // layoutUnitEvtScrub is the strip itself: a played portion, a tick per sound
 // in timeline order, and the playhead. Press or drag winds to the pointer's
 // position — the whole strip is the target, so it needs no handle to aim at.
-func (ui *uiState) layoutUnitEvtScrub(gtx layout.Context, hDp int) layout.Dimensions {
-	p := &ui.evtPlayer
+func LayoutUnitEvtScrub(ui *uiState, gtx layout.Context, hDp int) layout.Dimensions {
+	p := &ui.EvtPlayer
 	w := gtx.Constraints.Max.X
 	if w < 1 {
 		w = 1

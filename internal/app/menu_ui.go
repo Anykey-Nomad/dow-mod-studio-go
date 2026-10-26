@@ -19,7 +19,7 @@ import (
 	"gioui.org/widget/material"
 )
 
-func (ui *uiState) layoutMenuBar(gtx layout.Context) layout.Dimensions {
+func LayoutMenuBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(24))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -36,7 +36,7 @@ func (ui *uiState) layoutMenuBar(gtx layout.Context) layout.Dimensions {
 					var ch []layout.FlexChild
 					for i, m := range menus {
 						i, m := i, m
-						ch = append(ch, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.menuButton(gtx, i, m.name) }))
+						ch = append(ch, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MenuButton(ui, gtx, i, m.name) }))
 					}
 					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, ch...)
 				}),
@@ -50,7 +50,7 @@ func (ui *uiState) layoutMenuBar(gtx layout.Context) layout.Dimensions {
 		// and the field ends up past the window edge.
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			macro := op.Record(gtx.Ops)
-			w := ui.layoutMenuRightGroup(gtx).Size.X
+			w := LayoutMenuRightGroup(ui, gtx).Size.X
 			call := macro.Stop()
 			if w > 0 && w < gtx.Constraints.Max.X {
 				defer op.Offset(image.Pt(gtx.Constraints.Max.X-w, 0)).Push(gtx.Ops).Pop()
@@ -63,17 +63,17 @@ func (ui *uiState) layoutMenuBar(gtx layout.Context) layout.Dimensions {
 
 // layoutMenuRightGroup is the right hand end of the menu bar: the language
 // picker, the object interface tools and the search field, side by side.
-func (ui *uiState) layoutMenuRightGroup(gtx layout.Context) layout.Dimensions {
+func LayoutMenuRightGroup(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(ui.layoutLocaleSlot),
-		layout.Rigid(ui.layoutUnitPanelSlot),
-		layout.Rigid(ui.layoutSearchSlot),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutLocaleSlot(ui, gtx) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutUnitPanelSlot(ui, gtx) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutSearchSlot(ui, gtx) }),
 	)
 }
 
-func (ui *uiState) menuButton(gtx layout.Context, idx int, label string) layout.Dimensions {
-	open := ui.menuOpen == idx
-	hover := ui.menuClicks[idx].Hovered()
+func MenuButton(ui *uiState, gtx layout.Context, idx int, label string) layout.Dimensions {
+	open := ui.MenuOpen == idx
+	hover := ui.MenuClicks[idx].Hovered()
 	bg := cMenuBg
 	if open {
 		bg = cMenuOpen
@@ -87,10 +87,10 @@ func (ui *uiState) menuButton(gtx layout.Context, idx int, label string) layout.
 	} else if hover {
 		border = rgba(0x99, 0xCC, 0xFF, 0xFF)
 	}
-	return ui.menuClicks[idx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.MenuClicks[idx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		macro := op.Record(gtx.Ops)
 		lblDims := layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(13), label)
+			l := material.Label(ui.Th, unit.Sp(13), label)
 			l.Color = cText
 			return l.Layout(gtx)
 		})
@@ -128,9 +128,9 @@ func isEmptyRecycleBinMenuLabel(label string) bool {
 	return label == prefix || (len(label) > len(prefix) && label[:len(prefix)] == prefix && label[len(prefix)] == ' ')
 }
 
-func (ui *uiState) menuItemsForOpen() []string {
-	if ui.menuOpen != 0 {
-		return menus[ui.menuOpen].items
+func MenuItemsForOpen(ui *uiState) []string {
+	if ui.MenuOpen != 0 {
+		return menus[ui.MenuOpen].items
 	}
 	items := append([]string(nil), menus[0].items...)
 	for i, item := range items {
@@ -138,7 +138,7 @@ func (ui *uiState) menuItemsForOpen() []string {
 			items[i] = emptyRecycleBinMenuLabel()
 		}
 	}
-	if !ui.recentMenuExpanded || len(ui.recentModules) == 0 {
+	if !ui.RecentMenuExpanded || len(ui.RecentModules) == 0 {
 		return items
 	}
 	header := recentModulesHeaderIndex()
@@ -147,42 +147,42 @@ func (ui *uiState) menuItemsForOpen() []string {
 	}
 	tail := append([]string(nil), items[header+1:]...)
 	items = append(items[:header+1], "—")
-	for _, modulePath := range ui.recentModules {
+	for _, modulePath := range ui.RecentModules {
 		items = append(items, filepath.Base(modulePath))
 	}
 	return append(items, tail...)
 }
 
-func (ui *uiState) ensureMenuItemClicks(menuIndex, n int) {
-	if menuIndex < 0 || menuIndex >= len(ui.menuItemClicks) {
+func EnsureMenuItemClicks(ui *uiState, menuIndex, n int) {
+	if menuIndex < 0 || menuIndex >= len(ui.MenuItemClicks) {
 		return
 	}
-	if len(ui.menuItemClicks[menuIndex]) < n {
-		old := ui.menuItemClicks[menuIndex]
+	if len(ui.MenuItemClicks[menuIndex]) < n {
+		old := ui.MenuItemClicks[menuIndex]
 		clicks := make([]widget.Clickable, n)
 		copy(clicks, old)
-		ui.menuItemClicks[menuIndex] = clicks
-	} else if len(ui.menuItemClicks[menuIndex]) > n {
-		ui.menuItemClicks[menuIndex] = ui.menuItemClicks[menuIndex][:n]
+		ui.MenuItemClicks[menuIndex] = clicks
+	} else if len(ui.MenuItemClicks[menuIndex]) > n {
+		ui.MenuItemClicks[menuIndex] = ui.MenuItemClicks[menuIndex][:n]
 	}
 }
 
-func (ui *uiState) layoutMenuDropdown(gtx layout.Context) layout.Dimensions {
+func LayoutMenuDropdown(ui *uiState, gtx layout.Context) layout.Dimensions {
 	menuBarH := gtx.Dp(unit.Dp(24))
 	xOff := gtx.Dp(unit.Dp(6))
-	for i := 0; i < ui.menuOpen; i++ {
+	for i := 0; i < ui.MenuOpen; i++ {
 		w := len(menus[i].name)*7 + 20
 		xOff += gtx.Dp(unit.Dp(w))
 		xOff += gtx.Dp(unit.Dp(2))
 	}
-	items := ui.menuItemsForOpen()
-	ui.ensureMenuItemClicks(ui.menuOpen, len(items))
+	items := MenuItemsForOpen(ui)
+	EnsureMenuItemClicks(ui, ui.MenuOpen, len(items))
 	itemH := gtx.Dp(unit.Dp(22))
 	ddW := gtx.Dp(unit.Dp(220))
 	ddH := len(items)*itemH + gtx.Dp(unit.Dp(6))
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			return ui.dismissClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: gtx.Constraints.Max} })
+			return ui.DismissClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: gtx.Constraints.Max} })
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			gtx2 := gtx
@@ -220,7 +220,7 @@ func (ui *uiState) layoutMenuDropdown(gtx layout.Context) layout.Dimensions {
 								})
 							}))
 						} else {
-							ch = append(ch, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.menuItem(gtx, idx, it) }))
+							ch = append(ch, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MenuItem(ui, gtx, idx, it) }))
 						}
 					}
 					return layout.Flex{Axis: layout.Vertical}.Layout(gtx, ch...)
@@ -230,8 +230,8 @@ func (ui *uiState) layoutMenuDropdown(gtx layout.Context) layout.Dimensions {
 	)
 }
 
-func (ui *uiState) menuItem(gtx layout.Context, idx int, label string) layout.Dimensions {
-	click := &ui.menuItemClicks[ui.menuOpen][idx]
+func MenuItem(ui *uiState, gtx layout.Context, idx int, label string) layout.Dimensions {
+	click := &ui.MenuItemClicks[ui.MenuOpen][idx]
 	hover := click.Hovered()
 	bg := cPanelBg
 	if hover {
@@ -243,7 +243,7 @@ func (ui *uiState) menuItem(gtx layout.Context, idx int, label string) layout.Di
 	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		macro := op.Record(gtx.Ops)
 		inner := layout.Inset{Left: unit.Dp(28), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(12), label)
+			l := material.Label(ui.Th, unit.Sp(12), label)
 			l.Color = cText
 			return l.Layout(gtx)
 		})
@@ -260,7 +260,7 @@ func (ui *uiState) menuItem(gtx layout.Context, idx int, label string) layout.Di
 	})
 }
 
-func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
+func LayoutSettingsDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			st := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
@@ -285,7 +285,7 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Top: unit.Dp(18), Bottom: unit.Dp(18), Left: unit.Dp(20), Right: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(14), "Settings")
+										l := material.Label(ui.Th, unit.Sp(14), "Settings")
 										l.Font.Weight = font.Medium
 										l.Color = cText
 										return l.Layout(gtx)
@@ -294,14 +294,14 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(11), "Dark theme")
+												l := material.Label(ui.Th, unit.Sp(11), "Dark theme")
 												l.Color = cText
 												return l.Layout(gtx)
 											}),
 											layout.Flexed(1, rowGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												onBg := cMenuOpen
-												return ui.toggleButton(gtx, &ui.settingsThemeClick, "Enabled", ui.darkTheme, onBg)
+												return ToggleButton(ui, gtx, &ui.SettingsThemeClick, "Enabled", ui.DarkTheme, onBg)
 											}),
 										)
 									}),
@@ -309,7 +309,7 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(11), "Game folder")
+												l := material.Label(ui.Th, unit.Sp(11), "Game folder")
 												l.Color = cText
 												return l.Layout(gtx)
 											}),
@@ -319,7 +319,7 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 												gtx.Constraints.Max.Y = h
 												return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 													return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-														ed := material.Editor(ui.th, &ui.settingsGameEditor, "")
+														ed := material.Editor(ui.Th, &ui.SettingsGameEditor, "")
 														ed.TextSize = unit.Sp(11)
 														ed.HintColor = cTextDim
 														return ed.Layout(gtx)
@@ -332,7 +332,7 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(11), "Text editor formats")
+												l := material.Label(ui.Th, unit.Sp(11), "Text editor formats")
 												l.Color = cText
 												return l.Layout(gtx)
 											}),
@@ -343,7 +343,7 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 												gtx.Constraints.Max.Y = h
 												return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 													return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-														ed := material.Editor(ui.th, &ui.settingsFormatEditor, "")
+														ed := material.Editor(ui.Th, &ui.SettingsFormatEditor, "")
 														ed.TextSize = unit.Sp(11)
 														ed.HintColor = cTextDim
 														return ed.Layout(gtx)
@@ -352,22 +352,22 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 											}),
 											layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(10), "Opened by one click or Enter, separated by commas or spaces")
+												l := material.Label(ui.Th, unit.Sp(10), "Opened by one click or Enter, separated by commas or spaces")
 												l.Color = cTextDim
 												return l.Layout(gtx)
 											}),
 										)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
-									layout.Rigid(ui.layoutAssocRows),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutAssocRows(ui, gtx) }),
 									layout.Flexed(1, flexGap()),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.dialogButton(gtx, &ui.settingsCancel, "Cancel", false)
+												return DialogButton(ui, gtx, &ui.SettingsCancel, "Cancel", false)
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-											layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.dialogButton(gtx, &ui.settingsOk, "OK", true) }),
+											layout.Rigid(func(gtx layout.Context) layout.Dimensions { return DialogButton(ui, gtx, &ui.SettingsOk, "OK", true) }),
 										)
 									}),
 								)
@@ -384,13 +384,13 @@ func (ui *uiState) layoutSettingsDialog(gtx layout.Context) layout.Dimensions {
 // one row per format, whose button registers or removes that format's
 // double-click association for the current user. The rows come from the same
 // table the registration code uses, so a format added there appears here.
-func (ui *uiState) layoutAssocRows(gtx layout.Context) layout.Dimensions {
-	if !associationsSupported() || len(ui.assocClicks) != len(assocTypes) {
+func LayoutAssocRows(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if !associationsSupported() || len(ui.AssocClicks) != len(assocTypes) {
 		return layout.Dimensions{}
 	}
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "File associations (this user)")
+			l := material.Label(ui.Th, unit.Sp(11), "File associations (this user)")
 			l.Color = cText
 			return l.Layout(gtx)
 		}),
@@ -398,11 +398,11 @@ func (ui *uiState) layoutAssocRows(gtx layout.Context) layout.Dimensions {
 	}
 	for i := range assocTypes {
 		i, t := i, assocTypes[i]
-		on := i < len(ui.assocOn) && ui.assocOn[i]
+		on := i < len(ui.AssocOn) && ui.AssocOn[i]
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), t.Ext+" — "+t.Label)
+					l := material.Label(ui.Th, unit.Sp(11), t.Ext+" — "+t.Label)
 					l.Color = cText
 					l.MaxLines = 1
 					return l.Layout(gtx)
@@ -411,7 +411,7 @@ func (ui *uiState) layoutAssocRows(gtx layout.Context) layout.Dimensions {
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					// The same pill the Dark theme row uses: lit when the
 					// format is registered, and the click adds or removes.
-					return ui.toggleButton(gtx, &ui.assocClicks[i], "Associated", on, cMenuOpen)
+					return ToggleButton(ui, gtx, &ui.AssocClicks[i], "Associated", on, cMenuOpen)
 				}),
 			)
 		}))
@@ -419,7 +419,7 @@ func (ui *uiState) layoutAssocRows(gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
-func (ui *uiState) layoutClearRecycleDialog(gtx layout.Context) layout.Dimensions {
+func LayoutClearRecycleDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			st := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
@@ -444,14 +444,14 @@ func (ui *uiState) layoutClearRecycleDialog(gtx layout.Context) layout.Dimension
 							return layout.Inset{Top: unit.Dp(18), Bottom: unit.Dp(16), Left: unit.Dp(20), Right: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(14), "Empty Recycle Bin")
+										l := material.Label(ui.Th, unit.Sp(14), "Empty Recycle Bin")
 										l.Font.Weight = font.Medium
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(11), "This action is irreversible. All files in the Recycle Bin will be permanently deleted.")
+										l := material.Label(ui.Th, unit.Sp(11), "This action is irreversible. All files in the Recycle Bin will be permanently deleted.")
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
@@ -459,11 +459,11 @@ func (ui *uiState) layoutClearRecycleDialog(gtx layout.Context) layout.Dimension
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.dialogButton(gtx, &ui.clearRecycleCancel, "Cancel", false)
+												return DialogButton(ui, gtx, &ui.ClearRecycleCancel, "Cancel", false)
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.dialogButton(gtx, &ui.clearRecycleConfirm, "Delete", true)
+												return DialogButton(ui, gtx, &ui.ClearRecycleConfirm, "Delete", true)
 											}),
 										)
 									}),
@@ -477,8 +477,8 @@ func (ui *uiState) layoutClearRecycleDialog(gtx layout.Context) layout.Dimension
 	)
 }
 
-func (ui *uiState) layoutFileDeleteDialog(gtx layout.Context) layout.Dimensions {
-	_, name := modtree.VirtualDirAndBase(ui.fileDeletePath)
+func LayoutFileDeleteDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
+	_, name := modtree.VirtualDirAndBase(ui.FileDeletePath)
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			st := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
@@ -503,14 +503,14 @@ func (ui *uiState) layoutFileDeleteDialog(gtx layout.Context) layout.Dimensions 
 							return layout.Inset{Top: unit.Dp(18), Bottom: unit.Dp(16), Left: unit.Dp(20), Right: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(14), "Delete File")
+										l := material.Label(ui.Th, unit.Sp(14), "Delete File")
 										l.Font.Weight = font.Medium
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(11), fmt.Sprintf("Move %q to the Recycle Bin?", name))
+										l := material.Label(ui.Th, unit.Sp(11), fmt.Sprintf("Move %q to the Recycle Bin?", name))
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
@@ -518,11 +518,11 @@ func (ui *uiState) layoutFileDeleteDialog(gtx layout.Context) layout.Dimensions 
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.dialogButton(gtx, &ui.fileDeleteCancel, "Cancel", false)
+												return DialogButton(ui, gtx, &ui.FileDeleteCancel, "Cancel", false)
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.dialogButton(gtx, &ui.fileDeleteConfirm, "Delete", true)
+												return DialogButton(ui, gtx, &ui.FileDeleteConfirm, "Delete", true)
 											}),
 										)
 									}),
@@ -536,7 +536,7 @@ func (ui *uiState) layoutFileDeleteDialog(gtx layout.Context) layout.Dimensions 
 	)
 }
 
-func (ui *uiState) dialogButton(gtx layout.Context, btn *widget.Clickable, label string, primary bool) layout.Dimensions {
+func DialogButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, primary bool) layout.Dimensions {
 	// Keep action buttons compact. Without explicit constraints, the Stack
 	// background inherits the dialog's available width and height.
 	w := gtx.Dp(unit.Dp(88))
@@ -572,7 +572,7 @@ func (ui *uiState) dialogButton(gtx layout.Context, btn *widget.Clickable, label
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(16), Right: unit.Dp(16), Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), label)
+						l := material.Label(ui.Th, unit.Sp(11), label)
 						if primary {
 							l.Color = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 						} else {
@@ -631,64 +631,64 @@ func searchFolderOf(f *modtree.TreeFile) string {
 // runSearch rebuilds the result list when the query, the filter, or the module
 // has changed. Walking the merged tree is cheap but not free, and it must not
 // run on frames where nothing was typed.
-func (ui *uiState) runSearch(force bool) {
-	q := strings.TrimSpace(ui.searchEditor.Text())
-	kind := ui.searchKind
-	if !force && ui.searchQuerySet && q == ui.lastSearchQuery && kind == ui.lastSearchKind {
+func RunSearch(ui *uiState, force bool) {
+	q := strings.TrimSpace(ui.SearchEditor.Text())
+	kind := ui.SearchKind
+	if !force && ui.SearchQuerySet && q == ui.LastSearchQuery && kind == ui.LastSearchKind {
 		return
 	}
-	ui.lastSearchQuery = q
-	ui.lastSearchKind = kind
-	ui.searchQuerySet = true
-	ui.searchSel = 0
-	ui.searchScroll.offset = 0
-	ui.searchHits = nil
-	if q == "" || ui.modTree == nil {
-		ui.ensureSearchClicks(0)
-		ui.searchStatus = ""
+	ui.LastSearchQuery = q
+	ui.LastSearchKind = kind
+	ui.SearchQuerySet = true
+	ui.SearchSel = 0
+	ui.SearchScroll.offset = 0
+	ui.SearchHits = nil
+	if q == "" || ui.ModTree == nil {
+		EnsureSearchClicks(ui, 0)
+		ui.SearchStatus = ""
 		return
 	}
-	ui.searchHits = ui.modTree.Search(q, kind, searchResultLimit)
-	ui.ensureSearchClicks(len(ui.searchHits))
-	if len(ui.searchHits) == 0 {
-		ui.searchStatus = fmt.Sprintf("No files match %q", q)
+	ui.SearchHits = ui.ModTree.Search(q, kind, searchResultLimit)
+	EnsureSearchClicks(ui, len(ui.SearchHits))
+	if len(ui.SearchHits) == 0 {
+		ui.SearchStatus = fmt.Sprintf("No files match %q", q)
 		return
 	}
 	if kind == modtree.SearchAll {
-		ui.searchStatus = fmt.Sprintf("%d files", len(ui.searchHits))
+		ui.SearchStatus = fmt.Sprintf("%d files", len(ui.SearchHits))
 	} else {
-		ui.searchStatus = fmt.Sprintf("%d files (%s)", len(ui.searchHits), kind.Label())
+		ui.SearchStatus = fmt.Sprintf("%d files (%s)", len(ui.SearchHits), kind.Label())
 	}
 }
 
-func (ui *uiState) ensureSearchClicks(n int) {
-	if len(ui.searchHitClicks) < n {
-		old := ui.searchHitClicks
+func EnsureSearchClicks(ui *uiState, n int) {
+	if len(ui.SearchHitClicks) < n {
+		old := ui.SearchHitClicks
 		grown := make([]widget.Clickable, n)
 		copy(grown, old)
-		ui.searchHitClicks = grown
+		ui.SearchHitClicks = grown
 	}
-	if len(ui.searchHover) < n {
-		old := ui.searchHover
+	if len(ui.SearchHover) < n {
+		old := ui.SearchHover
 		grown := make([]bool, n)
 		copy(grown, old)
-		ui.searchHover = grown
+		ui.SearchHover = grown
 	}
 }
 
 // openSearchResult activates a hit exactly as a double-click in the tree would,
 // so a file opens in the same viewer no matter how it was reached.
-func (ui *uiState) openSearchResult(i int) {
-	if i < 0 || i >= len(ui.searchHits) {
+func OpenSearchResult(ui *uiState, i int) {
+	if i < 0 || i >= len(ui.SearchHits) {
 		return
 	}
-	f := ui.searchHits[i].File
+	f := ui.SearchHits[i].File
 	if f == nil {
 		return
 	}
 	// Reveal it in the tree first, so the left panel and the open tab agree.
-	ui.revealInTree(f.FullPath)
-	ui.openTreeFile(modtree.VisibleNode{
+	RevealInTree(ui, f.FullPath)
+	OpenTreeFile(ui, modtree.VisibleNode{
 		Name:     f.Name,
 		FullPath: f.FullPath,
 		IsFile:   true,
@@ -697,21 +697,21 @@ func (ui *uiState) openSearchResult(i int) {
 	})
 	// The query is kept so it can be refined, so the panel is held down for as
 	// long as the field keeps that text.
-	ui.closeSearch()
+	CloseSearch(ui)
 }
 
 // revealInTree expands every folder on the way to a file and selects it, so a
 // hit does not vanish from the tree the moment it is opened.
-func (ui *uiState) revealInTree(fullPath string) {
-	if ui.modTree == nil || fullPath == "" {
+func RevealInTree(ui *uiState, fullPath string) {
+	if ui.ModTree == nil || fullPath == "" {
 		return
 	}
-	ui.selectedPath = fullPath
-	ui.selectedTreePath = fullPath
-	if ui.expanded == nil {
-		ui.expanded = map[string]bool{}
+	ui.SelectedPath = fullPath
+	ui.SelectedTreePath = fullPath
+	if ui.Expanded == nil {
+		ui.Expanded = map[string]bool{}
 	}
-	ui.expanded[ui.modTree.Root.FullPath] = true
+	ui.Expanded[ui.ModTree.Root.FullPath] = true
 	segs := strings.Split(strings.ReplaceAll(fullPath, "/", "\\"), "\\")
 	prefix := ""
 	// Stop one segment short: the last segment is the file itself.
@@ -721,11 +721,11 @@ func (ui *uiState) revealInTree(fullPath string) {
 		} else {
 			prefix += "\\" + seg
 		}
-		ui.expanded[prefix] = true
+		ui.Expanded[prefix] = true
 	}
-	ui.visibleNodes = ui.getVisibleNodes()
-	ui.ensureRowClicks(len(ui.visibleNodes))
-	ui.ensureRowHover(len(ui.visibleNodes))
+	ui.VisibleNodes = GetVisibleNodes(ui)
+	EnsureRowClicks(ui, len(ui.VisibleNodes))
+	EnsureRowHover(ui, len(ui.VisibleNodes))
 }
 
 // ── input ──────────────────────────────────────────────────────────────────
@@ -733,7 +733,7 @@ func (ui *uiState) revealInTree(fullPath string) {
 // handleSearchInput owns the search field's keyboard. It must run before
 // handleKeyboard, otherwise the arrow keys move the file tree instead of the
 // result list.
-func (ui *uiState) handleSearchInput(gtx layout.Context) {
+func HandleSearchInput(ui *uiState, gtx layout.Context) {
 	// Ctrl+F opens the field from anywhere, including while a text file is
 	// being edited. It is the one shortcut worth stealing for this.
 	for {
@@ -745,17 +745,17 @@ func (ui *uiState) handleSearchInput(gtx layout.Context) {
 		if !ok || e.State != key.Press {
 			continue
 		}
-		ui.searchVisible = true
-		ui.searchHeldQuery = ""
-		gtx.Execute(key.FocusCmd{Tag: &ui.searchEditor})
+		ui.SearchVisible = true
+		ui.SearchHeldQuery = ""
+		gtx.Execute(key.FocusCmd{Tag: &ui.SearchEditor})
 		break
 	}
 	// Clicking the field focuses it, which is all that is needed for typing to
 	// work: the editor is part of the field, not of the panel below it.
-	if ui.searchFieldClick.Clicked(gtx) {
-		ui.searchVisible = true
-		ui.searchHeldQuery = ""
-		gtx.Execute(key.FocusCmd{Tag: &ui.searchEditor})
+	if ui.SearchFieldClick.Clicked(gtx) {
+		ui.SearchVisible = true
+		ui.SearchHeldQuery = ""
+		gtx.Execute(key.FocusCmd{Tag: &ui.SearchEditor})
 	}
 
 	// Escape has to be taken before the editor's own Update, or the editor
@@ -769,11 +769,11 @@ func (ui *uiState) handleSearchInput(gtx layout.Context) {
 		if !ok || e.State != key.Press {
 			continue
 		}
-		if strings.TrimSpace(ui.searchEditor.Text()) != "" {
-			ui.searchEditor.SetText("")
-			ui.runSearch(true)
+		if strings.TrimSpace(ui.SearchEditor.Text()) != "" {
+			ui.SearchEditor.SetText("")
+			RunSearch(ui, true)
 		} else {
-			ui.closeSearch()
+			CloseSearch(ui)
 		}
 		return
 	}
@@ -782,7 +782,7 @@ func (ui *uiState) handleSearchInput(gtx layout.Context) {
 	// is what actually delivers the typed characters.
 	submitted := false
 	for {
-		ev, ok := ui.searchEditor.Update(gtx)
+		ev, ok := ui.SearchEditor.Update(gtx)
 		if !ok {
 			break
 		}
@@ -801,42 +801,42 @@ func (ui *uiState) handleSearchInput(gtx layout.Context) {
 	// Typing opens the panel, and emptying the field closes it again. A search
 	// dismissed by a click outside stays closed for as long as its query is
 	// kept, so the panel does not spring back on the next frame.
-	if ui.searchPanelWanted(ui.searchEditor.Text()) {
-		ui.searchVisible = true
+	if SearchPanelWanted(ui, ui.SearchEditor.Text()) {
+		ui.SearchVisible = true
 	}
-	if !ui.searchVisible {
+	if !ui.SearchVisible {
 		return
 	}
-	ui.runSearch(false)
+	RunSearch(ui, false)
 
-	if ui.searchDismiss.Clicked(gtx) {
-		ui.closeSearch()
+	if ui.SearchDismiss.Clicked(gtx) {
+		CloseSearch(ui)
 		return
 	}
-	for i := range ui.searchKindClicks {
-		if ui.searchKindClicks[i].Clicked(gtx) && i < len(modtree.SearchKinds) {
-			ui.searchKind = modtree.SearchKinds[i]
-			ui.runSearch(true)
+	for i := range ui.SearchKindClicks {
+		if ui.SearchKindClicks[i].Clicked(gtx) && i < len(modtree.SearchKinds) {
+			ui.SearchKind = modtree.SearchKinds[i]
+			RunSearch(ui, true)
 		}
 	}
-	for i := range ui.searchHitClicks {
-		if i < len(ui.searchHits) && ui.searchHitClicks[i].Clicked(gtx) {
-			ui.openSearchResult(i)
+	for i := range ui.SearchHitClicks {
+		if i < len(ui.SearchHits) && ui.SearchHitClicks[i].Clicked(gtx) {
+			OpenSearchResult(ui, i)
 			return
 		}
 	}
 	if submitted {
-		ui.openSearchResult(ui.searchSel)
+		OpenSearchResult(ui, ui.SearchSel)
 		return
 	}
-	ui.handleSearchArrows(gtx)
+	HandleSearchArrows(ui, gtx)
 }
 
 // handleSearchArrows walks the result list with the arrow keys. Gio's editor
 // consumes an arrow only when it can act on it, so whatever reaches us here is
 // meant for the list.
-func (ui *uiState) handleSearchArrows(gtx layout.Context) {
-	if len(ui.searchHits) == 0 {
+func HandleSearchArrows(ui *uiState, gtx layout.Context) {
+	if len(ui.SearchHits) == 0 {
 		return
 	}
 	rowH := gtx.Dp(unit.Dp(searchRowHeightDp))
@@ -851,20 +851,20 @@ func (ui *uiState) handleSearchArrows(gtx layout.Context) {
 				continue
 			}
 			if name == key.NameDownArrow {
-				ui.searchSel++
+				ui.SearchSel++
 			} else {
-				ui.searchSel--
+				ui.SearchSel--
 			}
-			ui.searchSel = clampInt(ui.searchSel, 0, len(ui.searchHits)-1)
+			ui.SearchSel = clampInt(ui.SearchSel, 0, len(ui.SearchHits)-1)
 			// Keep the selected row inside the viewport, mirroring what the
 			// list's own scrolling would have done.
-			top := ui.searchSel * rowH
-			if top < ui.searchScroll.offset {
-				ui.searchScroll.offset = top
-			} else if top+rowH > ui.searchScroll.offset+ui.searchScroll.viewport {
-				ui.searchScroll.offset = top + rowH - ui.searchScroll.viewport
+			top := ui.SearchSel * rowH
+			if top < ui.SearchScroll.offset {
+				ui.SearchScroll.offset = top
+			} else if top+rowH > ui.SearchScroll.offset+ui.SearchScroll.viewport {
+				ui.SearchScroll.offset = top + rowH - ui.SearchScroll.viewport
 			}
-			ui.searchScroll.offset = clampInt(ui.searchScroll.offset, 0, maxInt(0, ui.searchScroll.contentHeight-ui.searchScroll.viewport))
+			ui.SearchScroll.offset = clampInt(ui.SearchScroll.offset, 0, maxInt(0, ui.SearchScroll.contentHeight-ui.SearchScroll.viewport))
 		}
 	}
 }
@@ -878,16 +878,16 @@ func (ui *uiState) handleSearchArrows(gtx layout.Context) {
 // dismiss catcher over the content, so a panel that springs back open by
 // itself swallows every click on the file tree with no sign of why: files stop
 // opening and folders stop expanding while the panel looks perfectly normal.
-func (ui *uiState) searchPanelWanted(text string) bool {
+func SearchPanelWanted(ui *uiState, text string) bool {
 	query := strings.TrimSpace(text)
 	if query == "" {
 		// Nothing to hold. An empty field has no query to spring back from,
 		// and dropping the hold here is what lets the same text be typed
 		// again after Escape emptied the field.
-		ui.searchHeldQuery = ""
+		ui.SearchHeldQuery = ""
 		return false
 	}
-	return query != ui.searchHeldQuery
+	return query != ui.SearchHeldQuery
 }
 
 // closeSearch puts the results panel away and holds it down for as long as the
@@ -895,34 +895,34 @@ func (ui *uiState) searchPanelWanted(text string) bool {
 // through here — the dismiss catcher, Escape, opening a result, a menu, the
 // language picker — so none of them can leave it to spring back on the next
 // frame and cover the content with its dismiss catcher.
-func (ui *uiState) closeSearch() {
-	ui.searchVisible = false
-	ui.searchSel = 0
-	ui.searchScroll.offset = 0
-	ui.searchHeldQuery = strings.TrimSpace(ui.searchEditor.Text())
+func CloseSearch(ui *uiState) {
+	ui.SearchVisible = false
+	ui.SearchSel = 0
+	ui.SearchScroll.offset = 0
+	ui.SearchHeldQuery = strings.TrimSpace(ui.SearchEditor.Text())
 }
 
 // ── layout ─────────────────────────────────────────────────────────────────
 
 // layoutSearchSlot places the field at the right end of the menu bar.
-func (ui *uiState) layoutSearchSlot(gtx layout.Context) layout.Dimensions {
-	return layout.Inset{Right: unit.Dp(searchPanelMarginDp), Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, ui.layoutSearchField)
+func LayoutSearchSlot(ui *uiState, gtx layout.Context) layout.Dimensions {
+	return layout.Inset{Right: unit.Dp(searchPanelMarginDp), Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return LayoutSearchField(ui, gtx) })
 }
 
 // layoutSearchField is the search field in the menu bar. The editor lives in
 // the field itself rather than in the results panel, so it is laid out on
 // every frame and can always take the keyboard focus — an editor that only
 // exists while a panel is open cannot be focused the frame the panel opens.
-func (ui *uiState) layoutSearchField(gtx layout.Context) layout.Dimensions {
+func LayoutSearchField(ui *uiState, gtx layout.Context) layout.Dimensions {
 	size := image.Pt(gtx.Dp(unit.Dp(searchFieldWidthDp)), gtx.Dp(unit.Dp(searchFieldHeightDp)))
 	gtx.Constraints.Min = size
 	gtx.Constraints.Max = size
-	hover := ui.searchFieldClick.Hovered() || ui.searchEditor.Focused(gtx)
+	hover := ui.SearchFieldClick.Hovered() || ui.SearchEditor.Focused(gtx)
 	border := cBorder
 	if hover {
 		border = cSelectBd
 	}
-	return ui.searchFieldClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.SearchFieldClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				rrect(gtx, cContentBg, size, gtx.Dp(unit.Dp(3)))
@@ -932,13 +932,13 @@ func (ui *uiState) layoutSearchField(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6), Top: unit.Dp(3), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(11), "Search")
+							l := material.Label(ui.Th, unit.Sp(11), "Search")
 							l.Color = cTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							ed := material.Editor(ui.th, &ui.searchEditor, "file name or folder")
+							ed := material.Editor(ui.Th, &ui.SearchEditor, "file name or folder")
 							return ed.Layout(gtx)
 						}),
 					)
@@ -955,7 +955,7 @@ func (ui *uiState) layoutSearchField(gtx layout.Context) layout.Dimensions {
 
 // layoutSearchPanel draws the editor, the filter chips and the result list in a
 // panel anchored under the menu bar's search field.
-func (ui *uiState) layoutSearchPanel(gtx layout.Context) layout.Dimensions {
+func LayoutSearchPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 	w := gtx.Dp(unit.Dp(searchPanelWidthDp))
 	margin := gtx.Dp(unit.Dp(searchPanelMarginDp))
 	top := gtx.Dp(unit.Dp(searchPanelTopDp))
@@ -986,10 +986,10 @@ func (ui *uiState) layoutSearchPanel(gtx layout.Context) layout.Dimensions {
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-						layout.Rigid(ui.layoutSearchFilters),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutSearchFilters(ui, gtx) }),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-						layout.Rigid(ui.layoutSearchStatus),
-						layout.Flexed(1, ui.layoutSearchResults),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutSearchStatus(ui, gtx) }),
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutSearchResults(ui, gtx) }),
 					)
 				})
 			}),
@@ -997,49 +997,49 @@ func (ui *uiState) layoutSearchPanel(gtx layout.Context) layout.Dimensions {
 	})
 }
 
-func (ui *uiState) layoutSearchFilters(gtx layout.Context) layout.Dimensions {
+func LayoutSearchFilters(ui *uiState, gtx layout.Context) layout.Dimensions {
 	var children []layout.FlexChild
 	for i := range modtree.SearchKinds {
 		i, k := i, modtree.SearchKinds[i]
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.toggleButton(gtx, &ui.searchKindClicks[i], k.Label(), ui.searchKind == k, cSelectBg)
+				return ToggleButton(ui, gtx, &ui.SearchKindClicks[i], k.Label(), ui.SearchKind == k, cSelectBg)
 			})
 		}))
 	}
 	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, children...)
 }
 
-func (ui *uiState) layoutSearchStatus(gtx layout.Context) layout.Dimensions {
+func LayoutSearchStatus(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		l := material.Label(ui.th, unit.Sp(10), ui.searchStatus)
+		l := material.Label(ui.Th, unit.Sp(10), ui.SearchStatus)
 		l.Color = cTextDim
 		l.MaxLines = 1
 		return l.Layout(gtx)
 	})
 }
 
-func (ui *uiState) layoutSearchResults(gtx layout.Context) layout.Dimensions {
-	if len(ui.searchHits) == 0 {
+func LayoutSearchResults(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if len(ui.SearchHits) == 0 {
 		return layout.Dimensions{}
 	}
-	ui.ensureSearchClicks(len(ui.searchHits))
+	EnsureSearchClicks(ui, len(ui.SearchHits))
 	rowH := gtx.Dp(unit.Dp(searchRowHeightDp))
-	ui.searchList.Axis = layout.Vertical
-	return ui.layoutListWithScrollbar(gtx, &ui.searchScroll, &ui.searchList, rowH, len(ui.searchHits), func(gtx layout.Context, index int) layout.Dimensions {
-		return ui.layoutSearchRow(gtx, index, ui.searchHits[index])
+	ui.SearchList.Axis = layout.Vertical
+	return LayoutListWithScrollbar(ui, gtx, &ui.SearchScroll, &ui.SearchList, rowH, len(ui.SearchHits), func(gtx layout.Context, index int) layout.Dimensions {
+		return LayoutSearchRow(ui, gtx, index, ui.SearchHits[index])
 	})
 }
 
 // layoutSearchRow draws one hit: the file name with the matched word picked out,
 // and the folder it lives in underneath.
-func (ui *uiState) layoutSearchRow(gtx layout.Context, index int, hit modtree.SearchHit) layout.Dimensions {
+func LayoutSearchRow(ui *uiState, gtx layout.Context, index int, hit modtree.SearchHit) layout.Dimensions {
 	f := hit.File
-	if f == nil || index >= len(ui.searchHitClicks) {
+	if f == nil || index >= len(ui.SearchHitClicks) {
 		return layout.Dimensions{Size: gtx.Constraints.Min}
 	}
-	selected := index == ui.searchSel
-	hover := index < len(ui.searchHover) && ui.searchHover[index]
+	selected := index == ui.SearchSel
+	hover := index < len(ui.SearchHover) && ui.SearchHover[index]
 	if selected || hover {
 		bg := cMenuHover
 		if selected {
@@ -1049,14 +1049,14 @@ func (ui *uiState) layoutSearchRow(gtx layout.Context, index int, hit modtree.Se
 		rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 		rect.Pop()
 	}
-	return ui.searchHitClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.SearchHitClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(3), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutSearchName(gtx, f.Name, hit)
+					return LayoutSearchName(ui, gtx, f.Name, hit)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutSearchPath(gtx, f)
+					return LayoutSearchPath(ui, gtx, f)
 				}),
 			)
 		})
@@ -1065,7 +1065,7 @@ func (ui *uiState) layoutSearchRow(gtx layout.Context, index int, hit modtree.Se
 
 // layoutSearchName splits the file name around the matched word so the word
 // stands out, which is why a row's first line is a flex of three labels.
-func (ui *uiState) layoutSearchName(gtx layout.Context, name string, hit modtree.SearchHit) layout.Dimensions {
+func LayoutSearchName(ui *uiState, gtx layout.Context, name string, hit modtree.SearchHit) layout.Dimensions {
 	word := hit.MatchWord
 	at := -1
 	if word != "" {
@@ -1074,46 +1074,46 @@ func (ui *uiState) layoutSearchName(gtx layout.Context, name string, hit modtree
 		}
 	}
 	if at < 0 {
-		return ui.searchNameLabel(gtx, name, cText)
+		return SearchNameLabel(ui, gtx, name, cText)
 	}
 	before := name[:at]
 	matched := name[at : at+len(word)]
 	after := name[at+len(word):]
 	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.searchNameLabel(gtx, before, cText)
+			return SearchNameLabel(ui, gtx, before, cText)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.searchNameLabel(gtx, matched, searchSourceColor(hit.File))
+			return SearchNameLabel(ui, gtx, matched, searchSourceColor(hit.File))
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.searchNameLabel(gtx, after, cText)
+			return SearchNameLabel(ui, gtx, after, cText)
 		}),
 	)
 }
 
-func (ui *uiState) searchNameLabel(gtx layout.Context, text string, col color.NRGBA) layout.Dimensions {
-	l := material.Label(ui.th, unit.Sp(11), text)
+func SearchNameLabel(ui *uiState, gtx layout.Context, text string, col color.NRGBA) layout.Dimensions {
+	l := material.Label(ui.Th, unit.Sp(11), text)
 	l.Color = col
 	l.MaxLines = 1
 	return l.Layout(gtx)
 }
 
-func (ui *uiState) layoutSearchPath(gtx layout.Context, f *modtree.TreeFile) layout.Dimensions {
+func LayoutSearchPath(ui *uiState, gtx layout.Context, f *modtree.TreeFile) layout.Dimensions {
 	modName := ""
 	if f.Source != nil {
 		modName = f.Source.ModName
 	}
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), searchFolderOf(f))
+			l := material.Label(ui.Th, unit.Sp(9), searchFolderOf(f))
 			l.Color = cTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), modName)
+			l := material.Label(ui.Th, unit.Sp(9), modName)
 			l.Color = searchSourceColor(f)
 			l.MaxLines = 1
 			return l.Layout(gtx)
@@ -1125,28 +1125,28 @@ func (ui *uiState) layoutSearchPath(gtx layout.Context, f *modtree.TreeFile) lay
 // outside dismisses the search, with the panel stacked on top of it. The
 // catcher starts below the menu bar, otherwise it would swallow clicks on the
 // search field itself and the field could never be used again after a dismiss.
-func (ui *uiState) layoutSearchOverlay(gtx layout.Context) layout.Dimensions {
-	if !ui.searchVisible {
+func LayoutSearchOverlay(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if !ui.SearchVisible {
 		return layout.Dimensions{}
 	}
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			top := gtx.Dp(unit.Dp(searchPanelTopDp))
 			below := clip.Rect{Min: image.Pt(0, top), Max: gtx.Constraints.Max}.Push(gtx.Ops)
-			dims := ui.searchDismiss.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			dims := ui.SearchDismiss.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			})
 			below.Pop()
 			return dims
 		}),
-		layout.Stacked(ui.layoutSearchPanel),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions { return LayoutSearchPanel(ui, gtx) }),
 	)
 }
 
 // searchResultPaths lists the current hits as virtual paths, for tests.
-func (ui *uiState) searchResultPaths() []string {
-	out := make([]string, 0, len(ui.searchHits))
-	for _, hit := range ui.searchHits {
+func SearchResultPaths(ui *uiState) []string {
+	out := make([]string, 0, len(ui.SearchHits))
+	for _, hit := range ui.SearchHits {
 		if hit.File != nil {
 			out = append(out, hit.File.FullPath)
 		}

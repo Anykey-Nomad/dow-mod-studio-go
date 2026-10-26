@@ -115,33 +115,33 @@ func sgbApproachCameraVelocity(value, target, seconds float64) float64 {
 // sgbMoveCamera advances the orbit target over the map in camera-relative
 // directions. forward and strafe are signed velocity axes; seconds makes
 // motion independent of frame rate. The target's Z follows the terrain.
-func (ui *uiState) sgbMoveCamera(t *fileTab, forward, strafe, seconds float64) bool {
-	if t == nil || t.sgbMap == nil || t.model == nil || seconds <= 0 || (forward == 0 && strafe == 0) {
+func SgbMoveCamera(ui *uiState, t *fileTab, forward, strafe, seconds float64) bool {
+	if t == nil || t.SgbMap == nil || t.Model == nil || seconds <= 0 || (forward == 0 && strafe == 0) {
 		return false
 	}
 	length := math.Hypot(forward, strafe)
 	if length > 1 {
 		forward, strafe = forward/length, strafe/length
 	}
-	speed := math.Max(float64(t.sgbMap.Ground.CellSize)*8, 20) // metres per second
-	forwardX, forwardY := -math.Cos(t.model.Yaw), -math.Sin(t.model.Yaw)
+	speed := math.Max(float64(t.SgbMap.Ground.CellSize)*8, 20) // metres per second
+	forwardX, forwardY := -math.Cos(t.Model.Yaw), -math.Sin(t.Model.Yaw)
 	rightX, rightY := -forwardY, forwardX
 	distance := speed * seconds
 	dx := (forwardX*forward + rightX*strafe) * distance
 	dy := (forwardY*forward + rightY*strafe) * distance
-	g := t.sgbMap.Ground
-	x := math.Max(float64(g.XMin()), math.Min(float64(g.XMax()), t.model.Center.X+dx))
-	y := math.Max(float64(g.ZMin()), math.Min(float64(g.ZMax()), t.model.Center.Y+dy))
-	if x == t.model.Center.X && y == t.model.Center.Y {
+	g := t.SgbMap.Ground
+	x := math.Max(float64(g.XMin()), math.Min(float64(g.XMax()), t.Model.Center.X+dx))
+	y := math.Max(float64(g.ZMin()), math.Min(float64(g.ZMax()), t.Model.Center.Y+dy))
+	if x == t.Model.Center.X && y == t.Model.Center.Y {
 		return false
 	}
-	height, ok := sgbTerrainHeightAt(t.sgbMap, x, y)
+	height, ok := sgbTerrainHeightAt(t.SgbMap, x, y)
 	if !ok {
 		return false
 	}
-	t.model.Center.X, t.model.Center.Y, t.model.Center.Z = x, y, height
-	t.model.ActiveCamera = ""
-	t.model.invalidate()
+	t.Model.Center.X, t.Model.Center.Y, t.Model.Center.Z = x, y, height
+	t.Model.ActiveCamera = ""
+	t.Model.Invalidate()
 	return true
 }
 
@@ -284,20 +284,20 @@ func sgbBuildTileTexture(tree *modtree.ModTree, m *sgb.Map) *image.NRGBA {
 // baked, then the model with the placed objects plus their materials,
 // resolved through the same .rsh lookup a .whm tab uses. The whole build
 // reads files and bakes pixels for seconds on a real map, so none of it may
-// run inside a layout pass; v.loading keeps layoutModelViewer from starting
+// run inside a layout pass; v.Loading keeps layoutModelViewer from starting
 // its own .rsh lookup over the terrain material while this is in flight, and
 // both paths answer even on failure so the viewer settles instead of waiting
 // forever.
-func (ui *uiState) startSgbSceneLoad(t *fileTab, material string) {
-	if t == nil || t.model == nil {
+func StartSgbSceneLoad(ui *uiState, t *fileTab, material string) {
+	if t == nil || t.Model == nil {
 		return
 	}
-	t.model.loading = true
-	tree := ui.modTree
-	path := t.path
-	m := t.sgbMap
+	t.Model.Loading = true
+	tree := ui.ModTree
+	path := t.Path
+	m := t.SgbMap
 	ch := make(chan modelMaterialResult, 2)
-	t.modelMaterialCh = ch
+	t.ModelMaterialCh = ch
 	go func() {
 		// Phase one: the ground. Its diffuse is the only material the
 		// terrain-only model the tab opened with can show.

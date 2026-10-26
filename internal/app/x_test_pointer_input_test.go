@@ -65,17 +65,17 @@ func treePointerUI(t *testing.T) (*uiState, *pointerFrame, int) {
 	t.Helper()
 	const target = `Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`
 	ui := newUI(unitTestTheme())
-	ui.modTree = openTestDXP3(t)
-	ui.expanded = map[string]bool{"Data": true}
+	ui.ModTree = openTestDXP3(t)
+	ui.Expanded = map[string]bool{"Data": true}
 	segs := strings.Split(target, `\`)
 	for i := 2; i < len(segs); i++ {
-		ui.expanded[strings.Join(segs[:i], "\\")] = true
+		ui.Expanded[strings.Join(segs[:i], "\\")] = true
 	}
-	ui.visibleNodes = ui.getVisibleNodes()
-	ui.ensureRowClicks(len(ui.visibleNodes))
-	ui.ensureRowHover(len(ui.visibleNodes))
+	ui.VisibleNodes = GetVisibleNodes(ui)
+	EnsureRowClicks(ui, len(ui.VisibleNodes))
+	EnsureRowHover(ui, len(ui.VisibleNodes))
 	row := -1
-	for i, n := range ui.visibleNodes {
+	for i, n := range ui.VisibleNodes {
 		if n.FullPath == target {
 			row = i
 		}
@@ -83,8 +83,8 @@ func treePointerUI(t *testing.T) (*uiState, *pointerFrame, int) {
 	if row < 0 {
 		t.Skip("the target unit is not in the visible tree")
 	}
-	f := newPointerFrame(ui, 300, 600, func(gtx layout.Context) { ui.layoutLeftPanel(gtx) }, func(gtx layout.Context) {
-		ui.handleTreePointerInput(gtx, ui.visibleNodes)
+	f := newPointerFrame(ui, 300, 600, func(gtx layout.Context) { LayoutLeftPanel(ui, gtx) }, func(gtx layout.Context) {
+		HandleTreePointerInput(ui, gtx, ui.VisibleNodes)
 	})
 	// Two frames: the first one registers the target and hands the router the
 	// one-off reset event it gives a new target, the second one a hit tree
@@ -109,7 +109,7 @@ func treeRowPoint(t *testing.T, f *pointerFrame, row int) f32.Point {
 	)
 	top := float32(-1)
 	for {
-		ev, ok := f.gtx.Event(pointer.Filter{Target: ui.leftTreePointerTag, Kinds: pointer.Press})
+		ev, ok := f.gtx.Event(pointer.Filter{Target: ui.LeftTreePointerTag, Kinds: pointer.Press})
 		if !ok {
 			break
 		}
@@ -120,8 +120,8 @@ func treeRowPoint(t *testing.T, f *pointerFrame, row int) f32.Point {
 	if top < 0 {
 		t.Fatalf("a press in the file tree was not delivered to the tree's own area")
 	}
-	rowH := float32(ui.leftRowHeightPx)
-	y := top + float32(row)*rowH - float32(ui.leftList.Position.Offset) + rowH/2
+	rowH := float32(ui.LeftRowHeightPx)
+	y := top + float32(row)*rowH - float32(ui.LeftList.Position.Offset) + rowH/2
 	return f32.Pt(60, y)
 }
 
@@ -138,12 +138,12 @@ func TestTreeClickOpensTheFile(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: at},
 	)
 	f.frame()
-	tab := ui.activeTab()
+	tab := ActiveTab(ui)
 	if tab == nil {
-		t.Fatalf("a click on row %d opened no tab; the status line reads %q", row, ui.statusText)
+		t.Fatalf("a click on row %d opened no tab; the status line reads %q", row, ui.StatusText)
 	}
-	if !strings.HasSuffix(tab.path, "necron_basic_warrior.rgd") {
-		t.Errorf("a click on row %d opened %q, want the file of that row", row, tab.path)
+	if !strings.HasSuffix(tab.Path, "necron_basic_warrior.rgd") {
+		t.Errorf("a click on row %d opened %q, want the file of that row", row, tab.Path)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestTreeClickOpensTheFile(t *testing.T) {
 // the press was left behind.
 func TestTreeClickOnAnotherRowDoesNotOpen(t *testing.T) {
 	ui, f, row := treePointerUI(t)
-	rowH := float32(ui.leftRowHeightPx)
+	rowH := float32(ui.LeftRowHeightPx)
 	at := treeRowPoint(t, f, row)
 	other := at.Add(f32.Pt(0, rowH))
 	f.send(
@@ -164,8 +164,8 @@ func TestTreeClickOnAnotherRowDoesNotOpen(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: other},
 	)
 	f.frame()
-	if tab := ui.activeTab(); tab != nil {
-		t.Errorf("a press and a release on two rows opened %q, want nothing", tab.path)
+	if tab := ActiveTab(ui); tab != nil {
+		t.Errorf("a press and a release on two rows opened %q, want nothing", tab.Path)
 	}
 }
 
@@ -177,22 +177,22 @@ func TestTreeRowHoverFollowsThePointer(t *testing.T) {
 	at := treeRowPoint(t, f, row)
 	f.send(pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at})
 	f.frame()
-	if !ui.rowHover[row] {
+	if !ui.RowHover[row] {
 		t.Errorf("the pointer is over row %d and the row is not marked hovered", row)
 	}
 	if hovered := hoveredRows(ui); len(hovered) != 1 || hovered[0] != row {
 		t.Errorf("hovered rows are %v, want only row %d", hovered, row)
 	}
-	f.send(pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at.Add(f32.Pt(0, float32(ui.leftRowHeightPx)))})
+	f.send(pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at.Add(f32.Pt(0, float32(ui.LeftRowHeightPx)))})
 	f.frame()
-	if ui.rowHover[row] {
+	if ui.RowHover[row] {
 		t.Errorf("the pointer has left row %d, which is still marked hovered", row)
 	}
 }
 
 func hoveredRows(ui *uiState) []int {
 	var rows []int
-	for i, h := range ui.rowHover {
+	for i, h := range ui.RowHover {
 		if h {
 			rows = append(rows, i)
 		}
@@ -207,14 +207,14 @@ func hoveredRows(ui *uiState) []int {
 func TestTreeWheelScrollsUnderTheRows(t *testing.T) {
 	ui, f, row := treePointerUI(t)
 	at := treeRowPoint(t, f, row)
-	before := ui.leftList.Position.First
+	before := ui.LeftList.Position.First
 	f.send(
 		pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at},
 		pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: at, Scroll: f32.Pt(0, 200)},
 	)
 	f.frame()
 	f.frame()
-	if ui.leftList.Position.First <= before {
+	if ui.LeftList.Position.First <= before {
 		t.Fatalf("the wheel over row %d did not scroll the tree: first row is still %d", row, before)
 	}
 }
@@ -224,14 +224,14 @@ func TestTreeWheelScrollsUnderTheRows(t *testing.T) {
 func tabBarPointerUI(t *testing.T) (*uiState, *pointerFrame) {
 	t.Helper()
 	ui := newUI(unitTestTheme())
-	ui.openTabs = append(ui.openTabs,
-		&fileTab{kind: "rgd", path: `Data\attrib\ebps\races\space_marines\space_marine_orbital_relay.rgd`},
-		&fileTab{kind: "rgd", path: `Data\attrib\ebps\races\space_marines\space_marine_turret_bolter.rgd`},
-		&fileTab{kind: unitTabKind, path: unitTabPath},
+	ui.OpenTabs = append(ui.OpenTabs,
+		&fileTab{Kind: "rgd", Path: `Data\attrib\ebps\races\space_marines\space_marine_orbital_relay.rgd`},
+		&fileTab{Kind: "rgd", Path: `Data\attrib\ebps\races\space_marines\space_marine_turret_bolter.rgd`},
+		&fileTab{Kind: unitTabKind, Path: unitTabPath},
 	)
-	ui.ensureTabClicks()
-	ui.tabSel = 1
-	f := newPointerFrame(ui, 900, 600, func(gtx layout.Context) { ui.layoutTabBar(gtx) }, ui.handleTabBarInput)
+	EnsureTabClicks(ui)
+	ui.TabSel = 1
+	f := newPointerFrame(ui, 900, 600, func(gtx layout.Context) { LayoutTabBar(ui, gtx) }, ui.HandleTabBarInput)
 	f.frame()
 	f.frame()
 	return ui, f
@@ -244,20 +244,20 @@ func tabBarPointerUI(t *testing.T) (*uiState, *pointerFrame) {
 // the wheel did nothing over a tab and the right press opened no menu.
 func TestTabBarRightPressOpensTheContextMenu(t *testing.T) {
 	ui, f := tabBarPointerUI(t)
-	for i, r := range ui.tabRects {
+	for i, r := range ui.TabRects {
 		at := f32.Pt(float32((r.Min.X+r.Max.X)/2), float32((r.Min.Y+r.Max.Y)/2))
 		f.send(
 			pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at},
 			pointer.Event{Kind: pointer.Press, Source: pointer.Mouse, Position: at, Buttons: pointer.ButtonSecondary},
 		)
 		f.frame()
-		if !ui.tabContextVisible {
+		if !ui.TabContextVisible {
 			t.Fatalf("a right press on tab %d opened no context menu", i)
 		}
-		if ui.tabContextIndex != i {
-			t.Errorf("a right press at %v opened the menu for tab %d, want tab %d", f32.Point(at), ui.tabContextIndex, i)
+		if ui.TabContextIndex != i {
+			t.Errorf("a right press at %v opened the menu for tab %d, want tab %d", f32.Point(at), ui.TabContextIndex, i)
 		}
-		ui.closeTabContextMenu()
+		CloseTabContextMenu(ui)
 		f.frame()
 	}
 }
@@ -269,20 +269,20 @@ func TestTabBarRightPressOpensTheContextMenu(t *testing.T) {
 // the one part of a tab that is at a known place inside it.
 func TestTabBarTabsAreLaidOutSideBySide(t *testing.T) {
 	ui, f := tabBarPointerUI(t)
-	for i := range ui.tabRects {
-		r := ui.tabRects[i]
+	for i := range ui.TabRects {
+		r := ui.TabRects[i]
 		if r.Min.X >= r.Max.X {
 			t.Fatalf("tab %d has no width: %v", i, r)
 		}
-		if i > 0 && r.Min.X <= ui.tabRects[i-1].Max.X {
-			t.Errorf("tab %d starts at %d, which is not past the end of tab %d at %d", i, r.Min.X, i-1, ui.tabRects[i-1].Max.X)
+		if i > 0 && r.Min.X <= ui.TabRects[i-1].Max.X {
+			t.Errorf("tab %d starts at %d, which is not past the end of tab %d at %d", i, r.Min.X, i-1, ui.TabRects[i-1].Max.X)
 		}
 		// The close button sits at the right hand end of the tab, twelve
 		// pixels in from its edge.
 		at := f32.Pt(float32(r.Max.X)-12, float32((r.Min.Y+r.Max.Y)/2))
 		f.send(pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at})
 		f.frame()
-		if !ui.tabCloses[i].Hovered() {
+		if !ui.TabCloses[i].Hovered() {
 			t.Errorf("the pointer at %v is not over tab %d's close button, so the tabs are not laid out side by side", f32.Point(at), i)
 		}
 	}

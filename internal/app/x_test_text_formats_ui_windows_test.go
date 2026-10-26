@@ -21,9 +21,9 @@ import (
 func settingsWindow(t *testing.T) *windowFrame {
 	t.Helper()
 	ui := newUI(unitTestTheme())
-	ui.openSettingsDialog()
+	OpenSettingsDialog(ui)
 	f := newWindowFrame(ui, 1000, 700)
-	if !ui.settingsDialog {
+	if !ui.SettingsDialog {
 		t.Fatal("the Settings dialog did not open")
 	}
 	return f
@@ -57,7 +57,7 @@ func findFormatField(t *testing.T, f *windowFrame) (f32.Point, bool) {
 			f.frame()
 			f.send(pointer.Event{Kind: pointer.Press, Source: pointer.Mouse, Position: at})
 			f.frame()
-			if ui.settingsFormatEditor.Focused(f.gtx) {
+			if ui.SettingsFormatEditor.Focused(f.gtx) {
 				return at, true
 			}
 		}
@@ -88,22 +88,22 @@ func TestTypingFormatsInSettingsAndPressingOkChangesWhatOpens(t *testing.T) {
 	if _, ok := findFormatField(t, f); !ok {
 		t.Fatal("the text formats field was not reachable")
 	}
-	ui.settingsFormatEditor.SetText(".lua, .txt, .dsl, card")
+	ui.SettingsFormatEditor.SetText(".lua, .txt, .dsl, card")
 	f.frame()
-	at, ok := findInDialog(t, f, &ui.settingsOk)
+	at, ok := findInDialog(t, f, &ui.SettingsOk)
 	if !ok {
 		t.Fatal("the OK button was not found in the Settings dialog")
 	}
 	clickAt(f, at)
-	if ui.settingsDialog {
+	if ui.SettingsDialog {
 		t.Fatal("the dialog stayed open after OK")
 	}
 	for _, path := range []string{"a.lua", "a.txt", "a.dsl", "a.card"} {
-		if !ui.isEditorFile(path) {
+		if !IsEditorFile(ui, path) {
 			t.Errorf("%q does not open in the editor after the reader listed it", path)
 		}
 	}
-	if ui.isEditorFile("a.ai") {
+	if IsEditorFile(ui, "a.ai") {
 		t.Error("a format the reader left out still opens")
 	}
 }
@@ -113,21 +113,21 @@ func TestTypingFormatsInSettingsAndPressingOkChangesWhatOpens(t *testing.T) {
 func TestCancellingSettingsLeavesTheFormatsAlone(t *testing.T) {
 	f := settingsWindow(t)
 	ui := f.ui
-	before := formatTextFormats(ui.textEditorFormats)
-	ui.settingsFormatEditor.SetText(".only, .mine")
+	before := formatTextFormats(ui.TextEditorFormats)
+	ui.SettingsFormatEditor.SetText(".only, .mine")
 	f.frame()
-	at, ok := findInDialog(t, f, &ui.settingsCancel)
+	at, ok := findInDialog(t, f, &ui.SettingsCancel)
 	if !ok {
 		t.Fatal("the Cancel button was not found in the Settings dialog")
 	}
 	clickAt(f, at)
-	if ui.settingsDialog {
+	if ui.SettingsDialog {
 		t.Fatal("the dialog stayed open after Cancel")
 	}
-	if got := formatTextFormats(ui.textEditorFormats); got != before {
+	if got := formatTextFormats(ui.TextEditorFormats); got != before {
 		t.Errorf("Cancel changed the formats to %q, want %q", got, before)
 	}
-	if ui.isEditorFile("a.only") {
+	if IsEditorFile(ui, "a.only") {
 		t.Error("a format typed into a cancelled dialog took effect")
 	}
 }
@@ -137,10 +137,10 @@ func TestCancellingSettingsLeavesTheFormatsAlone(t *testing.T) {
 func TestReopeningSettingsShowsTheFormatsInForce(t *testing.T) {
 	f := settingsWindow(t)
 	ui := f.ui
-	ui.textEditorFormats = parseTextFormats(".lua, .mine")
-	ui.openSettingsDialog()
+	ui.TextEditorFormats = parseTextFormats(".lua, .mine")
+	OpenSettingsDialog(ui)
 	f.frame()
-	if got := ui.settingsFormatEditor.Text(); got != ".lua, .mine" {
+	if got := ui.SettingsFormatEditor.Text(); got != ".lua, .mine" {
 		t.Errorf("the field showed %q, want %q", got, ".lua, .mine")
 	}
 }
@@ -167,11 +167,11 @@ func formatTestMod(t *testing.T, name string) (*uiState, string) {
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
 	ui := newUI(unitTestTheme())
-	ui.modTree = tree
+	ui.ModTree = tree
 	t.Cleanup(tree.Close)
-	ui.modulePath = filepath.Join(appPath, "FormatMod")
-	ui.expanded = map[string]bool{"Data": true, `Data\art`: true}
-	ui.textEditorFormats = parseTextFormats(".lua, .dsl")
+	ui.ModulePath = filepath.Join(appPath, "FormatMod")
+	ui.Expanded = map[string]bool{"Data": true, `Data\art`: true}
+	ui.TextEditorFormats = parseTextFormats(".lua, .dsl")
 	return ui, full
 }
 
@@ -180,22 +180,22 @@ func formatTestMod(t *testing.T, name string) (*uiState, string) {
 // opened as text at all.
 func TestACustomFormatOpensOnOneClickInTheTree(t *testing.T) {
 	ui, full := formatTestMod(t, "my_effect.dsl")
-	ui.openTreeFile(modtree.VisibleNode{FullPath: full, IsFile: true})
-	tab := ui.activeTab()
+	OpenTreeFile(ui, modtree.VisibleNode{FullPath: full, IsFile: true})
+	tab := ActiveTab(ui)
 	if tab == nil {
 		t.Fatal("one click on a listed format opened no tab")
 	}
-	if tab.path != full {
-		t.Errorf("one click opened %q, want %q", tab.path, full)
+	if tab.Path != full {
+		t.Errorf("one click opened %q, want %q", tab.Path, full)
 	}
-	if tab.kind != "text" {
-		t.Errorf("the tab is a %q, want the text editor", tab.kind)
+	if tab.Kind != "text" {
+		t.Errorf("the tab is a %q, want the text editor", tab.Kind)
 	}
-	if tab.textError != "" {
-		t.Errorf("the editor could not read the file: %s", tab.textError)
+	if tab.TextError != "" {
+		t.Errorf("the editor could not read the file: %s", tab.TextError)
 	}
-	if !strings.Contains(tab.textOriginal, "return true") {
-		t.Errorf("the editor shows %q, want the file's own text", tab.textOriginal)
+	if !strings.Contains(tab.TextOriginal, "return true") {
+		t.Errorf("the editor shows %q, want the file's own text", tab.TextOriginal)
 	}
 }
 
@@ -203,9 +203,9 @@ func TestACustomFormatOpensOnOneClickInTheTree(t *testing.T) {
 // list a setting rather than a way of adding to it.
 func TestAFormatLeftOutOfTheListDoesNotOpenAsText(t *testing.T) {
 	ui, full := formatTestMod(t, "other_effect.bin")
-	ui.openTreeFile(modtree.VisibleNode{FullPath: full, IsFile: true})
-	if tab := ui.activeTab(); tab != nil && tab.kind == "text" {
-		t.Errorf("an unlisted format opened in the text editor: %q", tab.path)
+	OpenTreeFile(ui, modtree.VisibleNode{FullPath: full, IsFile: true})
+	if tab := ActiveTab(ui); tab != nil && tab.Kind == "text" {
+		t.Errorf("an unlisted format opened in the text editor: %q", tab.Path)
 	}
 }
 
@@ -213,10 +213,10 @@ func TestAFormatLeftOutOfTheListDoesNotOpenAsText(t *testing.T) {
 // opens them in the editor.
 func TestTheDefaultFormatsStillOpenInTheEditor(t *testing.T) {
 	ui, full := formatTestMod(t, "unit.ai")
-	ui.textEditorFormats = append([]string(nil), defaultTextFormats...)
-	ui.openTreeFile(modtree.VisibleNode{FullPath: full, IsFile: true})
-	tab := ui.activeTab()
-	if tab == nil || tab.kind != "text" {
+	ui.TextEditorFormats = append([]string(nil), defaultTextFormats...)
+	OpenTreeFile(ui, modtree.VisibleNode{FullPath: full, IsFile: true})
+	tab := ActiveTab(ui)
+	if tab == nil || tab.Kind != "text" {
 		t.Fatalf("a .ai file did not open in the editor: %+v", tab)
 	}
 }

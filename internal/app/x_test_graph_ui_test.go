@@ -191,16 +191,16 @@ func TestTheBackgroundScanFindsWhatTheBlockingReadFinds(t *testing.T) {
 	blocking.EnsureLinks()
 
 	ui := newUI(unitTestTheme())
-	ui.modTree = openTestDXP3(t)
-	ui.modulePath = ""
+	ui.ModTree = openTestDXP3(t)
+	ui.ModulePath = ""
 	t.Setenv("AppData", t.TempDir())
 	t.Setenv("LOCALAPPDATA", t.TempDir())
-	ui.startGraphLinkScan()
+	StartGraphLinkScan(ui)
 	waitForLinkScan(t, ui)
-	if ui.graphLinksRunning {
+	if ui.GraphLinksRunning {
 		t.Fatal("the scan says it is still running after it finished")
 	}
-	scanned := ui.graphFor()
+	scanned := GraphFor(ui)
 
 	if len(scanned.Links) != len(blocking.Links) {
 		t.Errorf("the scan read %d references, the blocking read found %d", len(scanned.Links), len(blocking.Links))
@@ -222,9 +222,9 @@ func TestTheBackgroundScanFindsWhatTheBlockingReadFinds(t *testing.T) {
 
 func TestStartingAScanTwiceDoesNotReadTheModTwice(t *testing.T) {
 	ui := newUI(unitTestTheme())
-	ui.modTree = newGraphTestMod(t)
-	g := ui.startGraphLinkScan()
-	if again := ui.startGraphLinkScan(); again != g {
+	ui.ModTree = newGraphTestMod(t)
+	g := StartGraphLinkScan(ui)
+	if again := StartGraphLinkScan(ui); again != g {
 		t.Error("a second scan replaced the graph the first one is writing into")
 	}
 	waitForLinkScan(t, ui)
@@ -246,10 +246,10 @@ const linkScanWaitLimit = 20000
 func waitForLinkScan(t *testing.T, ui *uiState) {
 	t.Helper()
 	for i := 0; i < linkScanWaitLimit; i++ {
-		if !ui.graphLinksRunning && ui.graphLinksCh == nil {
+		if !ui.GraphLinksRunning && ui.GraphLinksCh == nil {
 			return
 		}
-		ui.pollGraphLinks()
+		PollGraphLinks(ui)
 		sleepMillis()
 	}
 	t.Fatal("the background scan did not finish")

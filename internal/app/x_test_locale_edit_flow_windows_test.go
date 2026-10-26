@@ -21,8 +21,8 @@ func TestSaveLocaleEditCreatesAStringAndPointsTheFieldAtIt(t *testing.T) {
 	resetLocales(t)
 	project := t.TempDir()
 	ui := newUI(unitTestTheme())
-	ui.projectDir = project
-	ui.locale = "English"
+	ui.ProjectDir = project
+	ui.Locale = "English"
 	// An engine table with the id the field already points at, so the "before"
 	// state is a real one rather than an empty table.
 	gamePath := t.TempDir()
@@ -30,8 +30,8 @@ func TestSaveLocaleEditCreatesAStringAndPointsTheFieldAtIt(t *testing.T) {
 		map[string]string{"705754": "Necron Lord"})
 	setLocaleOverrideDir(project)
 	t.Cleanup(func() { setLocaleOverrideDir("") })
-	ui.gamePath = gamePath
-	ui.refreshLocales()
+	ui.GamePath = gamePath
+	RefreshLocales(ui)
 
 	// A field that carries the game's "no string" marker, which is how a unit
 	// says it has no name of its own.
@@ -40,23 +40,23 @@ func TestSaveLocaleEditCreatesAStringAndPointsTheFieldAtIt(t *testing.T) {
 		t.Fatalf("the fixture does not look unset, it reads %q", got)
 	}
 
-	ui.openLocaleEdit("0", localeRowCreate, entry, "unit.rgd\u00a0screen_name_id")
-	if !ui.localeEditDialog {
+	OpenLocaleEdit(ui, "0", localeRowCreate, entry, "unit.rgd\u00a0screen_name_id")
+	if !ui.LocaleEditDialog {
 		t.Fatal("the dialog did not open")
 	}
-	if !ui.localeEditCreate {
+	if !ui.LocaleEditCreate {
 		t.Error("the dialog is not in create mode, so it would overwrite id $0")
 	}
-	if got := ui.localeEditEditor.Text(); got != "" {
+	if got := ui.LocaleEditEditor.Text(); got != "" {
 		t.Errorf("the editor started with %q, want empty for a new string", got)
 	}
 
-	ui.localeEditEditor.SetText("My Lord")
-	ui.saveLocaleEditAndClose()
-	if ui.localeEditError != "" {
-		t.Fatalf("saving failed: %s", ui.localeEditError)
+	ui.LocaleEditEditor.SetText("My Lord")
+	SaveLocaleEditAndClose(ui)
+	if ui.LocaleEditError != "" {
+		t.Fatalf("saving failed: %s", ui.LocaleEditError)
 	}
-	msg := ui.statusText
+	msg := ui.StatusText
 
 	// The field now points at a real id rather than at the unset marker.
 	if !strings.HasPrefix(entry.WStrVal, "$") || entry.WStrVal == "$0" {
@@ -87,7 +87,7 @@ func TestSaveLocaleEditCreatesAStringAndPointsTheFieldAtIt(t *testing.T) {
 	if got := localisedString(id); got != "My Lord" {
 		t.Errorf("after saving, the id resolves to %q, want %q; the table was not rebuilt", got, "My Lord")
 	}
-	if ui.localeEditDialog {
+	if ui.LocaleEditDialog {
 		t.Error("the dialog is still open after a successful save")
 	}
 }
@@ -104,29 +104,29 @@ func TestSaveLocaleEditOverridesAnEngineString(t *testing.T) {
 		map[string]string{"705754": "Necron Lord"})
 
 	ui := newUI(unitTestTheme())
-	ui.projectDir = project
-	ui.locale = "English"
-	ui.gamePath = gamePath
+	ui.ProjectDir = project
+	ui.Locale = "English"
+	ui.GamePath = gamePath
 	setLocaleOverrideDir(project)
 	t.Cleanup(func() { setLocaleOverrideDir("") })
-	ui.refreshLocales()
+	RefreshLocales(ui)
 	if got := localisedString("705754"); got != "Necron Lord" {
 		t.Fatalf("the engine string does not resolve, got %q", got)
 	}
 
 	entry := &rgd.RgdEntry{Name: "screen_name_id", Type: rgd.RgdTypeWString, WStrVal: "$705754"}
-	ui.openLocaleEdit("705754", localeRowEdit, entry, "unit.rgd\u00a0screen_name_id")
-	if ui.localeEditCreate {
+	OpenLocaleEdit(ui, "705754", localeRowEdit, entry, "unit.rgd\u00a0screen_name_id")
+	if ui.LocaleEditCreate {
 		t.Error("editing an existing string was treated as creating a new one")
 	}
-	if got := ui.localeEditEditor.Text(); got != "Necron Lord" {
+	if got := ui.LocaleEditEditor.Text(); got != "Necron Lord" {
 		t.Errorf("the editor opened with %q, want the current text", got)
 	}
 
-	ui.localeEditEditor.SetText("Overlord")
-	ui.saveLocaleEditAndClose()
-	if ui.localeEditError != "" {
-		t.Fatalf("saving failed: %s", ui.localeEditError)
+	ui.LocaleEditEditor.SetText("Overlord")
+	SaveLocaleEditAndClose(ui)
+	if ui.LocaleEditError != "" {
+		t.Fatalf("saving failed: %s", ui.LocaleEditError)
 	}
 
 	if entry.WStrVal != "$705754" {
@@ -148,17 +148,17 @@ func TestSaveLocaleEditRefusesAnEmptyString(t *testing.T) {
 	resetLocales(t)
 	project := t.TempDir()
 	ui := newUI(unitTestTheme())
-	ui.projectDir = project
-	ui.locale = "English"
+	ui.ProjectDir = project
+	ui.Locale = "English"
 	setLocaleOverrideDir(project)
 	t.Cleanup(func() { setLocaleOverrideDir("") })
-	ui.gamePath = t.TempDir()
-	ui.refreshLocales()
+	ui.GamePath = t.TempDir()
+	RefreshLocales(ui)
 
-	ui.openLocaleEdit("1000000000", localeRowCreate, nil, "")
-	ui.localeEditEditor.SetText("   ")
-	ui.saveLocaleEditAndClose()
-	if ui.localeEditError == "" {
+	OpenLocaleEdit(ui, "1000000000", localeRowCreate, nil, "")
+	ui.LocaleEditEditor.SetText("   ")
+	SaveLocaleEditAndClose(ui)
+	if ui.LocaleEditError == "" {
 		t.Error("an empty string was accepted")
 	}
 	if _, err := os.Stat(filepath.Join(project, "Locale", "English", "ModStudio.ucs")); err == nil {
@@ -172,16 +172,16 @@ func TestSaveLocaleEditRefusesAnEmptyString(t *testing.T) {
 func TestSaveLocaleEditSaysWhereThereIsNowhereToWrite(t *testing.T) {
 	resetLocales(t)
 	ui := newUI(unitTestTheme())
-	ui.projectDir = ""
-	ui.locale = "English"
+	ui.ProjectDir = ""
+	ui.Locale = "English"
 
-	ui.openLocaleEdit("1000000000", localeRowCreate, nil, "")
-	ui.localeEditEditor.SetText("Something")
-	ui.saveLocaleEditAndClose()
-	if ui.localeEditError == "" {
+	OpenLocaleEdit(ui, "1000000000", localeRowCreate, nil, "")
+	ui.LocaleEditEditor.SetText("Something")
+	SaveLocaleEditAndClose(ui)
+	if ui.LocaleEditError == "" {
 		t.Error("a string was accepted with no mod open")
-	} else if !strings.Contains(ui.localeEditError, "mod is open") {
-		t.Errorf("the message does not say what is wrong: %s", ui.localeEditError)
+	} else if !strings.Contains(ui.LocaleEditError, "mod is open") {
+		t.Errorf("the message does not say what is wrong: %s", ui.LocaleEditError)
 	}
 }
 
@@ -242,20 +242,20 @@ const localeRowTextPixels = 200
 func TestLocaleRowShowsTheTextNotTheId(t *testing.T) {
 	resetLocales(t)
 	ui := newUI(unitTestTheme())
-	ui.locale = "English"
-	ui.testLocaleTable(t, "705754", "Necron Lord")
+	ui.Locale = "English"
+	TestLocaleTable(ui, t, "705754", "Necron Lord")
 
 	entry := &rgd.RgdEntry{Name: "screen_name_id", Type: rgd.RgdTypeWString, WStrVal: "$705754"}
 	const w, h = 420, 60
 
 	withText := renderTo(t, w, h, func(gtx layout.Context) {
-		ui.localeEditableRow(gtx, "Screen name", "705754", entry, "k")
+		LocaleEditableRow(ui, gtx, "Screen name", "705754", entry, "k")
 	})
 	// The same row with the string table knowing nothing: it falls back to
 	// naming what is missing, which is a different set of words.
-	ui.testLocaleTable(t, "1", "One")
+	TestLocaleTable(ui, t, "1", "One")
 	withoutText := renderTo(t, w, h, func(gtx layout.Context) {
-		ui.localeEditableRow(gtx, "Screen name", "705754", entry, "k")
+		LocaleEditableRow(ui, gtx, "Screen name", "705754", entry, "k")
 	})
 
 	if n := localeDifferingPixels(withText, withoutText); n < localeRowTextPixels {
@@ -272,10 +272,10 @@ func TestLocaleRowShowsTheTextNotTheId(t *testing.T) {
 func TestLocaleRowTooltipCarriesTheId(t *testing.T) {
 	resetLocales(t)
 	ui := newUI(unitTestTheme())
-	ui.locale = "English"
-	ui.testLocaleTable(t, "705754", "Necron Lord")
+	ui.Locale = "English"
+	TestLocaleTable(ui, t, "705754", "Necron Lord")
 
-	tip := ui.localeRowTooltip("705754")
+	tip := LocaleRowTooltip(ui, "705754")
 	if !strings.Contains(tip, "$705754") {
 		t.Errorf("the tooltip does not carry the id: %q", tip)
 	}
@@ -286,7 +286,7 @@ func TestLocaleRowTooltipCarriesTheId(t *testing.T) {
 	}
 
 	// A field with no id says what a click will do, not "$0".
-	none := ui.localeRowTooltip("0")
+	none := LocaleRowTooltip(ui, "0")
 	if strings.Contains(none, "$0 ") {
 		t.Errorf("the tooltip for an unset field leads with the marker: %q", none)
 	}
@@ -301,19 +301,19 @@ func TestLocaleRowTooltipCarriesTheId(t *testing.T) {
 func TestLocaleEditDialogDrawsItsText(t *testing.T) {
 	resetLocales(t)
 	ui := newUI(unitTestTheme())
-	ui.locale = "English"
-	ui.testLocaleTable(t, "705754", "Necron Lord")
-	ui.projectDir = t.TempDir()
+	ui.Locale = "English"
+	TestLocaleTable(ui, t, "705754", "Necron Lord")
+	ui.ProjectDir = t.TempDir()
 
 	closed := renderTo(t, 900, 700, func(gtx layout.Context) {
-		ui.layoutLocaleEditDialog(gtx)
+		LayoutLocaleEditDialog(ui, gtx)
 	})
-	ui.openLocaleEdit("705754", localeRowEdit, nil, "k")
-	if !ui.localeEditDialog {
+	OpenLocaleEdit(ui, "705754", localeRowEdit, nil, "k")
+	if !ui.LocaleEditDialog {
 		t.Fatal("the dialog did not open")
 	}
 	open := renderTo(t, 900, 700, func(gtx layout.Context) {
-		ui.layoutLocaleEditDialog(gtx)
+		LayoutLocaleEditDialog(ui, gtx)
 	})
 
 	n := localeDifferingPixels(closed, open)

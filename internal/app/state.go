@@ -90,36 +90,36 @@ func savePersistedState(ui *uiState) error {
 	}
 	state := persistedState{
 		Version:          1,
-		DarkTheme:        ui.darkTheme,
-		GPUAPI:           render.NormalizeGPUAPI(ui.gpuAPI),
-		TextFormats:      formatTextFormats(ui.textEditorFormats),
-		GamePath:         ui.gamePath,
-		ModulePath:       ui.modulePath,
-		RecentFolders:    append([]string(nil), ui.recentFolders...),
-		RecentModules:    append([]string(nil), ui.recentModules...),
-		Expanded:         make(map[string]bool, len(ui.expanded)),
-		SelectedTreePath: ui.selectedTreePath,
-		SelectedPath:     ui.selectedPath,
-		Locale:           ui.locale,
-		ActiveTab:        ui.tabSel,
-		ObjectSection:    ui.unitSection,
+		DarkTheme:        ui.DarkTheme,
+		GPUAPI:           render.NormalizeGPUAPI(ui.GpuAPI),
+		TextFormats:      formatTextFormats(ui.TextEditorFormats),
+		GamePath:         ui.GamePath,
+		ModulePath:       ui.ModulePath,
+		RecentFolders:    append([]string(nil), ui.RecentFolders...),
+		RecentModules:    append([]string(nil), ui.RecentModules...),
+		Expanded:         make(map[string]bool, len(ui.Expanded)),
+		SelectedTreePath: ui.SelectedTreePath,
+		SelectedPath:     ui.SelectedPath,
+		Locale:           ui.Locale,
+		ActiveTab:        ui.TabSel,
+		ObjectSection:    ui.UnitSection,
 	}
 	// The Object window's own pickers, again by name. The catalog is read
 	// directly rather than through the accessor, because asking for the
 	// selected unit would build the whole catalog on a background save, and a
 	// save is not the moment to start reading six hundred files.
-	if ui.unitCatalog != nil {
-		if r := ui.unitCatalog.SelectedRace(ui.unitRaceSel); r != nil {
+	if ui.UnitCatalog != nil {
+		if r := ui.UnitCatalog.SelectedRace(ui.UnitRaceSel); r != nil {
 			state.ObjectRace = r.Name
 		}
-		if u := ui.unitCatalog.SelectedUnit(ui.unitRaceSel, ui.unitSel); u != nil {
+		if u := ui.UnitCatalog.SelectedUnit(ui.UnitRaceSel, ui.UnitSel); u != nil {
 			state.ObjectUnit = u.Path
 		}
 	}
-	for path, expanded := range ui.expanded {
+	for path, expanded := range ui.Expanded {
 		state.Expanded[path] = expanded
 	}
-	for _, tab := range ui.openTabs {
+	for _, tab := range ui.OpenTabs {
 		// The object tab has no file behind it, so there is no path to
 		// remember; it is reopened from the menu bar instead.
 		if tab == nil || unitTabHasNoFile(tab) {
@@ -128,10 +128,10 @@ func savePersistedState(ui *uiState) error {
 		// A .ucs belongs to the game and sits outside the mod tree, so the
 		// session loader would skip it on the way back in. Saving the path
 		// would only put a dead entry in the settings file.
-		if tab.textLocale {
+		if tab.TextLocale {
 			continue
 		}
-		state.Tabs = append(state.Tabs, persistedTab{Path: tab.path, Kind: tab.kind, RGDSelected: tab.rgdSelected})
+		state.Tabs = append(state.Tabs, persistedTab{Path: tab.Path, Kind: tab.Kind, RGDSelected: tab.RgdSelected})
 	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
@@ -141,17 +141,17 @@ func savePersistedState(ui *uiState) error {
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return err
 	}
-	ui.lastStateSave = time.Now()
-	ui.stateDirty = false
+	ui.LastStateSave = time.Now()
+	ui.StateDirty = false
 	return nil
 }
 
-func (ui *uiState) markStateDirty() {
-	ui.stateDirty = true
+func MarkStateDirty(ui *uiState) {
+	ui.StateDirty = true
 }
 
-func (ui *uiState) maybeSaveState() {
-	if !ui.stateDirty || time.Since(ui.lastStateSave) < 2*time.Second {
+func MaybeSaveState(ui *uiState) {
+	if !ui.StateDirty || time.Since(ui.LastStateSave) < 2*time.Second {
 		return
 	}
 	if err := savePersistedState(ui); err != nil {
@@ -159,29 +159,29 @@ func (ui *uiState) maybeSaveState() {
 	}
 }
 
-func (ui *uiState) applyPersistedSettings(state persistedState) {
-	ui.darkTheme = state.DarkTheme
-	ui.gpuAPI = render.NormalizeGPUAPI(state.GPUAPI)
+func ApplyPersistedSettings(ui *uiState, state persistedState) {
+	ui.DarkTheme = state.DarkTheme
+	ui.GpuAPI = render.NormalizeGPUAPI(state.GPUAPI)
 	// A state file from before the setting existed has no list, and so does
 	// one whose field was cleared: both mean the built-in default, which is
 	// what parseTextFormats answers for an empty string.
-	ui.textEditorFormats = parseTextFormats(state.TextFormats)
-	ui.gamePath = state.GamePath
-	ui.recentFolders = append([]string(nil), state.RecentFolders...)
-	ui.recentModules = append([]string(nil), state.RecentModules...)
+	ui.TextEditorFormats = parseTextFormats(state.TextFormats)
+	ui.GamePath = state.GamePath
+	ui.RecentFolders = append([]string(nil), state.RecentFolders...)
+	ui.RecentModules = append([]string(nil), state.RecentModules...)
 	// The language is restored before the table is built; refreshLocales is
 	// what rediscovers the installed languages and would otherwise fall back
 	// to English on an empty setting, so the default is filled in here.
-	ui.locale = strings.TrimSpace(state.Locale)
-	if ui.locale == "" {
-		ui.locale = localeDefault
+	ui.Locale = strings.TrimSpace(state.Locale)
+	if ui.Locale == "" {
+		ui.Locale = localeDefault
 	}
-	applyMaterialTheme(ui.th, ui.darkTheme)
-	ui.refreshLocales()
-	ui.markStateDirty()
+	applyMaterialTheme(ui.Th, ui.DarkTheme)
+	RefreshLocales(ui)
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) rememberRecentModule(modulePath string) {
+func RememberRecentModule(ui *uiState, modulePath string) {
 	modulePath = strings.TrimSpace(modulePath)
 	if modulePath == "" {
 		return
@@ -190,20 +190,20 @@ func (ui *uiState) rememberRecentModule(modulePath string) {
 		modulePath = abs
 	}
 	key := strings.ToLower(filepath.Clean(modulePath))
-	out := ui.recentModules[:0]
-	for _, old := range ui.recentModules {
+	out := ui.RecentModules[:0]
+	for _, old := range ui.RecentModules {
 		if strings.ToLower(filepath.Clean(old)) != key {
 			out = append(out, old)
 		}
 	}
-	ui.recentModules = append([]string{modulePath}, out...)
-	if len(ui.recentModules) > 8 {
-		ui.recentModules = ui.recentModules[:8]
+	ui.RecentModules = append([]string{modulePath}, out...)
+	if len(ui.RecentModules) > 8 {
+		ui.RecentModules = ui.RecentModules[:8]
 	}
-	ui.markStateDirty()
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) rememberRecentFolder(folder string) {
+func RememberRecentFolder(ui *uiState, folder string) {
 	folder = strings.TrimSpace(folder)
 	if folder == "" {
 		return
@@ -212,63 +212,63 @@ func (ui *uiState) rememberRecentFolder(folder string) {
 		folder = abs
 	}
 	key := strings.ToLower(filepath.Clean(folder))
-	out := ui.recentFolders[:0]
-	for _, old := range ui.recentFolders {
+	out := ui.RecentFolders[:0]
+	for _, old := range ui.RecentFolders {
 		if strings.ToLower(filepath.Clean(old)) != key {
 			out = append(out, old)
 		}
 	}
-	ui.recentFolders = append([]string{folder}, out...)
-	if len(ui.recentFolders) > 10 {
-		ui.recentFolders = ui.recentFolders[:10]
+	ui.RecentFolders = append([]string{folder}, out...)
+	if len(ui.RecentFolders) > 10 {
+		ui.RecentFolders = ui.RecentFolders[:10]
 	}
-	ui.markStateDirty()
+	MarkStateDirty(ui)
 }
 
-func (ui *uiState) restorePersistedState(state persistedState) bool {
+func RestorePersistedState(ui *uiState, state persistedState) bool {
 	if strings.TrimSpace(state.ModulePath) == "" {
 		return false
 	}
 	if _, err := os.Stat(state.ModulePath); err != nil {
 		return false
 	}
-	ui.loadModule(state.ModulePath)
-	if ui.modTree == nil || !samePath(ui.modulePath, state.ModulePath) {
+	LoadModule(ui, state.ModulePath)
+	if ui.ModTree == nil || !samePath(ui.ModulePath, state.ModulePath) {
 		return false
 	}
 	if len(state.Expanded) > 0 {
-		ui.expanded = make(map[string]bool, len(state.Expanded))
+		ui.Expanded = make(map[string]bool, len(state.Expanded))
 		for path, expanded := range state.Expanded {
-			ui.expanded[path] = expanded
+			ui.Expanded[path] = expanded
 		}
 	}
-	ui.selectedTreePath = state.SelectedTreePath
-	if ui.selectedTreePath == "" {
-		ui.selectedTreePath = "Data"
+	ui.SelectedTreePath = state.SelectedTreePath
+	if ui.SelectedTreePath == "" {
+		ui.SelectedTreePath = "Data"
 	}
-	ui.selectedPath = state.SelectedPath
+	ui.SelectedPath = state.SelectedPath
 	// The Object window's pickers are restored by name once the catalog
 	// exists, which is the first frame something asks it for. The section is
 	// an index into a fixed list, so it can be put back straight away.
-	ui.unitPickRace = state.ObjectRace
-	ui.unitPickPath = state.ObjectUnit
+	ui.UnitPickRace = state.ObjectRace
+	ui.UnitPickPath = state.ObjectUnit
 	if state.ObjectSection > 0 && state.ObjectSection < len(unitSections) {
-		ui.unitSection = state.ObjectSection
+		ui.UnitSection = state.ObjectSection
 	}
 	for _, savedTab := range state.Tabs {
-		if ui.modTree.FindFile(savedTab.Path) == nil {
+		if ui.ModTree.FindFile(savedTab.Path) == nil {
 			continue
 		}
-		before := len(ui.openTabs)
-		ui.restoreSavedTab(savedTab)
-		if len(ui.openTabs) > before && savedTab.RGDSelected != "" {
-			ui.openTabs[len(ui.openTabs)-1].rgdSelected = savedTab.RGDSelected
-			ui.rebuildRgdMidNodesFor(ui.openTabs[len(ui.openTabs)-1])
+		before := len(ui.OpenTabs)
+		RestoreSavedTab(ui, savedTab)
+		if len(ui.OpenTabs) > before && savedTab.RGDSelected != "" {
+			ui.OpenTabs[len(ui.OpenTabs)-1].RgdSelected = savedTab.RGDSelected
+			RebuildRgdMidNodesFor(ui, ui.OpenTabs[len(ui.OpenTabs)-1])
 		}
 	}
-	ui.tabSel = state.ActiveTab
-	ui.ensureTabClicks()
-	ui.markStateDirty()
+	ui.TabSel = state.ActiveTab
+	EnsureTabClicks(ui)
+	MarkStateDirty(ui)
 	return true
 }
 
@@ -278,24 +278,24 @@ func samePath(a, b string) bool {
 	return err1 == nil && err2 == nil && strings.EqualFold(filepath.Clean(aa), filepath.Clean(bb))
 }
 
-func (ui *uiState) restoreSavedTab(saved persistedTab) {
+func RestoreSavedTab(ui *uiState, saved persistedTab) {
 	switch strings.ToLower(saved.Kind) {
 	case "rgd":
-		ui.openRgd(saved.Path)
+		OpenRgd(ui, saved.Path)
 	case "fda":
-		ui.openFda(saved.Path)
+		OpenFda(ui, saved.Path)
 	case "wav":
-		ui.openWav(saved.Path)
+		OpenWav(ui, saved.Path)
 	case "image":
-		ui.openImage(saved.Path)
+		OpenImage(ui, saved.Path)
 	case "whm":
 		// A model tab has to go back through the model viewer, otherwise the
 		// 3D preview is lost on every restart and the file opens as text.
-		ui.openWhm(saved.Path)
+		OpenWhm(ui, saved.Path)
 	case "sgb":
-		ui.openSgb(saved.Path)
+		OpenSgb(ui, saved.Path)
 	default:
-		ui.openTextFile(saved.Path)
+		OpenTextFile(ui, saved.Path)
 	}
 }
 

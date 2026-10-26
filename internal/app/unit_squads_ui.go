@@ -30,27 +30,27 @@ import (
 const squadRowHeightDp = unitRowHeightDp
 
 // layoutUnitSquadList is the middle column of the Squads section.
-func (ui *uiState) layoutUnitSquadList(gtx layout.Context) layout.Dimensions {
-	d := ui.currentUnitDetails()
+func LayoutUnitSquadList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	d := CurrentUnitDetails(ui)
 	if d == nil || d.Error != "" {
-		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions { return UnitEmptyState(ui, gtx) })
 	}
-	squads := ui.squadsOfUnitOf(d.Entry)
+	squads := SquadsOfUnitOf(ui, d.Entry)
 	if len(squads) == 0 {
-		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.squadEmptyMessage(gtx, ui.unitSquadsDone)
+				return SquadEmptyMessage(ui, gtx, ui.UnitSquadsDone)
 			})
 		})
 	}
-	ui.ensureUnitRowClicks(len(squads))
-	return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+	EnsureUnitRowClicks(ui, len(squads))
+	return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutListWithScrollbar(gtx, &ui.unitSquadScroll, &ui.unitSquadList, gtx.Dp(unit.Dp(squadRowHeightDp)), len(squads), func(gtx layout.Context, index int) layout.Dimensions {
+			return LayoutListWithScrollbar(ui, gtx, &ui.UnitSquadScroll, &ui.UnitSquadList, gtx.Dp(unit.Dp(squadRowHeightDp)), len(squads), func(gtx layout.Context, index int) layout.Dimensions {
 				if index < 0 || index >= len(squads) {
 					return layout.Dimensions{}
 				}
-				return ui.layoutUnitSquadRow(gtx, index, squads[index])
+				return LayoutUnitSquadRow(ui, gtx, index, squads[index])
 			})
 		})
 	})
@@ -64,12 +64,12 @@ func (ui *uiState) layoutUnitSquadList(gtx layout.Context) layout.Dimensions {
 // A unit whose squads have not arrived yet is only an answer because the index
 // is still being built, and saying so is the difference between a reader waiting
 // and a reader concluding the unit is orphaned.
-func (ui *uiState) squadEmptyMessage(gtx layout.Context, scanDone bool) layout.Dimensions {
+func SquadEmptyMessage(ui *uiState, gtx layout.Context, scanDone bool) layout.Dimensions {
 	msg := "This unit is not part of any squad."
 	if !scanDone {
 		msg = "Looking for the squads this unit belongs to…"
 	}
-	l := material.Label(ui.th, unit.Sp(10), msg)
+	l := material.Label(ui.Th, unit.Sp(10), msg)
 	l.Color = cTextDim
 	return l.Layout(gtx)
 }
@@ -78,16 +78,16 @@ func (ui *uiState) squadEmptyMessage(gtx layout.Context, scanDone bool) layout.D
 // at. The size is shown on the row because it is the answer to the question a
 // reader opens this column with — a necron lord is 1, a necron warrior is 3 to 8
 // — and finding it means opening the squad otherwise.
-func (ui *uiState) layoutUnitSquadRow(gtx layout.Context, index int, s unitSquadRef) layout.Dimensions {
-	sel := index == ui.unitSelRow
+func LayoutUnitSquadRow(ui *uiState, gtx layout.Context, index int, s unitSquadRef) layout.Dimensions {
+	sel := index == ui.UnitSelRow
 	bg := cPanelBg
 	switch {
 	case sel:
 		bg = cSelectBg
-	case ui.unitRowClicks[index].Hovered():
+	case ui.UnitRowClicks[index].Hovered():
 		bg = cMenuHover
 	}
-	return ui.unitRowClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.UnitRowClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(squadRowHeightDp))
 		sz := image.Pt(gtx.Constraints.Max.X, h)
 		gtx.Constraints.Min = sz
@@ -107,14 +107,14 @@ func (ui *uiState) layoutUnitSquadRow(gtx layout.Context, index int, s unitSquad
 							if len(name) > 30 {
 								name = name[:27] + "…"
 							}
-							l := material.Label(ui.th, unit.Sp(11), name)
+							l := material.Label(ui.Th, unit.Sp(11), name)
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, flexGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), squadSizeLabel(s))
+							l := material.Label(ui.Th, unit.Sp(9), squadSizeLabel(s))
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -149,22 +149,22 @@ func squadSizeLabel(s unitSquadRef) string {
 // properties, read out of its .rgd. This is the part of the squad the unit's own
 // file cannot say anything about — its stance, its morale, its cap cost, how it
 // captures — none of which belongs to an individual trooper.
-func (ui *uiState) layoutUnitSquadRightColumn(gtx layout.Context, sec unitSection) layout.Dimensions {
-	d := ui.currentUnitDetails()
+func LayoutUnitSquadRightColumn(ui *uiState, gtx layout.Context, sec unitSection) layout.Dimensions {
+	d := CurrentUnitDetails(ui)
 	if d == nil || d.Error != "" {
-		return ui.unitColumn(gtx, sec.rightTitle, "No entry is selected.")
+		return UnitColumn(ui, gtx, sec.rightTitle, "No entry is selected.")
 	}
-	squads := ui.squadsOfUnitOf(d.Entry)
+	squads := SquadsOfUnitOf(ui, d.Entry)
 	if len(squads) == 0 {
-		return ui.unitColumn(gtx, sec.rightTitle, "No entry is selected.")
+		return UnitColumn(ui, gtx, sec.rightTitle, "No entry is selected.")
 	}
-	idx := clampInt(ui.unitSelRow, 0, len(squads)-1)
+	idx := clampInt(ui.UnitSelRow, 0, len(squads)-1)
 	s := squads[idx]
-	fields := squadFields(ui.modTree, s)
+	fields := squadFields(ui.ModTree, s)
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, sec.rightTitle)
+				return LayoutUnitColumnHeader(ui, gtx, sec.rightTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -172,17 +172,17 @@ func (ui *uiState) layoutUnitSquadRightColumn(gtx layout.Context, sec unitSectio
 					children := []layout.FlexChild{
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, "Name", squadNameOf(s), false)
+								return UnitKeyValueRow(ui, gtx, "Name", squadNameOf(s), false)
 							})
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, "Race", s.race, false)
+								return UnitKeyValueRow(ui, gtx, "Race", s.race, false)
 							})
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, "File", s.path, false)
+								return UnitKeyValueRow(ui, gtx, "File", s.path, false)
 							})
 						}),
 					}
@@ -190,7 +190,7 @@ func (ui *uiState) layoutUnitSquadRightColumn(gtx layout.Context, sec unitSectio
 						f := f
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, f.Label, f.Value, f.IsLocID)
+								return UnitKeyValueRow(ui, gtx, f.Label, f.Value, f.IsLocID)
 							})
 						}))
 					}
@@ -204,19 +204,19 @@ func (ui *uiState) layoutUnitSquadRightColumn(gtx layout.Context, sec unitSectio
 // handleUnitSquadInput owns the Squads column's row clicks. It is separate from
 // handleUnitRowInput because the rows come from a different list and a stale
 // index from the weapons column must not select a squad.
-func (ui *uiState) handleUnitSquadInput(gtx layout.Context) {
-	if ui.currentUnitSection().label != "Squads" {
+func HandleUnitSquadInput(ui *uiState, gtx layout.Context) {
+	if CurrentUnitSection(ui).label != "Squads" {
 		return
 	}
-	d := ui.currentUnitDetails()
+	d := CurrentUnitDetails(ui)
 	if d == nil {
 		return
 	}
-	squads := ui.squadsOfUnitOf(d.Entry)
-	ui.ensureUnitRowClicks(len(squads))
-	for i := range ui.unitRowClicks {
-		if i < len(squads) && ui.unitRowClicks[i].Clicked(gtx) {
-			ui.unitSelRow = i
+	squads := SquadsOfUnitOf(ui, d.Entry)
+	EnsureUnitRowClicks(ui, len(squads))
+	for i := range ui.UnitRowClicks {
+		if i < len(squads) && ui.UnitRowClicks[i].Clicked(gtx) {
+			ui.UnitSelRow = i
 			return
 		}
 	}
@@ -377,7 +377,7 @@ var birthResourceLabels = map[string]string{
 // squadRowsForTest builds a state with a squad index already in place, so a test
 // can say what a unit is in without running a scan. It is not used by the app.
 func squadRowsForTest(refs map[string][]unitSquadRef) *uiState {
-	return &uiState{unitSquads: refs, unitSquadsDone: true}
+	return &uiState{UnitSquads: refs, UnitSquadsDone: true}
 }
 
 // ─── merged from unit_squads.go ───────────────────────────────────────────────
@@ -460,24 +460,24 @@ const unitSquadBatchSize = 24
 // index of which squads use which unit. A scan already running for the same tree
 // is left alone; one for a different tree is stopped, so a module reload does not
 // leave a goroutine reading a tree that is being closed.
-func (ui *uiState) startUnitSquadScan(tree *modtree.ModTree) {
+func StartUnitSquadScan(ui *uiState, tree *modtree.ModTree) {
 	if tree == nil {
 		return
 	}
-	if ui.unitSquadsRunning && ui.unitSquadsTree == tree {
+	if ui.UnitSquadsRunning && ui.UnitSquadsTree == tree {
 		return
 	}
-	ui.stopUnitSquadScan()
+	StopUnitSquadScan(ui)
 
-	ui.unitSquadsTree = tree
-	ui.unitSquads = make(map[string][]unitSquadRef)
-	ui.unitSquadsCh = make(chan unitSquadBatch, 8)
+	ui.UnitSquadsTree = tree
+	ui.UnitSquads = make(map[string][]unitSquadRef)
+	ui.UnitSquadsCh = make(chan unitSquadBatch, 8)
 	stop := make(chan struct{})
-	ui.unitSquadsStop = stop
-	ui.unitSquadsRunning = true
+	ui.UnitSquadsStop = stop
+	ui.UnitSquadsRunning = true
 
 	files := collectSquadRgds(tree)
-	ch := ui.unitSquadsCh
+	ch := ui.UnitSquadsCh
 	go func() {
 		batch := make(map[string][]unitSquadRef)
 		flush := func(done bool) bool {
@@ -509,43 +509,43 @@ func (ui *uiState) startUnitSquadScan(tree *modtree.ModTree) {
 // stopUnitSquadScan ends a running scan. The goroutine notices through its stop
 // channel and returns, so a module reload does not leave one reading a tree that
 // is being closed underneath it.
-func (ui *uiState) stopUnitSquadScan() {
-	if ui.unitSquadsStop != nil {
-		close(ui.unitSquadsStop)
-		ui.unitSquadsStop = nil
+func StopUnitSquadScan(ui *uiState) {
+	if ui.UnitSquadsStop != nil {
+		close(ui.UnitSquadsStop)
+		ui.UnitSquadsStop = nil
 	}
-	ui.unitSquadsRunning = false
-	ui.unitSquadsCh = nil
-	ui.unitSquadsTree = nil
+	ui.UnitSquadsRunning = false
+	ui.UnitSquadsCh = nil
+	ui.UnitSquadsTree = nil
 }
 
 // pollUnitSquads takes whatever the scan has finished and reports whether
 // anything new arrived, so the caller can ask for a redraw. Nothing else
 // animates while a module is idle, so without this the squad column would sit
 // empty until the mouse happened to move.
-func (ui *uiState) pollUnitSquads() bool {
-	if ui.unitSquadsCh == nil {
+func PollUnitSquads(ui *uiState) bool {
+	if ui.UnitSquadsCh == nil {
 		return false
 	}
 	got := false
 	for {
 		select {
-		case b := <-ui.unitSquadsCh:
+		case b := <-ui.UnitSquadsCh:
 			for path, refs := range b.byUnit {
 				// A batch can carry a unit the previous batch also carried, so
 				// the lists are concatenated rather than replaced. Deduplication
 				// is the reader's job: a squad appears once per trooper_base it
 				// declares, and no squad in the DXP3 tree declares more than one.
-				ui.unitSquads[path] = append(ui.unitSquads[path], refs...)
+				ui.UnitSquads[path] = append(ui.UnitSquads[path], refs...)
 			}
 			if b.done {
-				ui.unitSquadsDone = true
-				ui.stopUnitSquadScan()
+				ui.UnitSquadsDone = true
+				StopUnitSquadScan(ui)
 			}
 			got = true
 		default:
 			if got {
-				ui.sortUnitSquads()
+				SortUnitSquads(ui)
 			}
 			return got
 		}
@@ -557,8 +557,8 @@ func (ui *uiState) pollUnitSquads() bool {
 // races in tree order already, but the batches interleave units, and a list that
 // reordered itself between two scans of the same mod would be a bug a reader
 // could not explain.
-func (ui *uiState) sortUnitSquads() {
-	for _, refs := range ui.unitSquads {
+func SortUnitSquads(ui *uiState) {
+	for _, refs := range ui.UnitSquads {
 		sortSquadRefs(refs)
 	}
 }
@@ -712,9 +712,9 @@ func collectSquadRgds(tree *modtree.ModTree) []unitSquadRef {
 // can tell "not scanned yet" from "this unit is in no squad" — the scan starts
 // when the catalog is built and finishes seconds later, and during that window
 // every unit would otherwise look like it is in no squad at all.
-func (ui *uiState) squadsOfUnitOf(u unitEntry) []unitSquadRef {
-	if u.Path == "" || ui.unitSquads == nil {
+func SquadsOfUnitOf(ui *uiState, u unitEntry) []unitSquadRef {
+	if u.Path == "" || ui.UnitSquads == nil {
 		return nil
 	}
-	return ui.unitSquads[strings.ToLower(u.Path)]
+	return ui.UnitSquads[strings.ToLower(u.Path)]
 }

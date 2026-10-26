@@ -10,12 +10,12 @@ import (
 func TestExternalTextFileExtensions(t *testing.T) {
 	ui := &uiState{}
 	for _, path := range []string{"script.lua", "readme.txt", "unit.ai", "battle.scar", "voice.rat", "console.con"} {
-		if !ui.isExternalTextFile(path) {
+		if !IsExternalTextFile(ui, path) {
 			t.Errorf("isExternalTextFile(%q) = false, want true", path)
 		}
 	}
 	for _, path := range []string{"data.rgd", "sound.fda", "texture.dds", "module.module"} {
-		if ui.isExternalTextFile(path) {
+		if IsExternalTextFile(ui, path) {
 			t.Errorf("isExternalTextFile(%q) = true, want false", path)
 		}
 	}
@@ -67,19 +67,19 @@ func TestEmptyTextFormatListFallsBackToTheDefault(t *testing.T) {
 // The whole point of the setting: a format nobody shipped with is opened by
 // one click, and one the reader took back out is not.
 func TestAReaderCanExtendTheTextEditorFormats(t *testing.T) {
-	ui := &uiState{textEditorFormats: parseTextFormats(".lua, .txt, .dsl")}
+	ui := &uiState{TextEditorFormats: parseTextFormats(".lua, .txt, .dsl")}
 	for _, path := range []string{"a.lua", "a.txt", "a.dsl", "nested/path/to/a.dsl", "a.DSL"} {
-		if !ui.isEditorFile(path) {
+		if !IsEditorFile(ui, path) {
 			t.Errorf("isEditorFile(%q) = false, want true", path)
 		}
 	}
 	for _, path := range []string{"a.ai", "a.con", "a.rgd"} {
-		if ui.isEditorFile(path) {
+		if IsEditorFile(ui, path) {
 			t.Errorf("isEditorFile(%q) = true, want false once it was left out", path)
 		}
 	}
 	// One click, not two: the same list decides the double click.
-	if !ui.isExternalTextFile("a.dsl") {
+	if !IsExternalTextFile(ui, "a.dsl") {
 		t.Error("isExternalTextFile did not follow the reader's list")
 	}
 }
@@ -106,9 +106,9 @@ func TestTextFormatsRoundTripThroughTheFieldText(t *testing.T) {
 
 // A file with no extension at all is never text, whatever the list says.
 func TestAFileWithNoExtensionIsNotText(t *testing.T) {
-	ui := &uiState{textEditorFormats: parseTextFormats(".lua")}
+	ui := &uiState{TextEditorFormats: parseTextFormats(".lua")}
 	for _, path := range []string{"Makefile", "dir/file", ""} {
-		if ui.isEditorFile(path) {
+		if IsEditorFile(ui, path) {
 			t.Errorf("isEditorFile(%q) = true, want false", path)
 		}
 	}
@@ -188,14 +188,14 @@ func TestCanDeleteCurrentModFile(t *testing.T) {
 	for _, file := range folder.Files {
 		folder.FileByLower[file.Name] = file
 	}
-	ui := &uiState{modTree: tree}
-	if !ui.canDeleteCurrentModFile(current.FullPath) {
+	ui := &uiState{ModTree: tree}
+	if !CanDeleteCurrentModFile(ui, current.FullPath) {
 		t.Fatal("current mod file should be deletable")
 	}
-	if ui.canDeleteCurrentModFile(required.FullPath) {
+	if CanDeleteCurrentModFile(ui, required.FullPath) {
 		t.Fatal("required mod file should not be deletable")
 	}
-	if ui.canDeleteCurrentModFile(sga.FullPath) {
+	if CanDeleteCurrentModFile(ui, sga.FullPath) {
 		t.Fatal("SGA file should not be deletable")
 	}
 }

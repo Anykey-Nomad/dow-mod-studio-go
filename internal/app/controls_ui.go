@@ -82,7 +82,7 @@ func centeredPanelWidget(gtx layout.Context, widget layout.Widget) layout.Dimens
 	return layout.Dimensions{Size: image.Pt(width, height)}
 }
 
-func (ui *uiState) iconButton(gtx layout.Context, btn *widget.Clickable, glyph string, active bool) layout.Dimensions {
+func IconButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, glyph string, active bool) layout.Dimensions {
 	hover := btn.Hovered()
 	pressed := btn.Pressed()
 	bg := cSaveBg
@@ -119,7 +119,7 @@ func (ui *uiState) iconButton(gtx layout.Context, btn *widget.Clickable, glyph s
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(13), glyph)
+						l := material.Label(ui.Th, unit.Sp(13), glyph)
 						if active {
 							l.Color = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 						} else {
@@ -133,17 +133,17 @@ func (ui *uiState) iconButton(gtx layout.Context, btn *widget.Clickable, glyph s
 	})
 }
 
-func (ui *uiState) miniButton(gtx layout.Context, btn *widget.Clickable, label string, on bool, bgOn color.NRGBA) layout.Dimensions {
-	return ui.toggleButton(gtx, btn, label, on, bgOn)
+func MiniButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, on bool, bgOn color.NRGBA) layout.Dimensions {
+	return ToggleButton(ui, gtx, btn, label, on, bgOn)
 }
-func (ui *uiState) miniButtonDisabled(gtx layout.Context, btn *widget.Clickable, label string, disabled bool) layout.Dimensions {
-	return ui.smallButtonDisabled(gtx, btn, label, disabled)
+func MiniButtonDisabled(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, disabled bool) layout.Dimensions {
+	return SmallButtonDisabled(ui, gtx, btn, label, disabled)
 }
 
-func (ui *uiState) smallButton(gtx layout.Context, btn *widget.Clickable, label string) layout.Dimensions {
-	return ui.smallButtonDisabled(gtx, btn, label, false)
+func SmallButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string) layout.Dimensions {
+	return SmallButtonDisabled(ui, gtx, btn, label, false)
 }
-func (ui *uiState) smallButtonDisabled(gtx layout.Context, btn *widget.Clickable, label string, disabled bool) layout.Dimensions {
+func SmallButtonDisabled(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, disabled bool) layout.Dimensions {
 	hover := btn.Hovered() && !disabled
 	pressed := btn.Pressed() && !disabled
 	bg := cSaveBg
@@ -176,7 +176,7 @@ func (ui *uiState) smallButtonDisabled(gtx layout.Context, btn *widget.Clickable
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), label)
+						l := material.Label(ui.Th, unit.Sp(11), label)
 						if disabled {
 							l.Color = cTextDim
 						} else {
@@ -189,7 +189,7 @@ func (ui *uiState) smallButtonDisabled(gtx layout.Context, btn *widget.Clickable
 		})
 	})
 }
-func (ui *uiState) primaryButton(gtx layout.Context, btn *widget.Clickable, label string) layout.Dimensions {
+func PrimaryButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string) layout.Dimensions {
 	hover := btn.Hovered()
 	pressed := btn.Pressed()
 	bg := rgb(0x0078D4)
@@ -217,7 +217,7 @@ func (ui *uiState) primaryButton(gtx layout.Context, btn *widget.Clickable, labe
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(16), Right: unit.Dp(16), Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), label)
+						l := material.Label(ui.Th, unit.Sp(11), label)
 						l.Color = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 						return l.Layout(gtx)
 					})
@@ -226,7 +226,7 @@ func (ui *uiState) primaryButton(gtx layout.Context, btn *widget.Clickable, labe
 		})
 	})
 }
-func (ui *uiState) toggleButton(gtx layout.Context, btn *widget.Clickable, label string, on bool, bgOn color.NRGBA) layout.Dimensions {
+func ToggleButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, on bool, bgOn color.NRGBA) layout.Dimensions {
 	hover := btn.Hovered()
 	pressed := btn.Pressed()
 	bg := cSaveBg
@@ -260,7 +260,7 @@ func (ui *uiState) toggleButton(gtx layout.Context, btn *widget.Clickable, label
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), label)
+						l := material.Label(ui.Th, unit.Sp(11), label)
 						l.Color = cText
 						return l.Layout(gtx)
 					})
@@ -272,102 +272,102 @@ func (ui *uiState) toggleButton(gtx layout.Context, btn *widget.Clickable, label
 
 // ─── merged from bottom_ui.go ───────────────────────────────────────────────
 
-func (ui *uiState) layoutRightPanel(gtx layout.Context) layout.Dimensions {
-	tab := ui.activeTab()
-	if tab != nil && tab.kind == "sgb" {
-		return ui.layoutSgbObjectPanel(gtx, tab)
+func LayoutRightPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
+	tab := ActiveTab(ui)
+	if tab != nil && tab.Kind == "sgb" {
+		return LayoutSgbObjectPanel(ui, gtx, tab)
 	}
 	// The object tab keeps this panel, but there is no open file behind it, so
 	// it describes the selected unit instead of a file's properties.
 	if isUnitTab(tab) {
-		return ui.panelWithScroll(gtx, &ui.rightScroll, func(gtx layout.Context) layout.Dimensions {
+		return PanelWithScroll(ui, gtx, &ui.RightScroll, func(gtx layout.Context) layout.Dimensions {
 			children := []layout.FlexChild{
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Object") }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitInfoTable(gtx) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Object") }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitInfoTable(ui, gtx) }),
 			}
-			if v := ui.unitModelViewer(); v != nil && v.model != nil {
+			if v := UnitModelViewer(ui); v != nil && v.Model != nil {
 				children = append(children,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Model") }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Model") }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), ui.unitModelFileLabel())
+						l := material.Label(ui.Th, unit.Sp(9), UnitModelFileLabel(ui))
 						l.Color = cTextDim
 						l.MaxLines = 2
 						return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(2)}.Layout(gtx, l.Layout)
 					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelFrameLabel(gtx, v) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitModelFrameLabel(ui, gtx, v) }),
 				)
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 		})
 	}
-	if tab != nil && tab.kind == "fda" {
-		return ui.panelWithScroll(gtx, &ui.rightScroll, func(gtx layout.Context) layout.Dimensions {
+	if tab != nil && tab.Kind == "fda" {
+		return PanelWithScroll(ui, gtx, &ui.RightScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "FDA Properties") }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fdaPropertiesTable(gtx, tab) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "FDA Properties") }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FdaPropertiesTable(ui, gtx, tab) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "File Info") }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fdaInfoTable(gtx, tab) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "File Info") }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FdaInfoTable(ui, gtx, tab) }),
 			)
 		})
 	}
-	if tab != nil && tab.kind == "wav" {
-		return ui.panelWithScroll(gtx, &ui.rightScroll, func(gtx layout.Context) layout.Dimensions {
+	if tab != nil && tab.Kind == "wav" {
+		return PanelWithScroll(ui, gtx, &ui.RightScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "WAV Properties") }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.wavInfoTable(gtx, tab) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "WAV Properties") }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return WavInfoTable(ui, gtx, tab) }),
 			)
 		})
 	}
-	if tab != nil && tab.kind == "whm" {
-		return ui.panelWithScroll(gtx, &ui.rightScroll, func(gtx layout.Context) layout.Dimensions {
+	if tab != nil && tab.Kind == "whm" {
+		return PanelWithScroll(ui, gtx, &ui.RightScroll, func(gtx layout.Context) layout.Dimensions {
 			children := []layout.FlexChild{
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Model Properties") }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.whmInfoTable(gtx, tab) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Model Properties") }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return WhmInfoTable(ui, gtx, tab) }),
 			}
-			if tab.model != nil {
+			if tab.Model != nil {
 				children = append(children,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "3D Preview") }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelInfoTable(gtx, tab) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "3D Preview") }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ModelInfoTable(ui, gtx, tab) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Materials by Mesh") }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelMaterialDiagnosticsTable(gtx, tab) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Materials by Mesh") }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ModelMaterialDiagnosticsTable(ui, gtx, tab) }),
 				)
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 		})
 	}
-	if tab != nil && tab.kind == "image" {
-		return ui.panelWithScroll(gtx, &ui.rightScroll, func(gtx layout.Context) layout.Dimensions {
+	if tab != nil && tab.Kind == "image" {
+		return PanelWithScroll(ui, gtx, &ui.RightScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Image Properties") }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.imageInfoTable(gtx, tab) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Image Properties") }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ImageInfoTable(ui, gtx, tab) }),
 			)
 		})
 	}
-	if tab != nil && tab.kind == "rgd" {
-		return ui.panelWithScroll(gtx, &ui.rightScroll, func(gtx layout.Context) layout.Dimensions {
+	if tab != nil && tab.Kind == "rgd" {
+		return PanelWithScroll(ui, gtx, &ui.RightScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Properties") }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.propertiesTable(gtx, tab) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Properties") }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return PropertiesTable(ui, gtx, tab) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Table Children") }),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.childrenTable(gtx, tab) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Table Children") }),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ChildrenTable(ui, gtx, tab) }),
 			)
 		})
 	}
-	return ui.panelWithScroll(gtx, &ui.rightScroll, func(gtx layout.Context) layout.Dimensions {
+	return PanelWithScroll(ui, gtx, &ui.RightScroll, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Properties") }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Properties") }),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return centeredPanelLabel(gtx, ui.th, "Module tab — open a file to see its properties", unit.Sp(10), cTextDim)
+				return centeredPanelLabel(gtx, ui.Th, "Module tab — open a file to see its properties", unit.Sp(10), cTextDim)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Table Children") }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Table Children") }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return centeredPanelLabel(gtx, ui.th, "—", unit.Sp(10), cTextDim)
+				return centeredPanelLabel(gtx, ui.Th, "—", unit.Sp(10), cTextDim)
 			}),
 		)
 	})
@@ -394,7 +394,7 @@ func sectionHeader(gtx layout.Context, th *material.Theme, title string) layout.
 	)
 }
 
-func (ui *uiState) layoutStatusBar(gtx layout.Context) layout.Dimensions {
+func LayoutStatusBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(36))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -408,11 +408,11 @@ func (ui *uiState) layoutStatusBar(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(12), Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						txt := ui.statusText
+						txt := ui.StatusText
 						if txt == "" {
 							txt = "Ready"
 						}
-						l := material.Label(ui.th, unit.Sp(11), txt)
+						l := material.Label(ui.Th, unit.Sp(11), txt)
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					}),
@@ -422,86 +422,86 @@ func (ui *uiState) layoutStatusBar(gtx layout.Context) layout.Dimensions {
 	)
 }
 
-func (ui *uiState) saveEligible() bool {
-	t := ui.activeTab()
+func SaveEligible(ui *uiState) bool {
+	t := ActiveTab(ui)
 	if t == nil {
 		return false
 	}
-	if t.kind == "sgb" {
-		return t.sgbDirty
+	if t.Kind == "sgb" {
+		return t.SgbDirty
 	}
-	return (t.kind == "rgd" && t.rgdDirty) || (t.kind == "text" && t.textDirty)
+	return (t.Kind == "rgd" && t.RgdDirty) || (t.Kind == "text" && t.TextDirty)
 }
 
-func (ui *uiState) handleSaveActiveTab() {
-	if t := ui.activeTab(); t != nil && t.kind == "sgb" {
-		ui.handleSgbSave(t)
-	} else if t := ui.activeTab(); t != nil && t.kind == "rgd" {
-		ui.handleRgdSave(t)
-	} else if t := ui.activeTab(); t != nil && t.kind == "text" {
-		ui.handleTextSave(t)
-	} else if t := ui.activeTab(); t != nil && t.kind == "fda" {
-		ui.fdaExportWav()
-	} else if t := ui.activeTab(); t != nil && t.kind == "wav" {
-		ui.convertWavToFDA(t)
-	} else if t := ui.activeTab(); t != nil && t.kind == "whm" {
-		ui.convertWhmToSgmFile(t)
-	} else if ui.modTree == nil {
-		ui.statusText = "Save — no mod loaded"
-	} else if ui.activeTab() == nil {
-		ui.statusText = "Save — open an editable file first"
+func HandleSaveActiveTab(ui *uiState) {
+	if t := ActiveTab(ui); t != nil && t.Kind == "sgb" {
+		HandleSgbSave(ui, t)
+	} else if t := ActiveTab(ui); t != nil && t.Kind == "rgd" {
+		HandleRgdSave(ui, t)
+	} else if t := ActiveTab(ui); t != nil && t.Kind == "text" {
+		HandleTextSave(ui, t)
+	} else if t := ActiveTab(ui); t != nil && t.Kind == "fda" {
+		FdaExportWav(ui)
+	} else if t := ActiveTab(ui); t != nil && t.Kind == "wav" {
+		ConvertWavToFDA(ui, t)
+	} else if t := ActiveTab(ui); t != nil && t.Kind == "whm" {
+		ConvertWhmToSgmFile(ui, t)
+	} else if ui.ModTree == nil {
+		ui.StatusText = "Save — no mod loaded"
+	} else if ActiveTab(ui) == nil {
+		ui.StatusText = "Save — open an editable file first"
 	} else {
-		ui.statusText = "Save — the active file type is not editable"
+		ui.StatusText = "Save — the active file type is not editable"
 	}
 }
 
-func (ui *uiState) handleSgbSave(t *fileTab) {
-	if t == nil || t.kind != "sgb" || t.sgbMap == nil {
-		ui.statusText = "Save failed: no editable scenario is open"
+func HandleSgbSave(ui *uiState, t *fileTab) {
+	if t == nil || t.Kind != "sgb" || t.SgbMap == nil {
+		ui.StatusText = "Save failed: no editable scenario is open"
 		return
 	}
-	if ui.modTree == nil {
-		ui.statusText = "Save failed: no mod loaded"
+	if ui.ModTree == nil {
+		ui.StatusText = "Save failed: no mod loaded"
 		return
 	}
-	if !t.sgbDirty {
-		ui.statusText = filepath.Base(t.path) + " — no map changes"
+	if !t.SgbDirty {
+		ui.StatusText = filepath.Base(t.Path) + " — no map changes"
 		return
 	}
-	data, err := t.sgbMap.MarshalBinary()
+	data, err := t.SgbMap.MarshalBinary()
 	if err != nil {
-		ui.statusText = fmt.Sprintf("Save failed: %v", err)
+		ui.StatusText = fmt.Sprintf("Save failed: %v", err)
 		return
 	}
-	diskPath, err := ui.modTree.WriteOverlayFile(t.path, data)
+	diskPath, err := ui.ModTree.WriteOverlayFile(t.Path, data)
 	if err != nil {
-		ui.statusText = fmt.Sprintf("Save failed: %v", err)
+		ui.StatusText = fmt.Sprintf("Save failed: %v", err)
 		return
 	}
-	t.sgbBytes = len(data)
-	t.sgbDirty = false
-	ui.statusText = fmt.Sprintf("Saved map %s → %s (%d bytes)", filepath.Base(t.path), diskPath, len(data))
+	t.SgbBytes = len(data)
+	t.SgbDirty = false
+	ui.StatusText = fmt.Sprintf("Saved map %s → %s (%d bytes)", filepath.Base(t.Path), diskPath, len(data))
 }
 
 // exportEligible reports whether the active file can be copied from its
 // resolved source into the current mod's writable overlay. An SGA source is
 // eligible even when it belongs to a required mod or the engine, provided the
 // current mod's ModFolder does not already contain the file on disk.
-func (ui *uiState) exportEligible(tab *fileTab) (bool, string) {
-	if ui.modTree == nil {
+func ExportEligible(ui *uiState, tab *fileTab) (bool, string) {
+	if ui.ModTree == nil {
 		return false, "no mod loaded"
 	}
 	if tab == nil {
 		return false, "no active file"
 	}
-	file := ui.modTree.FindFile(tab.path)
+	file := ui.ModTree.FindFile(tab.Path)
 	if file == nil {
 		return false, "active file is not in the merged mod tree"
 	}
 	if file.Source == nil || (!file.Source.IsSGA && file.Source.Kind != modtree.KindReqMod) {
 		return false, "active file is not from an SGA or a parent mod"
 	}
-	disk, err := ui.modTree.OverlayPath(tab.path)
+	disk, err := ui.ModTree.OverlayPath(tab.Path)
 	if err != nil {
 		return false, err.Error()
 	}
@@ -513,29 +513,29 @@ func (ui *uiState) exportEligible(tab *fileTab) (bool, string) {
 	return true, ""
 }
 
-func (ui *uiState) handleExportActiveTab() {
-	tab := ui.activeTab()
-	eligible, reason := ui.exportEligible(tab)
+func HandleExportActiveTab(ui *uiState) {
+	tab := ActiveTab(ui)
+	eligible, reason := ExportEligible(ui, tab)
 	if !eligible {
-		ui.statusText = "Export — " + reason
+		ui.StatusText = "Export — " + reason
 		return
 	}
-	data, err := ui.modTree.ReadFile(tab.path)
+	data, err := ui.ModTree.ReadFile(tab.Path)
 	if err != nil {
-		ui.statusText = fmt.Sprintf("Export failed: %v", err)
+		ui.StatusText = fmt.Sprintf("Export failed: %v", err)
 		return
 	}
-	disk, err := ui.modTree.WriteOverlayFile(tab.path, data)
+	disk, err := ui.ModTree.WriteOverlayFile(tab.Path, data)
 	if err != nil {
-		ui.statusText = fmt.Sprintf("Export failed: %v", err)
+		ui.StatusText = fmt.Sprintf("Export failed: %v", err)
 		return
 	}
-	ui.statusText = fmt.Sprintf("Exported %s to %s", tab.path, disk)
+	ui.StatusText = fmt.Sprintf("Exported %s to %s", tab.Path, disk)
 }
 
 // ─── merged from table_ui.go ───────────────────────────────────────────────
 
-func (ui *uiState) tableHead(gtx layout.Context, a, b string) layout.Dimensions {
+func TableHead(ui *uiState, gtx layout.Context, a, b string) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(20))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -549,7 +549,7 @@ func (ui *uiState) tableHead(gtx layout.Context, a, b string) layout.Dimensions 
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), a)
+						l := material.Label(ui.Th, unit.Sp(11), a)
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					})
@@ -557,7 +557,7 @@ func (ui *uiState) tableHead(gtx layout.Context, a, b string) layout.Dimensions 
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, cHeaderLine) }),
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), b)
+						l := material.Label(ui.Th, unit.Sp(11), b)
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					})
@@ -580,11 +580,11 @@ func vLine(gtx layout.Context, col color.NRGBA) layout.Dimensions {
 	return layout.Dimensions{Size: sz}
 }
 
-func (ui *uiState) tableRow2(gtx layout.Context, a, b string, alt bool) layout.Dimensions {
-	return ui.tableRow2WithTooltip(gtx, a, b, alt, "")
+func TableRow2(ui *uiState, gtx layout.Context, a, b string, alt bool) layout.Dimensions {
+	return TableRow2WithTooltip(ui, gtx, a, b, alt, "")
 }
 
-func (ui *uiState) tableRow2WithTooltip(gtx layout.Context, a, b string, alt bool, tooltip string) layout.Dimensions {
+func TableRow2WithTooltip(ui *uiState, gtx layout.Context, a, b string, alt bool, tooltip string) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(24))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -602,13 +602,13 @@ func (ui *uiState) tableRow2WithTooltip(gtx layout.Context, a, b string, alt boo
 			if tooltip == "" {
 				return layout.Dimensions{}
 			}
-			if ui.rgdTooltipTags == nil {
-				ui.rgdTooltipTags = make(map[string]event.Tag)
+			if ui.RgdTooltipTags == nil {
+				ui.RgdTooltipTags = make(map[string]event.Tag)
 			}
-			tag, ok := ui.rgdTooltipTags[tooltip]
+			tag, ok := ui.RgdTooltipTags[tooltip]
 			if !ok {
 				tag = newPointerTag(tooltip)
-				ui.rgdTooltipTags[tooltip] = tag
+				ui.RgdTooltipTags[tooltip] = tag
 			}
 			event.Op(gtx.Ops, tag)
 			for {
@@ -622,9 +622,9 @@ func (ui *uiState) tableRow2WithTooltip(gtx layout.Context, a, b string, alt boo
 				}
 				switch e.Kind {
 				case pointer.Enter:
-					ui.rgdTooltipText = tooltip
+					ui.RgdTooltipText = tooltip
 				case pointer.Leave:
-					ui.rgdTooltipText = ""
+					ui.RgdTooltipText = ""
 				}
 			}
 			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, h)}
@@ -633,7 +633,7 @@ func (ui *uiState) tableRow2WithTooltip(gtx layout.Context, a, b string, alt boo
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), a)
+						l := material.Label(ui.Th, unit.Sp(11), a)
 						l.Color = cText
 						return l.Layout(gtx)
 					})
@@ -641,7 +641,7 @@ func (ui *uiState) tableRow2WithTooltip(gtx layout.Context, a, b string, alt boo
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, cBorderLight) }),
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), b)
+						l := material.Label(ui.Th, unit.Sp(11), b)
 						l.Color = cText
 						return l.Layout(gtx)
 					})
@@ -678,11 +678,11 @@ func tabBarTop(gtx layout.Context) int {
 	return gtx.Dp(unit.Dp(menuBarHeightDp)) + 1
 }
 
-func (ui *uiState) layoutTabBar(gtx layout.Context) layout.Dimensions {
+func LayoutTabBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(tabBarHeightDp))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
-	ui.ensureTabClicks()
+	EnsureTabClicks(ui)
 
 	// The offset is clamped against the width measured on the previous frame.
 	// The row cannot be measured earlier in this frame instead: it holds the
@@ -690,8 +690,8 @@ func (ui *uiState) layoutTabBar(gtx layout.Context) layout.Dimensions {
 	// out again registers their areas twice, and replaying a recorded copy of
 	// the ops moves the frame's input handlers around after they were placed.
 	// One frame of lag on the clamp is invisible; a misplaced handler is not.
-	ui.tabBarWidth = gtx.Constraints.Max.X
-	ui.clampTabScroll(ui.tabBarWidth, ui.tabRowWidth)
+	ui.TabBarWidth = gtx.Constraints.Max.X
+	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
 
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
@@ -705,17 +705,17 @@ func (ui *uiState) layoutTabBar(gtx layout.Context) layout.Dimensions {
 			// place. When the bar is scrolled the row is wider than the bar, so
 			// it is clipped to the bar and slid left; the bar's own background
 			// covers whatever is past the end.
-			if ui.tabScrollX != 0 {
+			if ui.TabScrollX != 0 {
 				st := clip.Rect{Max: image.Pt(gtx.Constraints.Max.X, h)}.Push(gtx.Ops)
-				off := op.Offset(image.Pt(-ui.tabScrollX, 0)).Push(gtx.Ops)
-				ui.layoutTabRow(gtx)
+				off := op.Offset(image.Pt(-ui.TabScrollX, 0)).Push(gtx.Ops)
+				LayoutTabRow(ui, gtx)
 				off.Pop()
 				st.Pop()
 			} else {
-				ui.layoutTabRow(gtx)
+				LayoutTabRow(ui, gtx)
 			}
 			// The row's real width is known now, for the next frame's clamp.
-			ui.tabRowWidth = ui.tabRowWidthPx
+			ui.TabRowWidth = ui.TabRowWidthPx
 			// The bar's own pointer target goes in after the row, not before
 			// it. Gio's hit test walks a frame's input stack from the top and
 			// stops descending at the first target it meets, so a target
@@ -723,7 +723,7 @@ func (ui *uiState) layoutTabBar(gtx layout.Context) layout.Dimensions {
 			// over one of them: the wheel and the right press would do nothing
 			// on a tab. Being last, and inside a PassOp, it sees the press
 			// first and the tabs underneath still see it after it.
-			ui.registerTabBarPointer(gtx)
+			RegisterTabBarPointer(ui, gtx)
 			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, h)}
 		}),
 	)
@@ -734,13 +734,13 @@ func (ui *uiState) layoutTabBar(gtx layout.Context) layout.Dimensions {
 // underneath keep their own clicks — the same arrangement the file tree uses
 // for its scroll area. It must be called after the tabs are laid out; see
 // layoutTabBar for why the order matters.
-func (ui *uiState) registerTabBarPointer(gtx layout.Context) {
-	if ui.tabBarPointerTag == nil {
+func RegisterTabBarPointer(ui *uiState, gtx layout.Context) {
+	if ui.TabBarPointerTag == nil {
 		return
 	}
 	pass := pointer.PassOp{}.Push(gtx.Ops)
 	area := clip.Rect{Max: image.Pt(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(tabBarHeightDp)))}.Push(gtx.Ops)
-	event.Op(gtx.Ops, ui.tabBarPointerTag)
+	event.Op(gtx.Ops, ui.TabBarPointerTag)
 	area.Pop()
 	pass.Pop()
 }
@@ -756,28 +756,28 @@ func (ui *uiState) registerTabBarPointer(gtx layout.Context) {
 // at the row's left edge: they cover one another, only the last one is under
 // the pointer, and the row looks like a single tab with pieces of the others
 // sticking out from behind it.
-func (ui *uiState) layoutTabRow(gtx layout.Context) layout.Dimensions {
+func LayoutTabRow(ui *uiState, gtx layout.Context) layout.Dimensions {
 	x := gtx.Dp(unit.Dp(6))
-	for idx, t := range ui.openTabs {
+	for idx, t := range ui.OpenTabs {
 		idx, t := idx, t
 		x += gtx.Dp(unit.Dp(2))
 		off := op.Offset(image.Pt(x, 0)).Push(gtx.Ops)
-		tabW := ui.tab(gtx, idx+1, tabLabelFor(t), idx).Size.X
+		tabW := Tab(ui, gtx, idx+1, tabLabelFor(t), idx).Size.X
 		off.Pop()
-		if len(ui.tabRects) <= idx {
-			ui.tabRects = append(ui.tabRects, image.Rectangle{})
+		if len(ui.TabRects) <= idx {
+			ui.TabRects = append(ui.TabRects, image.Rectangle{})
 		}
 		// The rects are recorded in the bar's own coordinates, which is the
 		// space a pointer event on the bar is reported in, so a press can be
 		// matched against them without translating anything.
-		ui.tabRects[idx] = image.Rectangle{
+		ui.TabRects[idx] = image.Rectangle{
 			Min: image.Pt(x, 0),
 			Max: image.Pt(x+tabW, gtx.Dp(unit.Dp(tabBarHeightDp))),
 		}
 		x += tabW
 	}
-	ui.tabRects = ui.tabRects[:len(ui.openTabs)]
-	ui.tabRowWidthPx = x
+	ui.TabRects = ui.TabRects[:len(ui.OpenTabs)]
+	ui.TabRowWidthPx = x
 	return layout.Dimensions{Size: image.Pt(x, gtx.Dp(unit.Dp(tabBarHeightDp)))}
 }
 
@@ -790,45 +790,45 @@ func tabLabelFor(t *fileTab) string {
 	if isUnitTab(t) {
 		return unitTabLabel
 	}
-	switch t.kind {
+	switch t.Kind {
 	case "fda":
-		return fmt.Sprintf("FDA [%s]", filepath.Base(t.path))
+		return fmt.Sprintf("FDA [%s]", filepath.Base(t.Path))
 	case "wav":
-		return fmt.Sprintf("WAV [%s]", filepath.Base(t.path))
+		return fmt.Sprintf("WAV [%s]", filepath.Base(t.Path))
 	case "whm":
-		return fmt.Sprintf("Model [%s]", filepath.Base(t.path))
+		return fmt.Sprintf("Model [%s]", filepath.Base(t.Path))
 	case "image":
-		return fmt.Sprintf("Image [%s]", filepath.Base(t.path))
+		return fmt.Sprintf("Image [%s]", filepath.Base(t.Path))
 	case "sga":
-		return fmt.Sprintf("SGA [%s]", filepath.Base(t.path))
+		return fmt.Sprintf("SGA [%s]", filepath.Base(t.Path))
 	case "sgb":
-		return fmt.Sprintf("Map [%s]", filepath.Base(t.path))
+		return fmt.Sprintf("Map [%s]", filepath.Base(t.Path))
 	case "rgd":
-		return fmt.Sprintf("RGD [%s]", filepath.Base(t.path))
+		return fmt.Sprintf("RGD [%s]", filepath.Base(t.Path))
 	}
-	return filepath.Base(t.path)
+	return filepath.Base(t.Path)
 }
 
 // tabMaxScroll is how far the row can be slid: the part of it that does not
 // fit. It is zero while the tabs do fit, which is what makes the bar scroll
 // only when it has to.
-func (ui *uiState) tabMaxScroll(barWidth, rowWidth int) int {
+func TabMaxScroll(ui *uiState, barWidth, rowWidth int) int {
 	if d := rowWidth - barWidth; d > 0 {
 		return d
 	}
 	return 0
 }
 
-func (ui *uiState) clampTabScroll(barWidth, rowWidth int) {
-	ui.tabScrollX = clampInt(ui.tabScrollX, 0, ui.tabMaxScroll(barWidth, rowWidth))
+func ClampTabScroll(ui *uiState, barWidth, rowWidth int) {
+	ui.TabScrollX = clampInt(ui.TabScrollX, 0, TabMaxScroll(ui, barWidth, rowWidth))
 }
 
 // tabAt is which tab a position in the bar lands on, or -1 for the gap beside
 // the last one. The comparison is in floats because a pointer event reports
 // fractional pixels, and rounding first would put the rightmost pixel column of
 // a tab on the tab beside it.
-func (ui *uiState) tabAt(p f32.Point) int {
-	for i, r := range ui.tabRects {
+func TabAt(ui *uiState, p f32.Point) int {
+	for i, r := range ui.TabRects {
 		if p.X >= float32(r.Min.X) && p.X < float32(r.Max.X) &&
 			p.Y >= float32(r.Min.Y) && p.Y < float32(r.Max.Y) {
 			return i
@@ -837,21 +837,21 @@ func (ui *uiState) tabAt(p f32.Point) int {
 	return -1
 }
 
-func (ui *uiState) tab(gtx layout.Context, idx int, label string, closeIdx int) layout.Dimensions {
-	sel := ui.tabSel == idx
+func Tab(ui *uiState, gtx layout.Context, idx int, label string, closeIdx int) layout.Dimensions {
+	sel := ui.TabSel == idx
 	bg := cTabOff
 	closable := closeIdx >= 0
 	if sel {
 		bg = cTabOn
-	} else if ui.tabClicks[idx].Hovered() {
+	} else if ui.TabClicks[idx].Hovered() {
 		bg = cMenuHover
 	}
-	return ui.tabClicks[idx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.TabClicks[idx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		inner := func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(2), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(12), label)
+						l := material.Label(ui.Th, unit.Sp(12), label)
 						if sel {
 							l.Color = cText
 							l.Font.Weight = font.Medium
@@ -866,13 +866,13 @@ func (ui *uiState) tab(gtx layout.Context, idx int, label string, closeIdx int) 
 						return layout.Dimensions{}
 					}
 					return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.tabCloses[closeIdx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							hover := ui.tabCloses[closeIdx].Hovered()
+						return ui.TabCloses[closeIdx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							hover := ui.TabCloses[closeIdx].Hovered()
 							sz := gtx.Dp(unit.Dp(16))
 							if hover {
 								rrect(gtx, rgb(0xE81123), image.Pt(sz, sz), gtx.Dp(2))
 							}
-							l := material.Label(ui.th, unit.Sp(12), "×")
+							l := material.Label(ui.Th, unit.Sp(12), "×")
 							if hover {
 								l.Color = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 							} else {
@@ -920,24 +920,24 @@ func (ui *uiState) tab(gtx layout.Context, idx int, label string, closeIdx int) 
 // openTabContextMenu puts the menu on a tab, at the point it was clicked. The
 // tab is selected as well, so the menu belongs to the tab under the pointer
 // even when it was not the active one.
-func (ui *uiState) openTabContextMenu(idx int, at image.Point) {
-	if idx < 0 || idx >= len(ui.openTabs) {
+func OpenTabContextMenu(ui *uiState, idx int, at image.Point) {
+	if idx < 0 || idx >= len(ui.OpenTabs) {
 		return
 	}
-	ui.tabContextIndex = idx
-	ui.tabContextPos = at
-	ui.tabContextVisible = true
+	ui.TabContextIndex = idx
+	ui.TabContextPos = at
+	ui.TabContextVisible = true
 	// Selecting is not what the menu acts on yet, but a context menu on an
 	// unselected tab is a trap: the reader has no way to tell which one it is
 	// for, and the next item to be added will act on the selection.
-	ui.tabSel = idx + 1
-	ui.markStateDirty()
+	ui.TabSel = idx + 1
+	MarkStateDirty(ui)
 }
 
 // closeTabContextMenu puts the menu away.
-func (ui *uiState) closeTabContextMenu() {
-	ui.tabContextVisible = false
-	ui.tabContextIndex = -1
+func CloseTabContextMenu(ui *uiState) {
+	ui.TabContextVisible = false
+	ui.TabContextIndex = -1
 }
 
 // tabContextItems are the menu's rows, in order. One for now; the list is here
@@ -975,8 +975,8 @@ func tabContextMenuOrigin(p image.Point, winW, winH, menuW, menuH, inset int) im
 // positioned in window coordinates — the bar's own top plus where the click
 // landed — and nudged back inside the window, because a click near the right or
 // bottom edge would otherwise open it off screen.
-func (ui *uiState) layoutTabContextMenu(gtx layout.Context) layout.Dimensions {
-	if !ui.tabContextVisible {
+func LayoutTabContextMenu(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if !ui.TabContextVisible {
 		return layout.Dimensions{}
 	}
 	menuW := gtx.Dp(unit.Dp(tabContextWDP))
@@ -984,7 +984,7 @@ func (ui *uiState) layoutTabContextMenu(gtx layout.Context) layout.Dimensions {
 	rowH := gtx.Dp(unit.Dp(tabContextRowDp))
 	menuH := pad*2 + rowH*len(tabContextItems)
 	inset := gtx.Dp(unit.Dp(tabContextInsetP))
-	origin := tabContextMenuOrigin(ui.tabContextPos, gtx.Constraints.Max.X, gtx.Constraints.Max.Y, menuW, menuH, inset)
+	origin := tabContextMenuOrigin(ui.TabContextPos, gtx.Constraints.Max.X, gtx.Constraints.Max.Y, menuW, menuH, inset)
 
 	gtx2 := gtx
 	defer op.Offset(origin).Push(gtx2.Ops).Pop()
@@ -1010,7 +1010,7 @@ func (ui *uiState) layoutTabContextMenu(gtx layout.Context) layout.Dimensions {
 				}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &ui.tabContextCloseAll, tabContextItems[0])
+							return SmallButton(ui, gtx, &ui.TabContextCloseAll, tabContextItems[0])
 						}),
 					)
 				})

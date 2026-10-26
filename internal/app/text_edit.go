@@ -24,114 +24,114 @@ func isTextExtension(ext string) bool {
 	}
 }
 
-func (ui *uiState) textActive() bool {
-	t := ui.activeTab()
-	return t != nil && t.kind == "text" && t.textError == ""
+func TextActive(ui *uiState) bool {
+	t := ActiveTab(ui)
+	return t != nil && t.Kind == "text" && t.TextError == ""
 }
 
-func (ui *uiState) openTextFile(virtualPath string) {
-	if ui.modTree == nil {
+func OpenTextFile(ui *uiState, virtualPath string) {
+	if ui.ModTree == nil {
 		return
 	}
-	if idx := ui.findTabIndex(virtualPath); idx >= 0 {
-		ui.tabSel = idx + 1
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
+	if idx := FindTabIndex(ui, virtualPath); idx >= 0 {
+		ui.TabSel = idx + 1
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
-	data, err := ui.modTree.ReadFile(virtualPath)
+	data, err := ui.ModTree.ReadFile(virtualPath)
 	if err != nil {
-		t := &fileTab{path: virtualPath, kind: "text", textError: err.Error()}
-		ui.openTabs = append(ui.openTabs, t)
-		ui.tabSel = len(ui.openTabs)
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(virtualPath), err)
+		t := &fileTab{Path: virtualPath, Kind: "text", TextError: err.Error()}
+		ui.OpenTabs = append(ui.OpenTabs, t)
+		ui.TabSel = len(ui.OpenTabs)
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(virtualPath), err)
 		return
 	}
 	text := string(data)
 	t := &fileTab{
-		path:         virtualPath,
-		kind:         "text",
-		textOriginal: text,
-		textBytes:    len(data),
+		Path:         virtualPath,
+		Kind:         "text",
+		TextOriginal: text,
+		TextBytes:    len(data),
 	}
-	t.textEditor.SingleLine = false
-	t.textEditor.Submit = false
-	t.textEditor.SetText(text)
-	ui.openTabs = append(ui.openTabs, t)
-	ui.tabSel = len(ui.openTabs)
-	ui.ensureTabClicks()
-	ui.statusText = fmt.Sprintf("Opened %s — %d bytes", filepath.Base(virtualPath), len(data))
+	t.TextEditor.SingleLine = false
+	t.TextEditor.Submit = false
+	t.TextEditor.SetText(text)
+	ui.OpenTabs = append(ui.OpenTabs, t)
+	ui.TabSel = len(ui.OpenTabs)
+	EnsureTabClicks(ui)
+	ui.StatusText = fmt.Sprintf("Opened %s — %d bytes", filepath.Base(virtualPath), len(data))
 	log.Printf("openText %q: %d bytes", virtualPath, len(data))
 }
 
-func (ui *uiState) textSyncAndApply(gtx layout.Context) {
-	t := ui.activeTab()
-	if t == nil || t.kind != "text" || t.textError != "" {
+func TextSyncAndApply(ui *uiState, gtx layout.Context) {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "text" || t.TextError != "" {
 		return
 	}
 	for {
-		if _, ok := t.textEditor.Update(gtx); !ok {
+		if _, ok := t.TextEditor.Update(gtx); !ok {
 			break
 		}
 	}
-	t.textDirty = t.textEditor.Text() != t.textOriginal
+	t.TextDirty = t.TextEditor.Text() != t.TextOriginal
 }
 
-func (ui *uiState) handleTextSave(t *fileTab) {
-	if t == nil || t.kind != "text" {
-		ui.statusText = "Nothing to save"
+func HandleTextSave(ui *uiState, t *fileTab) {
+	if t == nil || t.Kind != "text" {
+		ui.StatusText = "Nothing to save"
 		return
 	}
-	if t.textLocale {
+	if t.TextLocale {
 		// The .ucs tables belong to the game, sit outside the mod tree, and
 		// are UTF-16; writing one back as the UTF-8 the editor holds would
 		// corrupt it. The tab is read only for the same reason.
-		ui.statusText = fmt.Sprintf("%s is a game locale file — opened read only", filepath.Base(t.path))
+		ui.StatusText = fmt.Sprintf("%s is a game locale file — opened read only", filepath.Base(t.Path))
 		return
 	}
-	if t.textError != "" {
-		ui.statusText = "Save failed: " + t.textError
+	if t.TextError != "" {
+		ui.StatusText = "Save failed: " + t.TextError
 		return
 	}
-	if ui.modTree == nil {
-		ui.statusText = "Save failed: no mod loaded"
+	if ui.ModTree == nil {
+		ui.StatusText = "Save failed: no mod loaded"
 		return
 	}
-	text := t.textEditor.Text()
-	if text == t.textOriginal {
-		ui.statusText = fmt.Sprintf("%s — no changes", filepath.Base(t.path))
+	text := t.TextEditor.Text()
+	if text == t.TextOriginal {
+		ui.StatusText = fmt.Sprintf("%s — no changes", filepath.Base(t.Path))
 		return
 	}
-	diskPath, err := ui.modTree.WriteOverlayFile(t.path, []byte(text))
+	diskPath, err := ui.ModTree.WriteOverlayFile(t.Path, []byte(text))
 	if err != nil {
-		ui.statusText = fmt.Sprintf("Save failed: %v", err)
-		log.Printf("write text overlay %q: %v", t.path, err)
+		ui.StatusText = fmt.Sprintf("Save failed: %v", err)
+		log.Printf("write text overlay %q: %v", t.Path, err)
 		return
 	}
-	t.textOriginal = text
-	t.textBytes = len(text)
-	t.textDirty = false
-	ui.statusText = fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(t.path), diskPath, len(text))
-	log.Printf("saved text %q -> %q (%d bytes)", t.path, diskPath, len(text))
+	t.TextOriginal = text
+	t.TextBytes = len(text)
+	t.TextDirty = false
+	ui.StatusText = fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(t.Path), diskPath, len(text))
+	log.Printf("saved text %q -> %q (%d bytes)", t.Path, diskPath, len(text))
 }
 
-func (ui *uiState) layoutTextEditor(gtx layout.Context, t *fileTab) layout.Dimensions {
+func LayoutTextEditor(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	// Keep this central panel useful for both short scripts and large Lua files.
 	// Gio's multiline editor is constrained by the available center-panel space.
-	if t.textError != "" {
+	if t.TextError != "" {
 		return layout.Inset{Top: unit.Dp(16), Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "Failed: "+t.textError)
+			l := material.Label(ui.Th, unit.Sp(11), "Failed: "+t.TextError)
 			l.Color = rgb(0xB00020)
 			return l.Layout(gtx)
 		})
 	}
 	editor := func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return widgetBorderTextEditor(gtx, ui.th, &t.textEditor, t.textDirty, strings.ToLower(filepath.Ext(t.path)))
+			return widgetBorderTextEditor(gtx, ui.Th, &t.TextEditor, t.TextDirty, strings.ToLower(filepath.Ext(t.Path)))
 		})
 	}
-	if !t.textLocale {
+	if !t.TextLocale {
 		return editor(gtx)
 	}
 	// A locale table is a game file being looked at, not a mod file being
@@ -140,7 +140,7 @@ func (ui *uiState) layoutTextEditor(gtx layout.Context, t *fileTab) layout.Dimen
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), t.path+"  —  read only, UTF-16LE .ucs")
+				l := material.Label(ui.Th, unit.Sp(10), t.Path+"  —  read only, UTF-16LE .ucs")
 				l.Color = cTextDim
 				l.MaxLines = 1
 				return l.Layout(gtx)

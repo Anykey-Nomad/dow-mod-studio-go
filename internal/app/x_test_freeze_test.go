@@ -50,8 +50,8 @@ func freezeTestUI(t *testing.T) (*uiState, *modtree.ModTree) {
 	tree := newGraphTestMod(t)
 	freezeTestMod(t, tree)
 	ui := newUI(unitTestTheme())
-	ui.modTree = tree
-	ui.modulePath = filepath.Join(tree.AppPath, "GraphTestMod")
+	ui.ModTree = tree
+	ui.ModulePath = filepath.Join(tree.AppPath, "GraphTestMod")
 	return ui, tree
 }
 
@@ -63,7 +63,7 @@ func TestFreezingMovesTheFilesOutOfTheModAndRecordsWhere(t *testing.T) {
 	squad := `Data\attrib\sbps\races\necrons\necron_gauntlet.rgd`
 	writeFixtureFile(t, tree, squad)
 
-	record, err := ui.freezeEntity(graphTestGauntlet)
+	record, err := FreezeEntity(ui, graphTestGauntlet)
 	if err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestFreezingMovesTheFilesOutOfTheModAndRecordsWhere(t *testing.T) {
 		}
 	}
 	// Both are in the project's Units folder, under the names the record says.
-	unitsDir, err := freezeUnitsDir(tree, ui.modulePath)
+	unitsDir, err := freezeUnitsDir(tree, ui.ModulePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,10 +114,10 @@ func TestFreezingClearsEveryReferenceAndWritesThemDownFirst(t *testing.T) {
 	// reads it in the background and a freeze must not depend on that having
 	// finished. A freeze that cleared only what a scan had reached would leave
 	// the mod with a name pointing at nothing.
-	if ui.graphFor().Linked {
+	if GraphFor(ui).Linked {
 		t.Fatal("the fixture's graph was already read, so this is not testing what it should")
 	}
-	record, err := ui.freezeEntity(graphTestArmoury)
+	record, err := FreezeEntity(ui, graphTestArmoury)
 	if err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestFreezingClearsTheMentionsInAbilitiesAndAddonsToo(t *testing.T) {
 		t.Fatalf("the fixture's add-on does not name the gauntlet, it names %q", got)
 	}
 
-	record, err := ui.freezeEntity(graphTestGauntlet)
+	record, err := FreezeEntity(ui, graphTestGauntlet)
 	if err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
@@ -200,17 +200,17 @@ func TestTheRecordIsWrittenBeforeAnythingIsTouched(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
 
-	if _, err := ui.freezeEntity(graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
-	path, err := freezeBookPath(tree, ui.modulePath)
+	path, err := freezeBookPath(tree, ui.ModulePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("the record of what the freeze changed was not written: %v", err)
 	}
-	book, err := readFreezeBook(tree, ui.modulePath)
+	book, err := readFreezeBook(tree, ui.ModulePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,10 +228,10 @@ func TestTheRecordIsWrittenBeforeAnythingIsTouched(t *testing.T) {
 func TestFreezingTwiceIsRefused(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	if _, err := ui.freezeEntity(graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
 		t.Fatalf("the first freeze: %v", err)
 	}
-	if _, err := ui.freezeEntity(graphTestArmoury); err == nil {
+	if _, err := FreezeEntity(ui, graphTestArmoury); err == nil {
 		t.Error("freezing an already frozen unit was allowed, which would lose the first record")
 	}
 }
@@ -239,10 +239,10 @@ func TestFreezingTwiceIsRefused(t *testing.T) {
 func TestOnlyAUnitOrABuildingCanBeFrozen(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	if _, err := ui.freezeEntity(graphTestGauss); err == nil {
+	if _, err := FreezeEntity(ui, graphTestGauss); err == nil {
 		t.Error("a weapon was frozen, but only units and buildings are units the mod ships")
 	}
-	if _, err := ui.freezeEntity(`Data\attrib\ebps\races\necrons\troops\nothing_here.rgd`); err == nil {
+	if _, err := FreezeEntity(ui, `Data\attrib\ebps\races\necrons\troops\nothing_here.rgd`); err == nil {
 		t.Error("a file that is not in the mod was frozen")
 	}
 }
@@ -260,10 +260,10 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := ui.freezeEntity(graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
-	record, err := ui.unfreezeEntity(graphTestArmoury)
+	record, err := UnfreezeEntity(ui, graphTestArmoury)
 	if err != nil {
 		t.Fatalf("unfreezeEntity: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 		t.Error("the file that pointed at the frozen unit is not byte for byte what it was")
 	}
 	// The project folder no longer holds a copy of a unit that is in the mod.
-	unitsDir, err := freezeUnitsDir(tree, ui.modulePath)
+	unitsDir, err := freezeUnitsDir(tree, ui.ModulePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 		}
 	}
 	// And the record no longer claims it is frozen.
-	book, err := readFreezeBook(tree, ui.modulePath)
+	book, err := readFreezeBook(tree, ui.ModulePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 func TestUnfreezingSomethingThatWasNeverFrozenIsRefused(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	if _, err := ui.unfreezeEntity(graphTestArmoury); err == nil {
+	if _, err := UnfreezeEntity(ui, graphTestArmoury); err == nil {
 		t.Error("unfreezing a unit that is not frozen was allowed")
 	}
 }
@@ -331,16 +331,16 @@ func TestAskingWhatIsFrozenCreatesNothing(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	appData := freezeTestMod(t, tree)
 
-	if ui.isFrozen(graphTestArmoury) {
+	if IsFrozen(ui, graphTestArmoury) {
 		t.Error("a mod that has frozen nothing says a unit is frozen")
 	}
-	if rows := ui.frozenRows(); len(rows) != 0 {
+	if rows := FrozenRows(ui); len(rows) != 0 {
 		t.Errorf("a mod that has frozen nothing lists %d rows", len(rows))
 	}
 	// Asking a few more times, which is what a window does.
 	for i := 0; i < 5; i++ {
-		ui.isFrozen(graphTestLoose)
-		ui.frozenRows()
+		IsFrozen(ui, graphTestLoose)
+		FrozenRows(ui)
 	}
 	if _, err := os.Stat(filepath.Join(appData, "DoW Mod Studio")); !os.IsNotExist(err) {
 		t.Errorf("asking what is frozen created the program's own folder under %s", appData)
@@ -348,10 +348,10 @@ func TestAskingWhatIsFrozenCreatesNothing(t *testing.T) {
 
 	// A freeze does create the project folder, because it has somewhere to put
 	// the files.
-	if _, err := ui.freezeEntity(graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
-	dir, err := freezeUnitsDir(tree, ui.modulePath)
+	dir, err := freezeUnitsDir(tree, ui.ModulePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,18 +370,18 @@ func TestAskingWhatIsFrozenCreatesNothing(t *testing.T) {
 func TestTheRecordIsReadOnceNotOnceAFrame(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	first := ui.freezeBookFor()
+	first := FreezeBookFor(ui)
 	if first == nil {
 		t.Fatal("no record for a mod that has one")
 	}
-	if again := ui.freezeBookFor(); again != first {
+	if again := FreezeBookFor(ui); again != first {
 		t.Error("the record was read again instead of being kept")
 	}
 	// A freeze changes it, so the cache has to be dropped.
-	if _, err := ui.freezeEntity(graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
-	after := ui.freezeBookFor()
+	after := FreezeBookFor(ui)
 	if after == first {
 		t.Error("the cached record survived a freeze, so the window would not show it")
 	}
@@ -486,10 +486,10 @@ func clickAt(f *windowFrame, at f32.Point) {
 // and finds the freeze button by walking the pointer along the strip.
 func TestTheFreezeButtonIsReachableInTheWindow(t *testing.T) {
 	ui, _ := freezeTestUI(t)
-	freezeTestMod(t, ui.modTree)
-	ui.openUnitTab()
+	freezeTestMod(t, ui.ModTree)
+	OpenUnitTab(ui)
 	f := newWindowFrame(ui, 1000, 700)
-	at, ok := findStripButton(t, f, &f.ui.unitFreezeTrigger)
+	at, ok := findStripButton(t, f, &f.ui.UnitFreezeTrigger)
 	if !ok {
 		t.Fatal("the Freeze button was not found in the picker strip")
 	}
@@ -507,14 +507,14 @@ func TestTheFreezeButtonIsReachableInTheWindow(t *testing.T) {
 func TestFreezingFromTheWindowMovesTheSelectedUnitAndSaysSo(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	ui.openUnitTab()
-	sel := ui.currentUnit()
+	OpenUnitTab(ui)
+	sel := CurrentUnit(ui)
 	if sel == nil {
 		t.Fatal("no unit is selected in the object window")
 	}
 	f := newWindowFrame(ui, 1000, 700)
 
-	at, ok := findStripButton(t, f, &f.ui.unitFreezeTrigger)
+	at, ok := findStripButton(t, f, &f.ui.UnitFreezeTrigger)
 	if !ok {
 		t.Fatal("the Freeze button was not found in the picker strip")
 	}
@@ -523,15 +523,15 @@ func TestFreezingFromTheWindowMovesTheSelectedUnitAndSaysSo(t *testing.T) {
 	if tree.FindFile(sel.Path) != nil {
 		t.Errorf("%s is still in the mod after the button was pressed", sel.Name)
 	}
-	if !ui.isFrozen(sel.Path) {
+	if !IsFrozen(ui, sel.Path) {
 		t.Error("the record does not say the unit was frozen")
 	}
-	if ui.statusText == "" {
+	if ui.StatusText == "" {
 		t.Error("nothing was said about what the freeze did")
 	}
 	// The window sends the user where the way back is, because the unit is no
 	// longer in the list it was just frozen from.
-	if got := unitSections[ui.unitSection].label; got != "Frozen" {
+	if got := unitSections[ui.UnitSection].label; got != "Frozen" {
 		t.Errorf("after freezing the window shows %q, want the Frozen section", got)
 	}
 	// And it still draws.
@@ -544,14 +544,14 @@ func TestFreezingFromTheWindowMovesTheSelectedUnitAndSaysSo(t *testing.T) {
 func TestAFrozenUnitIsListedSoItCanBePutBack(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	sel := ui.currentUnit()
+	sel := CurrentUnit(ui)
 	if sel == nil {
 		t.Fatal("no unit is selected in the object window")
 	}
-	if _, err := ui.freezeEntity(sel.Path); err != nil {
+	if _, err := FreezeEntity(ui, sel.Path); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
-	rows := ui.frozenRows()
+	rows := FrozenRows(ui)
 	if len(rows) != 1 {
 		t.Fatalf("the Frozen list has %d rows, want the one that was frozen", len(rows))
 	}
@@ -571,8 +571,8 @@ func TestAFrozenUnitIsListedSoItCanBePutBack(t *testing.T) {
 func freezeTestUIRows(t *testing.T) []unitWeaponRow {
 	t.Helper()
 	ui, _ := freezeTestUI(t)
-	freezeTestMod(t, ui.modTree)
-	return ui.frozenRows()
+	freezeTestMod(t, ui.ModTree)
+	return FrozenRows(ui)
 }
 
 // TestPuttingAFrozenUnitBackFromTheListPressesItHome is the whole round trip
@@ -580,14 +580,14 @@ func freezeTestUIRows(t *testing.T) []unitWeaponRow {
 func TestPuttingAFrozenUnitBackFromTheListPressesItHome(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	ui.openUnitTab()
-	sel := ui.currentUnit()
+	OpenUnitTab(ui)
+	sel := CurrentUnit(ui)
 	if sel == nil {
 		t.Fatal("no unit is selected in the object window")
 	}
 	f := newWindowFrame(ui, 1000, 700)
 
-	at, ok := findStripButton(t, f, &f.ui.unitFreezeTrigger)
+	at, ok := findStripButton(t, f, &f.ui.UnitFreezeTrigger)
 	if !ok {
 		t.Fatal("the Freeze button was not found in the picker strip")
 	}
@@ -598,10 +598,10 @@ func TestPuttingAFrozenUnitBackFromTheListPressesItHome(t *testing.T) {
 
 	// Put it back by pressing its row in the Frozen list. The row is found by
 	// hovering it, the same way the strip buttons are.
-	ui.unitSection = unitSectionNamed("Frozen")
-	rowClicks := len(ui.frozenRows())
-	ui.ensureUnitRowClicks(rowClicks)
-	at, ok = findHoverPoint(t, f, ui.unitRowClicks[0].Hovered, frozenRowProbeRow(t, f), 4)
+	ui.UnitSection = unitSectionNamed("Frozen")
+	rowClicks := len(FrozenRows(ui))
+	EnsureUnitRowClicks(ui, rowClicks)
+	at, ok = findHoverPoint(t, f, ui.UnitRowClicks[0].Hovered, frozenRowProbeRow(t, f), 4)
 	if !ok {
 		t.Fatal("the row of the frozen unit was not found in the Frozen list")
 	}
@@ -610,14 +610,14 @@ func TestPuttingAFrozenUnitBackFromTheListPressesItHome(t *testing.T) {
 	if tree.FindFile(sel.Path) == nil {
 		t.Errorf("%s was not put back into the mod", sel.Name)
 	}
-	if ui.isFrozen(sel.Path) {
+	if IsFrozen(ui, sel.Path) {
 		t.Error("the record still says the unit is frozen after it was put back")
 	}
-	if len(ui.frozenRows()) != 0 {
+	if len(FrozenRows(ui)) != 0 {
 		t.Error("the Frozen list is not empty after the last unit was put back")
 	}
 	// Nothing is left in the project folder either.
-	unitsDir, err := freezeUnitsDir(tree, ui.modulePath)
+	unitsDir, err := freezeUnitsDir(tree, ui.ModulePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,10 +647,10 @@ func frozenRowProbeRow(t *testing.T, f *windowFrame) image.Rectangle {
 func TestTheRelationshipsViewDraws(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	ui.openUnitTab()
+	OpenUnitTab(ui)
 	f := newWindowFrame(ui, 1000, 700)
 	for _, name := range []string{"Links", "Problems", "Frozen"} {
-		ui.unitSection = unitSectionNamed(name)
+		ui.UnitSection = unitSectionNamed(name)
 		f.frame()
 	}
 	waitForLinkScan(t, ui)

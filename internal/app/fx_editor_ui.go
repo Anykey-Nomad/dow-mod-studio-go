@@ -20,60 +20,60 @@ import (
 
 // modelFxChecklist lists every resolved effect. Timeline membership supplies
 // the default checks; explicit selections are kept on the viewer across clips.
-func (ui *uiState) modelFxChecklist(gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
-	v = ui.fxChecklistViewer(v)
-	if v == nil || v.model == nil {
+func ModelFxChecklist(ui *uiState, gtx layout.Context, v *modelViewer, clicks *[]widget.Clickable) layout.Dimensions {
+	v = FxChecklistViewer(ui, v)
+	if v == nil || v.Model == nil {
 		return layout.Dimensions{}
 	}
 	anim := ""
-	if v.anim != nil {
-		anim = v.anim.Name
+	if v.Anim != nil {
+		anim = v.Anim.Name
 	}
-	v.fxSelectionAnimName(anim)
-	if len(*clicks) != len(v.fxEffects) {
-		*clicks = make([]widget.Clickable, len(v.fxEffects))
+	v.FxSelectionAnimName(anim)
+	if len(*clicks) != len(v.FxEffects) {
+		*clicks = make([]widget.Clickable, len(v.FxEffects))
 	}
-	if len(v.fxAttrClicks) != len(v.fxEffects) {
-		v.fxAttrClicks = make([]widget.Clickable, len(v.fxEffects))
+	if len(v.FxAttrClicks) != len(v.FxEffects) {
+		v.FxAttrClicks = make([]widget.Clickable, len(v.FxEffects))
 	}
-	if v.fxAttrClick.Clicked(gtx) {
-		if v.fxAttrIndex < 0 && len(v.fxEffects) > 0 {
-			v.fxAttrIndex = 0
-			v.syncFXAttributeEditors(0)
+	if v.FxAttrClick.Clicked(gtx) {
+		if v.FxAttrIndex < 0 && len(v.FxEffects) > 0 {
+			v.FxAttrIndex = 0
+			v.SyncFXAttributeEditors(0)
 		}
-		if v.fxAttrIndex >= 0 {
-			v.fxAttrOpen = true
-			v.invalidate()
+		if v.FxAttrIndex >= 0 {
+			v.FxAttrOpen = true
+			v.Invalidate()
 		}
 	}
 	children := []layout.FlexChild{}
-	if len(v.fxEffects) == 0 {
+	if len(v.FxEffects) == 0 {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), "No FX events were resolved for this model.")
+			l := material.Label(ui.Th, unit.Sp(9), "No FX events were resolved for this model.")
 			l.Color = cTextDim
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6), Top: unit.Dp(6)}.Layout(gtx, l.Layout)
 		}))
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.fxAttributeDialogLauncher(gtx, v)
+			return FxAttributeDialogLauncher(ui, gtx, v)
 		}))
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	}
-	for i := range v.fxEffects {
+	for i := range v.FxEffects {
 		i := i
-		e := v.fxEffects[i]
+		e := v.FxEffects[i]
 		click := &(*clicks)[i]
 		if click.Clicked(gtx) {
-			v.fxSetEffectSelected(i, anim, !v.fxEffectSelected(i, anim))
-			v.invalidate()
+			v.FxSetEffectSelected(i, anim, !v.FxEffectSelected(i, anim))
+			v.Invalidate()
 		}
-		checked := v.fxEffectSelected(i, anim)
-		inTimeline := v.fxEffectVisible(i)
+		checked := v.FxEffectSelected(i, anim)
+		inTimeline := v.FxEffectVisible(i)
 		marker := "no marker"
-		if e.Marker >= 0 && e.Marker < len(v.model.Markers) {
-			marker = v.model.Markers[e.Marker].Name
+		if e.Marker >= 0 && e.Marker < len(v.Model.Markers) {
+			marker = v.Model.Markers[e.Marker].Name
 		}
-		if e.HasOther && e.OtherMarker >= 0 && e.OtherMarker < len(v.model.Markers) {
-			marker += " → " + v.model.Markers[e.OtherMarker].Name
+		if e.HasOther && e.OtherMarker >= 0 && e.OtherMarker < len(v.Model.Markers) {
+			marker += " → " + v.Model.Markers[e.OtherMarker].Name
 		}
 		name := e.Label
 		if e.FxName != "" {
@@ -82,66 +82,66 @@ func (ui *uiState) modelFxChecklist(gtx layout.Context, v *modelViewer, clicks *
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return ui.fxChecklistRow(gtx, click, checked, name, marker, v.fxAttrIndex == i, inTimeline)
+					return FxChecklistRow(ui, gtx, click, checked, name, marker, v.FxAttrIndex == i, inTimeline)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					attrClick := &v.fxAttrClicks[i]
+					attrClick := &v.FxAttrClicks[i]
 					if attrClick.Clicked(gtx) {
-						if v.fxAttrIndex != i {
-							v.fxAttrIndex = i
-							v.syncFXAttributeEditors(i)
+						if v.FxAttrIndex != i {
+							v.FxAttrIndex = i
+							v.SyncFXAttributeEditors(i)
 						}
-						v.fxAttrOpen = true
-						v.invalidate()
+						v.FxAttrOpen = true
+						v.Invalidate()
 					}
 					return layout.Inset{Left: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButton(gtx, attrClick, "Attributes")
+						return SmallButton(ui, gtx, attrClick, "Attributes")
 					})
 				}),
 			)
 		}))
 	}
 	children = append([]layout.FlexChild{layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.fxAttributeDialogLauncher(gtx, v)
+		return FxAttributeDialogLauncher(ui, gtx, v)
 	})}, children...)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
-func (ui *uiState) fxAttributeDialogLauncher(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	if v.fxAttrClick.Clicked(gtx) {
-		if v.fxAttrIndex < 0 && len(v.fxEffects) > 0 {
-			v.fxAttrIndex = 0
-			v.syncFXAttributeEditors(0)
+func FxAttributeDialogLauncher(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
+	if v.FxAttrClick.Clicked(gtx) {
+		if v.FxAttrIndex < 0 && len(v.FxEffects) > 0 {
+			v.FxAttrIndex = 0
+			v.SyncFXAttributeEditors(0)
 		}
-		if v.fxAttrIndex >= 0 {
-			v.fxAttrOpen = true
-			v.invalidate()
+		if v.FxAttrIndex >= 0 {
+			v.FxAttrOpen = true
+			v.Invalidate()
 		}
 	}
 	return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		label := "FX attributes"
-		if v.fxAttrIndex >= 0 && v.fxAttrIndex < len(v.fxEffects) {
-			label += ": " + v.fxEffects[v.fxAttrIndex].Label
+		if v.FxAttrIndex >= 0 && v.FxAttrIndex < len(v.FxEffects) {
+			label += ": " + v.FxEffects[v.FxAttrIndex].Label
 		}
-		return ui.smallButton(gtx, &v.fxAttrClick, label)
+		return SmallButton(ui, gtx, &v.FxAttrClick, label)
 	})
 }
 
 // fxChecklistViewer chooses the viewer whose effect list is currently shown.
 // The unit/Object viewport owns a separate viewer from the selected WHM tab.
-func (ui *uiState) fxChecklistViewer(v *modelViewer) *modelViewer {
-	if ui.unitModel != nil && ui.unitModel.model != nil && ui.unitModel.model == v {
-		return ui.unitModel.model
+func FxChecklistViewer(ui *uiState, v *modelViewer) *modelViewer {
+	if ui.UnitModel != nil && ui.UnitModel.Model != nil && ui.UnitModel.Model == v {
+		return ui.UnitModel.Model
 	}
-	for _, t := range ui.openTabs {
-		if t != nil && t.kind == "whm" && t.model == v {
-			return t.model
+	for _, t := range ui.OpenTabs {
+		if t != nil && t.Kind == "whm" && t.Model == v {
+			return t.Model
 		}
 	}
 	return v
 }
 
-func (ui *uiState) fxChecklistRow(gtx layout.Context, click *widget.Clickable, checked bool, title, marker string, selected, inTimeline bool) layout.Dimensions {
+func FxChecklistRow(ui *uiState, gtx layout.Context, click *widget.Clickable, checked bool, title, marker string, selected, inTimeline bool) layout.Dimensions {
 	bg := cPanelBg
 	if selected {
 		bg = cSelectBg
@@ -155,7 +155,7 @@ func (ui *uiState) fxChecklistRow(gtx layout.Context, click *widget.Clickable, c
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				if bg != cPanelBg {
-					ui.rrect(gtx, bg, sz, unit.Dp(2))
+					Rrect(ui, gtx, bg, sz, unit.Dp(2))
 				}
 				return layout.Dimensions{Size: sz}
 			}),
@@ -170,12 +170,12 @@ func (ui *uiState) fxChecklistRow(gtx layout.Context, click *widget.Clickable, c
 							if !inTimeline {
 								mark += "·"
 							}
-							l := material.Label(ui.th, unit.Sp(10), mark+"  "+title)
+							l := material.Label(ui.Th, unit.Sp(10), mark+"  "+title)
 							l.Color, l.MaxLines = cText, 1
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), marker)
+							l := material.Label(ui.Th, unit.Sp(9), marker)
 							l.Color, l.MaxLines = cTextDim, 1
 							return layout.Inset{Left: unit.Dp(20)}.Layout(gtx, l.Layout)
 						}),
@@ -186,23 +186,23 @@ func (ui *uiState) fxChecklistRow(gtx layout.Context, click *widget.Clickable, c
 	})
 }
 
-func (v *modelViewer) ensureFXOverride(index int) {
-	if v.fxOverrides == nil {
-		v.fxOverrides = make(map[int]fxAttributeOverride)
+func (v *modelViewer) EnsureFXOverride(index int) {
+	if v.FxOverrides == nil {
+		v.FxOverrides = make(map[int]fxAttributeOverride)
 	}
-	if _, ok := v.fxOverrides[index]; !ok {
-		v.fxOverrides[index] = fxAttributeOverride{}
+	if _, ok := v.FxOverrides[index]; !ok {
+		v.FxOverrides[index] = fxAttributeOverride{}
 	}
 }
 
-func (v *modelViewer) syncFXAttributeEditors(index int) {
-	if v == nil || index < 0 || index >= len(v.fxEffects) {
+func (v *modelViewer) SyncFXAttributeEditors(index int) {
+	if v == nil || index < 0 || index >= len(v.FxEffects) {
 		return
 	}
-	origin := v.fxEffects[index].Origin
+	origin := v.FxEffects[index].Origin
 	rotation := [3]float64{}
 	distance := origin.Length()
-	if override, ok := v.fxOverrides[index]; ok {
+	if override, ok := v.FxOverrides[index]; ok {
 		if override.HasOrigin {
 			origin = override.Origin
 		}
@@ -211,37 +211,37 @@ func (v *modelViewer) syncFXAttributeEditors(index int) {
 			distance = override.ScaleDistance
 		}
 	}
-	editors := []*widget.Editor{&v.fxAttrPosX, &v.fxAttrPosY, &v.fxAttrPosZ, &v.fxAttrRotX, &v.fxAttrRotY, &v.fxAttrRotZ, &v.fxAttrDistance}
+	editors := []*widget.Editor{&v.FxAttrPosX, &v.FxAttrPosY, &v.FxAttrPosZ, &v.FxAttrRotX, &v.FxAttrRotY, &v.FxAttrRotZ, &v.FxAttrDistance}
 	values := []float64{origin.X, origin.Y, origin.Z, rotation[0], rotation[1], rotation[2], distance}
 	for i := range editors {
 		editors[i].SetText(strconv.FormatFloat(values[i], 'f', 3, 64))
 	}
 }
 
-func (v *modelViewer) applyFXAttributeField(field int) {
-	if v == nil || v.fxAttrIndex < 0 || v.fxAttrIndex >= len(v.fxEffects) || field < 0 || field >= 7 {
+func (v *modelViewer) ApplyFXAttributeField(field int) {
+	if v == nil || v.FxAttrIndex < 0 || v.FxAttrIndex >= len(v.FxEffects) || field < 0 || field >= 7 {
 		return
 	}
-	editors := []*widget.Editor{&v.fxAttrPosX, &v.fxAttrPosY, &v.fxAttrPosZ, &v.fxAttrRotX, &v.fxAttrRotY, &v.fxAttrRotZ, &v.fxAttrDistance}
+	editors := []*widget.Editor{&v.FxAttrPosX, &v.FxAttrPosY, &v.FxAttrPosZ, &v.FxAttrRotX, &v.FxAttrRotY, &v.FxAttrRotZ, &v.FxAttrDistance}
 	value, ok := fxEditorValue(editors[field])
 	if !ok {
-		v.fxAttrError = "Enter a valid number"
+		v.FxAttrError = "Enter a valid number"
 		return
 	}
 	if field >= 3 && field <= 5 && (value < 1 || value > 360) {
-		v.fxAttrError = "Angle must be between 1° and 360°"
+		v.FxAttrError = "Angle must be between 1° and 360°"
 		return
 	}
 	if field == 6 && value < 0 {
-		v.fxAttrError = "Distance must not be negative"
+		v.FxAttrError = "Distance must not be negative"
 		return
 	}
-	v.fxAttrError = ""
-	v.ensureFXOverride(v.fxAttrIndex)
-	o := v.fxOverrides[v.fxAttrIndex]
+	v.FxAttrError = ""
+	v.EnsureFXOverride(v.FxAttrIndex)
+	o := v.FxOverrides[v.FxAttrIndex]
 	switch field {
 	case 0, 1, 2:
-		origin := v.fxEffects[v.fxAttrIndex].Origin
+		origin := v.FxEffects[v.FxAttrIndex].Origin
 		if o.HasOrigin {
 			origin = o.Origin
 		}
@@ -252,8 +252,8 @@ func (v *modelViewer) applyFXAttributeField(field int) {
 	case 6:
 		o.ScaleDistance, o.HasScaleDistance = value, true
 	}
-	v.fxOverrides[v.fxAttrIndex] = o
-	v.invalidate()
+	v.FxOverrides[v.FxAttrIndex] = o
+	v.Invalidate()
 }
 
 // FX attribute origin inputs are viewer/model space, where +Z is up. Setters
@@ -275,11 +275,11 @@ func fxEditorValue(ed *widget.Editor) (float64, bool) {
 	return v, err == nil && !math.IsNaN(v) && !math.IsInf(v, 0)
 }
 
-func (ui *uiState) modelFxAttributeDialog(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	if v == nil || v.model == nil || !v.fxAttrOpen || v.fxAttrIndex < 0 || v.fxAttrIndex >= len(v.fxEffects) {
+func ModelFxAttributeDialog(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
+	if v == nil || v.Model == nil || !v.FxAttrOpen || v.FxAttrIndex < 0 || v.FxAttrIndex >= len(v.FxEffects) {
 		return layout.Dimensions{}
 	}
-	editors := []*widget.Editor{&v.fxAttrPosX, &v.fxAttrPosY, &v.fxAttrPosZ, &v.fxAttrRotX, &v.fxAttrRotY, &v.fxAttrRotZ, &v.fxAttrDistance}
+	editors := []*widget.Editor{&v.FxAttrPosX, &v.FxAttrPosY, &v.FxAttrPosZ, &v.FxAttrRotX, &v.FxAttrRotY, &v.FxAttrRotZ, &v.FxAttrDistance}
 	for _, ed := range editors {
 		ed.SingleLine = true
 	}
@@ -312,7 +312,7 @@ func (ui *uiState) modelFxAttributeDialog(gtx layout.Context, v *modelViewer) la
 			}
 		}
 		if submit {
-			v.applyFXAttributeField(i)
+			v.ApplyFXAttributeField(i)
 		}
 		for {
 			ev, ok := gtx.Event(key.Filter{Focus: ed, Name: key.NameEscape})
@@ -320,11 +320,11 @@ func (ui *uiState) modelFxAttributeDialog(gtx layout.Context, v *modelViewer) la
 				break
 			}
 			if event, ok := ev.(key.Event); ok && event.State == key.Press {
-				v.fxAttrOpen = false
+				v.FxAttrOpen = false
 			}
 		}
 	}
-	if v.fxAttrSetPos.Clicked(gtx) {
+	if v.FxAttrSetPos.Clicked(gtx) {
 		var vals [3]float64
 		valid := true
 		for i := range vals {
@@ -334,17 +334,17 @@ func (ui *uiState) modelFxAttributeDialog(gtx layout.Context, v *modelViewer) la
 			}
 		}
 		if valid {
-			v.ensureFXOverride(v.fxAttrIndex)
-			ov := v.fxOverrides[v.fxAttrIndex]
+			v.EnsureFXOverride(v.FxAttrIndex)
+			ov := v.FxOverrides[v.FxAttrIndex]
 			ov.Origin, ov.HasOrigin = fauxgl.Vector{X: vals[0], Y: vals[1], Z: vals[2]}, true
-			v.fxOverrides[v.fxAttrIndex] = ov
-			v.fxAttrError = ""
-			v.invalidate()
+			v.FxOverrides[v.FxAttrIndex] = ov
+			v.FxAttrError = ""
+			v.Invalidate()
 		} else {
-			v.fxAttrError = "Enter valid coordinates"
+			v.FxAttrError = "Enter valid coordinates"
 		}
 	}
-	if v.fxAttrSetAngle.Clicked(gtx) {
+	if v.FxAttrSetAngle.Clicked(gtx) {
 		var angles [3]float64
 		valid := true
 		for i := range angles {
@@ -355,73 +355,73 @@ func (ui *uiState) modelFxAttributeDialog(gtx layout.Context, v *modelViewer) la
 			}
 		}
 		if valid {
-			v.ensureFXOverride(v.fxAttrIndex)
-			ov := v.fxOverrides[v.fxAttrIndex]
+			v.EnsureFXOverride(v.FxAttrIndex)
+			ov := v.FxOverrides[v.FxAttrIndex]
 			ov.Rotation = angles
-			v.fxOverrides[v.fxAttrIndex] = ov
-			v.fxAttrError = ""
-			v.invalidate()
+			v.FxOverrides[v.FxAttrIndex] = ov
+			v.FxAttrError = ""
+			v.Invalidate()
 		} else {
-			v.fxAttrError = "Each angle must be 1°..360°"
+			v.FxAttrError = "Each angle must be 1°..360°"
 		}
 	}
-	if v.fxAttrResetPos.Clicked(gtx) {
-		if ov, ok := v.fxOverrides[v.fxAttrIndex]; ok {
+	if v.FxAttrResetPos.Clicked(gtx) {
+		if ov, ok := v.FxOverrides[v.FxAttrIndex]; ok {
 			ov.HasOrigin = false
-			v.fxOverrides[v.fxAttrIndex] = ov
+			v.FxOverrides[v.FxAttrIndex] = ov
 		}
-		v.syncFXAttributeEditors(v.fxAttrIndex)
-		v.invalidate()
+		v.SyncFXAttributeEditors(v.FxAttrIndex)
+		v.Invalidate()
 	}
-	if v.fxAttrResetRot.Clicked(gtx) {
-		if ov, ok := v.fxOverrides[v.fxAttrIndex]; ok {
+	if v.FxAttrResetRot.Clicked(gtx) {
+		if ov, ok := v.FxOverrides[v.FxAttrIndex]; ok {
 			ov.Rotation = [3]float64{}
-			v.fxOverrides[v.fxAttrIndex] = ov
+			v.FxOverrides[v.FxAttrIndex] = ov
 		}
-		v.syncFXAttributeEditors(v.fxAttrIndex)
-		v.invalidate()
+		v.SyncFXAttributeEditors(v.FxAttrIndex)
+		v.Invalidate()
 	}
-	if v.fxAttrSetDistance.Clicked(gtx) {
-		if d, ok := fxEditorValue(&v.fxAttrDistance); ok && d >= 0 {
-			v.ensureFXOverride(v.fxAttrIndex)
-			ov := v.fxOverrides[v.fxAttrIndex]
+	if v.FxAttrSetDistance.Clicked(gtx) {
+		if d, ok := fxEditorValue(&v.FxAttrDistance); ok && d >= 0 {
+			v.EnsureFXOverride(v.FxAttrIndex)
+			ov := v.FxOverrides[v.FxAttrIndex]
 			ov.ScaleDistance, ov.HasScaleDistance = d, true
-			v.fxOverrides[v.fxAttrIndex] = ov
-			v.invalidate()
+			v.FxOverrides[v.FxAttrIndex] = ov
+			v.Invalidate()
 		}
 	}
-	if v.fxAttrDir.Clicked(gtx) {
-		v.ensureFXOverride(v.fxAttrIndex)
-		ov := v.fxOverrides[v.fxAttrIndex]
+	if v.FxAttrDir.Clicked(gtx) {
+		v.EnsureFXOverride(v.FxAttrIndex)
+		ov := v.FxOverrides[v.FxAttrIndex]
 		ov.ShowDirection = !ov.ShowDirection
-		v.fxOverrides[v.fxAttrIndex] = ov
-		v.invalidate()
+		v.FxOverrides[v.FxAttrIndex] = ov
+		v.Invalidate()
 	}
-	if v.fxAttrMarker.Clicked(gtx) {
-		v.ensureFXOverride(v.fxAttrIndex)
-		ov := v.fxOverrides[v.fxAttrIndex]
+	if v.FxAttrMarker.Clicked(gtx) {
+		v.EnsureFXOverride(v.FxAttrIndex)
+		ov := v.FxOverrides[v.FxAttrIndex]
 		ov.ShowMarker = !ov.ShowMarker
-		v.fxOverrides[v.fxAttrIndex] = ov
-		v.invalidate()
+		v.FxOverrides[v.FxAttrIndex] = ov
+		v.Invalidate()
 	}
-	v.updateFXAttributeDrag(gtx)
-	if !v.fxAttrOpen {
+	v.UpdateFXAttributeDrag(gtx)
+	if !v.FxAttrOpen {
 		return layout.Dimensions{}
 	}
 
 	w := minInt(gtx.Dp(unit.Dp(360)), gtx.Constraints.Max.X-16)
 	h := minInt(gtx.Dp(unit.Dp(420)), gtx.Constraints.Max.Y-16)
 	w, h = maxInt(240, w), maxInt(300, h)
-	if v.fxAttrWindowX == 0 && v.fxAttrWindowY == 0 {
-		v.fxAttrWindowX = maxInt(8, (gtx.Constraints.Max.X-w)/2)
-		v.fxAttrWindowY = maxInt(8, (gtx.Constraints.Max.Y-h)/2)
+	if v.FxAttrWindowX == 0 && v.FxAttrWindowY == 0 {
+		v.FxAttrWindowX = maxInt(8, (gtx.Constraints.Max.X-w)/2)
+		v.FxAttrWindowY = maxInt(8, (gtx.Constraints.Max.Y-h)/2)
 	}
-	v.fxAttrWindowX = clampInt(v.fxAttrWindowX, 0, maxInt(0, gtx.Constraints.Max.X-w))
-	v.fxAttrWindowY = clampInt(v.fxAttrWindowY, 0, maxInt(0, gtx.Constraints.Max.Y-h))
-	e := v.fxEffects[v.fxAttrIndex]
+	v.FxAttrWindowX = clampInt(v.FxAttrWindowX, 0, maxInt(0, gtx.Constraints.Max.X-w))
+	v.FxAttrWindowY = clampInt(v.FxAttrWindowY, 0, maxInt(0, gtx.Constraints.Max.Y-h))
+	e := v.FxEffects[v.FxAttrIndex]
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			at := image.Pt(v.fxAttrWindowX, v.fxAttrWindowY)
+			at := image.Pt(v.FxAttrWindowX, v.FxAttrWindowY)
 			child := gtx
 			child.Constraints.Min, child.Constraints.Max = image.Pt(w, h), image.Pt(w, h)
 			off := op.Offset(at).Push(gtx.Ops)
@@ -429,28 +429,34 @@ func (ui *uiState) modelFxAttributeDialog(gtx layout.Context, v *modelViewer) la
 			return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(child, func(gtx layout.Context) layout.Dimensions {
 				fillRect(gtx, cPanelBg, image.Pt(w, h))
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAttributeTitle(gtx, v, e) }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAttributeField(gtx, "Origin X", &v.fxAttrPosX) }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAttributeField(gtx, "Origin Y", &v.fxAttrPosY) }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAttributeField(gtx, "Origin Z", &v.fxAttrPosZ) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FxAttributeTitle(ui, gtx, v, e) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return FxAttributeField(ui, gtx, "Origin X", &v.FxAttrPosX)
+					}),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return FxAttributeField(ui, gtx, "Origin Y", &v.FxAttrPosY)
+					}),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return FxAttributeField(ui, gtx, "Origin Z", &v.FxAttrPosZ)
+					}),
 					layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.fxAttributeField(gtx, "Rotate X° (1..360)", &v.fxAttrRotX)
+						return FxAttributeField(ui, gtx, "Rotate X° (1..360)", &v.FxAttrRotX)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.fxAttributeField(gtx, "Rotate Y° (1..360)", &v.fxAttrRotY)
+						return FxAttributeField(ui, gtx, "Rotate Y° (1..360)", &v.FxAttrRotY)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.fxAttributeField(gtx, "Rotate Z° (1..360)", &v.fxAttrRotZ)
+						return FxAttributeField(ui, gtx, "Rotate Z° (1..360)", &v.FxAttrRotZ)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.fxAttributeField(gtx, "Distance", &v.fxAttrDistance)
+						return FxAttributeField(ui, gtx, "Distance", &v.FxAttrDistance)
 					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAttributeButtonRows(gtx, v) }), layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						if v.fxAttrError == "" {
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FxAttributeButtonRows(ui, gtx, v) }), layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						if v.FxAttrError == "" {
 							return layout.Dimensions{}
 						}
-						l := material.Label(ui.th, unit.Sp(9), v.fxAttrError)
+						l := material.Label(ui.Th, unit.Sp(9), v.FxAttrError)
 						l.Color = cProblem
 						return layout.Inset{Left: unit.Dp(10), Top: unit.Dp(4)}.Layout(gtx, l.Layout)
 					}),
@@ -460,20 +466,20 @@ func (ui *uiState) modelFxAttributeDialog(gtx layout.Context, v *modelViewer) la
 	)
 }
 
-func (ui *uiState) fxAttributeTitle(gtx layout.Context, v *modelViewer, e fxOverlayEffect) layout.Dimensions {
+func FxAttributeTitle(ui *uiState, gtx layout.Context, v *modelViewer, e fxOverlayEffect) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(32))
 	sz := image.Pt(gtx.Constraints.Max.X, h)
 	titleW := gtx.Constraints.Max.X - gtx.Dp(unit.Dp(36))
 	if titleW < 1 {
 		titleW = gtx.Constraints.Max.X
 	}
-	if v.fxAttrClose.Clicked(gtx) {
-		v.fxAttrOpen = false
+	if v.FxAttrClose.Clicked(gtx) {
+		v.FxAttrOpen = false
 	}
 	titleRect := clip.Rect{Max: image.Pt(titleW, h)}.Push(gtx.Ops)
-	event.Op(gtx.Ops, &v.fxAttrDragTag)
+	event.Op(gtx.Ops, &v.FxAttrDragTag)
 	for {
-		ev, ok := gtx.Event(pointer.Filter{Target: &v.fxAttrDragTag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel})
+		ev, ok := gtx.Event(pointer.Filter{Target: &v.FxAttrDragTag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel})
 		if !ok {
 			break
 		}
@@ -483,16 +489,16 @@ func (ui *uiState) fxAttributeTitle(gtx layout.Context, v *modelViewer, e fxOver
 		}
 		switch p.Kind {
 		case pointer.Press:
-			v.fxAttrDragging = true
-			v.fxAttrDragOrigin = image.Pt(v.fxAttrWindowX, v.fxAttrWindowY)
-			v.fxAttrDragX, v.fxAttrDragY = p.Position.X, p.Position.Y
+			v.FxAttrDragging = true
+			v.FxAttrDragOrigin = image.Pt(v.FxAttrWindowX, v.FxAttrWindowY)
+			v.FxAttrDragX, v.FxAttrDragY = p.Position.X, p.Position.Y
 		case pointer.Drag:
-			if v.fxAttrDragging {
-				v.fxAttrWindowX = v.fxAttrDragOrigin.X + int(p.Position.X-v.fxAttrDragX)
-				v.fxAttrWindowY = v.fxAttrDragOrigin.Y + int(p.Position.Y-v.fxAttrDragY)
+			if v.FxAttrDragging {
+				v.FxAttrWindowX = v.FxAttrDragOrigin.X + int(p.Position.X-v.FxAttrDragX)
+				v.FxAttrWindowY = v.FxAttrDragOrigin.Y + int(p.Position.Y-v.FxAttrDragY)
 			}
 		case pointer.Release, pointer.Cancel:
-			v.fxAttrDragging = false
+			v.FxAttrDragging = false
 		}
 	}
 	titleRect.Pop()
@@ -501,26 +507,26 @@ func (ui *uiState) fxAttributeTitle(gtx layout.Context, v *modelViewer, e fxOver
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = titleW
 			gtx.Constraints.Max.X = titleW
-			l := material.Label(ui.th, unit.Sp(11), e.Label+" attributes  ·  drag to move")
+			l := material.Label(ui.Th, unit.Sp(11), e.Label+" attributes  ·  drag to move")
 			l.Color, l.MaxLines = cText, 1
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(7)}.Layout(gtx, l.Layout)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButton(gtx, &v.fxAttrClose, "×")
+			return SmallButton(ui, gtx, &v.FxAttrClose, "×")
 		}),
 	)
 }
 
-func (ui *uiState) fxAttributeField(gtx layout.Context, label string, ed *widget.Editor) layout.Dimensions {
+func FxAttributeField(ui *uiState, gtx layout.Context, label string, ed *widget.Editor) layout.Dimensions {
 	return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(4), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), label)
+				l := material.Label(ui.Th, unit.Sp(10), label)
 				l.Color = cTextDim
 				return layout.Inset{Right: unit.Dp(4)}.Layout(gtx, l.Layout)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				editor := material.Editor(ui.th, ed, "")
+				editor := material.Editor(ui.Th, ed, "")
 				editor.TextSize = unit.Sp(10)
 				editor.HintColor = cTextDim
 				return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}.Layout(gtx, editor.Layout)
@@ -529,36 +535,38 @@ func (ui *uiState) fxAttributeField(gtx layout.Context, label string, ed *widget
 	})
 }
 
-func (ui *uiState) fxAttributeButtonRows(gtx layout.Context, v *modelViewer) layout.Dimensions {
+func FxAttributeButtonRows(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
 	return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, &v.fxAttrSetPos, "Set origin") }),
-					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, &v.fxAttrSetAngle, "Set angle") }),
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &v.FxAttrSetPos, "Set origin") }),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButton(gtx, &v.fxAttrResetPos, "Use marker")
+						return SmallButton(ui, gtx, &v.FxAttrSetAngle, "Set angle")
 					}),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButton(gtx, &v.fxAttrSetDistance, "Set distance")
+						return SmallButton(ui, gtx, &v.FxAttrResetPos, "Use marker")
+					}),
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						return SmallButton(ui, gtx, &v.FxAttrSetDistance, "Set distance")
 					}),
 				)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButton(gtx, &v.fxAttrResetRot, "Reset rotation")
+						return SmallButton(ui, gtx, &v.FxAttrResetRot, "Reset rotation")
 					}),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButton(gtx, &v.fxAttrDir, fxAttrToggleLabel(v.fxOverrides, v.fxAttrIndex, "Direction"))
+						return SmallButton(ui, gtx, &v.FxAttrDir, fxAttrToggleLabel(v.FxOverrides, v.FxAttrIndex, "Direction"))
 					}),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButton(gtx, &v.fxAttrMarker, fxAttrToggleLabel(v.fxOverrides, v.fxAttrIndex, "Marker"))
+						return SmallButton(ui, gtx, &v.FxAttrMarker, fxAttrToggleLabel(v.FxOverrides, v.FxAttrIndex, "Marker"))
 					}),
 				)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(9), "clip: "+v.fxSelectionAnim)
+				l := material.Label(ui.Th, unit.Sp(9), "clip: "+v.FxSelectionAnim)
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			}),
@@ -585,12 +593,12 @@ func fxAttrToggleLabel(overrides map[int]fxAttributeOverride, index int, label s
 	return "Marker off"
 }
 
-func (v *modelViewer) updateFXAttributeDrag(gtx layout.Context) {
-	if !v.fxAttrDragging {
+func (v *modelViewer) UpdateFXAttributeDrag(gtx layout.Context) {
+	if !v.FxAttrDragging {
 		return
 	}
 	for {
-		ev, ok := gtx.Event(pointer.Filter{Target: &v.fxAttrDragTag, Kinds: pointer.Drag | pointer.Release | pointer.Cancel})
+		ev, ok := gtx.Event(pointer.Filter{Target: &v.FxAttrDragTag, Kinds: pointer.Drag | pointer.Release | pointer.Cancel})
 		if !ok {
 			break
 		}
@@ -600,10 +608,10 @@ func (v *modelViewer) updateFXAttributeDrag(gtx layout.Context) {
 		}
 		switch p.Kind {
 		case pointer.Drag:
-			v.fxAttrWindowX = v.fxAttrDragOrigin.X + int(p.Position.X-v.fxAttrDragX)
-			v.fxAttrWindowY = v.fxAttrDragOrigin.Y + int(p.Position.Y-v.fxAttrDragY)
+			v.FxAttrWindowX = v.FxAttrDragOrigin.X + int(p.Position.X-v.FxAttrDragX)
+			v.FxAttrWindowY = v.FxAttrDragOrigin.Y + int(p.Position.Y-v.FxAttrDragY)
 		case pointer.Release, pointer.Cancel:
-			v.fxAttrDragging = false
+			v.FxAttrDragging = false
 		}
 	}
 }

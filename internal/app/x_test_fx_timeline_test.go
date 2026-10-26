@@ -55,20 +55,20 @@ func TestTimelineMapKeepsTheMomentEachEventFires(t *testing.T) {
 func TestAnEventBeforeThePlayheadHasNotFiredYet(t *testing.T) {
 	sim := fx.NewFxSim(&fx.FxFile{})
 	v := &modelViewer{
-		model:          &WhmModel{},
-		anim:           &WhmAnimation{Name: "landing", NumFrames: 20, Duration: 1},
-		animIndex:      0,
-		playing:        true,
-		time:           0.30, // a third of the way in; the clip is one second long
-		fxClipPrev:     0.20,
-		fxAnim:         "landing",
-		showFX:         true,
-		fxEffects:      []fxOverlayEffect{},
-		fxTextures:     nil,
-		fxScale:        1,
-		fxOverlay:      nil,
-		fxLast:         time.Now(),
-		fxClipPrevAnim: "landing",
+		Model:          &WhmModel{},
+		Anim:           &WhmAnimation{Name: "landing", NumFrames: 20, Duration: 1},
+		AnimIndex:      0,
+		Playing:        true,
+		Time:           0.30, // a third of the way in; the clip is one second long
+		FxClipPrev:     0.20,
+		FxAnim:         "landing",
+		ShowFX:         true,
+		FxEffects:      []fxOverlayEffect{},
+		FxTextures:     nil,
+		FxScale:        1,
+		FxOverlay:      nil,
+		FxLast:         time.Now(),
+		FxClipPrevAnim: "landing",
 	}
 	e := fxOverlayEffect{
 		Sim:        sim,
@@ -77,16 +77,16 @@ func TestAnEventBeforeThePlayheadHasNotFiredYet(t *testing.T) {
 		Animations: []string{"landing"},
 		FireTimes:  map[string]float64{"landing": 0.6},
 	}
-	v.fxEffects = []fxOverlayEffect{e}
-	got := v.fxStepOnClip([]fxOverlayEffect{e}, "landing", 0.1)
+	v.FxEffects = []fxOverlayEffect{e}
+	got := v.FxStepOnClip([]fxOverlayEffect{e}, "landing", 0.1)
 	if len(got) != 0 {
 		t.Errorf("an event due at 0.6 drew at 0.30; %d effects passed", len(got))
 	}
 
 	// Past its moment, it both draws and runs.
-	v.time = 0.70
-	v.fxClipPrev = 0.65
-	got = v.fxStepOnClip([]fxOverlayEffect{e}, "landing", 0.05)
+	v.Time = 0.70
+	v.FxClipPrev = 0.65
+	got = v.FxStepOnClip([]fxOverlayEffect{e}, "landing", 0.05)
 	if len(got) != 1 {
 		t.Fatalf("an event due at 0.6 did not draw at 0.70: %d effects", len(got))
 	}
@@ -103,15 +103,15 @@ func TestAnEntryEventFiresAsTheClipBegins(t *testing.T) {
 		FireTimes: map[string]float64{"all_stale": -1},
 	}
 	v := &modelViewer{
-		model: &WhmModel{},
-		anim:  &WhmAnimation{Name: "all_stale", NumFrames: 20, Duration: 1},
+		Model: &WhmModel{},
+		Anim:  &WhmAnimation{Name: "all_stale", NumFrames: 20, Duration: 1},
 		// The playhead is still at zero: the first frame of the clip.
-		time:           0,
-		fxClipPrevAnim: "all_stale",
-		showFX:         true,
-		fxScale:        1,
+		Time:           0,
+		FxClipPrevAnim: "all_stale",
+		ShowFX:         true,
+		FxScale:        1,
 	}
-	got := v.fxStepOnClip([]fxOverlayEffect{e}, "all_stale", 0.05)
+	got := v.FxStepOnClip([]fxOverlayEffect{e}, "all_stale", 0.05)
 	if len(got) != 1 {
 		t.Fatalf("an entry event did not fire on the first frame: %d effects", len(got))
 	}
@@ -126,29 +126,29 @@ func TestALoopingClipStartsItsEventsAgain(t *testing.T) {
 		FireTimes:  map[string]float64{"idle": 0.5},
 	}
 	v := &modelViewer{
-		model: &WhmModel{},
-		anim:  &WhmAnimation{Name: "idle", NumFrames: 20, Duration: 1}, playing: true,
-		time:           0.40,
-		fxClipPrev:     0.38,
-		fxClipPrevAnim: "idle",
-		showFX:         true,
-		fxScale:        1,
+		Model: &WhmModel{},
+		Anim:  &WhmAnimation{Name: "idle", NumFrames: 20, Duration: 1}, Playing: true,
+		Time:           0.40,
+		FxClipPrev:     0.38,
+		FxClipPrevAnim: "idle",
+		ShowFX:         true,
+		FxScale:        1,
 	} // Before the moment: nothing. This frame is a loop that is about to
 	// happen, so it starts at 0.40 rather than at the end.
-	v.time = 0.40
-	v.fxClipPrev = 0.38
-	if got := v.fxStepOnClip([]fxOverlayEffect{e}, "idle", 0.02); len(got) != 0 {
+	v.Time = 0.40
+	v.FxClipPrev = 0.38
+	if got := v.FxStepOnClip([]fxOverlayEffect{e}, "idle", 0.02); len(got) != 0 {
 		t.Fatalf("an event due at 0.5 drew at 0.40")
 	}
 	// The clip loops round: the playhead is back near the start, so the event
 	// must be reachable again rather than waiting out another whole clip.
-	v.time = 0.02
-	got := v.fxStepOnClip([]fxOverlayEffect{e}, "idle", 0.02)
+	v.Time = 0.02
+	got := v.FxStepOnClip([]fxOverlayEffect{e}, "idle", 0.02)
 	if len(got) != 0 {
 		t.Fatalf("after a loop the event drew before its moment: %d", len(got))
 	}
-	v.time = 0.55
-	got = v.fxStepOnClip([]fxOverlayEffect{e}, "idle", 0.02)
+	v.Time = 0.55
+	got = v.FxStepOnClip([]fxOverlayEffect{e}, "idle", 0.02)
 	if len(got) != 1 {
 		t.Fatalf("after a loop the event did not fire again at 0.55: %d", len(got))
 	}
@@ -164,11 +164,11 @@ func TestAClipNoTimelineNamesDrawsNothingRatherThanEverything(t *testing.T) {
 		{Label: "a", Timed: true, Animations: []string{"all_stale"}},
 		{Label: "b", Timed: true, Animations: []string{"land"}},
 	}
-	v := &modelViewer{fxEffects: effects, showFX: true, fxScale: 1}
+	v := &modelViewer{FxEffects: effects, ShowFX: true, FxScale: 1}
 	var played []fxOverlayEffect
-	for i := range v.fxEffects {
-		if v.fxEffects[i].fxPlaysFor("add_on_1a") {
-			played = append(played, v.fxEffects[i])
+	for i := range v.FxEffects {
+		if v.FxEffects[i].fxPlaysFor("add_on_1a") {
+			played = append(played, v.FxEffects[i])
 		}
 	}
 	if len(played) != 0 {
@@ -287,28 +287,28 @@ func (fakeModelGpu) Release()                   {}
 // off — a duplicated list here is how a frame ends up building a picture the
 // hardware path never paints, or painting a picture that was never built.
 func TestTheHardwarePathSaysWhyItWillNotDraw(t *testing.T) {
-	ui := &uiState{modelGpuTried: true, modelGpu: fakeModelGpu{}}
-	v := &modelViewer{model: &WhmModel{}}
-	if got := ui.modelGpuUnavailable(v); got != "" {
+	ui := &uiState{ModelGpuTried: true, ModelGpu: fakeModelGpu{}}
+	v := &modelViewer{Model: &WhmModel{}}
+	if got := ModelGpuUnavailable(ui, v); got != "" {
 		t.Errorf("available hardware path reported %q, want it available", got)
 	}
-	v.model = nil
-	if got := ui.modelGpuUnavailable(v); got != "no model" {
+	v.Model = nil
+	if got := ModelGpuUnavailable(ui, v); got != "no model" {
 		t.Errorf("modelless viewer reported %q, want %q", got, "no model")
 	}
-	v.model = &WhmModel{}
-	ui.forceSoftRenderer = true
-	if got := ui.modelGpuUnavailable(v); got != "software rendering enabled in settings" {
+	v.Model = &WhmModel{}
+	ui.ForceSoftRenderer = true
+	if got := ModelGpuUnavailable(ui, v); got != "software rendering enabled in settings" {
 		t.Errorf("software preference reported %q, want the settings reason", got)
 	}
-	ui.forceSoftRenderer = false
-	v.gpuBroken = true
-	if got := ui.modelGpuUnavailable(v); got != "hardware path marked broken" {
+	ui.ForceSoftRenderer = false
+	v.GpuBroken = true
+	if got := ModelGpuUnavailable(ui, v); got != "hardware path marked broken" {
 		t.Errorf("broken hardware path reported %q, want the broken reason", got)
 	}
-	v.gpuBroken = false
-	ui.modelGpu = nil
-	if got := ui.modelGpuUnavailable(v); got != "no hardware renderer on this window" {
+	v.GpuBroken = false
+	ui.ModelGpu = nil
+	if got := ModelGpuUnavailable(ui, v); got != "no hardware renderer on this window" {
 		t.Errorf("missing renderer reported %q, want the no-renderer reason", got)
 	}
 }
@@ -318,12 +318,12 @@ func TestTheHardwarePathSaysWhyItWillNotDraw(t *testing.T) {
 // it has to come back the moment the hardware path stops being one. Both
 // halves run off the reason the renderer acts on.
 func TestFxAdvanceBuildsTheSoftwarePictureOnlyForTheSoftwarePath(t *testing.T) {
-	ui := &uiState{modelGpuTried: true, modelGpu: fakeModelGpu{}}
+	ui := &uiState{ModelGpuTried: true, ModelGpu: fakeModelGpu{}}
 	v := &modelViewer{
-		model:   &WhmModel{},
-		showFX:  true,
-		fxScale: 1,
-		fxEffects: []fxOverlayEffect{{
+		Model:   &WhmModel{},
+		ShowFX:  true,
+		FxScale: 1,
+		FxEffects: []fxOverlayEffect{{
 			Label: "glow",
 			Sim: &fx.FxSim{Anchored: []fx.Visual{{
 				Lifetime: 1,
@@ -335,32 +335,32 @@ func TestFxAdvanceBuildsTheSoftwarePictureOnlyForTheSoftwarePath(t *testing.T) {
 	opts := render.RenderOptions{Width: 64, Height: 64, Fov: 45, Distance: 6}
 	now := time.Now()
 
-	if reason := ui.modelGpuUnavailable(v); reason != "" {
+	if reason := ModelGpuUnavailable(ui, v); reason != "" {
 		t.Fatalf("test setup: hardware path unavailable (%s)", reason)
 	}
-	if !v.fxAdvance(now, 64, 64, opts, false) {
+	if !v.FxAdvance(now, 64, 64, opts, false) {
 		t.Fatal("the effects were not advanced while the hardware path draws them")
 	}
-	if v.fxOverlay != nil {
+	if v.FxOverlay != nil {
 		t.Error("built the software FX picture for a frame the hardware renderer draws")
 	}
-	if v.fxScene == nil {
+	if v.FxScene == nil {
 		t.Error("no hardware FX scene: the particles would not be drawn at all")
 	}
 
 	// The hardware path breaks. The same reason now asks for the picture,
 	// and the next frame must carry it or the fallback shows no particles.
-	v.gpuBroken = true
-	if reason := ui.modelGpuUnavailable(v); reason == "" {
+	v.GpuBroken = true
+	if reason := ModelGpuUnavailable(ui, v); reason == "" {
 		t.Fatal("a broken hardware path reported itself available")
 	}
-	if !v.fxAdvance(now.Add(time.Second), 64, 64, opts, true) {
+	if !v.FxAdvance(now.Add(time.Second), 64, 64, opts, true) {
 		t.Fatal("the effects were not advanced after the hardware path broke")
 	}
-	if v.fxOverlay == nil {
+	if v.FxOverlay == nil {
 		t.Error("no software FX picture after the hardware path broke; the fallback draws no particles")
 	}
-	if v.fxScene == nil {
+	if v.FxScene == nil {
 		t.Error("no hardware FX scene after the fallback took over")
 	}
 }
@@ -2269,18 +2269,18 @@ func TestFxScaleRibbonScalesIntrinsicBeamLength(t *testing.T) {
 }
 
 func TestFxScaleFXControlSetsTheGeometryMultiplier(t *testing.T) {
-	v := &modelViewer{fxScale: fxScaleDefaultValue}
-	v.scaleFX(modelFXScaleStep)
-	if math.Abs(v.fxScale-modelFXScaleStep) > 1e-9 {
-		t.Fatalf("UI scale control set %.3f, want %.3f", v.fxScale, modelFXScaleStep)
+	v := &modelViewer{FxScale: fxScaleDefaultValue}
+	v.ScaleFX(modelFXScaleStep)
+	if math.Abs(v.FxScale-modelFXScaleStep) > 1e-9 {
+		t.Fatalf("UI scale control set %.3f, want %.3f", v.FxScale, modelFXScaleStep)
 	}
-	effects := fxScaledEffects([]fxOverlayEffect{{}}, v.fxScale)
+	effects := fxScaledEffects([]fxOverlayEffect{{}}, v.FxScale)
 	if len(effects) != 1 || math.Abs(effects[0].fxScaleOrOne()-modelFXScaleStep) > 1e-9 {
 		t.Errorf("displayed scale did not reach FX geometry: %+v", effects)
 	}
-	v.scaleFX(1 / modelFXScaleStep)
-	if math.Abs(v.fxScale-fxScaleDefaultValue) > 1e-9 {
-		t.Errorf("resetting with inverse step returned %.3f, want 1", v.fxScale)
+	v.ScaleFX(1 / modelFXScaleStep)
+	if math.Abs(v.FxScale-fxScaleDefaultValue) > 1e-9 {
+		t.Errorf("resetting with inverse step returned %.3f, want 1", v.FxScale)
 	}
 }
 
@@ -2741,11 +2741,11 @@ func TestPlayingAndPausedEffectsAdvanceAlike(t *testing.T) {
 	run := func(playing bool) float64 {
 		sim := fx.NewFxSim(&fx.FxFile{})
 		v := &modelViewer{
-			model:   &WhmModel{},
-			anim:    &WhmAnimation{Name: "vis_vis_main", NumFrames: 4, Duration: 1},
-			playing: playing,
-			showFX:  true,
-			fxScale: 1,
+			Model:   &WhmModel{},
+			Anim:    &WhmAnimation{Name: "vis_vis_main", NumFrames: 4, Duration: 1},
+			Playing: playing,
+			ShowFX:  true,
+			FxScale: 1,
 		}
 		e := fxOverlayEffect{
 			Sim:        sim,
@@ -2754,17 +2754,17 @@ func TestPlayingAndPausedEffectsAdvanceAlike(t *testing.T) {
 			Animations: []string{"vis_vis_main"},
 			FireTimes:  map[string]float64{"vis_vis_main": -1},
 		}
-		v.fxEffects = []fxOverlayEffect{e}
+		v.FxEffects = []fxOverlayEffect{e}
 		const frames = 60
 		const dt = 1.0 / 60.0
 		for i := 0; i < frames; i++ {
 			// The canvas steps the effects first and advances the playhead
 			// after, so the order here is the order it does it in.
-			v.fxStepOnClip([]fxOverlayEffect{v.fxEffects[0]}, "vis_vis_main", dt)
+			v.FxStepOnClip([]fxOverlayEffect{v.FxEffects[0]}, "vis_vis_main", dt)
 			if playing {
-				v.time += float32(dt * animFramesPerSecond(v.anim) / float64(v.anim.NumFrames))
-				for v.time >= 1 {
-					v.time -= 1
+				v.Time += float32(dt * animFramesPerSecond(v.Anim) / float64(v.Anim.NumFrames))
+				for v.Time >= 1 {
+					v.Time -= 1
 				}
 			}
 		}
@@ -2787,11 +2787,11 @@ func TestPlayingAndPausedEffectsAdvanceAlike(t *testing.T) {
 func TestALoopingShortClipKeepsItsEffectsRunning(t *testing.T) {
 	sim := fx.NewFxSim(&fx.FxFile{})
 	v := &modelViewer{
-		model:   &WhmModel{},
-		anim:    &WhmAnimation{Name: "vis_vis_main", NumFrames: 4, Duration: 1},
-		playing: true,
-		showFX:  true,
-		fxScale: 1,
+		Model:   &WhmModel{},
+		Anim:    &WhmAnimation{Name: "vis_vis_main", NumFrames: 4, Duration: 1},
+		Playing: true,
+		ShowFX:  true,
+		FxScale: 1,
 	}
 	e := fxOverlayEffect{
 		Sim:        sim,
@@ -2800,17 +2800,17 @@ func TestALoopingShortClipKeepsItsEffectsRunning(t *testing.T) {
 		Animations: []string{"vis_vis_main"},
 		FireTimes:  map[string]float64{"vis_vis_main": -1},
 	}
-	v.fxEffects = []fxOverlayEffect{e}
+	v.FxEffects = []fxOverlayEffect{e}
 	const dt = 1.0 / 60.0
 	drawn := 0
 	for i := 0; i < 60; i++ {
-		v.fxStepOnClip([]fxOverlayEffect{e}, "vis_vis_main", dt)
-		if len(v.fxStepOnClip([]fxOverlayEffect{e}, "vis_vis_main", 0)) > 0 {
+		v.FxStepOnClip([]fxOverlayEffect{e}, "vis_vis_main", dt)
+		if len(v.FxStepOnClip([]fxOverlayEffect{e}, "vis_vis_main", 0)) > 0 {
 			drawn++
 		}
-		v.time += float32(dt * animFramesPerSecond(v.anim) / float64(v.anim.NumFrames))
-		for v.time >= 1 {
-			v.time -= 1
+		v.Time += float32(dt * animFramesPerSecond(v.Anim) / float64(v.Anim.NumFrames))
+		for v.Time >= 1 {
+			v.Time -= 1
 		}
 	}
 	if drawn != 60 {
@@ -3479,14 +3479,14 @@ func TestFXAttributeRotationUsesWorldAxes(t *testing.T) {
 
 func TestApplyFXAttributeFieldSetsOnlyMatchingPositionAxis(t *testing.T) {
 	v := &modelViewer{
-		fxEffects:   []fxOverlayEffect{{Origin: fauxgl.Vector{X: 1, Y: 2, Z: 3}}},
-		fxAttrIndex: 0,
-		fxOverrides: map[int]fxAttributeOverride{},
+		FxEffects:   []fxOverlayEffect{{Origin: fauxgl.Vector{X: 1, Y: 2, Z: 3}}},
+		FxAttrIndex: 0,
+		FxOverrides: map[int]fxAttributeOverride{},
 	}
-	v.fxAttrPosY = widget.Editor{}
-	v.fxAttrPosY.SetText("12.5")
-	v.applyFXAttributeField(1)
-	got := v.fxOverrides[0]
+	v.FxAttrPosY = widget.Editor{}
+	v.FxAttrPosY.SetText("12.5")
+	v.ApplyFXAttributeField(1)
+	got := v.FxOverrides[0]
 	if !got.HasOrigin || got.Origin != (fauxgl.Vector{X: 1, Y: 12.5, Z: 3}) {
 		t.Fatalf("editing Y should change only model-space Y, got %+v", got.Origin)
 	}

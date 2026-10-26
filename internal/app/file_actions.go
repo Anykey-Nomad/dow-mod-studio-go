@@ -100,23 +100,23 @@ func hasTextFormat(formats []string, virtualPath string) bool {
 
 // isExternalTextFile reports whether one click should open the path in the
 // built-in text editor. The list is the reader's own where they set one.
-func (ui *uiState) isExternalTextFile(virtualPath string) bool {
-	return hasTextFormat(ui.textFormats(), virtualPath)
+func IsExternalTextFile(ui *uiState, virtualPath string) bool {
+	return hasTextFormat(TextFormats(ui), virtualPath)
 }
 
 // isEditorFile reports whether Enter or a single click should open the path in
 // the built-in text editor.
-func (ui *uiState) isEditorFile(virtualPath string) bool {
-	return hasTextFormat(ui.textFormats(), virtualPath)
+func IsEditorFile(ui *uiState, virtualPath string) bool {
+	return hasTextFormat(TextFormats(ui), virtualPath)
 }
 
 // textFormats is the list in force, which is the reader's when they set one
 // and the built-in default otherwise.
-func (ui *uiState) textFormats() []string {
-	if ui == nil || len(ui.textEditorFormats) == 0 {
+func TextFormats(ui *uiState) []string {
+	if ui == nil || len(ui.TextEditorFormats) == 0 {
 		return defaultTextFormats
 	}
-	return ui.textEditorFormats
+	return ui.TextEditorFormats
 }
 
 func moveFileToRecycle(source, recycleDir string) (string, error) {
@@ -243,16 +243,16 @@ func clearRecycleDir(recycleDir string) error {
 	return nil
 }
 
-func (ui *uiState) canDeleteCurrentModFile(virtualPath string) bool {
-	_, err := ui.managedFileDiskPath(virtualPath)
+func CanDeleteCurrentModFile(ui *uiState, virtualPath string) bool {
+	_, err := ManagedFileDiskPath(ui, virtualPath)
 	return err == nil
 }
 
-func (ui *uiState) managedFileDiskPath(virtualPath string) (string, error) {
-	if ui.modTree == nil {
+func ManagedFileDiskPath(ui *uiState, virtualPath string) (string, error) {
+	if ui.ModTree == nil {
 		return "", fmt.Errorf("no mod loaded")
 	}
-	file := ui.modTree.FindFile(virtualPath)
+	file := ui.ModTree.FindFile(virtualPath)
 	if file == nil {
 		return "", fmt.Errorf("file not found: %s", virtualPath)
 	}
@@ -262,7 +262,7 @@ func (ui *uiState) managedFileDiskPath(virtualPath string) (string, error) {
 	if file.DiskPath == "" {
 		return "", fmt.Errorf("physical file path is unknown: %s", virtualPath)
 	}
-	root := currentModFolderRoot(ui.modTree)
+	root := currentModFolderRoot(ui.ModTree)
 	if root == "" || !pathWithinRoot(file.DiskPath, root) {
 		return "", fmt.Errorf("file is outside the current mod folder: %s", virtualPath)
 	}
@@ -292,18 +292,18 @@ func duplicateVirtualPath(tree *modtree.ModTree, virtualPath string) string {
 	}
 }
 
-func (ui *uiState) openTreeFileExternally(virtualPath string) error {
-	if ui.modTree == nil {
+func OpenTreeFileExternally(ui *uiState, virtualPath string) error {
+	if ui.ModTree == nil {
 		return fmt.Errorf("no mod loaded")
 	}
-	diskPath, managedErr := ui.managedFileDiskPath(virtualPath)
+	diskPath, managedErr := ManagedFileDiskPath(ui, virtualPath)
 	copied := false
 	if managedErr != nil {
-		data, err := ui.modTree.ReadFile(virtualPath)
+		data, err := ui.ModTree.ReadFile(virtualPath)
 		if err != nil {
 			return err
 		}
-		diskPath, err = ui.modTree.WriteOverlayFile(virtualPath, data)
+		diskPath, err = ui.ModTree.WriteOverlayFile(virtualPath, data)
 		if err != nil {
 			return err
 		}
@@ -312,15 +312,15 @@ func (ui *uiState) openTreeFileExternally(virtualPath string) error {
 	if err := openFileWithDefaultApp(diskPath); err != nil {
 		return err
 	}
-	if tabIndex := ui.findTabIndex(virtualPath); tabIndex >= 0 {
-		ui.closeTabAt(tabIndex)
+	if tabIndex := FindTabIndex(ui, virtualPath); tabIndex >= 0 {
+		CloseTabAt(ui, tabIndex)
 	}
 	if copied {
-		ui.statusText = fmt.Sprintf("Copied %s to the current mod and opened it", filepath.Base(virtualPath))
+		ui.StatusText = fmt.Sprintf("Copied %s to the current mod and opened it", filepath.Base(virtualPath))
 	} else {
-		ui.statusText = fmt.Sprintf("Opened %s with the system default application", filepath.Base(virtualPath))
+		ui.StatusText = fmt.Sprintf("Opened %s with the system default application", filepath.Base(virtualPath))
 	}
-	ui.markStateDirty()
+	MarkStateDirty(ui)
 	return nil
 }
 
@@ -333,44 +333,44 @@ func virtualParentPath(virtualPath string) string {
 	return normalized[:pos]
 }
 
-func (ui *uiState) refreshModTreePreservingUI() error {
-	if ui.modTree == nil || ui.modulePath == "" {
+func RefreshModTreePreservingUI(ui *uiState) error {
+	if ui.ModTree == nil || ui.ModulePath == "" {
 		return fmt.Errorf("no mod loaded")
 	}
-	oldTree := ui.modTree
-	ui.stopModFileWatcher()
-	newTree, err := modtree.BuildModTree(ui.modulePath, "English")
+	oldTree := ui.ModTree
+	StopModFileWatcher(ui)
+	newTree, err := modtree.BuildModTree(ui.ModulePath, "English")
 	if err != nil {
 		// Keep the old tree usable if a refresh fails.
-		ui.startModFileWatcher(oldTree)
+		StartModFileWatcher(ui, oldTree)
 		return err
 	}
 	oldTree.Close()
-	ui.modTree = newTree
-	ui.modSnapshot = currentModSnapshot(newTree)
-	ui.lastModPoll = time.Now()
-	ui.startModFileWatcher(newTree)
+	ui.ModTree = newTree
+	ui.ModSnapshot = currentModSnapshot(newTree)
+	ui.LastModPoll = time.Now()
+	StartModFileWatcher(ui, newTree)
 
 	// Keep expanded folders, selection, scroll position, and unrelated tabs.
 	// Only tabs whose virtual file disappeared need to be closed. The object
 	// tab is not backed by a file, so it survives a reload like a Module tab
 	// does.
-	for i := len(ui.openTabs) - 1; i >= 0; i-- {
-		if ui.openTabs[i] == nil || unitTabHasNoFile(ui.openTabs[i]) {
+	for i := len(ui.OpenTabs) - 1; i >= 0; i-- {
+		if ui.OpenTabs[i] == nil || unitTabHasNoFile(ui.OpenTabs[i]) {
 			continue
 		}
-		if newTree.FindFile(ui.openTabs[i].path) == nil {
-			ui.closeTabAt(i)
+		if newTree.FindFile(ui.OpenTabs[i].Path) == nil {
+			CloseTabAt(ui, i)
 		}
 	}
-	ui.visibleNodes = newTree.Flatten(ui.expanded, ui.selectedPath)
-	ui.ensureRowClicks(len(ui.visibleNodes))
-	ui.markStateDirty()
+	ui.VisibleNodes = newTree.Flatten(ui.Expanded, ui.SelectedPath)
+	EnsureRowClicks(ui, len(ui.VisibleNodes))
+	MarkStateDirty(ui)
 	return nil
 }
 
-func (ui *uiState) deleteCurrentModFile(virtualPath string) error {
-	diskPath, err := ui.managedFileDiskPath(virtualPath)
+func DeleteCurrentModFile(ui *uiState, virtualPath string) error {
+	diskPath, err := ManagedFileDiskPath(ui, virtualPath)
 	if err != nil {
 		return err
 	}
@@ -382,35 +382,35 @@ func (ui *uiState) deleteCurrentModFile(virtualPath string) error {
 	if err != nil {
 		return err
 	}
-	if ui.selectedPath == virtualPath {
-		ui.selectedPath = ""
-		ui.selectedTreePath = virtualParentPath(virtualPath)
+	if ui.SelectedPath == virtualPath {
+		ui.SelectedPath = ""
+		ui.SelectedTreePath = virtualParentPath(virtualPath)
 	}
-	if err := ui.refreshModTreePreservingUI(); err != nil {
+	if err := RefreshModTreePreservingUI(ui); err != nil {
 		return fmt.Errorf("file moved, but mod tree refresh failed: %w", err)
 	}
-	ui.statusText = fmt.Sprintf("Moved %s to Recycle Bin: %s", filepath.Base(diskPath), destination)
-	ui.markStateDirty()
+	ui.StatusText = fmt.Sprintf("Moved %s to Recycle Bin: %s", filepath.Base(diskPath), destination)
+	MarkStateDirty(ui)
 	return nil
 }
 
-func (ui *uiState) duplicateCurrentModFile(virtualPath string) error {
-	if ui.modTree == nil {
+func DuplicateCurrentModFile(ui *uiState, virtualPath string) error {
+	if ui.ModTree == nil {
 		return fmt.Errorf("no mod loaded")
 	}
-	data, err := ui.modTree.ReadFile(virtualPath)
+	data, err := ui.ModTree.ReadFile(virtualPath)
 	if err != nil {
 		return err
 	}
-	duplicate := duplicateVirtualPath(ui.modTree, virtualPath)
-	if _, err := ui.modTree.WriteOverlayFile(duplicate, data); err != nil {
+	duplicate := duplicateVirtualPath(ui.ModTree, virtualPath)
+	if _, err := ui.ModTree.WriteOverlayFile(duplicate, data); err != nil {
 		return err
 	}
-	if err := ui.refreshModTreePreservingUI(); err != nil {
+	if err := RefreshModTreePreservingUI(ui); err != nil {
 		return fmt.Errorf("duplicate created, but mod tree refresh failed: %w", err)
 	}
-	ui.statusText = "Duplicated " + filepath.Base(virtualPath) + " as " + filepath.Base(duplicate)
-	ui.markStateDirty()
+	ui.StatusText = "Duplicated " + filepath.Base(virtualPath) + " as " + filepath.Base(duplicate)
+	MarkStateDirty(ui)
 	return nil
 }
 
@@ -518,8 +518,8 @@ func (fp *filePicker) setText(s string) {
 }
 
 // openFilePicker shows the dialog for one caller.
-func (ui *uiState) openFilePicker(cfg pickConfig) {
-	fp := &ui.filePick
+func OpenFilePicker(ui *uiState, cfg pickConfig) {
+	fp := &ui.FilePick
 	fp.cfg = cfg
 	fp.ed.SingleLine = true
 	fp.ed.Submit = true
@@ -527,33 +527,33 @@ func (ui *uiState) openFilePicker(cfg pickConfig) {
 	fp.filter = ""
 	fp.dir = ""
 	fp.setText(cfg.start)
-	ui.filePickOpen = true
+	ui.FilePickOpen = true
 	if cfg.start != "" && !cfg.modTree {
 		if info, err := os.Stat(cfg.start); err == nil && info.IsDir() {
-			ui.fpBrowse(cfg.start)
+			FpBrowse(ui, cfg.start)
 			return
 		}
 	}
-	ui.fpStartList()
+	FpStartList(ui)
 }
 
 // fpStartList shows the start list: the module's files for a tree caller, or
 // the folders and matching files of the caller's roots.
-func (ui *uiState) fpStartList() {
-	ui.filePick.dir = ""
-	ui.fpRebuild()
+func FpStartList(ui *uiState) {
+	ui.FilePick.dir = ""
+	FpRebuild(ui)
 }
 
 // fpBrowse lists the folders and matching files of one folder, with a ".."
 // row up. A top folder's ".." goes back to the start list.
-func (ui *uiState) fpBrowse(dir string) {
-	fp := &ui.filePick
+func FpBrowse(ui *uiState, dir string) {
+	fp := &ui.FilePick
 	if dir == "" {
-		ui.fpStartList()
+		FpStartList(ui)
 		return
 	}
 	dir = filepath.Clean(dir)
-	ui.rememberRecentFolder(dir)
+	RememberRecentFolder(ui, dir)
 	fp.dir = dir
 	fp.setText(dir)
 	fp.filter = ""
@@ -583,23 +583,23 @@ func (ui *uiState) fpBrowse(dir string) {
 	})
 	fp.all = append(fp.all, subs...)
 	fp.all = append(fp.all, files...)
-	ui.fpRebuild()
+	FpRebuild(ui)
 	if err == nil {
 		fp.status = fmt.Sprintf("%d folder(s), %d file(s) in %s", len(subs), len(files), dir)
 	}
 }
 
 // fpStartRows builds the start list for the filter text.
-func (ui *uiState) fpStartRows(filter string) []pickRow {
-	fp := &ui.filePick
+func FpStartRows(ui *uiState, filter string) []pickRow {
+	fp := &ui.FilePick
 	q := strings.ToLower(filter)
 	if fp.cfg.modTree {
 		var out []pickRow
-		if ui.modTree == nil {
-			ui.filePick.status = "No mod is loaded: the mod file tree is empty"
+		if ui.ModTree == nil {
+			ui.FilePick.status = "No mod is loaded: the mod file tree is empty"
 			return nil
 		}
-		modtree.SearchWalk(ui.modTree.Root, func(f *modtree.TreeFile) {
+		modtree.SearchWalk(ui.ModTree.Root, func(f *modtree.TreeFile) {
 			if f == nil || len(out) >= pickMaxRows || !fp.allows(f.Name) {
 				return
 			}
@@ -620,10 +620,10 @@ func (ui *uiState) fpStartRows(filter string) []pickRow {
 }
 
 // fpRebuild recomputes the rows for the current filter and folder.
-func (ui *uiState) fpRebuild() {
-	fp := &ui.filePick
+func FpRebuild(ui *uiState) {
+	fp := &ui.FilePick
 	if fp.dir == "" {
-		fp.all = ui.fpStartRows(fp.filter)
+		fp.all = FpStartRows(ui, fp.filter)
 	}
 	q := strings.ToLower(fp.filter)
 	fp.rows = fp.rows[:0]
@@ -692,8 +692,8 @@ func listPickFiles(dirs []string, allows func(string) bool) []pickRow {
 // handleFilePicker runs the dialog's input: typing narrows the list or opens a
 // typed folder, a folder row opens that folder, a file row fills the field,
 // Enter or Open hands the path to the caller, and Cancel closes it.
-func (ui *uiState) handleFilePicker(gtx layout.Context) {
-	fp := &ui.filePick
+func HandleFilePicker(ui *uiState, gtx layout.Context) {
+	fp := &ui.FilePick
 	submitted := false
 	for {
 		ev, ok := fp.ed.Update(gtx)
@@ -709,15 +709,15 @@ func (ui *uiState) handleFilePicker(gtx layout.Context) {
 		t := cleanDialogPath(text)
 		if t != "" && !fp.cfg.modTree {
 			if info, err := os.Stat(t); err == nil && info.IsDir() {
-				ui.fpBrowse(t)
+				FpBrowse(ui, t)
 				return
 			}
 		}
 		fp.filter = pickFilterOf(t)
-		ui.fpRebuild()
+		FpRebuild(ui)
 	}
 	if fp.cancel.Clicked(gtx) {
-		ui.filePickOpen = false
+		ui.FilePickOpen = false
 		return
 	}
 	for i := range fp.clicks {
@@ -726,7 +726,7 @@ func (ui *uiState) handleFilePicker(gtx layout.Context) {
 		}
 		r := fp.rows[i]
 		if r.isDir {
-			ui.fpBrowse(r.path)
+			FpBrowse(ui, r.path)
 			return
 		}
 		fp.setText(r.path)
@@ -746,7 +746,7 @@ func (ui *uiState) handleFilePicker(gtx layout.Context) {
 		return
 	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		ui.fpBrowse(path)
+		FpBrowse(ui, path)
 		return
 	}
 	if pickExt(path) == "" && !pathExists(path) && len(fp.cfg.exts) > 0 {
@@ -758,7 +758,7 @@ func (ui *uiState) handleFilePicker(gtx layout.Context) {
 	}
 	accepted, status := fp.cfg.onPick(path)
 	if accepted {
-		ui.filePickOpen = false
+		ui.FilePickOpen = false
 		return
 	}
 	if status != "" {
@@ -768,8 +768,8 @@ func (ui *uiState) handleFilePicker(gtx layout.Context) {
 
 // layoutFilePicker draws the dialog over the window: a path field, the list,
 // the status line and the two buttons.
-func (ui *uiState) layoutFilePicker(gtx layout.Context) layout.Dimensions {
-	fp := &ui.filePick
+func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
+	fp := &ui.FilePick
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := gtx.Constraints.Max
@@ -801,14 +801,14 @@ func (ui *uiState) layoutFilePicker(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(16), Left: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(14), fp.cfg.title)
+										l := material.Label(ui.Th, unit.Sp(14), fp.cfg.title)
 										l.Font.Weight = font.Medium
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(11), fp.cfg.subtitle)
+										l := material.Label(ui.Th, unit.Sp(11), fp.cfg.subtitle)
 										l.Color = cTextDim
 										return l.Layout(gtx)
 									}),
@@ -819,7 +819,7 @@ func (ui *uiState) layoutFilePicker(gtx layout.Context) layout.Dimensions {
 										gtx.Constraints.Max.Y = h
 										return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 											return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												ed := material.Editor(ui.th, &fp.ed, "")
+												ed := material.Editor(ui.Th, &fp.ed, "")
 												ed.TextSize = unit.Sp(11)
 												ed.HintColor = cTextDim
 												ed.Hint = fp.cfg.hint
@@ -829,7 +829,7 @@ func (ui *uiState) layoutFilePicker(gtx layout.Context) layout.Dimensions {
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(11), "Folders and files")
+										l := material.Label(ui.Th, unit.Sp(11), "Folders and files")
 										l.Font.Weight = font.Medium
 										l.Color = cText
 										return l.Layout(gtx)
@@ -852,7 +852,7 @@ func (ui *uiState) layoutFilePicker(gtx layout.Context) layout.Dimensions {
 													paint.PaintOp{}.Add(gtx.Ops)
 													st.Pop()
 													return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-														l := material.Label(ui.th, unit.Sp(11), r.label)
+														l := material.Label(ui.Th, unit.Sp(11), r.label)
 														l.Color = cText
 														return l.Layout(gtx)
 													})
@@ -862,7 +862,7 @@ func (ui *uiState) layoutFilePicker(gtx layout.Context) layout.Dimensions {
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(10), fp.status)
+										l := material.Label(ui.Th, unit.Sp(10), fp.status)
 										l.Color = cTextDim
 										return l.Layout(gtx)
 									}),
@@ -871,11 +871,11 @@ func (ui *uiState) layoutFilePicker(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Flexed(1, rowGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.dialogButton(gtx, &fp.cancel, "Cancel", false)
+												return DialogButton(ui, gtx, &fp.cancel, "Cancel", false)
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.dialogButton(gtx, &fp.ok, "Open", true)
+												return DialogButton(ui, gtx, &fp.ok, "Open", true)
 											}),
 										)
 									}),

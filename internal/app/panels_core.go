@@ -21,7 +21,7 @@ import (
 	"gioui.org/widget/material"
 )
 
-func (ui *uiState) layoutContent(gtx layout.Context) layout.Dimensions {
+func LayoutContent(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := gtx.Constraints.Max
@@ -31,19 +31,19 @@ func (ui *uiState) layoutContent(gtx layout.Context) layout.Dimensions {
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				total := gtx.Constraints.Max.X
-				ui.ensurePanelWidths(total)
+				EnsurePanelWidths(ui, total)
 				// The object interface takes the whole content width: its
 				// own right-hand panel is hidden on every section, and the
 				// properties panel belongs to the plain modtree view below.
-				if ui.unitTabOwnsLeftPanel() {
-					return ui.layoutUnitTabBody(gtx)
+				if UnitTabOwnsLeftPanel(ui) {
+					return LayoutUnitTabBody(ui, gtx)
 				}
 				return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-					layout.Rigid(ui.fixedPanel(ui.leftPanelWidth, ui.layoutLeftPanel)),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.layoutPanelSplitter(gtx, 0, total) }),
-					layout.Flexed(1, ui.layoutMiddlePanel),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.layoutPanelSplitter(gtx, 1, total) }),
-					layout.Rigid(ui.fixedPanel(ui.rightPanelWidth, ui.layoutRightPanel)),
+					layout.Rigid(FixedPanel(ui, ui.LeftPanelWidth, func(gtx layout.Context) layout.Dimensions { return LayoutLeftPanel(ui, gtx) })),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutPanelSplitter(ui, gtx, 0, total) }),
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutMiddlePanel(ui, gtx) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutPanelSplitter(ui, gtx, 1, total) }),
+					layout.Rigid(FixedPanel(ui, ui.RightPanelWidth, func(gtx layout.Context) layout.Dimensions { return LayoutRightPanel(ui, gtx) })),
 				)
 			})
 		}),
@@ -87,40 +87,40 @@ func panelFrame(gtx layout.Context, content layout.Widget) layout.Dimensions {
 	})
 }
 
-func (ui *uiState) layoutLeftPanel(gtx layout.Context) layout.Dimensions {
+func LayoutLeftPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
-		if !ui.contextMenuVisible {
-			return ui.layoutLeftPanelContent(gtx)
+		if !ui.ContextMenuVisible {
+			return LayoutLeftPanelContent(ui, gtx)
 		}
 		return layout.Stack{}.Layout(gtx,
-			layout.Expanded(ui.layoutLeftPanelContent),
+			layout.Expanded(func(gtx layout.Context) layout.Dimensions { return LayoutLeftPanelContent(ui, gtx) }),
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				pass := pointer.PassOp{}.Push(gtx.Ops)
-				dims := ui.contextDismissClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				dims := ui.ContextDismissClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Dimensions{Size: gtx.Constraints.Max}
 				})
 				pass.Pop()
 				return dims
 			}),
-			layout.Stacked(ui.layoutFileContextMenu),
+			layout.Stacked(func(gtx layout.Context) layout.Dimensions { return LayoutFileContextMenu(ui, gtx) }),
 		)
 	})
 }
 
-func (ui *uiState) layoutLeftPanelContent(gtx layout.Context) layout.Dimensions {
-	if ui.modTree == nil {
+func LayoutLeftPanelContent(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if ui.ModTree == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return centeredPanelLabel(gtx, ui.th, "No module loaded", unit.Sp(12), cTextDim)
+						return centeredPanelLabel(gtx, ui.Th, "No module loaded", unit.Sp(12), cTextDim)
 					}),
 					layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Top: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							return centeredPanelWidget(gtx, func(gtx layout.Context) layout.Dimensions {
 								return material.Clickable(gtx, &widget.Clickable{}, func(gtx layout.Context) layout.Dimensions {
-									l := material.Label(ui.th, unit.Sp(11), "File → Open Module…")
+									l := material.Label(ui.Th, unit.Sp(11), "File → Open Module…")
 									l.Color = rgb(0x0066CC)
 									return l.Layout(gtx)
 								})
@@ -129,11 +129,11 @@ func (ui *uiState) layoutLeftPanelContent(gtx layout.Context) layout.Dimensions 
 					}),
 					layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						extra := ui.statusText
+						extra := ui.StatusText
 						if extra == "" {
 							extra = "Pick a .module from Dawn of War Definitive Edition"
 						}
-						return centeredPanelLabel(gtx, ui.th, extra, unit.Sp(10), cTextDim)
+						return centeredPanelLabel(gtx, ui.Th, extra, unit.Sp(10), cTextDim)
 					}),
 				)
 			})
@@ -149,13 +149,13 @@ func (ui *uiState) layoutLeftPanelContent(gtx layout.Context) layout.Dimensions 
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						modName := ui.modulePath
+						modName := ui.ModulePath
 						if modName != "" {
 							modName = filepath.Base(modName)
 						} else {
 							modName = "Data"
 						}
-						l := material.Label(ui.th, unit.Sp(10), modName)
+						l := material.Label(ui.Th, unit.Sp(10), modName)
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					})
@@ -167,12 +167,12 @@ func (ui *uiState) layoutLeftPanelContent(gtx layout.Context) layout.Dimensions 
 			return layout.Inset{Top: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Stack{}.Layout(gtx,
 					layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-						return ui.layoutListWithScrollbar(gtx, &ui.leftScroll, &ui.leftList, 22, len(ui.visibleNodes), func(gtx layout.Context, index int) layout.Dimensions {
-							return ui.layoutTreeRow(gtx, index, ui.visibleNodes[index])
+						return LayoutListWithScrollbar(ui, gtx, &ui.LeftScroll, &ui.LeftList, 22, len(ui.VisibleNodes), func(gtx layout.Context, index int) layout.Dimensions {
+							return LayoutTreeRow(ui, gtx, index, ui.VisibleNodes[index])
 						})
 					}),
 					layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-						if ui.leftTreePointerTag == nil {
+						if ui.LeftTreePointerTag == nil {
 							return layout.Dimensions{Size: gtx.Constraints.Max}
 						}
 						// The one target of the tree that is not a row: it
@@ -182,7 +182,7 @@ func (ui *uiState) layoutLeftPanelContent(gtx layout.Context) layout.Dimensions 
 						// underneath it clickable.
 						pass := pointer.PassOp{}.Push(gtx.Ops)
 						area := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
-						event.Op(gtx.Ops, ui.leftTreePointerTag)
+						event.Op(gtx.Ops, ui.LeftTreePointerTag)
 						area.Pop()
 						pass.Pop()
 						return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -193,13 +193,13 @@ func (ui *uiState) layoutLeftPanelContent(gtx layout.Context) layout.Dimensions 
 	)
 }
 
-func (ui *uiState) layoutFileContextMenu(gtx layout.Context) layout.Dimensions {
-	if !ui.contextMenuVisible {
+func LayoutFileContextMenu(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if !ui.ContextMenuVisible {
 		return layout.Dimensions{}
 	}
 	menuW := gtx.Dp(unit.Dp(196))
 	menuH := gtx.Dp(unit.Dp(86))
-	y := 32 + ui.contextMenuAnchor*gtx.Dp(unit.Dp(19)) - ui.leftScroll.offset
+	y := 32 + ui.ContextMenuAnchor*gtx.Dp(unit.Dp(19)) - ui.LeftScroll.offset
 	if y < 28 {
 		y = 28
 	}
@@ -210,7 +210,7 @@ func (ui *uiState) layoutFileContextMenu(gtx layout.Context) layout.Dimensions {
 		y = 0
 	}
 	gtx2 := gtx
-	deleteDisabled := !ui.canDeleteCurrentModFile(ui.contextMenuPath)
+	deleteDisabled := !CanDeleteCurrentModFile(ui, ui.ContextMenuPath)
 	defer op.Offset(image.Pt(gtx.Dp(unit.Dp(18)), y)).Push(gtx2.Ops).Pop()
 	gtx2.Constraints.Min = image.Pt(menuW, menuH)
 	gtx2.Constraints.Max = image.Pt(menuW, menuH)
@@ -224,18 +224,18 @@ func (ui *uiState) layoutFileContextMenu(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							_, base := modtree.VirtualDirAndBase(ui.contextMenuPath)
-							l := material.Label(ui.th, unit.Sp(11), base)
+							_, base := modtree.VirtualDirAndBase(ui.ContextMenuPath)
+							l := material.Label(ui.Th, unit.Sp(11), base)
 							l.Color = cText
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Height: unit.Dp(5)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &ui.contextDuplicate, "Duplicate")
+							return SmallButton(ui, gtx, &ui.ContextDuplicate, "Duplicate")
 						}),
 						layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &ui.contextDelete, "Delete", deleteDisabled)
+							return SmallButtonDisabled(ui, gtx, &ui.ContextDelete, "Delete", deleteDisabled)
 						}),
 					)
 				})
@@ -315,52 +315,52 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
-func (ui *uiState) ensurePanelWidths(total int) {
+func EnsurePanelWidths(ui *uiState, total int) {
 	if total <= 0 {
 		return
 	}
-	if ui.leftPanelWidth <= 0 {
-		ui.leftPanelWidth = total * 25 / 100
+	if ui.LeftPanelWidth <= 0 {
+		ui.LeftPanelWidth = total * 25 / 100
 	}
-	if ui.rightPanelWidth <= 0 {
-		ui.rightPanelWidth = total * 40 / 100
+	if ui.RightPanelWidth <= 0 {
+		ui.RightPanelWidth = total * 40 / 100
 	}
-	ui.clampPanelWidths(total)
+	ClampPanelWidths(ui, total)
 }
 
-func (ui *uiState) clampPanelWidths(total int) {
+func ClampPanelWidths(ui *uiState, total int) {
 	if total <= 0 {
 		return
 	}
-	minLeft := ui.panelWidthDp(total, panelSplitterMinDp)
-	minMid := ui.panelWidthDp(total, panelSplitterMinMidDp)
+	minLeft := PanelWidthDp(ui, total, panelSplitterMinDp)
+	minMid := PanelWidthDp(ui, total, panelSplitterMinMidDp)
 	minRight := minLeft
 	// Use the available width conservatively on small windows. The middle
 	// panel keeps the larger minimum because it is the editing surface.
-	if total < minLeft+minMid+minRight+2*ui.panelSplitterWidth(total) {
+	if total < minLeft+minMid+minRight+2*PanelSplitterWidth(ui, total) {
 		minLeft = total / 5
 		minMid = total / 3
 		minRight = total / 5
 	}
-	ui.leftPanelWidth = clampInt(ui.leftPanelWidth, minLeft, total-minMid-minRight-2*ui.panelSplitterWidth(total))
-	ui.rightPanelWidth = clampInt(ui.rightPanelWidth, minRight, total-ui.leftPanelWidth-minMid-ui.panelSplitterWidth(total))
-	if total-ui.leftPanelWidth-ui.rightPanelWidth-2*ui.panelSplitterWidth(total) < minMid {
-		ui.rightPanelWidth = total - ui.leftPanelWidth - minMid - 2*ui.panelSplitterWidth(total)
-		if ui.rightPanelWidth < minRight {
-			ui.rightPanelWidth = minRight
-			ui.leftPanelWidth = total - minRight - minMid - 2*ui.panelSplitterWidth(total)
+	ui.LeftPanelWidth = clampInt(ui.LeftPanelWidth, minLeft, total-minMid-minRight-2*PanelSplitterWidth(ui, total))
+	ui.RightPanelWidth = clampInt(ui.RightPanelWidth, minRight, total-ui.LeftPanelWidth-minMid-PanelSplitterWidth(ui, total))
+	if total-ui.LeftPanelWidth-ui.RightPanelWidth-2*PanelSplitterWidth(ui, total) < minMid {
+		ui.RightPanelWidth = total - ui.LeftPanelWidth - minMid - 2*PanelSplitterWidth(ui, total)
+		if ui.RightPanelWidth < minRight {
+			ui.RightPanelWidth = minRight
+			ui.LeftPanelWidth = total - minRight - minMid - 2*PanelSplitterWidth(ui, total)
 		}
 	}
 }
 
-func (ui *uiState) panelWidthDp(total, width int) int {
+func PanelWidthDp(ui *uiState, total, width int) int {
 	if total <= 0 {
 		return width
 	}
 	return width
 }
 
-func (ui *uiState) panelSplitterWidth(total int) int {
+func PanelSplitterWidth(ui *uiState, total int) int {
 	if total <= 0 {
 		return panelSplitterWidthDp
 	}
@@ -382,12 +382,12 @@ func panelSplitterWidthFromDrag(index int, pointerX, pressPointerX float32, star
 	return startLeft, startRight - delta
 }
 
-func (ui *uiState) layoutPanelSplitter(gtx layout.Context, index int, total int) layout.Dimensions {
+func LayoutPanelSplitter(ui *uiState, gtx layout.Context, index int, total int) layout.Dimensions {
 	w := gtx.Dp(unit.Dp(panelSplitterWidthDp))
 	gtx.Constraints.Min.X = w
 	gtx.Constraints.Max.X = w
 	gtx.Constraints.Min.Y = 0
-	s := &ui.panelSplitters[index]
+	s := &ui.PanelSplitters[index]
 	// Input is handled before layout, so event positions are local to the
 	// splitter's position in the previous frame. Keep that rendered origin
 	// separately from the widths being updated by this frame's input; using
@@ -416,24 +416,24 @@ func (ui *uiState) layoutPanelSplitter(gtx layout.Context, index int, total int)
 			s.dragging = true
 			s.hover = true
 			s.startPointerX = float32(eventOrigin) + e.Position.X
-			s.startLeft = ui.leftPanelWidth
-			s.startRight = ui.rightPanelWidth
+			s.startLeft = ui.LeftPanelWidth
+			s.startRight = ui.RightPanelWidth
 		case pointer.Drag:
 			if !s.dragging {
 				break
 			}
 			pointerX := float32(eventOrigin) + e.Position.X
-			ui.leftPanelWidth, ui.rightPanelWidth = panelSplitterWidthFromDrag(
+			ui.LeftPanelWidth, ui.RightPanelWidth = panelSplitterWidthFromDrag(
 				index, pointerX, s.startPointerX, s.startLeft, s.startRight,
 			)
-			ui.clampPanelWidths(total)
+			ClampPanelWidths(ui, total)
 		case pointer.Release, pointer.Cancel:
 			s.dragging = false
 		}
 	}
 	// Record the origin of the operations emitted below. Pointer positions
 	// received before the next layout will be relative to this origin.
-	s.layoutOrigin = panelSplitterLayoutOrigin(index, total, w, ui.leftPanelWidth, ui.rightPanelWidth)
+	s.layoutOrigin = panelSplitterLayoutOrigin(index, total, w, ui.LeftPanelWidth, ui.RightPanelWidth)
 	col := cBorder
 	if s.hover || s.dragging {
 		col = rgb(0x0078D4)
@@ -443,7 +443,7 @@ func (ui *uiState) layoutPanelSplitter(gtx layout.Context, index int, total int)
 	return layout.Dimensions{Size: image.Pt(w, gtx.Constraints.Max.Y)}
 }
 
-func (ui *uiState) fixedPanel(width int, content layout.Widget) layout.Widget {
+func FixedPanel(ui *uiState, width int, content layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min.X = width
 		gtx.Constraints.Max.X = width
@@ -451,9 +451,9 @@ func (ui *uiState) fixedPanel(width int, content layout.Widget) layout.Widget {
 	}
 }
 
-func (ui *uiState) panelWithScroll(gtx layout.Context, state *panelScrollState, content layout.Widget) layout.Dimensions {
+func PanelWithScroll(ui *uiState, gtx layout.Context, state *panelScrollState, content layout.Widget) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
-		return ui.panelScrollView(gtx, state, content)
+		return PanelScrollView(ui, gtx, state, content)
 	})
 }
 
@@ -470,7 +470,7 @@ const panelScrollMeasureHeight = 1 << 20
 // other, and the rows in between could not be reached at all.
 const panelScrollWheelStepPx = 0.55
 
-func (ui *uiState) panelScrollView(gtx layout.Context, state *panelScrollState, content layout.Widget) layout.Dimensions {
+func PanelScrollView(ui *uiState, gtx layout.Context, state *panelScrollState, content layout.Widget) layout.Dimensions {
 	if state == nil {
 		return content(gtx)
 	}
@@ -658,7 +658,7 @@ func drawPanelScrollbar(gtx layout.Context, state *panelScrollState, viewport im
 	shift.Pop()
 }
 
-func (ui *uiState) layoutListWithScrollbar(gtx layout.Context, state *panelScrollState, list *layout.List, rowHeight, count int, element layout.ListElement) layout.Dimensions {
+func LayoutListWithScrollbar(ui *uiState, gtx layout.Context, state *panelScrollState, list *layout.List, rowHeight, count int, element layout.ListElement) layout.Dimensions {
 	if list == nil {
 		return layout.Dimensions{}
 	}
@@ -729,19 +729,19 @@ func (ui *uiState) layoutListWithScrollbar(gtx layout.Context, state *panelScrol
 
 // ─── merged from tree_middle_ui.go ───────────────────────────────────────────────
 
-func (ui *uiState) layoutTreeRow(gtx layout.Context, idx int, n modtree.VisibleNode) layout.Dimensions {
-	selected := n.FullPath == ui.selectedTreePath
-	contextSelected := ui.contextMenuVisible && n.IsFile && n.FullPath == ui.contextMenuPath
-	if n.IsFile && n.FullPath == ui.selectedPath {
+func LayoutTreeRow(ui *uiState, gtx layout.Context, idx int, n modtree.VisibleNode) layout.Dimensions {
+	selected := n.FullPath == ui.SelectedTreePath
+	contextSelected := ui.ContextMenuVisible && n.IsFile && n.FullPath == ui.ContextMenuPath
+	if n.IsFile && n.FullPath == ui.SelectedPath {
 		selected = true
 	}
 	expandable := n.IsDir && n.HasKids
-	open := ui.expanded[n.FullPath]
+	open := ui.Expanded[n.FullPath]
 	h := gtx.Dp(unit.Dp(19))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
-	ui.leftRowHeightPx = h
-	ui.registerTreeRowClick(gtx, idx, h)
+	ui.LeftRowHeightPx = h
+	RegisterTreeRowClick(ui, gtx, idx, h)
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			if contextSelected {
@@ -757,7 +757,7 @@ func (ui *uiState) layoutTreeRow(gtx layout.Context, idx int, n modtree.VisibleN
 				sz := image.Pt(gtx.Constraints.Max.X, h)
 				fillRect(gtx, cSelectBg, sz)
 				bd := cSelectBd
-				if ui.treeHasKeyboard() {
+				if TreeHasKeyboard(ui) {
 					// The row the keys act on, which is worth telling apart
 					// from a row that is merely selected: the middle tree can
 					// hold the keyboard while this row stays selected.
@@ -769,7 +769,7 @@ func (ui *uiState) layoutTreeRow(gtx layout.Context, idx int, n modtree.VisibleN
 				_ = b.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: sz} })
 				return layout.Dimensions{Size: sz}
 			}
-			if ui.rowHover[idx] && !selected {
+			if ui.RowHover[idx] && !selected {
 				sz := image.Pt(gtx.Constraints.Max.X, h)
 				fillRect(gtx, cMenuHover, sz)
 				return layout.Dimensions{Size: sz}
@@ -799,7 +799,7 @@ func (ui *uiState) layoutTreeRow(gtx layout.Context, idx int, n modtree.VisibleN
 							if !open {
 								s = "+"
 							}
-							l := material.Label(ui.th, unit.Sp(9), s)
+							l := material.Label(ui.Th, unit.Sp(9), s)
 							l.Color = cText
 							return l.Layout(gtx)
 						})
@@ -837,7 +837,7 @@ func (ui *uiState) layoutTreeRow(gtx layout.Context, idx int, n modtree.VisibleN
 					if len(lbl) > 38 && n.IsFile {
 						lbl = lbl[:35] + "…"
 					}
-					l := material.Label(ui.th, unit.Sp(11), lbl)
+					l := material.Label(ui.Th, unit.Sp(11), lbl)
 					if selected {
 						l.Color = cText
 						l.Font.Weight = font.Medium
@@ -873,13 +873,13 @@ func (ui *uiState) layoutTreeRow(gtx layout.Context, idx int, n modtree.VisibleN
 // one laid out answers for all of them. The PassOp says the row is stacked over
 // the targets below it rather than in place of them — the list's own wheel
 // target and the tree's file menu are both registered underneath the rows.
-func (ui *uiState) registerTreeRowClick(gtx layout.Context, idx, h int) {
-	if idx < 0 || idx >= len(ui.rowClicks) {
+func RegisterTreeRowClick(ui *uiState, gtx layout.Context, idx, h int) {
+	if idx < 0 || idx >= len(ui.RowClicks) {
 		return
 	}
 	pass := pointer.PassOp{}.Push(gtx.Ops)
 	area := clip.Rect{Max: image.Pt(gtx.Constraints.Max.X, h)}.Push(gtx.Ops)
-	ui.rowClicks[idx].Add(gtx.Ops)
+	ui.RowClicks[idx].Add(gtx.Ops)
 	area.Pop()
 	pass.Pop()
 }
@@ -888,8 +888,8 @@ func (ui *uiState) registerTreeRowClick(gtx layout.Context, idx, h int) {
 // file tree. It is a click away and stays there: a click in the middle tree
 // takes the keyboard over, and nothing else does, so the tree keeps answering
 // to the keys the way a file list is expected to.
-func (ui *uiState) treeHasKeyboard() bool {
-	return ui.keyboardArea == "files"
+func TreeHasKeyboard(ui *uiState) bool {
+	return ui.KeyboardArea == "files"
 }
 
 func hasSuffix(s, suf string) bool {
@@ -899,7 +899,7 @@ func hasSuffix(s, suf string) bool {
 	return s[len(s)-len(suf):] == suf
 }
 
-func (ui *uiState) middleTreeRow(gtx layout.Context, indent int, txt string, expandable, open bool) layout.Dimensions {
+func MiddleTreeRow(ui *uiState, gtx layout.Context, indent int, txt string, expandable, open bool) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(18))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -930,7 +930,7 @@ func (ui *uiState) middleTreeRow(gtx layout.Context, indent int, txt string, exp
 							if !open {
 								s = "+"
 							}
-							l := material.Label(ui.th, unit.Sp(9), s)
+							l := material.Label(ui.Th, unit.Sp(9), s)
 							l.Color = cText
 							return l.Layout(gtx)
 						})
@@ -952,7 +952,7 @@ func (ui *uiState) middleTreeRow(gtx layout.Context, indent int, txt string, exp
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), txt)
+					l := material.Label(ui.Th, unit.Sp(11), txt)
 					l.Color = cText
 					return l.Layout(gtx)
 				}),
@@ -961,14 +961,14 @@ func (ui *uiState) middleTreeRow(gtx layout.Context, indent int, txt string, exp
 	)
 }
 
-func (ui *uiState) layoutRgdMidRow(gtx layout.Context, t *fileTab, idx int, v rgdVisible) layout.Dimensions {
+func LayoutRgdMidRow(ui *uiState, gtx layout.Context, t *fileTab, idx int, v rgdVisible) layout.Dimensions {
 	selected := v.Selected
 	expandable := v.IsTable && v.HasKids
 	open := v.Expanded
 	h := gtx.Dp(unit.Dp(19))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
-	return t.rgdMidClicks[idx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return t.RgdMidClicks[idx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				if selected {
@@ -980,7 +980,7 @@ func (ui *uiState) layoutRgdMidRow(gtx layout.Context, t *fileTab, idx int, v rg
 					_ = b.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: sz} })
 					return layout.Dimensions{Size: sz}
 				}
-				if t.rgdMidClicks[idx].Hovered() && !selected {
+				if t.RgdMidClicks[idx].Hovered() && !selected {
 					sz := image.Pt(gtx.Constraints.Max.X, h)
 					fillRect(gtx, cMenuHover, sz)
 					return layout.Dimensions{Size: sz}
@@ -1010,7 +1010,7 @@ func (ui *uiState) layoutRgdMidRow(gtx layout.Context, t *fileTab, idx int, v rg
 								if !open {
 									s = "+"
 								}
-								l := material.Label(ui.th, unit.Sp(9), s)
+								l := material.Label(ui.Th, unit.Sp(9), s)
 								l.Color = cText
 								return l.Layout(gtx)
 							})
@@ -1047,7 +1047,7 @@ func (ui *uiState) layoutRgdMidRow(gtx layout.Context, t *fileTab, idx int, v rg
 						if len(lbl) > 48 {
 							lbl = lbl[:45] + "…"
 						}
-						l := material.Label(ui.th, unit.Sp(11), lbl)
+						l := material.Label(ui.Th, unit.Sp(11), lbl)
 						if selected {
 							l.Color = cText
 							l.Font.Weight = font.Medium
@@ -1065,7 +1065,7 @@ func (ui *uiState) layoutRgdMidRow(gtx layout.Context, t *fileTab, idx int, v rg
 	})
 }
 
-func (ui *uiState) middleHeader(gtx layout.Context) layout.Dimensions {
+func MiddleHeader(ui *uiState, gtx layout.Context) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(28))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -1090,34 +1090,34 @@ func (ui *uiState) middleHeader(gtx layout.Context) layout.Dimensions {
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						title := "GameData"
-						if tab := ui.activeTab(); tab != nil {
-							if tab.kind == "fda" {
-								title = filepath.Base(tab.path)
+						if tab := ActiveTab(ui); tab != nil {
+							if tab.Kind == "fda" {
+								title = filepath.Base(tab.Path)
 								if title == "" {
 									title = "FDA"
 								}
-							} else if tab.kind == "text" {
-								title = filepath.Base(tab.path)
-							} else if tab.kind == "rgd" {
-								if tab.rgdFile != nil {
-									title = filepath.Base(tab.path)
-									if e := ui.rgdSelectedEntryFor(tab); e != nil && e != tab.rgdFile.Root {
+							} else if tab.Kind == "text" {
+								title = filepath.Base(tab.Path)
+							} else if tab.Kind == "rgd" {
+								if tab.RgdFile != nil {
+									title = filepath.Base(tab.Path)
+									if e := RgdSelectedEntryFor(ui, tab); e != nil && e != tab.RgdFile.Root {
 										title = e.Name
-										if idx := strings.LastIndex(tab.rgdSelected, "/"); idx >= 0 {
-											title = tab.rgdSelected[idx+1:]
+										if idx := strings.LastIndex(tab.RgdSelected, "/"); idx >= 0 {
+											title = tab.RgdSelected[idx+1:]
 										}
 									}
 								} else {
-									title = filepath.Base(tab.path)
+									title = filepath.Base(tab.Path)
 								}
 							}
-						} else if ui.selectedPath != "" {
-							title = ui.selectedPath
+						} else if ui.SelectedPath != "" {
+							title = ui.SelectedPath
 							if strings.Contains(title, "\\") {
 								title = title[strings.LastIndex(title, "\\")+1:]
 							}
 						}
-						l := material.Label(ui.th, unit.Sp(11), title)
+						l := material.Label(ui.Th, unit.Sp(11), title)
 						l.Color = cText
 						l.Font.Weight = font.Medium
 						return l.Layout(gtx)

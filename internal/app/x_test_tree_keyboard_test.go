@@ -35,12 +35,12 @@ func keyFrame(f *windowFrame, name key.Name) {
 // goes when the user clicks in there.
 func TestAClickLeavesTheTreeOnTheKeyboard(t *testing.T) {
 	f, row := treeWindow(t)
-	f.ui.keyboardArea = "rgd"
+	f.ui.KeyboardArea = "rgd"
 	clickTreeRow(t, f, row)
-	if !f.ui.treeHasKeyboard() {
+	if !f.TreeHasKeyboard(ui) {
 		t.Fatalf("a click on row %d did not give the file tree the keyboard", row)
 	}
-	if got, want := f.ui.selectedTreePath, f.ui.visibleNodes[row].FullPath; got != want {
+	if got, want := f.ui.SelectedTreePath, f.ui.VisibleNodes[row].FullPath; got != want {
 		t.Errorf("the keyboard is on %q, want the row that was clicked, %q", got, want)
 	}
 }
@@ -49,17 +49,17 @@ func TestAClickLeavesTheTreeOnTheKeyboard(t *testing.T) {
 // is in the tree, so the keys are as well, whichever button it came with.
 func TestARightPressGivesTheTreeTheKeyboardToo(t *testing.T) {
 	f, row := treeWindow(t)
-	f.ui.keyboardArea = "rgd"
+	f.ui.KeyboardArea = "rgd"
 	at := treeRowAt(t, f, treeOrigin(t, f), row)
 	f.send(
 		pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at},
 		pointer.Event{Kind: pointer.Press, Source: pointer.Mouse, Position: at, Buttons: pointer.ButtonSecondary},
 	)
 	f.frame()
-	if !f.ui.contextMenuVisible {
+	if !f.ui.ContextMenuVisible {
 		t.Skip("the right press opened no file menu, so the tree was not under the pointer")
 	}
-	if !f.ui.treeHasKeyboard() {
+	if !f.TreeHasKeyboard(ui) {
 		t.Error("a right press in the file tree left the keyboard to the middle tree")
 	}
 }
@@ -70,17 +70,17 @@ func TestARightPressGivesTheTreeTheKeyboardToo(t *testing.T) {
 func TestAnArrowKeyAfterAClickMovesTheSelection(t *testing.T) {
 	f, row := treeWindow(t)
 	clickTreeRow(t, f, row)
-	want := f.ui.visibleNodes[row+1].FullPath
+	want := f.ui.VisibleNodes[row+1].FullPath
 	keyFrame(f, key.NameDownArrow)
-	if f.ui.selectedTreePath != want {
-		t.Errorf("Down after a click on row %d selected %q, want the next row, %q", row, f.ui.selectedTreePath, want)
+	if f.ui.SelectedTreePath != want {
+		t.Errorf("Down after a click on row %d selected %q, want the next row, %q", row, f.ui.SelectedTreePath, want)
 	}
-	if f.ui.selectedPath != want {
-		t.Errorf("Down selected %q as the current file, want %q", f.ui.selectedPath, want)
+	if f.ui.SelectedPath != want {
+		t.Errorf("Down selected %q as the current file, want %q", f.ui.SelectedPath, want)
 	}
 	keyFrame(f, key.NameUpArrow)
-	if got := f.ui.selectedTreePath; got != f.ui.visibleNodes[row].FullPath {
-		t.Errorf("Up after Down selected %q, want the row the click was on, %q", got, f.ui.visibleNodes[row].FullPath)
+	if got := f.ui.SelectedTreePath; got != f.ui.VisibleNodes[row].FullPath {
+		t.Errorf("Up after Down selected %q, want the row the click was on, %q", got, f.ui.VisibleNodes[row].FullPath)
 	}
 }
 
@@ -91,17 +91,17 @@ func TestEnterAfterAClickOpensTheSelectedRow(t *testing.T) {
 	f, row := treeWindow(t)
 	clickTreeRow(t, f, row)
 	keyFrame(f, key.NameDownArrow)
-	want := f.ui.visibleNodes[row+1]
+	want := f.ui.VisibleNodes[row+1]
 	if !want.IsFile {
 		t.Skipf("the row below the one under test is %q, which is not a file", want.Name)
 	}
 	keyFrame(f, key.NameReturn)
-	tab := f.ui.activeTab()
+	tab := f.ActiveTab(ui)
 	if tab == nil {
-		t.Fatalf("Enter after a click opened no tab; the status line reads %q", f.ui.statusText)
+		t.Fatalf("Enter after a click opened no tab; the status line reads %q", f.ui.StatusText)
 	}
-	if !strings.HasSuffix(tab.path, want.Name) {
-		t.Errorf("Enter opened %q, want %q, the row the arrows were on", tab.path, want.Name)
+	if !strings.HasSuffix(tab.Path, want.Name) {
+		t.Errorf("Enter opened %q, want %q, the row the arrows were on", tab.Path, want.Name)
 	}
 }
 
@@ -135,13 +135,13 @@ func managedModWindow(t *testing.T) (*windowFrame, int, int, string) {
 		folder.FileByLower[file.Name] = file
 	}
 	ui := newUI(unitTestTheme())
-	ui.modTree = tree
-	ui.expanded = map[string]bool{"Data": true, `Data\files`: true}
-	ui.visibleNodes = ui.getVisibleNodes()
-	ui.ensureRowClicks(len(ui.visibleNodes))
-	ui.ensureRowHover(len(ui.visibleNodes))
+	ui.ModTree = tree
+	ui.Expanded = map[string]bool{"Data": true, `Data\files`: true}
+	ui.VisibleNodes = GetVisibleNodes(ui)
+	EnsureRowClicks(ui, len(ui.VisibleNodes))
+	EnsureRowHover(ui, len(ui.VisibleNodes))
 	row, foreignRow := -1, -1
-	for i, n := range ui.visibleNodes {
+	for i, n := range ui.VisibleNodes {
 		switch n.FullPath {
 		case target.FullPath:
 			row = i
@@ -161,15 +161,15 @@ func managedModWindow(t *testing.T) (*windowFrame, int, int, string) {
 func TestDeleteAfterAClickAsksBeforeTakingAnything(t *testing.T) {
 	f, row, _, diskPath := managedModWindow(t)
 	clickTreeRow(t, f, row)
-	if !f.ui.canDeleteCurrentModFile(f.ui.selectedPath) {
-		t.Fatalf("%q is not a file of the mod, so the key has nothing it may delete", f.ui.selectedPath)
+	if !f.CanDeleteCurrentModFile(ui, f.ui.SelectedPath) {
+		t.Fatalf("%q is not a file of the mod, so the key has nothing it may delete", f.ui.SelectedPath)
 	}
 	keyFrame(f, key.NameDeleteForward)
-	if !f.ui.fileDeleteDialog {
-		t.Fatalf("Delete asked nothing; the status line reads %q", f.ui.statusText)
+	if !f.ui.FileDeleteDialog {
+		t.Fatalf("Delete asked nothing; the status line reads %q", f.ui.StatusText)
 	}
-	if f.ui.fileDeletePath != f.ui.visibleNodes[row].FullPath {
-		t.Errorf("the confirmation is for %q, want the selected row, %q", f.ui.fileDeletePath, f.ui.visibleNodes[row].FullPath)
+	if f.ui.FileDeletePath != f.ui.VisibleNodes[row].FullPath {
+		t.Errorf("the confirmation is for %q, want the selected row, %q", f.ui.FileDeletePath, f.ui.VisibleNodes[row].FullPath)
 	}
 	if _, err := os.Stat(diskPath); err != nil {
 		t.Errorf("the key took the file away before anything confirmed it: %v", err)
@@ -182,7 +182,7 @@ func TestDeleteAfterAClickAsksBeforeTakingAnything(t *testing.T) {
 func TestDeleteOnAFolderAsksNothing(t *testing.T) {
 	f, _, _, _ := managedModWindow(t)
 	dir := -1
-	for i, n := range f.ui.visibleNodes {
+	for i, n := range f.ui.VisibleNodes {
 		if n.IsDir {
 			dir = i
 			break
@@ -193,8 +193,8 @@ func TestDeleteOnAFolderAsksNothing(t *testing.T) {
 	}
 	clickTreeRow(t, f, dir)
 	keyFrame(f, key.NameDeleteForward)
-	if f.ui.fileDeleteDialog {
-		t.Errorf("Delete on the folder %q asked to delete a file", f.ui.visibleNodes[dir].FullPath)
+	if f.ui.FileDeleteDialog {
+		t.Errorf("Delete on the folder %q asked to delete a file", f.ui.VisibleNodes[dir].FullPath)
 	}
 }
 
@@ -206,10 +206,10 @@ func TestDeleteOnAFileOfAnotherModAsksNothing(t *testing.T) {
 	f, _, foreignRow, _ := managedModWindow(t)
 	clickTreeRow(t, f, foreignRow)
 	keyFrame(f, key.NameDeleteForward)
-	if f.ui.fileDeleteDialog {
-		t.Errorf("Delete on the required mod's file %q asked to delete it", f.ui.selectedPath)
+	if f.ui.FileDeleteDialog {
+		t.Errorf("Delete on the required mod's file %q asked to delete it", f.ui.SelectedPath)
 	}
-	if f.ui.statusText == "" {
+	if f.ui.StatusText == "" {
 		t.Error("Delete on a file of another mod said nothing about why it will not")
 	}
 }
@@ -221,15 +221,15 @@ func TestEscapeClosesTheDeleteConfirmation(t *testing.T) {
 	f, row, _, diskPath := managedModWindow(t)
 	clickTreeRow(t, f, row)
 	keyFrame(f, key.NameDeleteForward)
-	if !f.ui.fileDeleteDialog {
+	if !f.ui.FileDeleteDialog {
 		t.Fatal("Delete asked nothing, so there is no confirmation to close")
 	}
 	keyFrame(f, key.NameEscape)
-	if f.ui.fileDeleteDialog {
+	if f.ui.FileDeleteDialog {
 		t.Error("Escape left the delete confirmation open")
 	}
-	if f.ui.fileDeletePath != "" {
-		t.Errorf("the closed confirmation still names %q", f.ui.fileDeletePath)
+	if f.ui.FileDeletePath != "" {
+		t.Errorf("the closed confirmation still names %q", f.ui.FileDeletePath)
 	}
 	if _, err := os.Stat(diskPath); err != nil {
 		t.Errorf("cancelling the confirmation deleted the file anyway: %v", err)
@@ -241,16 +241,16 @@ func TestEscapeClosesTheDeleteConfirmation(t *testing.T) {
 func treeKeyboardUI(t *testing.T) *uiState {
 	t.Helper()
 	tree := openTestDXP3(t)
-	ui := &uiState{modTree: tree, keyboardArea: "files", expanded: map[string]bool{"Data": true}}
+	ui := &uiState{ModTree: tree, KeyboardArea: "files", Expanded: map[string]bool{"Data": true}}
 	target := `Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`
 	segs := strings.Split(target, `\`)
 	for i := 2; i < len(segs); i++ {
-		ui.expanded[strings.Join(segs[:i], `\`)] = true
+		ui.Expanded[strings.Join(segs[:i], `\`)] = true
 	}
-	ui.visibleNodes = ui.getVisibleNodes()
-	for _, n := range ui.visibleNodes {
+	ui.VisibleNodes = GetVisibleNodes(ui)
+	for _, n := range ui.VisibleNodes {
 		if n.FullPath == target {
-			ui.selectedTreePath = target
+			ui.SelectedTreePath = target
 			return ui
 		}
 	}
@@ -266,13 +266,13 @@ func TestEnterOpensTheSelectedFileUnderEitherName(t *testing.T) {
 	for _, name := range []key.Name{key.NameReturn, key.NameEnter} {
 		t.Run(string(name), func(t *testing.T) {
 			ui := treeKeyboardUI(t)
-			ui.navigateFileTree(name)
-			tab := ui.activeTab()
+			NavigateFileTree(ui, name)
+			tab := ActiveTab(ui)
 			if tab == nil {
 				t.Fatalf("Enter under the name %q opened no tab", name)
 			}
-			if !strings.HasSuffix(tab.path, "necron_basic_warrior.rgd") {
-				t.Errorf("Enter under %q opened %q, want the selected file", name, tab.path)
+			if !strings.HasSuffix(tab.Path, "necron_basic_warrior.rgd") {
+				t.Errorf("Enter under %q opened %q, want the selected file", name, tab.Path)
 			}
 		})
 	}
@@ -312,12 +312,12 @@ func TestEnterNamesAreDistinct(t *testing.T) {
 // already worked, and that an arrow does not open anything.
 func TestArrowKeysStillMoveTheSelection(t *testing.T) {
 	ui := treeKeyboardUI(t)
-	before := ui.selectedTreePath
-	ui.navigateFileTree(key.NameDownArrow)
-	if ui.selectedTreePath == before {
+	before := ui.SelectedTreePath
+	NavigateFileTree(ui, key.NameDownArrow)
+	if ui.SelectedTreePath == before {
 		t.Error("Down did not move the selection, so the arrow keys are no longer reaching the tree")
 	}
-	if len(ui.openTabs) != 0 {
+	if len(ui.OpenTabs) != 0 {
 		t.Error("an arrow key opened a file, which is not what an arrow means")
 	}
 }
@@ -326,15 +326,15 @@ func TestArrowKeysStillMoveTheSelection(t *testing.T) {
 // folder is not an open, and must not fall through to opening something else.
 func TestEnterOnAFolderOpensNothing(t *testing.T) {
 	tree := openTestDXP3(t)
-	ui := &uiState{modTree: tree, keyboardArea: "files", expanded: map[string]bool{"Data": true}}
-	ui.visibleNodes = ui.getVisibleNodes()
-	ui.selectedTreePath = `Data`
-	ui.navigateFileTree(key.NameReturn)
-	if len(ui.openTabs) != 0 {
-		t.Errorf("Enter on a folder opened %d tab(s)", len(ui.openTabs))
+	ui := &uiState{ModTree: tree, KeyboardArea: "files", Expanded: map[string]bool{"Data": true}}
+	ui.VisibleNodes = GetVisibleNodes(ui)
+	ui.SelectedTreePath = `Data`
+	NavigateFileTree(ui, key.NameReturn)
+	if len(ui.OpenTabs) != 0 {
+		t.Errorf("Enter on a folder opened %d tab(s)", len(ui.OpenTabs))
 	}
 	// And the folder it was on is still there, untouched.
-	if len(ui.visibleNodes) == 0 {
+	if len(ui.VisibleNodes) == 0 {
 		t.Error("the tree lost its nodes")
 	}
 }

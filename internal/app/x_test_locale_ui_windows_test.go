@@ -42,7 +42,7 @@ func renderLocaleOverlay(t *testing.T, ui *uiState, w, h int) *image.RGBA {
 
 	var ops op.Ops
 	gtx := testutil.NewLayoutContext(&ops, w, h)
-	ui.layoutLocaleOverlay(gtx)
+	LayoutLocaleOverlay(ui, gtx)
 
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	if err := win.Frame(&ops); err != nil {
@@ -63,9 +63,9 @@ func localeTestUI(t *testing.T) *uiState {
 		"Engine/Locale/German/Engine.ucs":  encodeUCS(t, "90100\tRüstung"),
 	})
 	ui := newUI(unitTestTheme())
-	ui.gamePath = gamePath
-	ui.modulePath = moduleDir
-	ui.refreshLocales()
+	ui.GamePath = gamePath
+	ui.ModulePath = moduleDir
+	RefreshLocales(ui)
 	return ui
 }
 
@@ -80,11 +80,11 @@ func localeTestUI(t *testing.T) *uiState {
 func TestLocaleDropdownWritesTheLanguageNames(t *testing.T) {
 	const w, h = 900, 700
 	ui := localeTestUI(t)
-	ui.localeOpen = true
+	ui.LocaleOpen = true
 
 	img := renderLocaleOverlay(t, ui, w, h)
 
-	box := ui.localeDropBox
+	box := ui.LocaleDropBox
 	if box.Empty() {
 		t.Fatal("the layout reported no dropdown box at all")
 	}
@@ -104,13 +104,13 @@ func TestLocaleDropdownWritesTheLanguageNames(t *testing.T) {
 	}
 
 	// The same list with every name blanked out: only the writing can differ.
-	names := append([]string(nil), ui.localeList...)
-	for i := range ui.localeList {
-		ui.localeList[i] = ""
+	names := append([]string(nil), ui.LocaleList...)
+	for i := range ui.LocaleList {
+		ui.LocaleList[i] = ""
 	}
 	blank := renderLocaleOverlay(t, ui, w, h)
-	for i := range ui.localeList {
-		ui.localeList[i] = names[i]
+	for i := range ui.LocaleList {
+		ui.LocaleList[i] = names[i]
 	}
 
 	if diff := imagesDifferIn(img, blank, box); diff == 0 {
@@ -127,9 +127,9 @@ func TestLocaleDropdownWritesTheLanguageNames(t *testing.T) {
 	for i := range names {
 		langs := append([]string(nil), names...)
 		langs[i] = ""
-		ui.localeList = langs
+		ui.LocaleList = langs
 		oneBlank := renderLocaleOverlay(t, ui, w, h)
-		ui.localeList = names
+		ui.LocaleList = names
 
 		if imagesDifferIn(img, oneBlank, box) == 0 {
 			t.Errorf("nothing changes when %q is removed: row %d is not being drawn", names[i], i)
@@ -168,20 +168,20 @@ func absDiff(a, b uint8) int {
 func TestLocaleFieldWritesTheChosenLanguage(t *testing.T) {
 	const w, h = 900, 700
 	ui := localeTestUI(t)
-	ui.localeOpen = false
+	ui.LocaleOpen = false
 
 	img := renderFrame(t, w, h, func(gtx layout.Context) {
 		gtx.Constraints.Min = image.Point{}
-		ui.layoutLocaleField(gtx)
+		LayoutLocaleField(ui, gtx)
 	})
 
 	// The field is wider than it looks, so the box is generous; what matters is
 	// that the glyphs are somewhere inside it.
 	box := image.Rectangle{Max: image.Pt(300, localeFieldHeightDp)}
 	if !containsColor(img, box, cText, 12) {
-		t.Errorf("no text-coloured pixels in the field: %q is not being drawn", ui.localeLabel())
+		t.Errorf("no text-coloured pixels in the field: %q is not being drawn", LocaleLabel(ui))
 	} else {
-		t.Logf("the field carries text-coloured pixels, so %q is written in it", ui.localeLabel())
+		t.Logf("the field carries text-coloured pixels, so %q is written in it", LocaleLabel(ui))
 	}
 }
 
@@ -191,16 +191,16 @@ func TestLocaleDropdownStaysInsideTheWindow(t *testing.T) {
 	const w, h = 500, 300
 	ui := localeTestUI(t)
 	// Far more languages than any installation has.
-	ui.localeList = make([]string, 60)
-	for i := range ui.localeList {
-		ui.localeList[i] = "Language" + string(rune('A'+i%26))
+	ui.LocaleList = make([]string, 60)
+	for i := range ui.LocaleList {
+		ui.LocaleList[i] = "Language" + string(rune('A'+i%26))
 	}
-	ui.localeOpen = true
+	ui.LocaleOpen = true
 
-	ui.ensureLocaleClicks(len(ui.localeList))
+	EnsureLocaleClicks(ui, len(ui.LocaleList))
 	renderLocaleOverlay(t, ui, w, h)
 
-	box := ui.localeDropBox
+	box := ui.LocaleDropBox
 	if box.Empty() {
 		t.Fatal("the layout reported no dropdown box at all")
 	}
@@ -220,11 +220,11 @@ func TestPickingALanguageChangesTheResolvedText(t *testing.T) {
 	if got := rgd.LocIDDisplay("$90100"); got != "$90100  Armour" {
 		t.Fatalf("English shows %q", got)
 	}
-	ui.setLocaleLanguage("Russian")
+	SetLocaleLanguage(ui, "Russian")
 	if got := rgd.LocIDDisplay("$90100"); got != "$90100  Броня" {
 		t.Errorf("Russian shows %q, want the Russian text", got)
 	}
-	ui.setLocaleLanguage("German")
+	SetLocaleLanguage(ui, "German")
 	if got := rgd.LocIDDisplay("$90100"); got != "$90100  Rüstung" {
 		t.Errorf("German shows %q, want Rüstung", got)
 	}
@@ -234,8 +234,8 @@ func TestPickingALanguageChangesTheResolvedText(t *testing.T) {
 // text, so it has to name the chosen one and stay inside the menu bar.
 func TestLocaleFieldShowsTheChosenLanguage(t *testing.T) {
 	ui := localeTestUI(t)
-	ui.setLocaleLanguage("Russian")
-	if got := ui.localeLabel(); got != "Russian" {
+	SetLocaleLanguage(ui, "Russian")
+	if got := LocaleLabel(ui); got != "Russian" {
 		t.Errorf("label = %q, want Russian", got)
 	}
 }
@@ -247,7 +247,7 @@ func TestLocaleFieldShowsTheChosenLanguage(t *testing.T) {
 func TestLocaleRowShowsTheTextAndRegistersTheAltClick(t *testing.T) {
 	const w, h = 600, 80
 	ui := localeTestUI(t)
-	tab := &fileTab{path: "unit.rgd", kind: "text"}
+	tab := &fileTab{Path: "unit.rgd", Kind: "text"}
 	e := &rgd.RgdEntry{Name: "screen_name_id", Type: rgd.RgdTypeWString, WStrVal: "$90100"}
 
 	win, err := headless.NewWindow(w, h)
@@ -258,12 +258,12 @@ func TestLocaleRowShowsTheTextAndRegistersTheAltClick(t *testing.T) {
 
 	var ops op.Ops
 	gtx := testutil.NewLayoutContext(&ops, w, h)
-	dims := ui.tableRowLocaleText(gtx, tab, e, "GameData/screen_name_id", false)
+	dims := TableRowLocaleText(ui, gtx, tab, e, "GameData/screen_name_id", false)
 
 	if dims.Size.Y == 0 {
 		t.Fatal("the locale row took no height, so nothing is drawn or clickable")
 	}
-	tag := ui.rgdEnsureLocTag(tab, "GameData/screen_name_id")
+	tag := RgdEnsureLocTag(ui, tab, "GameData/screen_name_id")
 	if tag == nil {
 		t.Fatal("the row registered no pointer target, so Alt+click cannot reach it")
 	}
@@ -288,7 +288,7 @@ func TestLocaleRowSaysWhenTheTableHasNoEntry(t *testing.T) {
 	e := &rgd.RgdEntry{Name: "screen_name_id", Type: rgd.RgdTypeWString, WStrVal: "$404"}
 
 	// The message a reader gets is the one that has to name the language.
-	text, tooltip := ui.localeRowDisplay(e.DisplayValue())
+	text, tooltip := LocaleRowDisplay(ui, e.DisplayValue())
 	if text == "" {
 		t.Fatal("an unknown id produced no label at all")
 	}
@@ -305,10 +305,10 @@ func TestLocaleRowSaysWhenTheTableHasNoEntry(t *testing.T) {
 	if _, ok := localeLookup("404"); ok {
 		t.Fatal("404 should not be in the table")
 	}
-	tab := &fileTab{path: "unit.rgd", kind: "text"}
+	tab := &fileTab{Path: "unit.rgd", Kind: "text"}
 	gtx := testutil.NewLayoutContext(new(op.Ops), 400, 60)
-	ui.tableRowLocaleText(gtx, tab, e, "GameData/screen_name_id", false)
-	if len(tab.rgdLocTags) == 0 {
+	TableRowLocaleText(ui, gtx, tab, e, "GameData/screen_name_id", false)
+	if len(tab.RgdLocTags) == 0 {
 		t.Error("a field with no text registered no pointer target, so a click on it could not add one")
 	}
 	// Alt on it asks for a jump, and there is nowhere to jump to, so the rule
@@ -330,7 +330,7 @@ func TestLocaleRowSaysWhenTheTableHasNoEntry(t *testing.T) {
 // case a click can fix outright, so the label says that too.
 func TestLocaleRowSaysWhenTheSlotIsUnset(t *testing.T) {
 	ui := localeTestUI(t)
-	text, tooltip := ui.localeRowDisplay("$0")
+	text, tooltip := LocaleRowDisplay(ui, "$0")
 	if !strings.Contains(text, "no localisation") {
 		t.Errorf("label = %q, want it to say the field has no localisation", text)
 	}
@@ -345,11 +345,11 @@ func TestLocaleRowSaysWhenTheSlotIsUnset(t *testing.T) {
 // A value that is not a localisation id has no row to show at all.
 func TestLocaleRowIsSkippedForANonIDValue(t *testing.T) {
 	ui := localeTestUI(t)
-	tab := &fileTab{path: "unit.rgd", kind: "text"}
+	tab := &fileTab{Path: "unit.rgd", Kind: "text"}
 	e := &rgd.RgdEntry{Name: "screen_name_id", Type: rgd.RgdTypeWString, WStrVal: "not an id"}
 
 	gtx := testutil.NewLayoutContext(new(op.Ops), 400, 60)
-	dims := ui.tableRowLocaleText(gtx, tab, e, "GameData/screen_name_id", false)
+	dims := TableRowLocaleText(ui, gtx, tab, e, "GameData/screen_name_id", false)
 	if dims.Size.Y != 0 {
 		t.Errorf("row took %d px, want nothing for a value that is not an id", dims.Size.Y)
 	}

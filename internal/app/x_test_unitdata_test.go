@@ -140,15 +140,15 @@ func TestResolveRgdRefSwapsLuaForRgd(t *testing.T) {
 }
 
 func TestAbilityRefName(t *testing.T) {
-	a := abilityRef{slot: "ability_02", ref: `abilities\necron_chronometron.lua`, path: "x"}
-	if got := a.name(); got != "necron_chronometron" {
+	a := abilityRef{Slot: "ability_02", Ref: `abilities\necron_chronometron.lua`, Path: "x"}
+	if got := a.Name(); got != "necron_chronometron" {
 		t.Fatalf("abilityRef.name = %q, want %q", got, "necron_chronometron")
 	}
-	if !a.resolved() {
+	if !a.Resolved() {
 		t.Fatal("an abilityRef with a path should report resolved")
 	}
 	var empty abilityRef
-	if empty.resolved() {
+	if empty.Resolved() {
 		t.Fatal("an abilityRef with no path must not report resolved")
 	}
 }
@@ -158,55 +158,55 @@ func TestAbilityRefName(t *testing.T) {
 // The dialog clamps its selection rather than trusting it: an index left over
 // from a different mod must land on a real entry, never panic.
 func TestCatalogClampsStaleIndexes(t *testing.T) {
-	cat := &unitCatalog{races: []raceEntry{{
-		name:       "necrons",
-		troops:     []unitEntry{{path: "a", name: "a"}},
-		structures: []unitEntry{{path: "b", name: "b"}},
+	cat := &unitCatalog{Races: []raceEntry{{
+		Name:       "necrons",
+		Troops:     []unitEntry{{Path: "a", Name: "a"}},
+		Structures: []unitEntry{{Path: "b", Name: "b"}},
 	}}}
 	for _, i := range []int{-5, 0, 1, 99} {
-		if got := cat.clampRaceSel(i); got != 0 {
+		if got := cat.ClampRaceSel(i); got != 0 {
 			t.Errorf("clampRaceSel(%d) = %d, want 0", i, got)
 		}
 	}
-	r := cat.selectedRace(7)
-	if r == nil || r.name != "necrons" {
+	r := cat.SelectedRace(7)
+	if r == nil || r.Name != "necrons" {
 		t.Fatalf("selectedRace(7) = %+v, want the only race", r)
 	}
-	if u := cat.selectedUnit(0, 99); u == nil || u.name != "a" {
+	if u := cat.SelectedUnit(0, 99); u == nil || u.Name != "a" {
 		t.Fatalf("selectedUnit(0,99) = %+v, want the first unit", u)
 	}
-	if got := r.unitsOf(); len(got) != 2 || got[0].name != "a" || got[1].name != "b" {
+	if got := r.UnitsOf(); len(got) != 2 || got[0].Name != "a" || got[1].Name != "b" {
 		t.Fatalf("unitsOf = %+v, want troops before structures", got)
 	}
 }
 
 func TestEmptyCatalogIsSafe(t *testing.T) {
 	var nilCat *unitCatalog
-	if nilCat.clampRaceSel(3) != 0 {
+	if nilCat.ClampRaceSel(3) != 0 {
 		t.Error("a nil catalog must clamp to 0")
 	}
-	if nilCat.selectedRace(0) != nil {
+	if nilCat.SelectedRace(0) != nil {
 		t.Error("a nil catalog must have no race")
 	}
-	if nilCat.selectedUnit(0, 0) != nil {
+	if nilCat.SelectedUnit(0, 0) != nil {
 		t.Error("a nil catalog must have no unit")
 	}
-	if got := nilCat.allUnits(); got != nil {
+	if got := nilCat.AllUnits(); got != nil {
 		t.Error("a nil catalog must have no units")
 	}
 	empty := &unitCatalog{}
-	if empty.findRace("necrons") != nil {
+	if empty.FindRace("necrons") != nil {
 		t.Error("an empty catalog must find no race")
 	}
-	if u := empty.selectedUnit(0, 0); u != nil {
+	if u := empty.SelectedUnit(0, 0); u != nil {
 		t.Error("an empty catalog must have no unit")
 	}
 	// A race with no units must report zero rather than panicking.
 	var r raceEntry
-	if r.unitCount() != 0 {
+	if r.UnitCount() != 0 {
 		t.Error("a race with no units must count zero")
 	}
-	if r.clampUnitSel(4) != 0 {
+	if r.ClampUnitSel(4) != 0 {
 		t.Error("clampUnitSel on an empty race must be 0")
 	}
 }
@@ -223,21 +223,21 @@ func TestCatalogDeduplicatesByPath(t *testing.T) {
 	if cat == nil {
 		t.Fatal("buildUnitCatalog returned nil")
 	}
-	r := cat.findRace("necrons")
+	r := cat.FindRace("necrons")
 	if r == nil {
-		t.Fatalf("necrons not found in %+v", cat.races)
+		t.Fatalf("necrons not found in %+v", cat.Races)
 	}
 	// Only the .rgd is listed: the .whe is the same unit in another form.
-	if len(r.troops) != 1 || r.troops[0].name != "necron_lord" {
-		t.Fatalf("troops = %+v, want just necron_lord", r.troops)
+	if len(r.Troops) != 1 || r.Troops[0].Name != "necron_lord" {
+		t.Fatalf("troops = %+v, want just necron_lord", r.Troops)
 	}
-	if len(r.structures) != 1 || r.structures[0].name != "monolith" {
-		t.Fatalf("structures = %+v, want just monolith", r.structures)
+	if len(r.Structures) != 1 || r.Structures[0].Name != "monolith" {
+		t.Fatalf("structures = %+v, want just monolith", r.Structures)
 	}
-	if r.troops[0].kind != unitKindTroop {
-		t.Errorf("troop kind = %+v, want the troops kind", r.troops[0].kind)
+	if r.Troops[0].Kind != unitKindTroop {
+		t.Errorf("troop kind = %+v, want the troops kind", r.Troops[0].Kind)
 	}
-	if u, ok := cat.byPath[`data\attrib\ebps\races\necrons\troops\necron_lord.rgd`]; !ok || u.name != "necron_lord" {
+	if u, ok := cat.ByPath[`data\attrib\ebps\races\necrons\troops\necron_lord.rgd`]; !ok || u.Name != "necron_lord" {
 		t.Errorf("byPath lookup failed: %+v ok=%v", u, ok)
 	}
 }
@@ -286,28 +286,28 @@ func openTestDXP3(t *testing.T) *modtree.ModTree {
 func TestRealCatalogListsRacesAndUnits(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	if len(cat.races) < 5 {
-		t.Fatalf("only %d races found, expected the full set", len(cat.races))
+	if len(cat.Races) < 5 {
+		t.Fatalf("only %d races found, expected the full set", len(cat.Races))
 	}
-	necrons := cat.findRace("necrons")
+	necrons := cat.FindRace("necrons")
 	if necrons == nil {
-		t.Fatalf("necrons missing from %d races", len(cat.races))
+		t.Fatalf("necrons missing from %d races", len(cat.Races))
 	}
-	if necrons.unitCount() == 0 {
+	if necrons.UnitCount() == 0 {
 		t.Fatal("necrons has no units")
 	}
 	// Troops and structures are both present and both non-empty.
-	if len(necrons.troops) == 0 {
+	if len(necrons.Troops) == 0 {
 		t.Error("necrons has no troops")
 	}
-	if len(necrons.structures) == 0 {
+	if len(necrons.Structures) == 0 {
 		t.Error("necrons has no structures")
 	}
 	// Every listed unit must actually exist and parse.
 	bad := 0
-	for _, u := range necrons.unitsOf() {
-		if tree.FindFile(u.path) == nil {
-			t.Errorf("listed unit does not resolve: %s", u.path)
+	for _, u := range necrons.UnitsOf() {
+		if tree.FindFile(u.Path) == nil {
+			t.Errorf("listed unit does not resolve: %s", u.Path)
 			bad++
 		}
 	}
@@ -323,9 +323,9 @@ func TestRealUnitAbilitiesResolve(t *testing.T) {
 	cat := buildUnitCatalog(tree)
 
 	named, resolved := 0, 0
-	for _, r := range cat.races {
-		for _, u := range r.unitsOf() {
-			data, err := tree.ReadFile(u.path)
+	for _, r := range cat.Races {
+		for _, u := range r.UnitsOf() {
+			data, err := tree.ReadFile(u.Path)
 			if err != nil {
 				continue
 			}
@@ -339,7 +339,7 @@ func TestRealUnitAbilitiesResolve(t *testing.T) {
 				}
 				named++
 				if !a.resolved() {
-					t.Errorf("%s: ability slot %s ref %q did not resolve", u.name, a.slot, a.ref)
+					t.Errorf("%s: ability slot %s ref %q did not resolve", u.Name, a.slot, a.ref)
 					continue
 				}
 				resolved++
@@ -353,7 +353,7 @@ func TestRealUnitAbilitiesResolve(t *testing.T) {
 	if resolved != named {
 		t.Fatalf("only %d of %d ability references resolved", resolved, named)
 	}
-	t.Logf("all %d ability references across %d races resolved", named, len(cat.races))
+	t.Logf("all %d ability references across %d races resolved", named, len(cat.Races))
 }
 
 // The "Unit info" list must only state things the file actually says, so every
@@ -361,29 +361,29 @@ func TestRealUnitAbilitiesResolve(t *testing.T) {
 func TestRealUnitDetailsArePopulated(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	necrons := cat.findRace("necrons")
+	necrons := cat.FindRace("necrons")
 	if necrons == nil {
 		t.Skip("necrons not found")
 	}
 
 	populated, withAbilities, withWeapons, readErrors := 0, 0, 0, 0
-	for _, u := range necrons.unitsOf() {
+	for _, u := range necrons.UnitsOf() {
 		d := loadUnitDetails(tree, u)
-		if d.error != "" {
+		if d.Error != "" {
 			readErrors++
 			continue
 		}
-		if len(d.fields) > 0 {
+		if len(d.Fields) > 0 {
 			populated++
 		}
 		if len(unitAbilityRows(d)) > 0 {
 			withAbilities++
 		}
-		if len(d.weapons) > 0 {
+		if len(d.Weapons) > 0 {
 			withWeapons++
 		}
 	}
-	total := necrons.unitCount()
+	total := necrons.UnitCount()
 	if readErrors > 0 {
 		t.Errorf("%d of %d necrons units failed to read", readErrors, total)
 	}
@@ -404,34 +404,34 @@ func TestRealUnitDetailsArePopulated(t *testing.T) {
 func TestUnitDetailsCacheFollowsSelection(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	ui := &uiState{modTree: tree}
-	if got := ui.unitCatalogFor(); got == nil {
+	ui := &uiState{ModTree: tree}
+	if got := UnitCatalogFor(ui); got == nil {
 		t.Fatal("unitCatalogFor returned nil for a real mod")
 	}
-	first := ui.currentUnit()
+	first := CurrentUnit(ui)
 	if first == nil {
 		t.Fatal("no unit selected for a real mod")
 	}
-	d1 := ui.currentUnitDetails()
+	d1 := CurrentUnitDetails(ui)
 	if d1 == nil {
 		t.Fatal("no details for the first unit")
 	}
 	// A second call must return the same cached object.
-	if d2 := ui.currentUnitDetails(); d2 != d1 {
+	if d2 := CurrentUnitDetails(ui); d2 != d1 {
 		t.Error("details were re-read instead of served from the cache")
 	}
 	// Moving to another unit must invalidate the cache.
-	race := ui.currentRace()
-	if race == nil || len(race.unitsOf()) < 2 {
+	race := CurrentRace(ui)
+	if race == nil || len(race.UnitsOf()) < 2 {
 		t.Skip("race has fewer than two units")
 	}
-	ui.unitSel = 1
-	d3 := ui.currentUnitDetails()
+	ui.UnitSel = 1
+	d3 := CurrentUnitDetails(ui)
 	if d3 == d1 {
 		t.Error("details were not invalidated when the unit changed")
 	}
-	if filepath.Base(d3.entry.path) != ui.currentUnit().displayName()+".rgd" {
-		t.Errorf("details describe %s but the selection is %s", d3.entry.path, ui.currentUnit().path)
+	if filepath.Base(d3.Entry.Path) != CurrentUnit(ui).DisplayName()+".rgd" {
+		t.Errorf("details describe %s but the selection is %s", d3.Entry.Path, CurrentUnit(ui).Path)
 	}
 	_ = cat
 }

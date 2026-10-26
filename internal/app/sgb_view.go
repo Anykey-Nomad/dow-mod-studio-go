@@ -40,82 +40,82 @@ const (
 	sgbOverEntities
 )
 
-func (ui *uiState) openSgb(virtualPath string) {
-	if ui.modTree == nil {
+func OpenSgb(ui *uiState, virtualPath string) {
+	if ui.ModTree == nil {
 		return
 	}
-	if idx := ui.findTabIndex(virtualPath); idx >= 0 {
-		ui.tabSel = idx + 1
-		ui.ensureTabClicks()
-		ui.statusText = "Opened " + filepath.Base(virtualPath)
+	if idx := FindTabIndex(ui, virtualPath); idx >= 0 {
+		ui.TabSel = idx + 1
+		EnsureTabClicks(ui)
+		ui.StatusText = "Opened " + filepath.Base(virtualPath)
 		return
 	}
-	t := &fileTab{path: virtualPath, kind: "sgb"}
-	data, err := ui.modTree.ReadFile(virtualPath)
+	t := &fileTab{Path: virtualPath, Kind: "sgb"}
+	data, err := ui.ModTree.ReadFile(virtualPath)
 	if err != nil {
-		t.sgbError = err.Error()
+		t.SgbError = err.Error()
 	} else {
-		t.sgbBytes = len(data)
+		t.SgbBytes = len(data)
 		parseStart := time.Now()
 		m, perr := sgb.Parse(data)
 		if perr != nil {
-			t.sgbError = perr.Error()
+			t.SgbError = perr.Error()
 		} else {
-			t.sgbMap = m
-			t.sgbImage = buildSgbImage(m, t.sgbMask)
+			t.SgbMap = m
+			t.SgbImage = buildSgbImage(m, t.SgbMask)
 			log.Printf("sgb: parsed %s in %v: %q relief %dx%d cells %dx%d @ %.2fm, %d decals, %d entities, %d textures",
 				filepath.Base(virtualPath), time.Since(parseStart),
 				m.Name, m.Relief.W, m.Relief.H, m.Ground.CellsX, m.Ground.CellsZ,
 				m.Ground.CellSize, len(m.Decals), len(m.Entities), len(m.TexNames))
 		}
 	}
-	ui.openTabs = append(ui.openTabs, t)
-	ui.tabSel = len(ui.openTabs)
-	ui.ensureTabClicks()
-	if t.sgbError != "" {
-		ui.statusText = "Open " + filepath.Base(virtualPath) + " failed: " + t.sgbError
+	ui.OpenTabs = append(ui.OpenTabs, t)
+	ui.TabSel = len(ui.OpenTabs)
+	EnsureTabClicks(ui)
+	if t.SgbError != "" {
+		ui.StatusText = "Open " + filepath.Base(virtualPath) + " failed: " + t.SgbError
 	} else {
-		ui.statusText = "Opened " + filepath.Base(virtualPath)
+		ui.StatusText = "Opened " + filepath.Base(virtualPath)
 	}
 }
 
-func (ui *uiState) layoutSgbViewer(gtx layout.Context, t *fileTab) layout.Dimensions {
+func LayoutSgbViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	if t == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "No scenario selected")
+			l := material.Label(ui.Th, unit.Sp(11), "No scenario selected")
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		})
 	}
-	if t.sgbError != "" {
+	if t.SgbError != "" {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "Failed: "+t.sgbError)
+			l := material.Label(ui.Th, unit.Sp(11), "Failed: "+t.SgbError)
 			l.Color = rgb(0xB00020)
 			return l.Layout(gtx)
 		})
 	}
-	m := t.sgbMap
-	if m == nil || t.sgbImage == nil {
+	m := t.SgbMap
+	if m == nil || t.SgbImage == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "No map data")
+			l := material.Label(ui.Th, unit.Sp(11), "No map data")
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		})
 	}
 	// The switch trades the flat map for the 3D terrain and back; both
 	// views read the same parsed map, so nothing is reparsed on the way.
-	if t.sgbViewSwitch.Clicked(gtx) {
-		t.sgbView3D = !t.sgbView3D
+	if t.SgbViewSwitch.Clicked(gtx) {
+		t.SgbView3D = !t.SgbView3D
 	}
-	if t.sgbView3D {
-		ui.sgbEnsureTerrain(t)
+	if t.SgbView3D {
+		SgbEnsureTerrain(ui, t)
 	} else {
 		// The overlays are part of the image, so a toggle rebuilds it once —
 		// the maps are a million cells at most and the rebuild is milliseconds.
 		for _, tg := range sgbToggles(t) {
 			if tg.click.Clicked(gtx) {
-				t.sgbMask ^= tg.bit
-				t.sgbImage = buildSgbImage(m, t.sgbMask)
+				t.SgbMask ^= tg.bit
+				t.SgbImage = buildSgbImage(m, t.SgbMask)
 			}
 		}
 	}
@@ -125,7 +125,7 @@ func (ui *uiState) layoutSgbViewer(gtx layout.Context, t *fileTab) layout.Dimens
 		float64(m.Ground.CellsZ)*float64(m.Ground.CellSize),
 		len(m.Decals), len(m.Entities), len(m.TexNames))
 	viewLabel := "3D"
-	if t.sgbView3D {
+	if t.SgbView3D {
 		viewLabel = "2D"
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -133,28 +133,28 @@ func (ui *uiState) layoutSgbViewer(gtx layout.Context, t *fileTab) layout.Dimens
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(10), info)
+						l := material.Label(ui.Th, unit.Sp(10), info)
 						l.Color = cTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
 					layout.Flexed(1, rowGap()),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						if t.sgbView3D {
+						if t.SgbView3D {
 							return layout.Dimensions{}
 						}
-						return ui.sgbOverlayBar(gtx, t)
+						return SgbOverlayBar(ui, gtx, t)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButton(gtx, &t.sgbViewSwitch, viewLabel)
+						return SmallButton(ui, gtx, &t.SgbViewSwitch, viewLabel)
 					}),
 				)
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			if t.sgbView3D && t.model != nil {
+			if t.SgbView3D && t.Model != nil {
 				// The scroll panel measures its tabs with a synthetic
 				// enormous height; rendering at that size recreates the
 				// render target absurdly tall and fails the device. The
@@ -163,9 +163,9 @@ func (ui *uiState) layoutSgbViewer(gtx layout.Context, t *fileTab) layout.Dimens
 					return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
 				}
 				gtx.Constraints.Min.Y = 0
-				return ui.layoutModelViewer(gtx, t)
+				return LayoutModelViewer(ui, gtx, t)
 			}
-			return ui.drawSgbCanvas(gtx, t)
+			return DrawSgbCanvas(ui, gtx, t)
 		}),
 	)
 }
@@ -174,40 +174,40 @@ func (ui *uiState) layoutSgbViewer(gtx layout.Context, t *fileTab) layout.Dimens
 // the 3D view: a heightmap mesh and the shaded relief as its diffuse map. The
 // viewer is a plain model viewer, so the canvas, camera and both renderers
 // need no sgb-specific path — only the material handed in here.
-func (ui *uiState) sgbEnsureTerrain(t *fileTab) {
-	if t == nil || t.sgbMap == nil || t.model != nil {
+func SgbEnsureTerrain(ui *uiState, t *fileTab) {
+	if t == nil || t.SgbMap == nil || t.Model != nil {
 		return
 	}
 	start := time.Now()
-	material := sgbTerrainMaterial(t.path)
-	model := sgbTerrainModel(t.sgbMap, material)
+	material := sgbTerrainMaterial(t.Path)
+	model := sgbTerrainModel(t.SgbMap, material)
 	if model == nil {
 		return
 	}
-	v := newModelViewer(model, t.path)
+	v := newModelViewer(model, t.Path)
 	// The framing a model viewer opens on is the whole model at 1.4× its
 	// bounds — for a map that is hundreds of metres, the game's most
 	// zoomed-out camera at its closest. A map opens on an in-game-like
 	// distance instead, and its zoom range runs from a close orbit up to
 	// the whole-map fit rather than a fraction of it.
-	v.DefaultDistance = sgbCameraDefaultDistance(t.sgbMap)
+	v.DefaultDistance = sgbCameraDefaultDistance(t.SgbMap)
 	v.Distance = v.DefaultDistance
-	if height, ok := sgbTerrainHeightAt(t.sgbMap, v.Center.X, v.Center.Y); ok {
+	if height, ok := sgbTerrainHeightAt(t.SgbMap, v.Center.X, v.Center.Y); ok {
 		v.Center.Z = height
 	}
 	v.MinDistance = sgbCameraMinDistance
 	v.MaxDistance = v.FitDistance
 	v.Yaw, v.Pitch = sgbCameraYaw, sgbCameraPitch
-	t.model = v
+	t.Model = v
 	// The diffuse — companion .tga, tile blend, every decal baked — and
 	// the object scene on top of it cost seconds on a real map, so both
 	// are built on a worker and arrive through the material channel every
 	// viewer already polls: the ground first, the placed objects with
 	// their materials after. Until then the terrain draws untextured
 	// rather than the layout stalling.
-	ui.startSgbSceneLoad(t, material)
+	StartSgbSceneLoad(ui, t, material)
 	log.Printf("sgb: terrain %s ready in %v: %d verts, %d tris, material %q",
-		filepath.Base(t.path), time.Since(start), len(model.Vertices), len(model.Meshes[0].Indices)/3, material)
+		filepath.Base(t.Path), time.Since(start), len(model.Vertices), len(model.Meshes[0].Indices)/3, material)
 }
 
 // sgbToggle is one overlay switch of the viewer.
@@ -220,16 +220,16 @@ type sgbToggle struct {
 // sgbToggles is the viewer's switch strip in draw order.
 func sgbToggles(t *fileTab) []sgbToggle {
 	return []sgbToggle{
-		{sgbOverTypes, "Terrain types", &t.sgbToggleTypes},
-		{sgbOverPass, "Passability", &t.sgbTogglePass},
-		{sgbOverDecals, "Decals", &t.sgbToggleDecals},
-		{sgbOverEntities, "Entities", &t.sgbToggleEntities},
+		{sgbOverTypes, "Terrain types", &t.SgbToggleTypes},
+		{sgbOverPass, "Passability", &t.SgbTogglePass},
+		{sgbOverDecals, "Decals", &t.SgbToggleDecals},
+		{sgbOverEntities, "Entities", &t.SgbToggleEntities},
 	}
 }
 
 // sgbOverlayBar draws the overlay switches: each button reads ✓ while its
 // overlay is baked into the view.
-func (ui *uiState) sgbOverlayBar(gtx layout.Context, t *fileTab) layout.Dimensions {
+func SgbOverlayBar(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	toggles := sgbToggles(t)
 	var children []layout.FlexChild
 	for i := range toggles {
@@ -239,10 +239,10 @@ func (ui *uiState) sgbOverlayBar(gtx layout.Context, t *fileTab) layout.Dimensio
 		tg := toggles[i]
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			mark := "· "
-			if t.sgbMask&tg.bit != 0 {
+			if t.SgbMask&tg.bit != 0 {
 				mark = "✓ "
 			}
-			return ui.smallButton(gtx, tg.click, mark+tg.label)
+			return SmallButton(ui, gtx, tg.click, mark+tg.label)
 		}))
 	}
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
@@ -250,13 +250,13 @@ func (ui *uiState) sgbOverlayBar(gtx layout.Context, t *fileTab) layout.Dimensio
 
 // drawSgbCanvas paints the composite map image scaled to fit the panel, the
 // same affine paint the image viewer uses.
-func (ui *uiState) drawSgbCanvas(gtx layout.Context, t *fileTab) layout.Dimensions {
+func DrawSgbCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	area := gtx.Constraints.Max
 	if area.X < 1 || area.Y < 1 {
 		return layout.Dimensions{}
 	}
 	gtx.Constraints.Min = area
-	b := t.sgbImage.Bounds()
+	b := t.SgbImage.Bounds()
 	scale := float32(area.X) / float32(b.Dx())
 	if y := float32(area.Y) / float32(b.Dy()); y < scale {
 		scale = y
@@ -281,7 +281,7 @@ func (ui *uiState) drawSgbCanvas(gtx layout.Context, t *fileTab) layout.Dimensio
 			defer st.Pop()
 			aff := op.Affine(f32.AffineId().Scale(f32.Pt(0, 0), f32.Pt(scale, scale)).Offset(f32.Pt(float32(x)-float32(b.Min.X)*scale, float32(y)-float32(b.Min.Y)*scale)))
 			tr := aff.Push(gtx.Ops)
-			paint.NewImageOp(t.sgbImage).Add(gtx.Ops)
+			paint.NewImageOp(t.SgbImage).Add(gtx.Ops)
 			paint.PaintOp{}.Add(gtx.Ops)
 			tr.Pop()
 			return layout.Dimensions{Size: area}
@@ -532,16 +532,16 @@ func paintSgbSelection(gtx layout.Context, tab *fileTab, viewer *modelViewer, wi
 	area := image.Rectangle{Max: image.Pt(width, height)}
 	canvasClip := clip.Rect{Max: area.Max}.Push(gtx.Ops)
 	defer canvasClip.Pop()
-	if tab == nil || viewer == nil || tab.sgbMap == nil || width <= 0 || height <= 0 {
+	if tab == nil || viewer == nil || tab.SgbMap == nil || width <= 0 || height <= 0 {
 		return
 	}
-	if drawBounds && viewer.model != nil && len(tab.sgbSelectedEntities) > 0 {
-		pose := viewer.pose()
-		if len(viewer.animatedEntities) > 0 {
-			pose = sgb.CombineEntityPoses(len(pose.Bones), viewer.animatedEntities)
+	if drawBounds && viewer.Model != nil && len(tab.SgbSelectedEntities) > 0 {
+		pose := viewer.Pose()
+		if len(viewer.AnimatedEntities) > 0 {
+			pose = sgb.CombineEntityPoses(len(pose.Bones), viewer.AnimatedEntities)
 		}
-		bounds := render.SgbEntityProjectedBounds(viewer.modelData(), tab.sgbEntityMeshIDs, render.BuildViewMatrix(viewer.options(width, height)), width, height, pose, len(pose.Bones) > 0)
-		for id := range tab.sgbSelectedEntities {
+		bounds := render.SgbEntityProjectedBounds(viewer.ModelData(), tab.SgbEntityMeshIDs, render.BuildViewMatrix(viewer.Options(width, height)), width, height, pose, len(pose.Bones) > 0)
+		for id := range tab.SgbSelectedEntities {
 			box := bounds[id].Inset(-3).Intersect(area)
 			if !box.Empty() {
 				paint.FillShape(gtx.Ops, color.NRGBA{R: 255, G: 220, B: 80, A: 220}, clip.Stroke{Path: sgbRectPath(gtx, box), Width: 2}.Op())
@@ -556,10 +556,10 @@ func paintSgbSelection(gtx layout.Context, tab *fileTab, viewer *modelViewer, wi
 // the pipeline that draws the strips.
 
 func paintSgbSelectionMarquee(gtx layout.Context, tab *fileTab, area image.Rectangle) {
-	if tab == nil || !tab.sgbSelecting || !tab.sgbSelectionDrag {
+	if tab == nil || !tab.SgbSelecting || !tab.SgbSelectionDrag {
 		return
 	}
-	box := sgbSelectionRect(tab.sgbSelectionAnchor, tab.sgbSelectionCurrent).Intersect(area)
+	box := sgbSelectionRect(tab.SgbSelectionAnchor, tab.SgbSelectionCurrent).Intersect(area)
 	if box.Empty() {
 		return
 	}
@@ -733,7 +733,7 @@ func sgbCameraTargetScreen(v *modelViewer, width, height int) (fauxgl.Vector, bo
 	if v == nil || width < 1 || height < 1 {
 		return fauxgl.Vector{}, false
 	}
-	at := fxProject(render.BuildViewMatrix(v.options(width, height)), v.Center, width, height)
+	at := fxProject(render.BuildViewMatrix(v.Options(width, height)), v.Center, width, height)
 	if at == nil {
 		return fauxgl.Vector{}, false
 	}
@@ -742,7 +742,7 @@ func sgbCameraTargetScreen(v *modelViewer, width, height int) (fauxgl.Vector, bo
 
 // paintSgbCameraTargetOverlay draws nested contrasting circles so the current
 // surface point remains easy to spot against both terrain and placed objects.
-func (v *modelViewer) paintSgbCameraTargetOverlay(gtx layout.Context, width, height int) {
+func (v *modelViewer) PaintSgbCameraTargetOverlay(gtx layout.Context, width, height int) {
 	at, ok := sgbCameraTargetScreen(v, width, height)
 	if !ok {
 		return

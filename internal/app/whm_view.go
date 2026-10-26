@@ -36,7 +36,7 @@ func whmViewerLayout(ui *uiState, t *fileTab) layout.Widget {
 			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
 		}
 		gtx.Constraints.Min.Y = 0
-		return ui.layoutWhmModelViewport(gtx, t)
+		return LayoutWhmModelViewport(ui, gtx, t)
 	}
 }
 
@@ -47,17 +47,17 @@ func whmViewerLayout(ui *uiState, t *fileTab) layout.Widget {
 // strip stays under the canvas rather than moving into the side panel: the
 // viewport's own side controls are drawn as a column, while this strip is one
 // wide row of buttons that does not fit in a 300dp panel.
-func (ui *uiState) layoutWhmModelViewport(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t == nil || t.model == nil || t.model.model == nil {
-		return ui.layoutModelViewer(gtx, t)
+func LayoutWhmModelViewport(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t == nil || t.Model == nil || t.Model.Model == nil {
+		return LayoutModelViewer(ui, gtx, t)
 	}
-	v := t.model
-	v.sideControls = true
+	v := t.Model
+	v.SideControls = true
 	sideW := gtx.Dp(unit.Dp(unitViewportSideDp))
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, "Viewport")
+				return LayoutUnitColumnHeader(ui, gtx, "Viewport")
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -67,16 +67,16 @@ func (ui *uiState) layoutWhmModelViewport(gtx layout.Context, t *fileTab) layout
 							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-										return ui.layoutModelViewer(gtx, t)
+										return LayoutModelViewer(ui, gtx, t)
 									}),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										return ui.modelControlsWithUV(gtx, t)
+										return ModelControlsWithUV(ui, gtx, t)
 									}),
 								)
 							}),
 							layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-							layout.Rigid(ui.fixedPanel(sideW, func(gtx layout.Context) layout.Dimensions {
-								return ui.layoutWhmModelList(gtx, t)
+							layout.Rigid(FixedPanel(ui, sideW, func(gtx layout.Context) layout.Dimensions {
+								return LayoutWhmModelList(ui, gtx, t)
 							})),
 						)
 					})
@@ -85,13 +85,13 @@ func (ui *uiState) layoutWhmModelViewport(gtx layout.Context, t *fileTab) layout
 	})
 }
 
-func (ui *uiState) layoutWhmModelList(gtx layout.Context, t *fileTab) layout.Dimensions {
+func LayoutWhmModelList(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.whmModelListControls(gtx, t) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return WhmModelListControls(ui, gtx, t) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return ui.panelScrollView(gtx, &t.modelListScroll, func(gtx layout.Context) layout.Dimensions {
-					return ui.whmModelList(gtx, t)
+				return PanelScrollView(ui, gtx, &t.ModelListScroll, func(gtx layout.Context) layout.Dimensions {
+					return WhmModelList(ui, gtx, t)
 				})
 			}),
 		)
@@ -99,28 +99,28 @@ func (ui *uiState) layoutWhmModelList(gtx layout.Context, t *fileTab) layout.Dim
 }
 
 // whmModelListControls switches the list beside the canvas.
-func (ui *uiState) whmModelListControls(gtx layout.Context, t *fileTab) layout.Dimensions {
+func WhmModelListControls(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	labels := []string{"Animations", "Markers", "Bones", "FX"}
-	if t.modelListMode < 0 || t.modelListMode >= len(labels) {
-		t.modelListMode = 0
+	if t.ModelListMode < 0 || t.ModelListMode >= len(labels) {
+		t.ModelListMode = 0
 	}
 	for i := range labels {
-		if t.modelListClicks[i].Clicked(gtx) {
-			t.modelListMode = i
-			t.modelListScroll = panelScrollState{}
+		if t.ModelListClicks[i].Clicked(gtx) {
+			t.ModelListMode = i
+			t.ModelListScroll = panelScrollState{}
 		}
 	}
-	return ui.modelListTabButtons(gtx, labels, t.modelListClicks[:], t.modelListMode)
+	return ModelListTabButtons(ui, gtx, labels, t.ModelListClicks[:], t.ModelListMode)
 }
 
-func (ui *uiState) whmModelList(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t.modelListMode == 3 {
-		if t.model == nil || t.model.model == nil {
-			return centeredPanelLabel(gtx, ui.th, "No model", unit.Sp(10), cTextDim)
+func WhmModelList(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t.ModelListMode == 3 {
+		if t.Model == nil || t.Model.Model == nil {
+			return centeredPanelLabel(gtx, ui.Th, "No model", unit.Sp(10), cTextDim)
 		}
-		return ui.unitFXListWithHeader(gtx, t.model, &t.modelFXClicks)
+		return UnitFXListWithHeader(ui, gtx, t.Model, &t.ModelFXClicks)
 	}
-	return ui.unitModelListContent(gtx, t, t.modelListMode)
+	return UnitModelListContent(ui, gtx, t, t.ModelListMode)
 }
 
 func loadWhmGroundImage(tree *modtree.ModTree) image.Image {
@@ -148,42 +148,42 @@ func loadWhmGroundImage(tree *modtree.ModTree) image.Image {
 // process, so no Blender round trip is needed — and a modder's saved .sgm opens
 // in this same viewer, with whm.IsSgm choosing the reader.
 
-func (ui *uiState) openWhm(virtualPath string) {
-	if idx := ui.findTabIndex(virtualPath); idx >= 0 {
-		ui.tabSel = idx + 1
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
+func OpenWhm(ui *uiState, virtualPath string) {
+	if idx := FindTabIndex(ui, virtualPath); idx >= 0 {
+		ui.TabSel = idx + 1
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
-	t := &fileTab{path: virtualPath, kind: "whm"}
+	t := &fileTab{Path: virtualPath, Kind: "whm"}
 	// A virtual path comes from the open mod's tree; an absolute one is a
 	// file the OS handed the studio through a file association.
-	data, err := ui.readTabFile(virtualPath)
+	data, err := ReadTabFile(ui, virtualPath)
 	if err != nil {
-		t.whmError = err.Error()
+		t.WhmError = err.Error()
 	} else {
-		t.whmBytes = len(data)
+		t.WhmBytes = len(data)
 		// One sniff decides the container flavour: the Object Editor's .sgm
 		// and the game's .whm carry the same model, split differently.
-		t.whmIsSgm = whm.IsSgm(data)
+		t.WhmIsSgm = whm.IsSgm(data)
 		var info *whm.ModelInfo
 		var ierr error
-		if t.whmIsSgm {
+		if t.WhmIsSgm {
 			info, ierr = whm.InspectSgm(data)
 		} else {
 			info, ierr = whm.Inspect(data)
 		}
 		if ierr != nil {
-			t.whmError = ierr.Error()
+			t.WhmError = ierr.Error()
 		} else {
-			t.whmInfo = info
+			t.WhmInfo = info
 		}
 		// The 3D preview is a bonus: a model the converter cannot handle is
 		// still worth looking at, so a parse failure only hides the canvas.
 		parseStart := time.Now()
 		var model *WhmModel
 		var perr error
-		if t.whmIsSgm {
+		if t.WhmIsSgm {
 			model, perr = ParseSgmModel(data)
 		} else {
 			model, perr = ParseWhmModel(data)
@@ -191,21 +191,21 @@ func (ui *uiState) openWhm(virtualPath string) {
 		if perr != nil {
 			log.Printf("3D preview: parse %s failed after %v: %v", filepath.Base(virtualPath), time.Since(parseStart), perr)
 		} else {
-			ground := loadWhmGroundImage(ui.modTree)
-			t.model = newObjectModelViewer(model, virtualPath, ground)
-			t.model.sideControls = true
+			ground := loadWhmGroundImage(ui.ModTree)
+			t.Model = newObjectModelViewer(model, virtualPath, ground)
+			t.Model.SideControls = true
 			log.Printf("3D preview: parsed %s in %v: %d verts, %d meshes, %d bones, %d anims",
 				filepath.Base(virtualPath), time.Since(parseStart),
 				len(model.Vertices), len(model.Meshes), len(model.Bones), len(model.Animations))
 		}
 	}
-	ui.openTabs = append(ui.openTabs, t)
-	ui.tabSel = len(ui.openTabs)
-	ui.ensureTabClicks()
-	if t.whmError != "" {
-		ui.statusText = "Open " + filepath.Base(virtualPath) + " failed: " + t.whmError
+	ui.OpenTabs = append(ui.OpenTabs, t)
+	ui.TabSel = len(ui.OpenTabs)
+	EnsureTabClicks(ui)
+	if t.WhmError != "" {
+		ui.StatusText = "Open " + filepath.Base(virtualPath) + " failed: " + t.WhmError
 	} else {
-		ui.statusText = "Opened " + filepath.Base(virtualPath)
+		ui.StatusText = "Opened " + filepath.Base(virtualPath)
 	}
 }
 
@@ -219,72 +219,72 @@ func whmTargetSGM(virtualPath string) string {
 // writes it into the current mod folder. WriteOverlayFile resolves the virtual
 // path against the mod's writable ModFolder/Data, so a model coming from a
 // parent mod or from an SGA archive still lands in this mod.
-func (ui *uiState) convertWhmToSgmFile(t *fileTab) {
-	if t == nil || t.kind != "whm" || t.whmConverting || t.whmError != "" {
+func ConvertWhmToSgmFile(ui *uiState, t *fileTab) {
+	if t == nil || t.Kind != "whm" || t.WhmConverting || t.WhmError != "" {
 		return
 	}
-	if t.whmIsSgm {
+	if t.WhmIsSgm {
 		// The file is already the Object Editor's own container; running the
 		// whm→sgm rewrite over it would write a mangled copy.
-		ui.statusText = "Save — " + filepath.Base(t.path) + " is already an Object Editor .sgm"
+		ui.StatusText = "Save — " + filepath.Base(t.Path) + " is already an Object Editor .sgm"
 		return
 	}
-	if ui.modTree == nil {
-		ui.statusText = "Convert — no mod loaded"
+	if ui.ModTree == nil {
+		ui.StatusText = "Convert — no mod loaded"
 		return
 	}
-	t.whmConverting = true
-	t.whmExportDone = ""
-	target := whmTargetSGM(t.path)
+	t.WhmConverting = true
+	t.WhmExportDone = ""
+	target := whmTargetSGM(t.Path)
 
 	// Resolve the destination before doing the work so a bad mod folder fails
 	// fast and no half written file is left behind.
-	if _, err := ui.modTree.OverlayPath(target); err != nil {
-		t.whmConverting = false
-		ui.statusText = "Convert failed: " + err.Error()
+	if _, err := ui.ModTree.OverlayPath(target); err != nil {
+		t.WhmConverting = false
+		ui.StatusText = "Convert failed: " + err.Error()
 		return
 	}
-	data, err := ui.modTree.ReadFile(t.path)
+	data, err := ui.ModTree.ReadFile(t.Path)
 	if err != nil {
-		t.whmConverting = false
-		ui.statusText = "Convert failed: " + err.Error()
+		t.WhmConverting = false
+		ui.StatusText = "Convert failed: " + err.Error()
 		return
 	}
 	sgm, info, err := whm.ConvertToSgm(data)
 	if err != nil {
-		t.whmConverting = false
-		ui.statusText = "Convert failed: " + err.Error()
+		t.WhmConverting = false
+		ui.StatusText = "Convert failed: " + err.Error()
 		return
 	}
-	diskPath, err := ui.modTree.WriteOverlayFile(target, sgm)
+	diskPath, err := ui.ModTree.WriteOverlayFile(target, sgm)
 	if err != nil {
-		t.whmConverting = false
-		ui.statusText = "Convert failed: " + err.Error()
+		t.WhmConverting = false
+		ui.StatusText = "Convert failed: " + err.Error()
 		return
 	}
-	t.whmConverting = false
-	t.whmExportDone = diskPath
+	t.WhmConverting = false
+	t.WhmExportDone = diskPath
 	if info != nil {
-		t.whmInfo = info
+		t.WhmInfo = info
 	}
-	ui.statusText = fmt.Sprintf("Converted %s → %s (%d bytes)", filepath.Base(t.path), diskPath, len(sgm))
+	ui.StatusText = fmt.Sprintf("Converted %s → %s (%d bytes)", filepath.Base(t.Path), diskPath, len(sgm))
 	log.Printf("convertWhmToSgmFile: wrote %s (%d bytes)", diskPath, len(sgm))
 	// Surface the new .sgm in the file tree without losing the open tabs.
-	if err := ui.refreshModTreePreservingUI(); err != nil {
+	if err := RefreshModTreePreservingUI(ui); err != nil {
 		log.Printf("convertWhmToSgmFile: tree refresh failed: %v", err)
 	}
 }
 
-func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimensions {
+func LayoutWhmViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	if t == nil {
 		return layout.Dimensions{}
 	}
-	if t.whmError != "" {
-		if t.model != nil {
+	if t.WhmError != "" {
+		if t.Model != nil {
 			// Conversion failed but the geometry parsed, so keep the preview.
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(10), "Conversion unsupported: "+t.whmError)
+					l := material.Label(ui.Th, unit.Sp(10), "Conversion unsupported: "+t.WhmError)
 					l.Color = rgb(0xB06000)
 					return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8)}.Layout(gtx, l.Layout)
 				}),
@@ -292,27 +292,27 @@ func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimens
 			)
 		}
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "Failed: "+t.whmError)
+			l := material.Label(ui.Th, unit.Sp(11), "Failed: "+t.WhmError)
 			l.Color = rgb(0xB00020)
 			return l.Layout(gtx)
 		})
 	}
 	convertLabel := "Convert to SGM"
 	switch {
-	case t.whmConverting:
+	case t.WhmConverting:
 		convertLabel = "Converting…"
-	case t.whmExportDone != "":
+	case t.WhmExportDone != "":
 		convertLabel = "SGM created"
 	}
 	body := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &t.whmConvertClick, convertLabel, t.whmConverting)
+					return SmallButtonDisabled(ui, gtx, &t.WhmConvertClick, convertLabel, t.WhmConverting)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(9), "Object Editor model for "+t.path)
+					l := material.Label(ui.Th, unit.Sp(9), "Object Editor model for "+t.Path)
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				}),
@@ -320,7 +320,7 @@ func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimens
 			)
 		}),
 	}
-	if t.model != nil {
+	if t.Model != nil {
 		// Reuse the Object Viewport's viewer strip and model facts. This keeps
 		// both entry points on one playback, camera and rendering implementation.
 		body = append(body,
@@ -330,14 +330,14 @@ func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimens
 	} else {
 		body = append(body,
 			layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.whmInfoTable(gtx, t) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return WhmInfoTable(ui, gtx, t) }),
 		)
 	}
 	body = append(body, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		if t.whmExportDone == "" {
+		if t.WhmExportDone == "" {
 			return layout.Dimensions{}
 		}
-		l := material.Label(ui.th, unit.Sp(9), "SGM: "+t.whmExportDone)
+		l := material.Label(ui.Th, unit.Sp(9), "SGM: "+t.WhmExportDone)
 		l.Color = rgb(0x2E7D32)
 		return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, l.Layout)
 	}))
@@ -347,51 +347,51 @@ func (ui *uiState) layoutWhmViewer(gtx layout.Context, t *fileTab) layout.Dimens
 		})
 }
 
-func (ui *uiState) whmInfoTable(gtx layout.Context, t *fileTab) layout.Dimensions {
+func WhmInfoTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	if t == nil {
 		return layout.Dimensions{}
 	}
-	if t.whmInfo == nil {
-		if t.whmError == "" {
-			return centeredPanelLabel(gtx, ui.th, "No model data", unit.Sp(10), cTextDim)
+	if t.WhmInfo == nil {
+		if t.WhmError == "" {
+			return centeredPanelLabel(gtx, ui.Th, "No model data", unit.Sp(10), cTextDim)
 		}
 		return layout.Dimensions{}
 	}
-	info := t.whmInfo
+	info := t.WhmInfo
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Name", filepath.Base(t.path), false)
+			return TableRow2(ui, gtx, "Name", filepath.Base(t.Path), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Model", orDash(info.Name), true)
+			return TableRow2(ui, gtx, "Model", orDash(info.Name), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Size", fmt.Sprintf("%d bytes", t.whmBytes), false)
+			return TableRow2(ui, gtx, "Size", fmt.Sprintf("%d bytes", t.WhmBytes), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Bones", fmt.Sprintf("%d", info.Bones), true)
+			return TableRow2(ui, gtx, "Bones", fmt.Sprintf("%d", info.Bones), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Meshes", fmt.Sprintf("%d", info.Meshes), false)
+			return TableRow2(ui, gtx, "Meshes", fmt.Sprintf("%d", info.Meshes), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Vertices", fmt.Sprintf("%d", info.Vertices), true)
+			return TableRow2(ui, gtx, "Vertices", fmt.Sprintf("%d", info.Vertices), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Materials", fmt.Sprintf("%d", info.Materials), false)
+			return TableRow2(ui, gtx, "Materials", fmt.Sprintf("%d", info.Materials), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Textures", fmt.Sprintf("%d", info.Textures), true)
+			return TableRow2(ui, gtx, "Textures", fmt.Sprintf("%d", info.Textures), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Markers", fmt.Sprintf("%d", info.Markers), false)
+			return TableRow2(ui, gtx, "Markers", fmt.Sprintf("%d", info.Markers), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Cameras", fmt.Sprintf("%d", info.Cameras), true)
+			return TableRow2(ui, gtx, "Cameras", fmt.Sprintf("%d", info.Cameras), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Animations", fmt.Sprintf("%d", info.Animations), false)
+			return TableRow2(ui, gtx, "Animations", fmt.Sprintf("%d", info.Animations), false)
 		}),
 	)
 }

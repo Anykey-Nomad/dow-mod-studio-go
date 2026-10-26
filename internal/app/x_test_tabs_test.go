@@ -17,30 +17,30 @@ import (
 func TestTabScrollIsOnlyPossibleWhenTheRowOverflows(t *testing.T) {
 	ui := &uiState{}
 
-	if got := ui.tabMaxScroll(900, 400); got != 0 {
+	if got := TabMaxScroll(ui, 900, 400); got != 0 {
 		t.Errorf("maxScroll = %d for a 400px row in a 900px bar, want 0", got)
 	}
-	if got := ui.tabMaxScroll(900, 900); got != 0 {
+	if got := TabMaxScroll(ui, 900, 900); got != 0 {
 		t.Errorf("maxScroll = %d for an exactly fitting row, want 0", got)
 	}
-	if got := ui.tabMaxScroll(900, 1300); got != 400 {
+	if got := TabMaxScroll(ui, 900, 1300); got != 400 {
 		t.Errorf("maxScroll = %d, want 400", got)
 	}
 }
 
 func TestClampTabScrollHoldsTheOffsetInsideTheRow(t *testing.T) {
-	ui := &uiState{tabScrollX: 5000}
-	ui.clampTabScroll(900, 1300)
-	if ui.tabScrollX != 400 {
-		t.Errorf("scrollX = %d, want it pulled back to the 400px of overflow", ui.tabScrollX)
+	ui := &uiState{TabScrollX: 5000}
+	ClampTabScroll(ui, 900, 1300)
+	if ui.TabScrollX != 400 {
+		t.Errorf("scrollX = %d, want it pulled back to the 400px of overflow", ui.TabScrollX)
 	}
 
 	// A negative offset would slide the row off its left edge, leaving a gap
 	// where the first tab should be.
-	ui.tabScrollX = -200
-	ui.clampTabScroll(900, 1300)
-	if ui.tabScrollX != 0 {
-		t.Errorf("scrollX = %d, want 0", ui.tabScrollX)
+	ui.TabScrollX = -200
+	ClampTabScroll(ui, 900, 1300)
+	if ui.TabScrollX != 0 {
+		t.Errorf("scrollX = %d, want 0", ui.TabScrollX)
 	}
 }
 
@@ -48,15 +48,15 @@ func TestClampTabScrollHoldsTheOffsetInsideTheRow(t *testing.T) {
 // tabs slide out of sight and the bar shows nothing. This is the path a closed
 // tab takes, and it is checked here because the bar does not watch the tab list.
 func TestTabScrollFollowsTheRowShrinking(t *testing.T) {
-	ui := &uiState{tabScrollX: 600, tabBarWidth: 900, tabRowWidth: 1600}
-	ui.clampTabScroll(ui.tabBarWidth, ui.tabRowWidth)
-	if ui.tabScrollX != 600 {
-		t.Fatalf("scrollX = %d, want 600 to start with", ui.tabScrollX)
+	ui := &uiState{TabScrollX: 600, TabBarWidth: 900, TabRowWidth: 1600}
+	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	if ui.TabScrollX != 600 {
+		t.Fatalf("scrollX = %d, want 600 to start with", ui.TabScrollX)
 	}
 	// Last tab closed: the row is now narrower than the bar.
-	ui.clampTabScroll(900, 700)
-	if ui.tabScrollX != 0 {
-		t.Errorf("scrollX = %d after the row shrank below the bar, want 0", ui.tabScrollX)
+	ClampTabScroll(ui, 900, 700)
+	if ui.TabScrollX != 0 {
+		t.Errorf("scrollX = %d after the row shrank below the bar, want 0", ui.TabScrollX)
 	}
 }
 
@@ -67,7 +67,7 @@ func TestTabScrollFollowsTheRowShrinking(t *testing.T) {
 // the first tab, a wheel down towards the last.
 func TestTabWheelMovesTheRowSideways(t *testing.T) {
 	const bar, row = 400, 1400
-	ui := &uiState{tabBarWidth: bar, tabRowWidth: row, tabScrollX: 400}
+	ui := &uiState{TabBarWidth: bar, TabRowWidth: row, TabScrollX: 400}
 	overflow := row - bar
 
 	// A notch is wheelNotchDelta, and the step is a fraction of a pixel per
@@ -84,17 +84,17 @@ func TestTabWheelMovesTheRowSideways(t *testing.T) {
 
 	// Starting at the end, so a wheel that moves the row the wrong way shows
 	// up as a clamp rather than as nothing happening.
-	ui.tabScrollX += -2 * notch
-	ui.clampTabScroll(ui.tabBarWidth, ui.tabRowWidth)
-	if want := 400 - 2*notch; ui.tabScrollX != want {
-		t.Errorf("scrollX = %d after two notches up, want %d", ui.tabScrollX, want)
+	ui.TabScrollX += -2 * notch
+	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	if want := 400 - 2*notch; ui.TabScrollX != want {
+		t.Errorf("scrollX = %d after two notches up, want %d", ui.TabScrollX, want)
 	}
 
 	// And down again, back to the end of the row.
-	ui.tabScrollX += 2 * notch
-	ui.clampTabScroll(ui.tabBarWidth, ui.tabRowWidth)
-	if ui.tabScrollX != 400 {
-		t.Errorf("scrollX = %d after two notches down, want 400", ui.tabScrollX)
+	ui.TabScrollX += 2 * notch
+	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	if ui.TabScrollX != 400 {
+		t.Errorf("scrollX = %d after two notches down, want 400", ui.TabScrollX)
 	}
 }
 
@@ -103,7 +103,7 @@ func TestTabWheelMovesTheRowSideways(t *testing.T) {
 // A right press is resolved by position, not by a clickable per tab, so the
 // recorded rects have to line up with where the tabs were drawn.
 func TestTabAtFindsTheTabUnderAPoint(t *testing.T) {
-	ui := &uiState{tabRects: []image.Rectangle{
+	ui := &uiState{TabRects: []image.Rectangle{
 		{Min: image.Pt(0, 0), Max: image.Pt(80, 28)},
 		{Min: image.Pt(82, 0), Max: image.Pt(200, 28)},
 		{Min: image.Pt(202, 0), Max: image.Pt(260, 28)},
@@ -125,7 +125,7 @@ func TestTabAtFindsTheTabUnderAPoint(t *testing.T) {
 		{image.Pt(230, 28), -1}, // below the bar is nothing
 		{image.Pt(500, 14), -1}, // past the last tab
 	} {
-		got := ui.tabAt(f32.Point{X: float32(tc.p.X), Y: float32(tc.p.Y)})
+		got := TabAt(ui, f32.Point{X: float32(tc.p.X), Y: float32(tc.p.Y)})
 		if got != tc.want {
 			t.Errorf("tabAt(%v) = %d, want %d", tc.p, got, tc.want)
 		}
@@ -139,7 +139,7 @@ func TestTabContextMenuOpensBelowTheBar(t *testing.T) {
 	ui := &uiState{}
 	gtx := layout.Context{Metric: unit.Metric{PxPerDp: 1, PxPerSp: 1}}
 
-	pos := ui.tabContextPoint(gtx, 40)
+	pos := TabContextPoint(ui, gtx, 40)
 
 	// The bar sits under the 24px menu bar and its 1px line, so its own bottom
 	// is at 25+28 and the menu has to start below that, not on it.
@@ -155,47 +155,47 @@ func TestTabContextMenuOpensBelowTheBar(t *testing.T) {
 // ── the context menu ───────────────────────────────────────────────────────
 
 func TestTabContextMenuSelectsTheTabItWasOpenedOn(t *testing.T) {
-	ui := &uiState{openTabs: []*fileTab{
-		{path: "a.rgd", kind: "rgd"},
-		{path: "b.rgd", kind: "rgd"},
-		{path: "c.rgd", kind: "rgd"},
+	ui := &uiState{OpenTabs: []*fileTab{
+		{Path: "a.rgd", Kind: "rgd"},
+		{Path: "b.rgd", Kind: "rgd"},
+		{Path: "c.rgd", Kind: "rgd"},
 	}}
-	ui.tabSel = 1
+	ui.TabSel = 1
 
-	ui.openTabContextMenu(2, image.Pt(300, 60))
+	OpenTabContextMenu(ui, 2, image.Pt(300, 60))
 
-	if !ui.tabContextVisible {
+	if !ui.TabContextVisible {
 		t.Fatal("the menu did not open")
 	}
-	if ui.tabContextIndex != 2 {
-		t.Errorf("index = %d, want 2", ui.tabContextIndex)
+	if ui.TabContextIndex != 2 {
+		t.Errorf("index = %d, want 2", ui.TabContextIndex)
 	}
 	// The tab is selected too, so the menu is unambiguous about which tab it is
 	// for even though its one item does not act on the selection.
-	if ui.tabSel != 3 {
-		t.Errorf("tabSel = %d, want 3 (the third tab)", ui.tabSel)
+	if ui.TabSel != 3 {
+		t.Errorf("tabSel = %d, want 3 (the third tab)", ui.TabSel)
 	}
 }
 
 func TestTabContextMenuRefusesATabThatIsNotThere(t *testing.T) {
-	ui := &uiState{openTabs: []*fileTab{{path: "a.rgd", kind: "rgd"}}}
-	ui.openTabContextMenu(5, image.Pt(10, 10))
-	if ui.tabContextVisible {
+	ui := &uiState{OpenTabs: []*fileTab{{Path: "a.rgd", Kind: "rgd"}}}
+	OpenTabContextMenu(ui, 5, image.Pt(10, 10))
+	if ui.TabContextVisible {
 		t.Error("a menu opened for a tab that does not exist")
 	}
 }
 
 func TestCloseTabContextMenuForgetsWhichTabItWasOn(t *testing.T) {
-	ui := &uiState{openTabs: []*fileTab{{path: "a.rgd", kind: "rgd"}, {path: "b.rgd", kind: "rgd"}}}
-	ui.openTabContextMenu(1, image.Pt(10, 10))
-	ui.closeTabContextMenu()
+	ui := &uiState{OpenTabs: []*fileTab{{Path: "a.rgd", Kind: "rgd"}, {Path: "b.rgd", Kind: "rgd"}}}
+	OpenTabContextMenu(ui, 1, image.Pt(10, 10))
+	CloseTabContextMenu(ui)
 
-	if ui.tabContextVisible {
+	if ui.TabContextVisible {
 		t.Error("the menu is still open")
 	}
 	// A stale index left behind would open the next menu on the wrong tab.
-	if ui.tabContextIndex != -1 {
-		t.Errorf("index = %d after closing, want -1", ui.tabContextIndex)
+	if ui.TabContextIndex != -1 {
+		t.Errorf("index = %d after closing, want -1", ui.TabContextIndex)
 	}
 }
 
@@ -207,26 +207,26 @@ func TestCloseTabContextMenuForgetsWhichTabItWasOn(t *testing.T) {
 func TestCloseAllFileTabsReleasesWhatEachTabHeld(t *testing.T) {
 	stopped := 0
 	tab := &fileTab{
-		path: "a.rgd", kind: "rgd",
-		imageDecodeStop: func() { stopped++ },
-		model:           &modelViewer{model: &WhmModel{}},
+		Path: "a.rgd", Kind: "rgd",
+		ImageDecodeStop: func() { stopped++ },
+		Model:           &modelViewer{Model: &WhmModel{}},
 	}
-	ui := &uiState{openTabs: []*fileTab{tab}, tabSel: 1}
-	ui.ensureTabClicks()
+	ui := &uiState{OpenTabs: []*fileTab{tab}, TabSel: 1}
+	EnsureTabClicks(ui)
 
-	ui.closeAllFileTabs()
+	CloseAllFileTabs(ui)
 
 	if stopped != 1 {
 		t.Errorf("the decode was stopped %d times, want 1", stopped)
 	}
-	if tab.model != nil {
+	if tab.Model != nil {
 		t.Error("the 3D preview is still referenced after the tab went away")
 	}
-	if len(ui.openTabs) != 0 {
-		t.Errorf("%d tabs left open", len(ui.openTabs))
+	if len(ui.OpenTabs) != 0 {
+		t.Errorf("%d tabs left open", len(ui.OpenTabs))
 	}
-	if ui.tabSel != 0 {
-		t.Errorf("tabSel = %d, want 0", ui.tabSel)
+	if ui.TabSel != 0 {
+		t.Errorf("tabSel = %d, want 0", ui.TabSel)
 	}
 }
 
@@ -234,18 +234,18 @@ func TestCloseAllFileTabsReleasesWhatEachTabHeld(t *testing.T) {
 // to the left rather than leaving the bar showing empty background.
 func TestCloseAllFileTabsResetsTheScroll(t *testing.T) {
 	ui := &uiState{
-		openTabs:   []*fileTab{{path: "a.rgd", kind: "rgd"}},
-		tabSel:     1,
-		tabScrollX: 240,
+		OpenTabs:   []*fileTab{{Path: "a.rgd", Kind: "rgd"}},
+		TabSel:     1,
+		TabScrollX: 240,
 	}
-	ui.ensureTabClicks()
+	EnsureTabClicks(ui)
 
-	ui.closeAllFileTabs()
+	CloseAllFileTabs(ui)
 
-	if ui.tabScrollX != 0 {
-		t.Errorf("scrollX = %d on an empty bar, want 0", ui.tabScrollX)
+	if ui.TabScrollX != 0 {
+		t.Errorf("scrollX = %d on an empty bar, want 0", ui.TabScrollX)
 	}
-	if ui.tabContextVisible {
+	if ui.TabContextVisible {
 		t.Error("the context menu is still open after every tab went away")
 	}
 }
@@ -253,13 +253,13 @@ func TestCloseAllFileTabsResetsTheScroll(t *testing.T) {
 // The object tab's dropdowns belong to that tab, so they go with it rather than
 // being left open over whatever takes its place.
 func TestCloseAllFileTabsClosesTheObjectDropdowns(t *testing.T) {
-	unit := &fileTab{kind: unitTabKind}
-	ui := &uiState{openTabs: []*fileTab{unit}, tabSel: 1, unitRaceOpen: true, unitListOpen: true}
-	ui.ensureTabClicks()
+	unit := &fileTab{Kind: unitTabKind}
+	ui := &uiState{OpenTabs: []*fileTab{unit}, TabSel: 1, UnitRaceOpen: true, UnitListOpen: true}
+	EnsureTabClicks(ui)
 
-	ui.closeAllFileTabs()
+	CloseAllFileTabs(ui)
 
-	if ui.unitRaceOpen || ui.unitListOpen {
-		t.Errorf("a dropdown is still open (race=%v list=%v)", ui.unitRaceOpen, ui.unitListOpen)
+	if ui.UnitRaceOpen || ui.UnitListOpen {
+		t.Errorf("a dropdown is still open (race=%v list=%v)", ui.UnitRaceOpen, ui.UnitListOpen)
 	}
 }

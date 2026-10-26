@@ -50,9 +50,9 @@ func newUnitTestMod(t *testing.T) (*uiState, string) {
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
 	ui := newUI(unitTestTheme())
-	ui.modTree = tree
-	ui.modulePath = filepath.Join(appPath, "NewUnitMod")
-	ui.expanded = map[string]bool{"Data": true}
+	ui.ModTree = tree
+	ui.ModulePath = filepath.Join(appPath, "NewUnitMod")
+	ui.Expanded = map[string]bool{"Data": true}
 	return ui, appPath
 }
 
@@ -70,8 +70,8 @@ func mustMarshalUnit(t *testing.T, n unitTemplateName) []byte {
 // back, and the catalogue and the pickers know about it without a reload.
 func TestCreatingAUnitWritesItIntoTheMod(t *testing.T) {
 	ui, appPath := newUnitTestMod(t)
-	t.Cleanup(func() { ui.modTree.Close() })
-	virtual, err := ui.createNewObject(newObjUnit, newUnitTestRace, "necron_wraith")
+	t.Cleanup(func() { ui.ModTree.Close() })
+	virtual, err := CreateNewObject(ui, newObjUnit, newUnitTestRace, "necron_wraith")
 	if err != nil {
 		t.Fatalf("createNewObject: %v", err)
 	}
@@ -91,27 +91,27 @@ func TestCreatingAUnitWritesItIntoTheMod(t *testing.T) {
 	if len(rf.Root.Children) != len(unitTemplateSections) {
 		t.Errorf("the written unit has %d sections, want the %d every unit has", len(rf.Root.Children), len(unitTemplateSections))
 	}
-	if ui.modTree.FindFile(virtual) == nil {
+	if ui.ModTree.FindFile(virtual) == nil {
 		t.Error("the mod tree does not know the new unit, so it would not show up in the list")
 	}
-	cat := ui.unitCatalogFor()
+	cat := UnitCatalogFor(ui)
 	if cat == nil {
 		t.Fatal("no catalogue after creating a unit")
 	}
-	race := cat.findRace(newUnitTestRace)
+	race := cat.FindRace(newUnitTestRace)
 	if race == nil {
 		t.Fatalf("the race %q is not in the catalogue any more", newUnitTestRace)
 	}
 	found := false
-	for _, u := range race.unitsOf() {
-		if strings.EqualFold(u.path, virtual) {
+	for _, u := range race.UnitsOf() {
+		if strings.EqualFold(u.Path, virtual) {
 			found = true
 		}
 	}
 	if !found {
 		t.Error("the new unit is not in the race's list, so the object window cannot show it")
 	}
-	if u := ui.currentUnit(); u == nil || !strings.EqualFold(u.path, virtual) {
+	if u := CurrentUnit(ui); u == nil || !strings.EqualFold(u.Path, virtual) {
 		t.Errorf("the object window is on %v, want the unit that was just created", u)
 	}
 }
@@ -121,18 +121,18 @@ func TestCreatingAUnitWritesItIntoTheMod(t *testing.T) {
 // unit. A unit that overwrote somebody's would be worse than one not created.
 func TestANameThatCannotBeAFileIsRefused(t *testing.T) {
 	ui, _ := newUnitTestMod(t)
-	t.Cleanup(func() { ui.modTree.Close() })
+	t.Cleanup(func() { ui.ModTree.Close() })
 	for _, name := range []string{"", "  ", "necrons/other", `sub\necron`, "necron_wraith.rgd", "necron:lord", "necron_basic_warrior"} {
-		if _, err := ui.createNewObject(newObjUnit, newUnitTestRace, name); err == nil {
+		if _, err := CreateNewObject(ui, newObjUnit, newUnitTestRace, name); err == nil {
 			t.Errorf("the name %q was accepted, so a file nobody asked for could be written", name)
 		}
 	}
 	// And a name that is fine is accepted, so the rules above are not simply
 	// refusing everything.
-	if _, err := ui.createNewObject(newObjUnit, newUnitTestRace, "necron_wraith"); err != nil {
+	if _, err := CreateNewObject(ui, newObjUnit, newUnitTestRace, "necron_wraith"); err != nil {
 		t.Errorf("a plain name was refused: %v", err)
 	}
-	if _, err := ui.createNewObject(newObjUnit, "", "necron_shade"); err == nil {
+	if _, err := CreateNewObject(ui, newObjUnit, "", "necron_shade"); err == nil {
 		t.Error("a unit was created with no race, so there was nowhere to write it")
 	}
 }
@@ -143,10 +143,10 @@ func TestANameThatCannotBeAFileIsRefused(t *testing.T) {
 // where it is, so the test fails if the button moves somewhere unreachable.
 func TestTheNewUnitButtonOpensTheDialogAndTheDialogWritesTheUnit(t *testing.T) {
 	ui, appPath := newUnitTestMod(t)
-	t.Cleanup(func() { ui.modTree.Close() })
-	ui.openUnitTab()
+	t.Cleanup(func() { ui.ModTree.Close() })
+	OpenUnitTab(ui)
 	f := newWindowFrame(ui, 1000, 700)
-	if !ui.unitTabActive() {
+	if !UnitTabActive(ui) {
 		t.Fatal("the object window is not the tab on screen, so its strip was never laid out")
 	}
 	at, ok := findNewUnitButton(t, f)
@@ -159,13 +159,13 @@ func TestTheNewUnitButtonOpensTheDialogAndTheDialogWritesTheUnit(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: at},
 	)
 	f.frame()
-	if !ui.newObjDialog {
+	if !ui.NewObjDialog {
 		t.Fatalf("a click on the New unit button at %v opened no dialog", f32.Point(at))
 	}
 	// A name the file system will not take is said and nothing is written.
-	ui.newObjNameEditor.SetText("necron/bad")
+	ui.NewObjNameEditor.SetText("necron/bad")
 	f.frame()
-	create, ok := findDialogButton(t, f, &ui.newObjOk)
+	create, ok := findDialogButton(t, f, &ui.NewObjOk)
 	if !ok {
 		t.Fatal("the dialog's Create button was not found")
 	}
@@ -175,10 +175,10 @@ func TestTheNewUnitButtonOpensTheDialogAndTheDialogWritesTheUnit(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: create},
 	)
 	f.frame()
-	if !ui.newObjDialog {
+	if !ui.NewObjDialog {
 		t.Fatal("the dialog closed on a name it should have refused")
 	}
-	if ui.newObjStatus == "" {
+	if ui.NewObjStatus == "" {
 		t.Error("the dialog said nothing about why the name was refused")
 	}
 	disk := filepath.Join(appPath, "NewUnitMod", "Data", "attrib", "ebps", "races", newUnitTestRace, "troops", "necron_bad.rgd")
@@ -186,9 +186,9 @@ func TestTheNewUnitButtonOpensTheDialogAndTheDialogWritesTheUnit(t *testing.T) {
 		t.Fatal("a refused name was written to disk anyway")
 	}
 	// A good name creates the unit, closes the dialog and opens the file.
-	ui.newObjNameEditor.SetText("necron_shade")
+	ui.NewObjNameEditor.SetText("necron_shade")
 	f.frame()
-	create, ok = findDialogButton(t, f, &ui.newObjOk)
+	create, ok = findDialogButton(t, f, &ui.NewObjOk)
 	if !ok {
 		t.Fatal("the dialog's Create button was not found the second time")
 	}
@@ -198,8 +198,8 @@ func TestTheNewUnitButtonOpensTheDialogAndTheDialogWritesTheUnit(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: create},
 	)
 	f.frame()
-	if ui.newObjDialog {
-		t.Fatalf("the dialog stayed up after a unit was created; it says %q", ui.newObjStatus)
+	if ui.NewObjDialog {
+		t.Fatalf("the dialog stayed up after a unit was created; it says %q", ui.NewObjStatus)
 	}
 	disk = filepath.Join(appPath, "NewUnitMod", "Data", "attrib", "ebps", "races", newUnitTestRace, "troops", "necron_shade.rgd")
 	data, err := os.ReadFile(disk)
@@ -209,8 +209,8 @@ func TestTheNewUnitButtonOpensTheDialogAndTheDialogWritesTheUnit(t *testing.T) {
 	if _, err := rgd.ParseRgd(data); err != nil {
 		t.Fatalf("the unit the dialog wrote does not parse: %v", err)
 	}
-	tab := ui.activeTab()
-	if tab == nil || tab.kind != "rgd" || !strings.HasSuffix(tab.path, "necron_shade.rgd") {
+	tab := ActiveTab(ui)
+	if tab == nil || tab.Kind != "rgd" || !strings.HasSuffix(tab.Path, "necron_shade.rgd") {
 		t.Errorf("the created unit is not open for editing: %+v", tab)
 	}
 }
@@ -220,8 +220,8 @@ func TestTheNewUnitButtonOpensTheDialogAndTheDialogWritesTheUnit(t *testing.T) {
 // one.
 func TestTheNewObjDialogCanBeLeft(t *testing.T) {
 	ui, appPath := newUnitTestMod(t)
-	t.Cleanup(func() { ui.modTree.Close() })
-	ui.openUnitTab()
+	t.Cleanup(func() { ui.ModTree.Close() })
+	OpenUnitTab(ui)
 	f := newWindowFrame(ui, 1000, 700)
 	at, ok := findNewUnitButton(t, f)
 	if !ok {
@@ -233,15 +233,15 @@ func TestTheNewObjDialogCanBeLeft(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: at},
 	)
 	f.frame()
-	if !ui.newObjDialog {
+	if !ui.NewObjDialog {
 		t.Fatal("the button opened no dialog")
 	}
-	ui.newObjNameEditor.SetText("necron_veil")
+	ui.NewObjNameEditor.SetText("necron_veil")
 	f.frame()
 	// Escape leaves the dialog, and nothing is written.
 	f.sendKey(key.Event{Name: key.NameEscape, State: key.Press})
 	f.frame()
-	if ui.newObjDialog {
+	if ui.NewObjDialog {
 		t.Error("Escape left the new unit dialog open")
 	}
 	disk := filepath.Join(appPath, "NewUnitMod", "Data", "attrib", "ebps", "races", newUnitTestRace, "troops", "necron_veil.rgd")
@@ -257,7 +257,7 @@ func TestTheNewObjDialogCanBeLeft(t *testing.T) {
 // is a few rows rather than a grid.
 func findNewUnitButton(t *testing.T, f *windowFrame) (f32.Point, bool) {
 	t.Helper()
-	return findStripButton(t, f, &f.ui.unitNewTrigger)
+	return findStripButton(t, f, &f.ui.UnitNewTrigger)
 }
 
 // findNewBuildingButton is the same walk for the button beside it. Both are
@@ -265,7 +265,7 @@ func findNewUnitButton(t *testing.T, f *windowFrame) (f32.Point, bool) {
 // either one moves somewhere a user cannot reach.
 func findNewBuildingButton(t *testing.T, f *windowFrame) (f32.Point, bool) {
 	t.Helper()
-	return findStripButton(t, f, &f.ui.unitBuildingTrigger)
+	return findStripButton(t, f, &f.ui.UnitBuildingTrigger)
 }
 
 // findStripButton walks the pointer along the picker strip until the given
@@ -293,7 +293,7 @@ const (
 // the region is that corner of the card rather than the whole window.
 func findDialogButton(t *testing.T, f *windowFrame, c *widget.Clickable) (f32.Point, bool) {
 	t.Helper()
-	card := f.ui.newObjCardBox
+	card := f.ui.NewObjCardBox
 	if card.Empty() {
 		return f32.Point{}, false
 	}
@@ -329,8 +329,8 @@ func findHoverPoint(t *testing.T, f *windowFrame, hovered func() bool, row image
 // troops, and it is a building's file rather than a unit's.
 func TestCreatingABuildingWritesItIntoTheMod(t *testing.T) {
 	ui, appPath := newUnitTestMod(t)
-	t.Cleanup(func() { ui.modTree.Close() })
-	virtual, err := ui.createNewObject(newObjBuilding, newUnitTestRace, "necron_relay")
+	t.Cleanup(func() { ui.ModTree.Close() })
+	virtual, err := CreateNewObject(ui, newObjBuilding, newUnitTestRace, "necron_relay")
 	if err != nil {
 		t.Fatalf("createNewObject: %v", err)
 	}
@@ -360,27 +360,27 @@ func TestCreatingABuildingWritesItIntoTheMod(t *testing.T) {
 		t.Error("the written building has a unit's sections, so the wrong template was used")
 	}
 	// And the mod tree and the catalogue both know about it, without a reload.
-	if ui.modTree.FindFile(virtual) == nil {
+	if ui.ModTree.FindFile(virtual) == nil {
 		t.Error("the mod tree does not know the new building, so it would not show up in the list")
 	}
-	cat := ui.unitCatalogFor()
+	cat := UnitCatalogFor(ui)
 	if cat == nil {
 		t.Fatal("no catalogue after creating a building")
 	}
-	race := cat.findRace(newUnitTestRace)
+	race := cat.FindRace(newUnitTestRace)
 	if race == nil {
 		t.Fatalf("the race %q is not in the catalogue any more", newUnitTestRace)
 	}
 	found := false
-	for _, u := range race.unitsOf() {
-		if strings.EqualFold(u.path, virtual) {
+	for _, u := range race.UnitsOf() {
+		if strings.EqualFold(u.Path, virtual) {
 			found = true
 		}
 	}
 	if !found {
 		t.Error("the new building is not in the race's list, so the object window cannot show it")
 	}
-	if u := ui.currentUnit(); u == nil || !strings.EqualFold(u.path, virtual) {
+	if u := CurrentUnit(ui); u == nil || !strings.EqualFold(u.Path, virtual) {
 		t.Errorf("the object window is on %v, want the building that was just created", u)
 	}
 }
@@ -391,8 +391,8 @@ func TestCreatingABuildingWritesItIntoTheMod(t *testing.T) {
 // either could be the one wired to the wrong dialog.
 func TestTheNewBuildingButtonWritesTheBuilding(t *testing.T) {
 	ui, appPath := newUnitTestMod(t)
-	t.Cleanup(func() { ui.modTree.Close() })
-	ui.openUnitTab()
+	t.Cleanup(func() { ui.ModTree.Close() })
+	OpenUnitTab(ui)
 	f := newWindowFrame(ui, 1000, 700)
 	at, ok := findNewBuildingButton(t, f)
 	if !ok {
@@ -404,20 +404,20 @@ func TestTheNewBuildingButtonWritesTheBuilding(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: at},
 	)
 	f.frame()
-	if !ui.newObjDialog {
+	if !ui.NewObjDialog {
 		t.Fatalf("a click on the New building button at %v opened no dialog", f32.Point(at))
 	}
-	if ui.newObjKind != newObjBuilding {
+	if ui.NewObjKind != newObjBuilding {
 		t.Error("the New building button opened the dialog for something else")
 	}
 	// The dialog says where the file will go, and for a building that is the
 	// structures folder.
-	if label := ui.newObjFolderLabel(); !strings.Contains(label, `\structures\`) {
+	if label := NewObjFolderLabel(ui); !strings.Contains(label, `\structures\`) {
 		t.Errorf("the dialog says it will write to %q, want the structures folder", label)
 	}
-	ui.newObjNameEditor.SetText("necron_relay")
+	ui.NewObjNameEditor.SetText("necron_relay")
 	f.frame()
-	create, ok := findDialogButton(t, f, &ui.newObjOk)
+	create, ok := findDialogButton(t, f, &ui.NewObjOk)
 	if !ok {
 		t.Fatal("the dialog's Create button was not found")
 	}
@@ -427,15 +427,15 @@ func TestTheNewBuildingButtonWritesTheBuilding(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: create},
 	)
 	f.frame()
-	if ui.newObjDialog {
-		t.Fatalf("the dialog stayed up after a building was created; it says %q", ui.newObjStatus)
+	if ui.NewObjDialog {
+		t.Fatalf("the dialog stayed up after a building was created; it says %q", ui.NewObjStatus)
 	}
 	disk := filepath.Join(appPath, "NewUnitMod", "Data", "attrib", "ebps", "races", newUnitTestRace, "structures", "necron_relay.rgd")
 	if _, err := os.Stat(disk); err != nil {
 		t.Fatalf("the building was not written: %v", err)
 	}
-	tab := ui.activeTab()
-	if tab == nil || tab.kind != "rgd" || !strings.HasSuffix(tab.path, "necron_relay.rgd") {
+	tab := ActiveTab(ui)
+	if tab == nil || tab.Kind != "rgd" || !strings.HasSuffix(tab.Path, "necron_relay.rgd") {
 		t.Errorf("the created building is not open for editing: %+v", tab)
 	}
 	// And it did not go into the troops folder as well, which is the mistake a

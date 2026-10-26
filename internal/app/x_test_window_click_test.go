@@ -33,8 +33,8 @@ type windowFrame struct {
 }
 
 func (f *windowFrame) frame() {
-	f.ui.handleInput(f.gtx)
-	f.ui.Layout(f.gtx)
+	f.HandleInput(ui, f.gtx)
+	f.Layout(ui, f.gtx)
 	f.r.Frame(&f.ops)
 }
 
@@ -68,17 +68,17 @@ func treeWindow(t *testing.T) (*windowFrame, int) {
 	t.Helper()
 	const target = `Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`
 	ui := newUI(unitTestTheme())
-	ui.modTree = openTestDXP3(t)
-	ui.expanded = map[string]bool{"Data": true}
+	ui.ModTree = openTestDXP3(t)
+	ui.Expanded = map[string]bool{"Data": true}
 	segs := strings.Split(target, `\`)
 	for i := 2; i < len(segs); i++ {
-		ui.expanded[strings.Join(segs[:i], "\\")] = true
+		ui.Expanded[strings.Join(segs[:i], "\\")] = true
 	}
-	ui.visibleNodes = ui.getVisibleNodes()
-	ui.ensureRowClicks(len(ui.visibleNodes))
-	ui.ensureRowHover(len(ui.visibleNodes))
+	ui.VisibleNodes = GetVisibleNodes(ui)
+	EnsureRowClicks(ui, len(ui.VisibleNodes))
+	EnsureRowHover(ui, len(ui.VisibleNodes))
 	row := -1
-	for i, n := range ui.visibleNodes {
+	for i, n := range ui.VisibleNodes {
 		if n.FullPath == target {
 			row = i
 		}
@@ -88,13 +88,13 @@ func treeWindow(t *testing.T) (*windowFrame, int) {
 	}
 	// A file that is not the one the tests click, so that a click which opens
 	// nothing cannot pass by leaving the tab that was already there active.
-	for _, n := range ui.visibleNodes {
+	for _, n := range ui.VisibleNodes {
 		if n.IsFile && strings.HasSuffix(n.Name, ".rgd") && n.Name != "necron_basic_warrior.rgd" {
-			ui.openTreeFile(n)
+			OpenTreeFile(ui, n)
 			break
 		}
 	}
-	if tab := ui.activeTab(); tab == nil || strings.HasSuffix(tab.path, "necron_basic_warrior.rgd") {
+	if tab := ActiveTab(ui); tab == nil || strings.HasSuffix(tab.Path, "necron_basic_warrior.rgd") {
 		t.Skip("the window could not be given a file that is not the one under test")
 	}
 	return newWindowFrame(ui, 900, 700), row
@@ -117,7 +117,7 @@ func treeOrigin(t *testing.T, f *windowFrame) f32.Point {
 	)
 	origin := f32.Pt(-1, -1)
 	for {
-		ev, ok := f.gtx.Event(pointer.Filter{Target: f.ui.leftTreePointerTag, Kinds: pointer.Press})
+		ev, ok := f.gtx.Event(pointer.Filter{Target: f.ui.LeftTreePointerTag, Kinds: pointer.Press})
 		if !ok {
 			break
 		}
@@ -134,8 +134,8 @@ func treeOrigin(t *testing.T, f *windowFrame) f32.Point {
 func treeRowAt(t *testing.T, f *windowFrame, origin f32.Point, row int) f32.Point {
 	t.Helper()
 	ui := f.ui
-	rowH := float32(ui.leftRowHeightPx)
-	y := origin.Y + float32(row)*rowH - float32(ui.leftList.Position.Offset) + rowH/2
+	rowH := float32(ui.LeftRowHeightPx)
+	y := origin.Y + float32(row)*rowH - float32(ui.LeftList.Position.Offset) + rowH/2
 	return f32.Pt(origin.X+60, y)
 }
 
@@ -152,12 +152,12 @@ func TestClickOnATreeRowOpensTheFileInAWholeWindow(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: at},
 	)
 	f.frame()
-	tab := f.ui.activeTab()
+	tab := f.ActiveTab(ui)
 	if tab == nil {
-		t.Fatalf("a click on row %d at %v opened no tab; the status line reads %q", row, f32.Point(at), f.ui.statusText)
+		t.Fatalf("a click on row %d at %v opened no tab; the status line reads %q", row, f32.Point(at), f.ui.StatusText)
 	}
-	if !strings.HasSuffix(tab.path, "necron_basic_warrior.rgd") {
-		t.Errorf("a click on row %d opened %q, want the file of that row", row, tab.path)
+	if !strings.HasSuffix(tab.Path, "necron_basic_warrior.rgd") {
+		t.Errorf("a click on row %d opened %q, want the file of that row", row, tab.Path)
 	}
 }
 
@@ -173,14 +173,14 @@ func TestRightPressOnATreeRowOpensTheFilesMenu(t *testing.T) {
 		pointer.Event{Kind: pointer.Press, Source: pointer.Mouse, Position: at, Buttons: pointer.ButtonSecondary},
 	)
 	f.frame()
-	if f.ui.tabContextVisible {
+	if f.ui.TabContextVisible {
 		t.Errorf("a right press in the file tree opened the tab bar's menu")
 	}
-	if !f.ui.contextMenuVisible {
+	if !f.ui.ContextMenuVisible {
 		t.Fatalf("a right press on row %d opened no file menu", row)
 	}
-	if f.ui.contextMenuPath != f.ui.visibleNodes[row].FullPath {
-		t.Errorf("the file menu is for %q, want %q", f.ui.contextMenuPath, f.ui.visibleNodes[row].FullPath)
+	if f.ui.ContextMenuPath != f.ui.VisibleNodes[row].FullPath {
+		t.Errorf("the file menu is for %q, want %q", f.ui.ContextMenuPath, f.ui.VisibleNodes[row].FullPath)
 	}
 }
 
@@ -189,13 +189,13 @@ func TestRightPressOnATreeRowOpensTheFilesMenu(t *testing.T) {
 // way are one tag, and two targets that share a tag share one queue of events.
 func TestEveryPointerTagOfTheAppIsItsOwn(t *testing.T) {
 	ui := newUI(unitTestTheme())
-	if ui.leftTreePointerTag == ui.tabBarPointerTag {
-		t.Fatalf("the file tree and the tab bar share the pointer tag %v, so they share one queue of events", ui.tabBarPointerTag)
+	if ui.LeftTreePointerTag == ui.TabBarPointerTag {
+		t.Fatalf("the file tree and the tab bar share the pointer tag %v, so they share one queue of events", ui.TabBarPointerTag)
 	}
 	seen := map[event.Tag]string{}
 	for name, tag := range map[string]event.Tag{
-		"left tree": ui.leftTreePointerTag,
-		"tab bar":   ui.tabBarPointerTag,
+		"left tree": ui.LeftTreePointerTag,
+		"tab bar":   ui.TabBarPointerTag,
 		"locale 1":  newPointerTag("a"),
 		"locale 2":  newPointerTag("b"),
 	} {

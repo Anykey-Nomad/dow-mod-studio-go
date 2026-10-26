@@ -28,14 +28,14 @@ type archiveOption struct {
 	label  string
 }
 
-func (ui *uiState) openArchiveDialog() {
-	if ui.modTree == nil {
-		ui.statusText = "Extract SGA — no mod loaded"
+func OpenArchiveDialog(ui *uiState) {
+	if ui.ModTree == nil {
+		ui.StatusText = "Extract SGA — no mod loaded"
 		return
 	}
-	ui.archiveOptions = nil
+	ui.ArchiveOptions = nil
 	seen := make(map[string]bool)
-	for _, source := range ui.modTree.Sources {
+	for _, source := range ui.ModTree.Sources {
 		if source == nil || !source.IsSGA || source.Kind == modtree.KindEngine || source.SGAHandle == nil {
 			continue
 		}
@@ -45,36 +45,36 @@ func (ui *uiState) openArchiveDialog() {
 		}
 		seen[key] = true
 		label := fmt.Sprintf("%s — %s", source.ModName, source.SourceName)
-		ui.archiveOptions = append(ui.archiveOptions, archiveOption{source: source, label: label})
+		ui.ArchiveOptions = append(ui.ArchiveOptions, archiveOption{source: source, label: label})
 	}
-	sort.Slice(ui.archiveOptions, func(i, j int) bool {
-		return strings.ToLower(ui.archiveOptions[i].label) < strings.ToLower(ui.archiveOptions[j].label)
+	sort.Slice(ui.ArchiveOptions, func(i, j int) bool {
+		return strings.ToLower(ui.ArchiveOptions[i].label) < strings.ToLower(ui.ArchiveOptions[j].label)
 	})
-	ui.archiveSelected = make([]bool, len(ui.archiveOptions))
-	ui.archiveSelectClicks = make([]widget.Clickable, len(ui.archiveOptions))
-	for i := range ui.archiveSelected {
-		ui.archiveSelected[i] = true
+	ui.ArchiveSelected = make([]bool, len(ui.ArchiveOptions))
+	ui.ArchiveSelectClicks = make([]widget.Clickable, len(ui.ArchiveOptions))
+	for i := range ui.ArchiveSelected {
+		ui.ArchiveSelected[i] = true
 	}
-	ui.archiveList = layout.List{}
-	ui.archiveStatus = fmt.Sprintf("%d SGA archive(s) available", len(ui.archiveOptions))
-	ui.archiveDialog = len(ui.archiveOptions) > 0
-	if !ui.archiveDialog {
-		ui.statusText = "Extract SGA — no current/parent SGA archives found"
+	ui.ArchiveList = layout.List{}
+	ui.ArchiveStatus = fmt.Sprintf("%d SGA archive(s) available", len(ui.ArchiveOptions))
+	ui.ArchiveDialog = len(ui.ArchiveOptions) > 0
+	if !ui.ArchiveDialog {
+		ui.StatusText = "Extract SGA — no current/parent SGA archives found"
 	}
 }
 
-func (ui *uiState) currentModFiles() (map[string]string, error) {
-	if ui.modTree == nil {
+func CurrentModFiles(ui *uiState) (map[string]string, error) {
+	if ui.ModTree == nil {
 		return nil, fmt.Errorf("no mod loaded")
 	}
 	roots := make(map[string]bool)
-	modRoot := currentModFolderRoot(ui.modTree)
-	for _, source := range ui.modTree.Sources {
+	modRoot := currentModFolderRoot(ui.ModTree)
+	for _, source := range ui.ModTree.Sources {
 		if source != nil && !source.IsSGA && source.Kind == modtree.KindThisMod && source.DiskRoot != "" && pathWithinRoot(source.DiskRoot, modRoot) {
 			roots[filepath.Clean(source.DiskRoot)] = true
 		}
 	}
-	if root, err := ui.modTree.ResolveWritableRoot(); err == nil && pathWithinRoot(root, modRoot) {
+	if root, err := ui.ModTree.ResolveWritableRoot(); err == nil && pathWithinRoot(root, modRoot) {
 		roots[filepath.Clean(root)] = true
 	}
 	files := make(map[string]string)
@@ -103,45 +103,45 @@ func (ui *uiState) currentModFiles() (map[string]string, error) {
 	return files, nil
 }
 
-func (ui *uiState) packCurrentModSGA() {
-	if ui.modTree == nil || ui.modTree.ModFilePath == "" {
-		ui.statusText = "Pack SGA — no mod loaded"
+func PackCurrentModSGA(ui *uiState) {
+	if ui.ModTree == nil || ui.ModTree.ModFilePath == "" {
+		ui.StatusText = "Pack SGA — no mod loaded"
 		return
 	}
-	mf, err := modtree.ParseModule(ui.modTree.ModFilePath)
+	mf, err := modtree.ParseModule(ui.ModTree.ModFilePath)
 	if err != nil {
-		ui.statusText = "Pack SGA failed: " + err.Error()
+		ui.StatusText = "Pack SGA failed: " + err.Error()
 		return
 	}
 	modFolder := mf.ModFolder
 	if modFolder == "" {
 		modFolder = mf.FileMapName
 	}
-	output := filepath.Join(ui.modTree.AppPath, modFolder, ui.modTree.FileMapName+".sga")
+	output := filepath.Join(ui.ModTree.AppPath, modFolder, ui.ModTree.FileMapName+".sga")
 	if _, err := os.Stat(output); err == nil {
-		output = filepath.Join(ui.modTree.AppPath, modFolder, ui.modTree.FileMapName+"_packed.sga")
+		output = filepath.Join(ui.ModTree.AppPath, modFolder, ui.ModTree.FileMapName+"_packed.sga")
 	}
-	files, err := ui.currentModFiles()
+	files, err := CurrentModFiles(ui)
 	if err != nil || len(files) == 0 {
 		if err != nil {
-			ui.statusText = "Pack SGA failed: " + err.Error()
+			ui.StatusText = "Pack SGA failed: " + err.Error()
 		} else {
-			ui.statusText = "Pack SGA — no current mod files found"
+			ui.StatusText = "Pack SGA — no current mod files found"
 		}
 		return
 	}
 	if err := writeSGA2(output, files, "Data"); err != nil {
-		ui.statusText = "Pack SGA failed: " + err.Error()
+		ui.StatusText = "Pack SGA failed: " + err.Error()
 		return
 	}
 	archiveBase := strings.TrimSuffix(filepath.Base(output), filepath.Ext(output))
-	if err := addModuleArchive(ui.modTree.ModFilePath, archiveBase); err != nil {
-		ui.statusText = "SGA created, but .module update failed: " + err.Error()
+	if err := addModuleArchive(ui.ModTree.ModFilePath, archiveBase); err != nil {
+		ui.StatusText = "SGA created, but .module update failed: " + err.Error()
 		return
 	}
-	ui.modSnapshot = ""
-	ui.lastModPoll = time.Time{}
-	ui.statusText = fmt.Sprintf("Packed %d files to %s", len(files), output)
+	ui.ModSnapshot = ""
+	ui.LastModPoll = time.Time{}
+	ui.StatusText = fmt.Sprintf("Packed %d files to %s", len(files), output)
 }
 
 func addModuleArchive(modulePath, archiveBase string) error {
@@ -190,15 +190,15 @@ func addModuleArchive(modulePath, archiveBase string) error {
 	return os.WriteFile(modulePath, []byte(strings.Join(updated, "\n")), 0644)
 }
 
-func (ui *uiState) extractSelectedArchives() {
-	if ui.modTree == nil {
+func ExtractSelectedArchives(ui *uiState) {
+	if ui.ModTree == nil {
 		return
 	}
 	selected := 0
 	filesWritten := 0
 	filesSkipped := 0
-	for i, option := range ui.archiveOptions {
-		if i >= len(ui.archiveSelected) || !ui.archiveSelected[i] || option.source == nil || option.source.SGAHandle == nil {
+	for i, option := range ui.ArchiveOptions {
+		if i >= len(ui.ArchiveSelected) || !ui.ArchiveSelected[i] || option.source == nil || option.source.SGAHandle == nil {
 			continue
 		}
 		selected++
@@ -211,16 +211,16 @@ func (ui *uiState) extractSelectedArchives() {
 			if err != nil {
 				continue
 			}
-			filesWritten, filesSkipped = ui.extractSGADir(option.source.SGAHandle, dir, root, filesWritten, filesSkipped)
+			filesWritten, filesSkipped = ExtractSGADir(ui, option.source.SGAHandle, dir, root, filesWritten, filesSkipped)
 		}
 	}
-	ui.archiveStatus = fmt.Sprintf("Extracted %d file(s), skipped %d existing", filesWritten, filesSkipped)
-	ui.statusText = fmt.Sprintf("Extracted %d SGA archive(s): %d written, %d skipped", selected, filesWritten, filesSkipped)
-	ui.modSnapshot = ""
-	ui.lastModPoll = time.Time{}
+	ui.ArchiveStatus = fmt.Sprintf("Extracted %d file(s), skipped %d existing", filesWritten, filesSkipped)
+	ui.StatusText = fmt.Sprintf("Extracted %d SGA archive(s): %d written, %d skipped", selected, filesWritten, filesSkipped)
+	ui.ModSnapshot = ""
+	ui.LastModPoll = time.Time{}
 }
 
-func (ui *uiState) extractSGADir(sga *sga.SGAFile, dirID int, virtualDir string, written, skipped int) (int, int) {
+func ExtractSGADir(ui *uiState, sga *sga.SGAFile, dirID int, virtualDir string, written, skipped int) (int, int) {
 	entries, err := sga.List(dirID)
 	if err != nil {
 		return written, skipped
@@ -228,11 +228,11 @@ func (ui *uiState) extractSGADir(sga *sga.SGAFile, dirID int, virtualDir string,
 	for _, entry := range entries {
 		virtual := virtualDir + "\\" + entry.Name
 		if entry.IsDir {
-			written, skipped = ui.extractSGADir(sga, entry.DirID, virtual, written, skipped)
+			written, skipped = ExtractSGADir(ui, sga, entry.DirID, virtual, written, skipped)
 			continue
 		}
 		if _, err := os.Stat(func() string {
-			p, err := ui.modTree.OverlayPath(virtual)
+			p, err := ui.ModTree.OverlayPath(virtual)
 			if err != nil {
 				return ""
 			}
@@ -246,7 +246,7 @@ func (ui *uiState) extractSGADir(sga *sga.SGAFile, dirID int, virtualDir string,
 			skipped++
 			continue
 		}
-		if _, err := ui.modTree.WriteOverlayFile(virtual, data); err != nil {
+		if _, err := ui.ModTree.WriteOverlayFile(virtual, data); err != nil {
 			skipped++
 			continue
 		}
@@ -255,25 +255,25 @@ func (ui *uiState) extractSGADir(sga *sga.SGAFile, dirID int, virtualDir string,
 	return written, skipped
 }
 
-func (ui *uiState) handleArchiveDialogInput(gtx layout.Context) {
-	if !ui.archiveDialog {
+func HandleArchiveDialogInput(ui *uiState, gtx layout.Context) {
+	if !ui.ArchiveDialog {
 		return
 	}
-	for i := range ui.archiveSelectClicks {
-		if ui.archiveSelectClicks[i].Clicked(gtx) && i < len(ui.archiveSelected) {
-			ui.archiveSelected[i] = !ui.archiveSelected[i]
+	for i := range ui.ArchiveSelectClicks {
+		if ui.ArchiveSelectClicks[i].Clicked(gtx) && i < len(ui.ArchiveSelected) {
+			ui.ArchiveSelected[i] = !ui.ArchiveSelected[i]
 		}
 	}
-	if ui.archiveCloseClick.Clicked(gtx) {
-		ui.archiveDialog = false
+	if ui.ArchiveCloseClick.Clicked(gtx) {
+		ui.ArchiveDialog = false
 		return
 	}
-	if ui.archiveExtractClick.Clicked(gtx) {
-		ui.extractSelectedArchives()
+	if ui.ArchiveExtractClick.Clicked(gtx) {
+		ExtractSelectedArchives(ui)
 	}
 }
 
-func (ui *uiState) layoutArchiveDialog(gtx layout.Context) layout.Dimensions {
+func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 	sz := gtx.Constraints.Max
 	st := clip.Rect{Max: sz}.Push(gtx.Ops)
 	paint.ColorOp{Color: rgba(0, 0, 0, 70)}.Add(gtx.Ops)
@@ -294,22 +294,22 @@ func (ui *uiState) layoutArchiveDialog(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(14), Left: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						var children []layout.FlexChild
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(14), "Extract SGA archives")
+							l := material.Label(ui.Th, unit.Sp(14), "Extract SGA archives")
 							l.Font.Weight = font.Medium
 							return l.Layout(gtx)
 						}))
 						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout))
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), "Select one or more current/parent SGA archives. Existing current-mod files are preserved.")
+							l := material.Label(ui.Th, unit.Sp(10), "Select one or more current/parent SGA archives. Existing current-mod files are preserved.")
 							l.Color = cTextDim
 							return l.Layout(gtx)
 						}))
 						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout))
 						children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							ui.archiveList.Axis = layout.Vertical
-							return ui.archiveList.Layout(gtx, len(ui.archiveOptions), func(gtx layout.Context, index int) layout.Dimensions {
-								opt := ui.archiveOptions[index]
-								click := &ui.archiveSelectClicks[index]
+							ui.ArchiveList.Axis = layout.Vertical
+							return ui.ArchiveList.Layout(gtx, len(ui.ArchiveOptions), func(gtx layout.Context, index int) layout.Dimensions {
+								opt := ui.ArchiveOptions[index]
+								click := &ui.ArchiveSelectClicks[index]
 								bg := cPanelBg
 								if click.Hovered() {
 									bg = cMenuHover
@@ -325,7 +325,7 @@ func (ui *uiState) layoutArchiveDialog(gtx layout.Context) layout.Dimensions {
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												box := image.Pt(gtx.Dp(unit.Dp(14)), gtx.Dp(unit.Dp(14)))
 												col := cBorder
-												if ui.archiveSelected[index] {
+												if ui.ArchiveSelected[index] {
 													col = rgb(0x0078D4)
 												}
 												st := clip.Rect{Max: box}.Push(gtx.Ops)
@@ -336,7 +336,7 @@ func (ui *uiState) layoutArchiveDialog(gtx layout.Context) layout.Dimensions {
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(11), opt.label)
+												l := material.Label(ui.Th, unit.Sp(11), opt.label)
 												l.Color = cText
 												return l.Layout(gtx)
 											}),
@@ -347,17 +347,19 @@ func (ui *uiState) layoutArchiveDialog(gtx layout.Context) layout.Dimensions {
 						}))
 						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout))
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), ui.archiveStatus)
+							l := material.Label(ui.Th, unit.Sp(10), ui.ArchiveStatus)
 							l.Color = cTextDim
 							return l.Layout(gtx)
 						}))
 						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout))
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, &ui.archiveCloseClick, "Close") }),
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									return SmallButton(ui, gtx, &ui.ArchiveCloseClick, "Close")
+								}),
 								layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									return ui.smallButton(gtx, &ui.archiveExtractClick, "Extract selected")
+									return SmallButton(ui, gtx, &ui.ArchiveExtractClick, "Extract selected")
 								}),
 							)
 						}))

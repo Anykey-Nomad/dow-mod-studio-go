@@ -57,80 +57,80 @@ type modelMaterialResult struct {
 // modelViewer is the per tab state of the 3D preview. Everything here is
 // touched on the UI goroutine only; workers communicate through channels.
 type modelViewer struct {
-	model                *WhmModel
-	materials            map[string]render.WhmMaterial
-	materialAliases      map[string]string
-	anim                 *WhmAnimation
-	anims                []*WhmAnimation
-	animPlaybackDuration float64
-	animatedEntities     []sgb.AnimatedEntity
-	sgbAnimLast          time.Time
+	Model                *WhmModel
+	Materials            map[string]render.WhmMaterial
+	MaterialAliases      map[string]string
+	Anim                 *WhmAnimation
+	Anims                []*WhmAnimation
+	AnimPlaybackDuration float64
+	AnimatedEntities     []sgb.AnimatedEntity
+	SgbAnimLast          time.Time
 	// poseCache is the pose at poseTime of poseAnim, kept so a frame that
 	// asks for the pose more than once walks the skeleton once.
-	poseCache          WhmPose
-	poseAnim           *WhmAnimation
-	poseTime           float32
-	poseValid          bool
-	animIndex          int
-	playing            bool
-	time               float32 // normalised 0..1 within the clip
-	showSkeleton       bool
-	showSelection      bool
-	selectionIndicator *engine.SelectionIndicator
-	textured           bool
+	PoseCache          WhmPose
+	PoseAnim           *WhmAnimation
+	PoseTime           float32
+	PoseValid          bool
+	AnimIndex          int
+	Playing            bool
+	Time               float32 // normalised 0..1 within the clip
+	ShowSkeleton       bool
+	ShowSelection      bool
+	SelectionIndicator *engine.SelectionIndicator
+	Textured           bool
 	// frame is the last software render, painted by the canvas.
-	frame *image.RGBA
+	Frame *image.RGBA
 	// frameCh delivers the render in flight; serial orders renders so a late
 	// frame never replaces a newer one, and pending records a camera move that
 	// arrived while a render was running.
-	frameCh chan modelFrame
-	serial  uint64
-	pending bool
+	FrameCh chan modelFrame
+	Serial  uint64
+	Pending bool
 	// painted is the serial of the last software frame the canvas scheduled a
 	// paint for, so a frame that lands between layouts gets one.
-	painted uint64
+	Painted uint64
 	// rendering is set while a frame is being produced.
-	rendering bool
+	Rendering bool
 	// gpuBroken and gpuFrame belong to the hardware path. gpuFrame is the last
 	// frame drawn on the GPU; it lives in video memory, so painting it is a
 	// hand over of a device handle rather than a copy. gpuRetries counts
 	// renders deferred by a transient backend refusal (see modelGpuErrTransient):
 	// past modelGpuRetryLimit the hardware path is given up on as if it had
 	// failed outright.
-	gpuBroken  bool
-	gpuFrame   render.Frame
-	gpuRetries int
+	GpuBroken  bool
+	GpuFrame   render.Frame
+	GpuRetries int
 	// gpuProbeW/H and gpuProbedTextured record which GPU frames have already
 	// been read back, so the readback runs on the transitions that matter only.
 	gpuProbeW, gpuProbeH int
-	gpuProbedTextured    bool
+	GpuProbedTextured    bool
 	// rshData holds raw .rsh bytes for the Vulkan block-compressed path.
-	rshData map[string][]byte
+	RshData map[string][]byte
 	// materialDiagnostics records where each map came from and which image
 	// encoding decoded successfully, keyed by the model's material reference.
-	materialDiagnostics map[string]modelMaterialDiagnostic
+	MaterialDiagnostics map[string]modelMaterialDiagnostic
 	// sideControls puts the playback strip beside the canvas instead of under
 	// it, which is what the object window's viewport wants: its canvas is a
 	// third of the window wide and a strip of eight buttons does not fit under
 	// it.
-	sideControls bool
+	SideControls bool
 
 	viewer.CameraState
 	// uv is the mapping every material is drawn with, and uvMaterials holds a
 	// mapping of its own for the ones that need a different one. It is a
 	// reading of the model rather than a setting of the app: a map can be
 	// authored the wrong way round, and nothing in the file says so.
-	uv          render.UVMapping
-	uvMaterials map[string]*render.UVMapping
+	Uv          render.UVMapping
+	UvMaterials map[string]*render.UVMapping
 	// uvSelection names the material the mapping controls are editing, and is
 	// empty for the one they all share. uvSelectionDirty says the controls
 	// still show the previous selection's numbers, which is what stops the
 	// sliders being rewritten from a mapping before the reader has been shown
 	// which one they are now looking at. uvTextureClicks are the buttons of
 	// the texture list, sized as the panel is laid out.
-	uvSelection      string
-	uvSelectionDirty bool
-	uvTextureClicks  []widget.Clickable
+	UvSelection      string
+	UvSelectionDirty bool
+	UvTextureClicks  []widget.Clickable
 	// The three sliders are the widget's own 0..1 value rather than a float
 	// the panel and the renderer both write to, so there is no second copy to
 	// fall out of step; the real numbers are read out of them by uvPull.
@@ -144,67 +144,67 @@ type modelViewer struct {
 	// for a model with no vertices. It is read out beside the mapping rather
 	// than applied to it, so that the numbers a reader is given are the ones
 	// the file actually holds.
-	uvExtent   [4]float32
-	uvExtentOK bool
+	UvExtent   [4]float32
+	UvExtentOK bool
 
 	// Async material loading and viewport state.
-	loading         bool
-	materialsLoaded bool
-	missing         int
-	renderW         int
-	renderH         int
-	stop            context.CancelFunc
+	Loading         bool
+	MaterialsLoaded bool
+	Missing         int
+	RenderW         int
+	RenderH         int
+	Stop            context.CancelFunc
 
 	// showFX plays the model's effects over the frame. They live in the
 	// events its entity blueprint references and hang off markers on its
 	// bones, so they are resolved the first time the button is pressed and
 	// simulated from then on, which is what keeps the canvas repainting
 	// while the toggle is on.
-	showFX      bool
-	showFXAxes  bool
-	showGround  bool
-	groundImage *image.RGBA
-	fxEffects   []fxOverlayEffect
-	fxAxesClick widget.Clickable
-	fxTextures  map[string]*image.RGBA
+	ShowFX      bool
+	ShowFXAxes  bool
+	ShowGround  bool
+	GroundImage *image.RGBA
+	FxEffects   []fxOverlayEffect
+	FxAxesClick widget.Clickable
+	FxTextures  map[string]*image.RGBA
 	// FX checklist selection is reset with the clip, then defaults to the
 	// events on that clip's timelines.
-	fxSelectionAnim   string
-	fxManualOn        map[int]bool
-	fxManualOff       map[int]bool
-	fxOverrides       map[int]fxAttributeOverride
-	fxAttrClicks      []widget.Clickable
-	fxAttrIndex       int
-	fxAttrClick       widget.Clickable
-	fxAttrOpen        bool
-	fxAttrDragging    bool
-	fxAttrDragX       float32
-	fxAttrDragY       float32
-	fxAttrWindowX     int
-	fxAttrWindowY     int
-	fxAttrPosX        widget.Editor
-	fxAttrPosY        widget.Editor
-	fxAttrPosZ        widget.Editor
-	fxAttrRotX        widget.Editor
-	fxAttrRotY        widget.Editor
-	fxAttrRotZ        widget.Editor
-	fxAttrSetPos      widget.Clickable
-	fxAttrSetAngle    widget.Clickable
-	fxAttrResetPos    widget.Clickable
-	fxAttrResetRot    widget.Clickable
-	fxAttrError       string
-	fxAttrSetDistance widget.Clickable
-	fxAttrDir         widget.Clickable
-	fxAttrMarker      widget.Clickable
-	fxAttrClose       widget.Clickable
-	fxAttrTitle       widget.Clickable
-	fxAttrDistance    widget.Editor
-	fxAttrDragTag     event.Tag
-	fxAttrDragOrigin  image.Point
+	FxSelectionAnim   string
+	FxManualOn        map[int]bool
+	FxManualOff       map[int]bool
+	FxOverrides       map[int]fxAttributeOverride
+	FxAttrClicks      []widget.Clickable
+	FxAttrIndex       int
+	FxAttrClick       widget.Clickable
+	FxAttrOpen        bool
+	FxAttrDragging    bool
+	FxAttrDragX       float32
+	FxAttrDragY       float32
+	FxAttrWindowX     int
+	FxAttrWindowY     int
+	FxAttrPosX        widget.Editor
+	FxAttrPosY        widget.Editor
+	FxAttrPosZ        widget.Editor
+	FxAttrRotX        widget.Editor
+	FxAttrRotY        widget.Editor
+	FxAttrRotZ        widget.Editor
+	FxAttrSetPos      widget.Clickable
+	FxAttrSetAngle    widget.Clickable
+	FxAttrResetPos    widget.Clickable
+	FxAttrResetRot    widget.Clickable
+	FxAttrError       string
+	FxAttrSetDistance widget.Clickable
+	FxAttrDir         widget.Clickable
+	FxAttrMarker      widget.Clickable
+	FxAttrClose       widget.Clickable
+	FxAttrTitle       widget.Clickable
+	FxAttrDistance    widget.Editor
+	FxAttrDragTag     event.Tag
+	FxAttrDragOrigin  image.Point
 	// fxScale uniformly adjusts model-local FX geometry while leaving marker
 	// origins fixed. One is the authored model-space size; the viewport exposes
 	// the factor to inspect effects whose sizes need manual calibration.
-	fxScale float64
+	FxScale float64
 	// fxRotX, fxRotY and fxRotZ turn every effect about its own marker, in
 	// degrees, around the marker's own axes rather than the model's: X/Y/Z are
 	// the three columns of the marker's frame, so a beam turns with the bone
@@ -221,83 +221,83 @@ type modelViewer struct {
 	// fxSound is the model's declared audio: what plays when the clip on screen
 	// reaches the moments its timeline names. It is built from the same .whe the
 	// effects are read out of, and is nil for a model that declares no sounds.
-	fxSound *fx.SoundPlayer
+	FxSound *fx.SoundPlayer
 	// fxSoundOn is what the sound button shows: whether the sounds play. It is
 	// separate from the player's own flag so that switching them off and on
 	// again does not decode anything a second time.
-	fxSoundOn bool
+	FxSoundOn bool
 	// fxOverlay is the software-rendered particle image and fxScene is its
 	// Vulkan rendering input.
-	fxOverlay *image.RGBA
-	fxScene   *fxGpuScene
-	fxCh      chan fxLoadResult
+	FxOverlay *image.RGBA
+	FxScene   *fxGpuScene
+	FxCh      chan fxLoadResult
 	// fxSoundCh carries the sound half of the same work. It is separate from
 	// fxCh because sounds are wanted from the first frame on screen while the
 	// effects wait for the FX button, and a worker that had to wait for both
 	// would leave the audio waiting on a toggle nobody pressed.
-	fxSoundCh chan fxLoadResult
-	fxErr     string
-	fxLast    time.Time
+	FxSoundCh chan fxLoadResult
+	FxErr     string
+	FxLast    time.Time
 	// fxAnim is the clip the effects were last stepped for. A model with
 	// timelines only plays the events its own clip fires, so a change of clip
 	// is what tells the simulations to start again.
-	fxAnim string
+	FxAnim string
 	// fxClipPrev is where the playhead was on the previous frame, in seconds
 	// into the clip, and fxClipPrevAnim the clip it belonged to. The effects
 	// are stepped by the difference between the two rather than by wall clock
 	// time, which is what makes an event start when its clip reaches the
 	// moment the timeline names instead of when the clip began.
-	fxClipPrev     float64
-	fxClipPrevAnim string
+	FxClipPrev     float64
+	FxClipPrevAnim string
 	// fxTimelines are the motion timelines the worker's parse produced. They are
 	// kept on the viewer rather than only inside the sound player because the
 	// scrub bar reads them too: they are the only place that says which frames
 	// of a clip something fires on.
-	fxTimelines []whe.FxTimeline
+	FxTimelines []whe.FxTimeline
 	// scrubRect is where the frame strip was drawn last frame, so a press inside
 	// it winds the playhead instead of starting a camera drag. It is empty when
 	// there is nothing to draw.
-	scrubRect image.Rectangle
+	ScrubRect image.Rectangle
 
 	// markerIndex is the marker the markers list has picked, or -1 for none.
 	// The reader uses it to find one attachment point on a model that
 	// carries a dozen, which is the question a model file answers worst.
-	markerIndex int
+	MarkerIndex int
 	// boneIndex is the bone the bones list has picked, or -1 for none. The
 	// overlay draws it in the pick colour and the panel shows its
 	// parameters; it is separate from markerIndex because a bone and a
 	// marker are picked out of different lists.
-	boneIndex int
+	BoneIndex int
 
 	// boneKeyIndex and boneKeyMode describe the bone keyframe the user is
 	// currently editing, or -1/-1 when nothing is picked out of the bone's
 	// keyframes. boneKeyIndex counts position keys first, then rotation keys,
 	// so the same index space is shared by PosKey and RotKey.
-	boneKeyIndex int
-	boneKeyMode  int
+	BoneKeyIndex int
+	BoneKeyMode  int
 
 	// modelFile is the tree path of the .whm being shown, which is where its
 	// own textures are looked for first: a model and the maps it uses sit
 	// together far more often than not.
-	modelFile string
+	ModelFile string
 
-	tag      event.Tag
-	dragging bool
-	panning  bool
+	Tag      event.Tag
+	Dragging bool
+	Panning  bool
 	// seeking says a press landed on the frame strip rather than on the model,
 	// so the drag that follows is a scrub and not a camera turn.
-	seeking bool
+	Seeking bool
 	// keyDrag says the press that started the seek landed on the picked bone's
 	// keymark, so the drag that follows carries that key along the strip
 	// instead of scrubbing the playhead. keyDragMoved says one of the drag's
 	// steps actually put the key somewhere new — the step that makes the edit
 	// worth marking dirty and reporting when the drag ends.
-	keyDrag      bool
-	keyDragMoved bool
-	lastX        float32
-	lastY        float32
-	lastFrame    time.Time
-	redraw       bool
+	KeyDrag      bool
+	KeyDragMoved bool
+	LastX        float32
+	LastY        float32
+	LastFrame    time.Time
+	Redraw       bool
 }
 
 // newModelViewer prepares a viewer for a decoded model. The path is the one the
@@ -306,42 +306,42 @@ type modelViewer struct {
 func newModelViewer(model *WhmModel, modelFile string) *modelViewer {
 	camera := render.NewCameraState(&model.Model, 0.7, 0.2, render.DefaultFov)
 	return &modelViewer{
-		model:     model,
-		modelFile: modelFile,
-		materials: map[string]render.WhmMaterial{},
-		rshData:   map[string][]byte{},
+		Model:     model,
+		ModelFile: modelFile,
+		Materials: map[string]render.WhmMaterial{},
+		RshData:   map[string][]byte{},
 		// Textures start on. Set here rather than when a texture batch
 		// lands, so a Textures toggle made while loading is not overwritten.
-		textured:    true,
+		Textured:    true,
 		CameraState: camera,
 		// The map as the file has it, and the sliders showing that: no
 		// offset, no turn, no mirror, and a scale of one. A reader moves
 		// them away from that and back to it.
-		uv:      render.UVIdentityMapping(),
+		Uv:      render.UVIdentityMapping(),
 		uvU:     widget.Float{Value: 0.5},
 		uvV:     widget.Float{Value: 0.5},
 		uvScale: widget.Float{Value: (1 - modelUVMinScale) / (modelUVMaxScale - modelUVMinScale)},
 		// The model's own coordinates, measured once so that the panel can
 		// say how far they run without walking the vertices every frame.
-		uvExtent:   render.UVExtentOf(&model.Model),
-		uvExtentOK: render.ModelHasUVs(&model.Model),
+		UvExtent:   render.UVExtentOf(&model.Model),
+		UvExtentOK: render.ModelHasUVs(&model.Model),
 		// The effects at the size their files ask for; the panel moves this
 		// from there.
-		fxScale:     fxScaleDefaultValue,
-		fxAttrIndex: -1,
+		FxScale:     fxScaleDefaultValue,
+		FxAttrIndex: -1,
 		// Nothing has been rendered yet, so the canvas must ask for the first
 		// frame as soon as it is laid out.
-		redraw: true,
+		Redraw: true,
 		// Nothing is picked out of the markers list yet. -1 rather than the
 		// zero value, which is marker zero: a reader who never opens the
 		// list would otherwise find a red ring on the model's first
 		// attachment point with nothing in the panel to explain it.
-		markerIndex: -1, // Nothing is picked out of the bones list yet, for the same
+		MarkerIndex: -1, // Nothing is picked out of the bones list yet, for the same
 		// reason: a picked bone with no list on show would be an amber
 		// cross on the model and nothing in the panel to explain it.
-		boneIndex:    -1,
-		boneKeyIndex: -1,
-		boneKeyMode:  -1,
+		BoneIndex:    -1,
+		BoneKeyIndex: -1,
+		BoneKeyMode:  -1,
 	}
 }
 
@@ -353,68 +353,68 @@ func newObjectModelViewer(model *WhmModel, modelFile string, ground image.Image)
 	v := newModelViewer(model, modelFile)
 	if ground != nil {
 		b := ground.Bounds()
-		v.groundImage = image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
-		draw.Draw(v.groundImage, v.groundImage.Bounds(), ground, b.Min, draw.Src)
+		v.GroundImage = image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+		draw.Draw(v.GroundImage, v.GroundImage.Bounds(), ground, b.Min, draw.Src)
 	}
-	v.showGround = v.groundImage != nil
-	v.selectAnim(unitDefaultAnim(model))
-	v.playing = model != nil && len(model.Animations) > 0
-	v.lastFrame = time.Time{}
+	v.ShowGround = v.GroundImage != nil
+	v.SelectAnim(unitDefaultAnim(model))
+	v.Playing = model != nil && len(model.Animations) > 0
+	v.LastFrame = time.Time{}
 	return v
 }
 
 // modelClose stops this viewer's async jobs.
-func (ui *uiState) modelClose(v *modelViewer) {
+func ModelClose(ui *uiState, v *modelViewer) {
 	if v != nil {
-		v.close()
+		v.Close()
 	}
 }
 
 // close stops any running render so the goroutine does not outlive the tab.
-func (v *modelViewer) close() {
+func (v *modelViewer) Close() {
 	if v == nil {
 		return
 	}
-	if v.stop != nil {
-		v.stop()
-		v.stop = nil
+	if v.Stop != nil {
+		v.Stop()
+		v.Stop = nil
 	}
 	// A sound outlives the frame that started it, so anything playing has to
 	// be released here rather than left to the tab's last picture.
-	v.fxSound.Close()
-	v.fxSound = nil
+	v.FxSound.Close()
+	v.FxSound = nil
 	// A worker started for this model may still be decoding. Its answer is
 	// dropped rather than applied: the samples it decoded were chosen for a
 	// model this viewer no longer shows, and applying them would wire a sound
 	// player onto a closed tab. fxStartSoundLoad refuses to start again while
 	// the channel is set, so clearing it here lets the next model load afresh.
-	if v.fxSoundCh != nil {
+	if v.FxSoundCh != nil {
 		go func(ch chan fxLoadResult) {
 			<-ch
-		}(v.fxSoundCh)
-		v.fxSoundCh = nil
+		}(v.FxSoundCh)
+		v.FxSoundCh = nil
 	}
 }
 
 // invalidate marks the frame stale, which makes the next layout start a render.
-func (v *modelViewer) invalidate() {
+func (v *modelViewer) Invalidate() {
 	if v != nil {
-		v.redraw = true
+		v.Redraw = true
 	}
 }
 
 // setRenderSize records the size the next GPU render should use. A change means
 // the projection changed, so the view needs a redraw.
-func (v *modelViewer) setRenderSize(w, h int) {
+func (v *modelViewer) SetRenderSize(w, h int) {
 	if w < 1 || h < 1 {
 		return
 	}
-	if v.renderW == w && v.renderH == h {
+	if v.RenderW == w && v.RenderH == h {
 		return
 	}
-	log.Printf("3D preview: render size %dx%d -> %dx%d", v.renderW, v.renderH, w, h)
-	v.renderW, v.renderH = w, h
-	v.redraw = true
+	log.Printf("3D preview: render size %dx%d -> %dx%d", v.RenderW, v.RenderH, w, h)
+	v.RenderW, v.RenderH = w, h
+	v.Redraw = true
 }
 
 // requestRender starts a background render unless one is running. Only the
@@ -428,12 +428,12 @@ func (v *modelViewer) setRenderSize(w, h int) {
 // The pass runs here, on the goroutine that calls Frame and before it. Its
 // command buffer remains open so the next Gio frame submits both the offscreen
 // render and the blit that samples it in queue order.
-func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bool {
-	v := t.model
+func RenderModelOnGpu(ui *uiState, gtx layout.Context, t *fileTab, w, h int) bool {
+	v := t.Model
 	if v == nil {
 		return false
 	}
-	reason := ui.modelGpuUnavailable(v)
+	reason := ModelGpuUnavailable(ui, v)
 	if reason != "" {
 		// The software path takes over, so its frame has to be the one on
 		// screen rather than whatever the hardware path drew last.
@@ -441,30 +441,30 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 			log.Printf("3D preview: using software renderer (%s)", reason)
 			modelGpuSkipLogged = reason
 		}
-		v.gpuFrame = nil
+		v.GpuFrame = nil
 		return false
 	}
 	if modelGpuSkipLogged != "" {
 		log.Printf("3D preview: hardware renderer taking over again (%s resolved)", modelGpuSkipLogged)
 		modelGpuSkipLogged = ""
 	}
-	gpu := ui.modelGpuRenderer()
-	opts := v.options(w, h)
+	gpu := ModelGpuRenderer(ui)
+	opts := v.Options(w, h)
 	opts.Quality = render.ModelQualityFinal
-	if t.kind == "sgb" && t.sgbView3D {
-		opts.SgbSelectedEntities = t.sgbSelectedEntities
-		opts.SgbEntityMeshIDs = t.sgbEntityMeshIDs
+	if t.Kind == "sgb" && t.SgbView3D {
+		opts.SgbSelectedEntities = t.SgbSelectedEntities
+		opts.SgbEntityMeshIDs = t.SgbEntityMeshIDs
 	}
 	// Textures off means no materials and no .rsh lookups, so every draw
 	// falls back to the base colour. The GPU path must honour this too:
-	// it used to receive v.materials unconditionally.
+	// it used to receive v.Materials unconditionally.
 	var mats map[string]render.WhmMaterial
 	var rsh func(string) ([]byte, bool)
-	if v.textured {
-		mats = v.materials
-		if len(v.rshData) > 0 {
+	if v.Textured {
+		mats = v.Materials
+		if len(v.RshData) > 0 {
 			rsh = func(material string) ([]byte, bool) {
-				data, ok := v.rshData[material]
+				data, ok := v.RshData[material]
 				return data, ok
 			}
 		}
@@ -472,13 +472,13 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 	// The first frame of a stretch on the hardware path proves the render
 	// itself completed; without it a silent window cannot be told apart from
 	// a render that never returned.
-	firstGPUFrame := v.gpuFrame == nil
+	firstGPUFrame := v.GpuFrame == nil
 	start := time.Now()
-	frame, err := gpu.Render(&v.model.Model, v.pose(), opts, mats, rsh)
+	frame, err := gpu.Render(&v.Model.Model, v.Pose(), opts, mats, rsh)
 	if err == nil {
 		d := time.Since(start)
 		if firstGPUFrame {
-			log.Printf("3D preview: GPU frame ready %dx%d in %v (serial=%d)", w, h, d, v.serial)
+			log.Printf("3D preview: GPU frame ready %dx%d in %v (serial=%d)", w, h, d, v.Serial)
 		}
 		if d >= 50*time.Millisecond {
 			log.Printf("3D preview: slow GPU render %v (%dx%d)", d, w, h)
@@ -487,9 +487,9 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 		// the first with textures bound, and the first after a resize) so a
 		// grey window can be told apart from a black model and lost draws.
 		needProbe := v.gpuProbeW != w || v.gpuProbeH != h
-		if rsh != nil && !v.gpuProbedTextured {
+		if rsh != nil && !v.GpuProbedTextured {
 			needProbe = true
-			v.gpuProbedTextured = true
+			v.GpuProbedTextured = true
 		}
 		if needProbe {
 			v.gpuProbeW, v.gpuProbeH = w, h
@@ -499,8 +499,8 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 				// would fail the same way, so the hardware path is given up on
 				// here rather than one frame at a time.
 				log.Printf("3D preview: hardware render gave up after the probe, falling back to software")
-				v.gpuBroken = true
-				v.gpuFrame = nil
+				v.GpuBroken = true
+				v.GpuFrame = nil
 				return false
 			}
 		}
@@ -515,29 +515,29 @@ func (ui *uiState) renderModelOnGpu(gtx layout.Context, t *fileTab, w, h int) bo
 			// — marking the path broken here stranded it on the software
 			// renderer for the rest of the session. Ask for another frame
 			// instead, bounded so a backend that never clears still gives up.
-			if v.gpuRetries < modelGpuRetryLimit {
-				v.gpuRetries++
-				v.redraw = true
+			if v.GpuRetries < modelGpuRetryLimit {
+				v.GpuRetries++
+				v.Redraw = true
 				// The counter is reset by every successful render, so the
 				// modulo above never fires while the path keeps working;
 				// a time throttle is what keeps the log readable.
 				if time.Since(modelGpuRetryLogged) >= time.Second {
 					modelGpuRetryLogged = time.Now()
-					log.Printf("3D preview: GPU render deferred (%v), retry %d/%d", err, v.gpuRetries, modelGpuRetryLimit)
+					log.Printf("3D preview: GPU render deferred (%v), retry %d/%d", err, v.GpuRetries, modelGpuRetryLimit)
 				}
-				return v.gpuFrame != nil
+				return v.GpuFrame != nil
 			}
-			log.Printf("3D preview: hardware render still refused after %d deferred retries, falling back to software: %v", v.gpuRetries, err)
+			log.Printf("3D preview: hardware render still refused after %d deferred retries, falling back to software: %v", v.GpuRetries, err)
 		} else {
 			// One failure is enough: the software path is always there.
 			log.Printf("3D preview: hardware render failed, falling back to software: %v", err)
 		}
-		v.gpuBroken = true
-		v.gpuFrame = nil
+		v.GpuBroken = true
+		v.GpuFrame = nil
 		return false
 	}
-	v.gpuRetries = 0
-	v.gpuFrame = frame
+	v.GpuRetries = 0
+	v.GpuFrame = frame
 	return true
 }
 
@@ -564,47 +564,47 @@ func modelGpuErrTransient(err error) bool {
 		strings.Contains(s, "another command buffer is already being recorded")
 }
 
-func (v *modelViewer) requestRender(width, height, quality int) {
-	if v.rendering {
-		v.pending = true
+func (v *modelViewer) RequestRender(width, height, quality int) {
+	if v.Rendering {
+		v.Pending = true
 		return
 	}
-	opts := v.options(width, height)
+	opts := v.Options(width, height)
 	opts.Quality = quality
-	model := v.model
-	pose := v.pose()
-	v.serial++
-	serial := v.serial
+	model := v.Model
+	pose := v.Pose()
+	v.Serial++
+	serial := v.Serial
 	ch := make(chan modelFrame, 1)
-	v.frameCh = ch
-	v.rendering = true
+	v.FrameCh = ch
+	v.Rendering = true
 	go func() {
 		ch <- modelFrame{image: render.RenderWhmModel(&model.Model, pose, opts), serial: serial}
 	}()
 }
 
 // modelData returns the decoded model the canvas renders, or nil before one is loaded.
-func (v *modelViewer) modelData() *whm.Model {
-	if v.model == nil {
+func (v *modelViewer) ModelData() *whm.Model {
+	if v.Model == nil {
 		return nil
 	}
-	return &v.model.Model
+	return &v.Model.Model
 }
 
 // selectionIndicatorIfShown returns DATASEUI geometry only while its preview
 // toggle is on; the settings themselves remain editable while it is off.
-func (v *modelViewer) selectionIndicatorIfShown() *engine.SelectionIndicator {
-	if v == nil || !v.showSelection || v.selectionIndicator == nil {
+func (v *modelViewer) SelectionIndicatorIfShown() *engine.SelectionIndicator {
+	if v == nil || !v.ShowSelection || v.SelectionIndicator == nil {
 		return nil
 	}
-	return v.selectionIndicator
+	return v.SelectionIndicator
 }
 
 // options builds the render request for the current camera and pose.
-func (v *modelViewer) options(width, height int) render.RenderOptions {
+func (v *modelViewer) Options(width, height int) render.RenderOptions {
 	var mats map[string]render.WhmMaterial
-	if v.textured {
-		mats = v.materials
+	if v.Textured {
+		mats = v.Materials
 	}
 	return render.RenderOptions{
 		RenderOptions: engine.RenderOptions{
@@ -626,122 +626,122 @@ func (v *modelViewer) options(width, height int) render.RenderOptions {
 			Ambient:   10,
 			Diffuse:   10,
 			BaseColor: render.RgbaWhite,
-			Skeleton:  v.showSkeleton,
-			// nil rather than v.markerIndex: the viewer's -1 is its own
+			Skeleton:  v.ShowSkeleton,
+			// nil rather than v.MarkerIndex: the viewer's -1 is its own
 			// "nothing picked", and the render request says the same thing
 			// by carrying no marker at all.
-			Marker:        render.PickedMarker(v.markerIndex),
-			PickedBone:    render.PickedBone(v.boneIndex),
-			UVDefault:     v.uv,
-			UVPerMaterial: v.uvMaterials, MeshAlpha: v.meshAlphas(),
-			AnimatedEntities: v.animatedEntities,
+			Marker:        render.PickedMarker(v.MarkerIndex),
+			PickedBone:    render.PickedBone(v.BoneIndex),
+			UVDefault:     v.Uv,
+			UVPerMaterial: v.UvMaterials, MeshAlpha: v.MeshAlphas(),
+			AnimatedEntities: v.AnimatedEntities,
 		},
 		MaterialOverrides:  mats,
-		MaterialAliases:    v.materialAliases,
-		AnimatedEntities:   v.animatedEntities,
-		GroundImage:        v.groundImage,
-		Ground:             v.showGround && v.groundImage != nil,
-		FX:                 v.fxScene,
-		SelectionIndicator: v.selectionIndicatorIfShown(),
+		MaterialAliases:    v.MaterialAliases,
+		AnimatedEntities:   v.AnimatedEntities,
+		GroundImage:        v.GroundImage,
+		Ground:             v.ShowGround && v.GroundImage != nil,
+		FX:                 v.FxScene,
+		SelectionIndicator: v.SelectionIndicatorIfShown(),
 	}
 }
 
 // pollModelJobs runs on the UI goroutine and applies texture/FX results.
-func (ui *uiState) pollModelJobs() {
-	for _, t := range ui.openTabs {
-		ui.pollViewerJobs(t)
-		ui.pollSgbObjectModel(t)
-		ui.pollSgbObjectMaterials(t)
-		if t.sgbPlacementPending != nil && t.model != nil && !t.model.loading && !t.model.rendering && t.model.frameCh == nil && t.modelMaterialCh == nil && t.sgbObjectModelCh == nil && t.sgbObjectMaterialsCh == nil && len(t.sgbObjectMaterialsPending) == 0 && t.sgbObjectModel != nil {
-			request := *t.sgbPlacementPending
-			t.sgbPlacementPending = nil
-			ui.appendSgbPlacement(t, request, t.sgbObjectModel)
+func PollModelJobs(ui *uiState) {
+	for _, t := range ui.OpenTabs {
+		PollViewerJobs(ui, t)
+		PollSgbObjectModel(ui, t)
+		PollSgbObjectMaterials(ui, t)
+		if t.SgbPlacementPending != nil && t.Model != nil && !t.Model.Loading && !t.Model.Rendering && t.Model.FrameCh == nil && t.ModelMaterialCh == nil && t.SgbObjectModelCh == nil && t.SgbObjectMaterialsCh == nil && len(t.SgbObjectMaterialsPending) == 0 && t.SgbObjectModel != nil {
+			request := *t.SgbPlacementPending
+			t.SgbPlacementPending = nil
+			AppendSgbPlacement(ui, t, request, t.SgbObjectModel)
 		}
 	}
 	// The object window's viewport has a viewer that is not a file tab, and it
 	// renders and loads textures exactly the same way.
-	ui.pollViewerJobs(ui.unitModel)
+	PollViewerJobs(ui, ui.UnitModel)
 }
 
 // pollViewerJobs takes whatever one viewer has finished: its textures and FX.
 // A nil tab, or one with no model on it, is the normal case for most of them.
-func (ui *uiState) pollViewerJobs(t *fileTab) {
-	if t == nil || t.model == nil {
+func PollViewerJobs(ui *uiState, t *fileTab) {
+	if t == nil || t.Model == nil {
 		return
 	}
-	v := t.model
-	if t.modelMaterialCh != nil {
+	v := t.Model
+	if t.ModelMaterialCh != nil {
 		select {
-		case res := <-t.modelMaterialCh:
+		case res := <-t.ModelMaterialCh:
 			if !res.more {
-				t.modelMaterialCh = nil
+				t.ModelMaterialCh = nil
 			}
-			v.loading = false
-			v.materialsLoaded = !res.more
-			v.materials = res.materials
-			v.materialAliases = res.aliases
+			v.Loading = false
+			v.MaterialsLoaded = !res.more
+			v.Materials = res.materials
+			v.MaterialAliases = res.aliases
 			if len(res.materials) > 0 {
-				v.textured = true
+				v.Textured = true
 			}
 			log.Printf("3D preview: textures ready: %d materials resolved, %d missing", len(res.materials)+len(res.rsh), res.missing)
 			if len(res.rsh) > 0 {
-				v.rshData = res.rsh
+				v.RshData = res.rsh
 			}
 			if res.diagnostics != nil {
-				v.materialDiagnostics = res.diagnostics
+				v.MaterialDiagnostics = res.diagnostics
 			}
 			if res.missing > 0 {
-				v.missing = res.missing
+				v.Missing = res.missing
 			}
 			// A map scene swaps in the model with its objects; a .whm
 			// tab never sends one and keeps its model unchanged.
 			if res.model != nil {
-				v.model = res.model
+				v.Model = res.model
 			}
 			if res.model != nil {
-				t.model.animatedEntities = res.animatedEntities
+				t.Model.AnimatedEntities = res.animatedEntities
 			}
 			if res.model != nil && res.entityMeshes != nil {
-				t.sgbEntityMeshIDs = res.entityMeshes
-				if t.sgbSelectedEntities == nil {
-					t.sgbSelectedEntities = make(map[int]bool)
+				t.SgbEntityMeshIDs = res.entityMeshes
+				if t.SgbSelectedEntities == nil {
+					t.SgbSelectedEntities = make(map[int]bool)
 				}
 			}
-			v.invalidate()
+			v.Invalidate()
 		default:
 		}
 	}
-	if v.fxCh != nil {
+	if v.FxCh != nil {
 		select {
-		case res := <-v.fxCh:
-			v.fxApply(res)
+		case res := <-v.FxCh:
+			v.FxApply(res)
 		default:
 		}
 	}
-	if v.fxSoundCh != nil {
+	if v.FxSoundCh != nil {
 		select {
-		case res := <-v.fxSoundCh:
-			v.fxApplySoundsOnly(res)
+		case res := <-v.FxSoundCh:
+			v.FxApplySoundsOnly(res)
 		default:
 		}
 	}
-	if v.frameCh != nil {
+	if v.FrameCh != nil {
 		select {
-		case frame := <-v.frameCh:
-			v.frameCh = nil
-			v.rendering = false
-			if frame.serial >= v.serial {
-				v.serial = frame.serial
-				v.frame = frame.image
+		case frame := <-v.FrameCh:
+			v.FrameCh = nil
+			v.Rendering = false
+			if frame.serial >= v.Serial {
+				v.Serial = frame.serial
+				v.Frame = frame.image
 			} else {
 				// A frame the camera already moved past.
-				v.redraw = true
+				v.Redraw = true
 			}
 			// A camera move during the render means the frame is already
 			// stale; start the next one right away.
-			if v.pending {
-				v.pending = false
-				v.redraw = true
+			if v.Pending {
+				v.Pending = false
+				v.Redraw = true
 			}
 		default:
 		}
@@ -754,18 +754,18 @@ func (ui *uiState) pollViewerJobs(t *fileTab) {
 // are a dialog of their own, so there is nothing else to draw under the canvas:
 // the name is kept because the canvas area is the one place that has to decide
 // what goes below itself.
-func (ui *uiState) modelControlsWithUV(gtx layout.Context, t *fileTab) layout.Dimensions {
-	return ui.modelControls(gtx, t)
+func ModelControlsWithUV(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	return ModelControls(ui, gtx, t)
 }
 
 // modelControls is the strip under the canvas. A viewer whose controls live
 // beside it rather than under it — the object window's viewport, where the
 // canvas is a third of the window wide and the strip does not fit — is laid out
 // without one.
-func (ui *uiState) modelControls(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
-	ui.modelControlClicks(gtx, t)
-	animCount := len(v.model.Animations)
+func ModelControls(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.Model
+	ModelControlClicks(ui, gtx, t)
+	animCount := len(v.Model.Animations)
 	// The strip is two rows tall here, so the one-row clamp is applied to
 	// each row below rather than to the whole block: applied outside it
 	// would cap the pair at the height of one and clip the second.
@@ -775,53 +775,53 @@ func (ui *uiState) modelControls(gtx layout.Context, t *fileTab) layout.Dimensio
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(modelRowHeight(gtx),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &t.modelPlay, modelPlayLabel(v), animCount == 0)
+							return SmallButtonDisabled(ui, gtx, &t.ModelPlay, modelPlayLabel(v), animCount == 0)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &t.modelPrevAnim, "◀", animCount == 0)
+							return SmallButtonDisabled(ui, gtx, &t.ModelPrevAnim, "◀", animCount == 0)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), modelClipLabel(v))
+							l := material.Label(ui.Th, unit.Sp(10), modelClipLabel(v))
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, l.Layout)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &t.modelNextAnim, "▶", animCount == 0)
+							return SmallButtonDisabled(ui, gtx, &t.ModelNextAnim, "▶", animCount == 0)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &t.modelStepBack, "|◀", animCount == 0)
+							return SmallButtonDisabled(ui, gtx, &t.ModelStepBack, "|◀", animCount == 0)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &t.modelStepFwd, "▶|", animCount == 0)
+							return SmallButtonDisabled(ui, gtx, &t.ModelStepFwd, "▶|", animCount == 0)
 						}),
 						layout.Flexed(1, rowGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &t.modelTexture, "Textures", len(v.materials) == 0)
+							return SmallButtonDisabled(ui, gtx, &t.ModelTexture, "Textures", len(v.Materials) == 0)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &t.modelSkeleton, "Skeleton", len(v.model.Bones) == 0)
+							return SmallButtonDisabled(ui, gtx, &t.ModelSkeleton, "Skeleton", len(v.Model.Bones) == 0)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &t.modelFX, modelFXLabel(v))
+							return SmallButton(ui, gtx, &t.ModelFX, modelFXLabel(v))
 						}),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAxesButton(gtx, v) }),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FxAxesButton(ui, gtx, v) }),
 						// The ground plane toggle, the same switch the Object
 						// Viewport's side panel carries: disabled when the
 						// mod carries no ground texture to show.
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v.groundImage == nil)
+							return SmallButtonDisabled(ui, gtx, &t.ModelGround, modelGroundLabel(v), v.GroundImage == nil)
 						}),
 						// The zoom the wheel does, as two steps of it, so the
 						// distance can be moved by a known amount without a
 						// wheel to hand.
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &t.modelZoomOut, modelZoomOutLabel)
+							return SmallButton(ui, gtx, &t.ModelZoomOut, modelZoomOutLabel)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return ui.smallButton(gtx, &t.modelZoomIn, modelZoomInLabel)
+							return SmallButton(ui, gtx, &t.ModelZoomIn, modelZoomInLabel)
 						}),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, &t.modelReset, "Reset view") }),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ModelReset, "Reset view") }),
 					)
 				}),
 			)
@@ -830,45 +830,45 @@ func (ui *uiState) modelControls(gtx layout.Context, t *fileTab) layout.Dimensio
 
 // modelInfoTable reports what the 3D preview is showing, which makes it obvious
 // whether a blank canvas is a missing texture or a parse problem.
-func (ui *uiState) modelInfoTable(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t == nil || t.model == nil || t.model.model == nil {
+func ModelInfoTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t == nil || t.Model == nil || t.Model.Model == nil {
 		return layout.Dimensions{}
 	}
-	v := t.model
+	v := t.Model
 	tris := 0
-	for _, mesh := range v.model.Meshes {
+	for _, mesh := range v.Model.Meshes {
 		tris += len(mesh.Indices) / 3
 	}
 	frame := "—"
-	if v.frame != nil {
-		b := v.frame.Bounds()
+	if v.Frame != nil {
+		b := v.Frame.Bounds()
 		frame = fmt.Sprintf("%d × %d", b.Dx(), b.Dy())
 	}
 	state := "idle"
 	switch {
-	case v.loading:
+	case v.Loading:
 		state = "loading textures"
-	case v.rendering:
+	case v.Rendering:
 		state = "rendering"
-	case v.frame != nil:
+	case v.Frame != nil:
 		state = "ready"
 	}
 	// Several meshes usually share a map, so the count is over distinct
 	// materials. Comparing against the mesh count made a model with four
 	// textures look like it was missing twenty three of them.
 	unique := map[string]bool{}
-	for _, m := range v.model.Meshes {
+	for _, m := range v.Model.Meshes {
 		if m.Material != "" {
 			unique[m.Material] = true
 		}
 	}
-	textures := fmt.Sprintf("%d/%d", len(v.materials), len(unique))
-	if v.missing > 0 {
-		textures += fmt.Sprintf(" (%d missing)", v.missing)
+	textures := fmt.Sprintf("%d/%d", len(v.Materials), len(unique))
+	if v.Missing > 0 {
+		textures += fmt.Sprintf(" (%d missing)", v.Missing)
 	}
 	anim := "—"
-	if v.anim != nil {
-		anim = v.anim.Name
+	if v.Anim != nil {
+		anim = v.Anim.Name
 	}
 	rows := [][2]string{
 		{"State", state},
@@ -886,7 +886,7 @@ func (ui *uiState) modelInfoTable(gtx layout.Context, t *fileTab) layout.Dimensi
 	for i, row := range rows {
 		i, row := i, row
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, row[0], row[1], i%2 == 0)
+			return TableRow2(ui, gtx, row[0], row[1], i%2 == 0)
 		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -895,23 +895,23 @@ func (ui *uiState) modelInfoTable(gtx layout.Context, t *fileTab) layout.Dimensi
 // modelMaterialDiagnosticsTable lists each mesh's material reference, source,
 // and decoded image encoding. Repeated materials remain visible per mesh so
 // the reader can identify which geometry uses a missing or unexpected map.
-func (ui *uiState) modelMaterialDiagnosticsTable(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t == nil || t.model == nil || t.model.model == nil {
+func ModelMaterialDiagnosticsTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t == nil || t.Model == nil || t.Model.Model == nil {
 		return layout.Dimensions{}
 	}
-	v := t.model
-	if !v.materialsLoaded && !v.loading {
-		return centeredPanelLabel(gtx, ui.th, "Material lookup has not run", unit.Sp(10), cTextDim)
+	v := t.Model
+	if !v.MaterialsLoaded && !v.Loading {
+		return centeredPanelLabel(gtx, ui.Th, "Material lookup has not run", unit.Sp(10), cTextDim)
 	}
-	if v.loading && len(v.materialDiagnostics) == 0 {
-		return centeredPanelLabel(gtx, ui.th, "Resolving materials…", unit.Sp(10), cTextDim)
+	if v.Loading && len(v.MaterialDiagnostics) == 0 {
+		return centeredPanelLabel(gtx, ui.Th, "Resolving materials…", unit.Sp(10), cTextDim)
 	}
-	rows := make([]layout.FlexChild, 0, len(v.model.Meshes)*3)
-	for meshIndex, mesh := range v.model.Meshes {
+	rows := make([]layout.FlexChild, 0, len(v.Model.Meshes)*3)
+	for meshIndex, mesh := range v.Model.Meshes {
 		if mesh.Material == "" {
 			continue
 		}
-		diag, ok := v.materialDiagnostics[mesh.Material]
+		diag, ok := v.MaterialDiagnostics[mesh.Material]
 		if !ok {
 			diag = modelMaterialDiagnostic{Format: "—", Status: "not resolved"}
 		}
@@ -921,22 +921,22 @@ func (ui *uiState) modelMaterialDiagnosticsTable(gtx layout.Context, t *fileTab)
 		}
 		rows = append(rows,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.tableRow2WithTooltip(gtx, meshLabel, mesh.Material, meshIndex%2 == 0, mesh.Material)
+				return TableRow2WithTooltip(ui, gtx, meshLabel, mesh.Material, meshIndex%2 == 0, mesh.Material)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.tableRow2WithTooltip(gtx, "Format", diagnosticValue(diag.Format), meshIndex%2 != 0, diag.Status)
+				return TableRow2WithTooltip(ui, gtx, "Format", diagnosticValue(diag.Format), meshIndex%2 != 0, diag.Status)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				path := diag.ResolvedPath
 				if path == "" {
 					path = diag.Status
 				}
-				return ui.tableRow2WithTooltip(gtx, "Source", path, meshIndex%2 == 0, diag.ResolvedPath)
+				return TableRow2WithTooltip(ui, gtx, "Source", path, meshIndex%2 == 0, diag.ResolvedPath)
 			}),
 		)
 	}
 	if len(rows) == 0 {
-		return centeredPanelLabel(gtx, ui.th, "No meshes reference a material", unit.Sp(10), cTextDim)
+		return centeredPanelLabel(gtx, ui.Th, "No meshes reference a material", unit.Sp(10), cTextDim)
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
@@ -950,7 +950,7 @@ func diagnosticValue(value string) string {
 
 // modelPlayLabel is what the play button says: the action it will do.
 func modelPlayLabel(v *modelViewer) string {
-	if v.playing {
+	if v.Playing {
 		return "Pause"
 	}
 	return "Play"
@@ -958,15 +958,15 @@ func modelPlayLabel(v *modelViewer) string {
 
 // modelClipLabel is the name of the clip on show and where it is in the list.
 func modelClipLabel(v *modelViewer) string {
-	count := len(v.model.Animations)
+	count := len(v.Model.Animations)
 	if count == 0 {
 		return "no animations"
 	}
 	name := "—"
-	if v.anim != nil {
-		name = v.anim.Name
+	if v.Anim != nil {
+		name = v.Anim.Name
 	}
-	return fmt.Sprintf("%s  [%d/%d]", name, v.animIndex+1, count)
+	return fmt.Sprintf("%s  [%d/%d]", name, v.AnimIndex+1, count)
 }
 
 // onOff renders a boolean for a log line.
@@ -980,28 +980,28 @@ func onOff(b bool) string {
 // toggleSound turns the model's own audio on and off. Turning it off stops what
 // is playing at once, because a sound that keeps going after it was turned off
 // is the one case of this that is actually annoying.
-func (v *modelViewer) toggleSound() {
+func (v *modelViewer) ToggleSound() {
 	if v == nil {
 		return
 	}
-	if v.fxSoundOn {
-		v.fxSoundOn = false
-		if v.fxSound != nil {
-			v.fxSound.StopAll()
+	if v.FxSoundOn {
+		v.FxSoundOn = false
+		if v.FxSound != nil {
+			v.FxSound.StopAll()
 		}
 		log.Printf("3D preview: sound off")
 		return
 	}
-	v.fxSoundOn = true
+	v.FxSoundOn = true
 	log.Printf("3D preview: sound on")
 }
 
 // modelGroundLabel reports whether the unit viewport's ground plane is shown.
 func modelGroundLabel(v *modelViewer) string {
-	if v == nil || v.groundImage == nil {
+	if v == nil || v.GroundImage == nil {
 		return "no ground"
 	}
-	if v.showGround {
+	if v.ShowGround {
 		return "Ground on"
 	}
 	return "Ground off"
@@ -1022,12 +1022,12 @@ const modelZoomStep = 1.15
 
 // zoomBy multiplies the camera distance, keeping it inside the range the viewer
 // allows. A factor above one moves the camera away from the model.
-func (v *modelViewer) zoomBy(factor float64) {
+func (v *modelViewer) ZoomBy(factor float64) {
 	if v == nil || factor <= 0 || factor == 1 {
 		return
 	}
 	v.CameraState = viewer.ZoomBy(v.CameraState, factor)
-	v.invalidate()
+	v.Invalidate()
 }
 
 // modelZoomByDelta turns a scroll amount into the factor it costs the camera.
@@ -1108,15 +1108,15 @@ func modelMeshNames(m *WhmModel) []string {
 // of whatever the clip says: both the software and the hardware renderer skip
 // a mesh whose alpha is 0, so this is the one place that turns the toggle into
 // a mesh that is not drawn.
-func (v *modelViewer) meshAlphas() map[string]float32 {
-	if v == nil || v.model == nil {
+func (v *modelViewer) MeshAlphas() map[string]float32 {
+	if v == nil || v.Model == nil {
 		return nil
 	}
 	var out map[string]float32
-	if v.anim != nil {
+	if v.Anim != nil {
 		// The playhead is normalised over the clip, which is the measure the
 		// visibility keys are written in.
-		out = v.model.MeshAlphas(v.anim.Name, float32(v.time))
+		out = v.Model.MeshAlphas(v.Anim.Name, float32(v.Time))
 	}
 	if len(hiddenMeshes) == 0 {
 		return out
@@ -1124,8 +1124,8 @@ func (v *modelViewer) meshAlphas() map[string]float32 {
 	// Force every hidden mesh of this model to 0 by the mesh's own name,
 	// which is how both renderers look it up. A hidden name that belongs to
 	// another model simply is not in this loop.
-	for i := range v.model.Meshes {
-		name := v.model.Meshes[i].Name
+	for i := range v.Model.Meshes {
+		name := v.Model.Meshes[i].Name
 		if !meshHidden(name) {
 			continue
 		}
@@ -1151,56 +1151,56 @@ const (
 // the one place the presses are read, so a strip laid out in a different shape —
 // the viewport's two narrow rows — does exactly the same as the one under a
 // canvas.
-func (ui *uiState) modelControlClicks(gtx layout.Context, t *fileTab) {
-	v := t.model
-	if t.modelPlay.Clicked(gtx) {
-		if v.anim == nil {
-			v.selectAnim(0)
+func ModelControlClicks(ui *uiState, gtx layout.Context, t *fileTab) {
+	v := t.Model
+	if t.ModelPlay.Clicked(gtx) {
+		if v.Anim == nil {
+			v.SelectAnim(0)
 		}
-		v.playing = !v.playing
-		v.lastFrame = time.Time{}
-		v.invalidate()
+		v.Playing = !v.Playing
+		v.LastFrame = time.Time{}
+		v.Invalidate()
 	}
-	if t.modelPrevAnim.Clicked(gtx) {
-		v.selectAnim(v.animIndex - 1)
+	if t.ModelPrevAnim.Clicked(gtx) {
+		v.SelectAnim(v.AnimIndex - 1)
 	}
-	if t.modelNextAnim.Clicked(gtx) {
-		v.selectAnim(v.animIndex + 1)
+	if t.ModelNextAnim.Clicked(gtx) {
+		v.SelectAnim(v.AnimIndex + 1)
 	}
-	if t.modelStepBack.Clicked(gtx) {
-		v.stepFrame(-1)
-		ui.pickFrameKeyOnTimeline(v)
+	if t.ModelStepBack.Clicked(gtx) {
+		v.StepFrame(-1)
+		PickFrameKeyOnTimeline(ui, v)
 	}
-	if t.modelStepFwd.Clicked(gtx) {
-		v.stepFrame(1)
-		ui.pickFrameKeyOnTimeline(v)
+	if t.ModelStepFwd.Clicked(gtx) {
+		v.StepFrame(1)
+		PickFrameKeyOnTimeline(ui, v)
 	}
-	if t.modelReset.Clicked(gtx) {
-		v.resetCamera()
+	if t.ModelReset.Clicked(gtx) {
+		v.ResetCamera()
 	}
-	if t.modelZoomIn.Clicked(gtx) {
-		v.zoomBy(modelZoomStep)
+	if t.ModelZoomIn.Clicked(gtx) {
+		v.ZoomBy(modelZoomStep)
 	}
-	if t.modelZoomOut.Clicked(gtx) {
-		v.zoomBy(1 / modelZoomStep)
+	if t.ModelZoomOut.Clicked(gtx) {
+		v.ZoomBy(1 / modelZoomStep)
 	}
-	if t.modelSkeleton.Clicked(gtx) {
-		v.showSkeleton = !v.showSkeleton
-		log.Printf("3D preview: skeleton overlay %s", onOff(v.showSkeleton))
-		v.invalidate()
+	if t.ModelSkeleton.Clicked(gtx) {
+		v.ShowSkeleton = !v.ShowSkeleton
+		log.Printf("3D preview: skeleton overlay %s", onOff(v.ShowSkeleton))
+		v.Invalidate()
 	}
-	if t.modelFX.Clicked(gtx) {
-		v.toggleFX()
+	if t.ModelFX.Clicked(gtx) {
+		v.ToggleFX()
 	}
-	if t.modelGround.Clicked(gtx) {
-		v.showGround = !v.showGround
-		log.Printf("3D preview: ground %s", onOff(v.showGround))
-		v.invalidate()
+	if t.ModelGround.Clicked(gtx) {
+		v.ShowGround = !v.ShowGround
+		log.Printf("3D preview: ground %s", onOff(v.ShowGround))
+		v.Invalidate()
 	}
-	if t.modelTexture.Clicked(gtx) {
-		v.textured = !v.textured
-		log.Printf("3D preview: textures %s", onOff(v.textured))
-		v.invalidate()
+	if t.ModelTexture.Clicked(gtx) {
+		v.Textured = !v.Textured
+		log.Printf("3D preview: textures %s", onOff(v.Textured))
+		v.Invalidate()
 	}
 }
 
@@ -1241,7 +1241,7 @@ func uvTextureLabel(material string) string {
 // uvTextureButton is one entry of the texture list. The pressed look is the one
 // the selected rows use, so the choice reads as a choice without a word saying
 // so.
-func (ui *uiState) uvTextureButton(gtx layout.Context, btn *widget.Clickable, label string, on bool) layout.Dimensions {
+func UvTextureButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, on bool) layout.Dimensions {
 	bg, bd, text := cSaveBg, cSaveBd, cText
 	if on {
 		bg, bd, text = cSelectBg, cSelectBd, rgb(0xFFFFFF)
@@ -1249,7 +1249,7 @@ func (ui *uiState) uvTextureButton(gtx layout.Context, btn *widget.Clickable, la
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return frameMeasured(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(3), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), label)
+				l := material.Label(ui.Th, unit.Sp(10), label)
 				l.Color = text
 				l.MaxLines = 1
 				return l.Layout(gtx)
@@ -1261,9 +1261,9 @@ func (ui *uiState) uvTextureButton(gtx layout.Context, btn *widget.Clickable, la
 // ensureUVTextureClicks sizes the texture list's click targets. They are
 // rebuilt per model, so a list of the wrong length is replaced rather than
 // grown into.
-func (v *modelViewer) ensureUVTextureClicks(n int) {
-	if len(v.uvTextureClicks) != n {
-		v.uvTextureClicks = make([]widget.Clickable, n)
+func (v *modelViewer) EnsureUVTextureClicks(n int) {
+	if len(v.UvTextureClicks) != n {
+		v.UvTextureClicks = make([]widget.Clickable, n)
 	}
 }
 
@@ -1280,29 +1280,29 @@ func uvWholeTiles(v float32) bool {
 // modelMaterialsNeedLoad reports whether this viewer has never completed its
 // texture lookup and has no worker in progress.
 func modelMaterialsNeedLoad(t *fileTab) bool {
-	return t != nil && t.model != nil && t.model.model != nil &&
-		t.modelMaterialCh == nil && !t.model.loading && !t.model.materialsLoaded
+	return t != nil && t.Model != nil && t.Model.Model != nil &&
+		t.ModelMaterialCh == nil && !t.Model.Loading && !t.Model.MaterialsLoaded
 }
 
 // layoutModelViewer draws the canvas plus the playback controls.
-func (ui *uiState) layoutModelViewer(gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.model
-	if v == nil || v.model == nil {
-		return centeredPanelLabel(gtx, ui.th, "No model", unit.Sp(10), cTextDim)
+func LayoutModelViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.Model
+	if v == nil || v.Model == nil {
+		return centeredPanelLabel(gtx, ui.Th, "No model", unit.Sp(10), cTextDim)
 	}
 	if modelMaterialsNeedLoad(t) {
-		t.modelMaterialCh = make(chan modelMaterialResult, 1)
-		ui.loadModelMaterials(v, t.modelMaterialCh)
+		t.ModelMaterialCh = make(chan modelMaterialResult, 1)
+		LoadModelMaterials(ui, v, t.ModelMaterialCh)
 	}
 	// The canvas is always laid out, even before the first frame arrives: it is
 	// the canvas that starts the render, so skipping it here would leave the
 	// tab permanently blank.
-	if v.sideControls {
-		return ui.modelCanvasWithFxList(gtx, t)
+	if v.SideControls {
+		return ModelCanvasWithFxList(ui, gtx, t)
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.modelCanvasWithFxList(gtx, t) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelControlsWithUV(gtx, t) }),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ModelCanvasWithFxList(ui, gtx, t) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ModelControlsWithUV(ui, gtx, t) }),
 	)
 }
 
@@ -1348,17 +1348,17 @@ var modelGPUPaintSkipLogged time.Time
 // going to draw them instead. Two copies of this list would drift, and the
 // drift that matters is the one where the picture was not built while the
 // hardware path failed anyway.
-func (ui *uiState) modelGpuUnavailable(v *modelViewer) string {
+func ModelGpuUnavailable(ui *uiState, v *modelViewer) string {
 	switch {
-	case v == nil || v.model == nil:
+	case v == nil || v.Model == nil:
 		return "no model"
-	case ui.forceSoftRenderer:
+	case ui.ForceSoftRenderer:
 		// The settings checkbox wins over every hardware path, in the
 		// textured mode as in the skeleton one.
 		return "software rendering enabled in settings"
-	case v.gpuBroken:
+	case v.GpuBroken:
 		return "hardware path marked broken"
-	case ui.modelGpuRenderer() == nil:
+	case ModelGpuRenderer(ui) == nil:
 		return "no hardware renderer on this window"
 	}
 	return ""
@@ -1369,50 +1369,50 @@ func (ui *uiState) modelGpuUnavailable(v *modelViewer) string {
 // modelGpu opens the hardware renderer on first use and returns it, or nil when
 // there is none. Gio creates the window's GPU along with the first frame, so
 // this cannot be done any earlier.
-func (ui *uiState) modelGpuRenderer() render.Handle {
-	if ui.modelGpuTried {
-		return ui.modelGpu
+func ModelGpuRenderer(ui *uiState) render.Handle {
+	if ui.ModelGpuTried {
+		return ui.ModelGpu
 	}
-	ui.modelGpuTried = true
-	ui.modelGpu = render.NewForWindow(ui.win)
+	ui.ModelGpuTried = true
+	ui.ModelGpu = render.NewForWindow(ui.Win)
 	// A tab can be laid out before the window has drawn its first frame, and
 	// Gio only creates the device then. That is not a verdict on the backend,
 	// so the next layout asks again instead of falling back for good.
-	if ui.modelGpu == nil && render.TooEarly {
-		ui.modelGpuTried = false
+	if ui.ModelGpu == nil && render.TooEarly {
+		ui.ModelGpuTried = false
 	}
-	return ui.modelGpu
+	return ui.ModelGpu
 }
 
-func (ui *uiState) geometryChangedModelGpu(model *WhmModel) {
-	if model == nil || ui.modelGpu == nil {
+func GeometryChangedModelGpu(ui *uiState, model *WhmModel) {
+	if model == nil || ui.ModelGpu == nil {
 		return
 	}
-	ui.modelGpu.GeometryChanged(&model.Model)
+	ui.ModelGpu.GeometryChanged(&model.Model)
 }
 
-func (ui *uiState) forgetModelGpu(model *WhmModel) {
-	if model == nil || ui.modelGpu == nil {
+func ForgetModelGpu(ui *uiState, model *WhmModel) {
+	if model == nil || ui.ModelGpu == nil {
 		return
 	}
-	ui.modelGpu.Forget(&model.Model)
+	ui.ModelGpu.Forget(&model.Model)
 }
 
 // releaseModelGpu frees the hardware renderer and everything it cached.
-func (ui *uiState) releaseModelGpu() {
-	for _, t := range ui.openTabs {
-		if t.model != nil {
-			t.model.gpuFrame = nil
+func ReleaseModelGpu(ui *uiState) {
+	for _, t := range ui.OpenTabs {
+		if t.Model != nil {
+			t.Model.GpuFrame = nil
 		}
 	}
 	// The object window's viewport has a viewer of its own, which is not in
 	// openTabs, so its video memory frame has to go back separately.
-	if ui.unitModel != nil && ui.unitModel.model != nil {
-		ui.unitModel.model.gpuFrame = nil
+	if ui.UnitModel != nil && ui.UnitModel.Model != nil {
+		ui.UnitModel.Model.GpuFrame = nil
 	}
-	if ui.modelGpu != nil {
-		ui.modelGpu.Release()
-		ui.modelGpu = nil
+	if ui.ModelGpu != nil {
+		ui.ModelGpu.Release()
+		ui.ModelGpu = nil
 	}
-	ui.modelGpuTried = false
+	ui.ModelGpuTried = false
 }

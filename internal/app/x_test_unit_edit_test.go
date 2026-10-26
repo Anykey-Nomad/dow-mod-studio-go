@@ -94,8 +94,8 @@ func unitEditUI(t *testing.T) (*uiState, *modtree.ModTree) {
 	})
 	tree.SortAll(tree.Root)
 	ui := newUI(unitTestTheme())
-	ui.modTree = tree
-	ui.modulePath = filepath.Join(tree.AppPath, "GraphTestMod")
+	ui.ModTree = tree
+	ui.ModulePath = filepath.Join(tree.AppPath, "GraphTestMod")
 	selectUnit(t, ui, unitEditTroop)
 	return ui, tree
 }
@@ -128,15 +128,15 @@ func writeSourcedFile(t *testing.T, tree *modtree.ModTree, virtualPath string, d
 // pickers do when a row is chosen.
 func selectUnit(t *testing.T, ui *uiState, virtualPath string) {
 	t.Helper()
-	cat := ui.unitCatalogFor()
-	for i := range cat.races {
-		r := &cat.races[i]
-		for j, u := range r.unitsOf() {
-			if strings.EqualFold(u.path, virtualPath) {
-				ui.unitRaceSel = i
-				ui.unitSel = j
-				ui.unitDetails = nil
-				ui.unitDetailsPath = ""
+	cat := UnitCatalogFor(ui)
+	for i := range cat.Races {
+		r := &cat.Races[i]
+		for j, u := range r.UnitsOf() {
+			if strings.EqualFold(u.Path, virtualPath) {
+				ui.UnitRaceSel = i
+				ui.UnitSel = j
+				ui.UnitDetails = nil
+				ui.UnitDetailsPath = ""
 				return
 			}
 		}
@@ -147,16 +147,16 @@ func selectUnit(t *testing.T, ui *uiState, virtualPath string) {
 // pressing that row of the info list does.
 func selectUnitField(t *testing.T, ui *uiState, label string) *unitField {
 	t.Helper()
-	d := ui.currentUnitDetails()
+	d := CurrentUnitDetails(ui)
 	if d == nil {
 		t.Fatal("no unit is open in the object window")
 	}
-	for i := range d.fields {
-		if d.fields[i].label != label {
+	for i := range d.Fields {
+		if d.Fields[i].Label != label {
 			continue
 		}
-		ui.unitInfoSel = i
-		f := ui.unitInfoFieldSelected()
+		ui.UnitInfoSel = i
+		f := UnitInfoFieldSelected(ui)
 		if f == nil {
 			t.Fatalf("the row %q cannot be edited", label)
 		}
@@ -172,28 +172,28 @@ func selectUnitField(t *testing.T, ui *uiState, label string) *unitField {
 // expected to have none.
 func TestTheInfoRowsCarryTheFieldTheyCameFrom(t *testing.T) {
 	ui, _ := unitEditUI(t)
-	d := ui.currentUnitDetails()
+	d := CurrentUnitDetails(ui)
 	if d == nil {
 		t.Fatal("no unit is open in the object window")
 	}
 	checked := 0
-	for _, row := range d.fields {
-		if strings.HasPrefix(row.group, "Lists") {
-			if row.entry != nil {
-				t.Errorf("the counted row %q claims a field of the file", row.label)
+	for _, row := range d.Fields {
+		if strings.HasPrefix(row.Group, "Lists") {
+			if row.Entry != nil {
+				t.Errorf("the counted row %q claims a field of the file", row.Label)
 			}
 			continue
 		}
-		if row.isLocID {
+		if row.IsLocID {
 			continue
 		}
-		if row.entry == nil {
-			t.Errorf("the row %q has no field behind it, so it cannot be written back", row.label)
+		if row.Entry == nil {
+			t.Errorf("the row %q has no field behind it, so it cannot be written back", row.Label)
 			continue
 		}
 		checked++
-		if got := rgdPathOf(d.file.Root, row.entry); got == "" {
-			t.Errorf("the field of the row %q is not reachable from the file's root", row.label)
+		if got := rgdPathOf(d.File.Root, row.Entry); got == "" {
+			t.Errorf("the field of the row %q is not reachable from the file's root", row.Label)
 		}
 	}
 	if checked < 8 {
@@ -208,22 +208,22 @@ func TestTypingAValueChangesTheUnitAndSavingWritesItIntoTheMod(t *testing.T) {
 	ui, tree := unitEditUI(t)
 	before := rgdLeaves(readRgdAt(t, tree, unitEditTroop).Root)
 	f := selectUnitField(t, ui, "Hit points")
-	if err := ui.applyUnitFieldText(f, "250"); err != nil {
+	if err := ApplyUnitFieldText(ui, f, "250"); err != nil {
 		t.Fatalf("apply 250: %v", err)
 	}
-	if !ui.unitInfoDirty {
+	if !ui.UnitInfoDirty {
 		t.Fatal("a changed value did not mark the unit as unsaved")
 	}
 	// The list is rebuilt from the file, so the row has to show what was typed
 	// and the selection has to have followed the field rather than the index.
-	row := ui.currentUnitDetails().fields[ui.unitInfoSel]
-	if row.label != "Hit points" || row.value != "250" {
-		t.Errorf("the info list now shows %q = %q, want Hit points = 250", row.label, row.value)
+	row := CurrentUnitDetails(ui).Fields[ui.UnitInfoSel]
+	if row.Label != "Hit points" || row.Value != "250" {
+		t.Errorf("the info list now shows %q = %q, want Hit points = 250", row.Label, row.Value)
 	}
-	if _, err := ui.saveUnitDetails(); err != nil {
+	if _, err := SaveUnitDetails(ui); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if ui.unitInfoDirty {
+	if ui.UnitInfoDirty {
 		t.Error("the unit is still marked unsaved after it was written")
 	}
 	after := rgdLeaves(readRgdAt(t, tree, unitEditTroop).Root)
@@ -260,14 +260,14 @@ func TestAValueThatWouldNotParseIsRefusedAndNothingIsWritten(t *testing.T) {
 	}
 	for _, bad := range []string{"lots", "12hp", ""} {
 		f := selectUnitField(t, ui, "Sight range")
-		if err := ui.applyUnitFieldText(f, bad); err == nil {
+		if err := ApplyUnitFieldText(ui, f, bad); err == nil {
 			t.Errorf("%q was accepted for a float field", bad)
 		}
 	}
-	if ui.unitInfoDirty {
+	if ui.UnitInfoDirty {
 		t.Error("a refused value marked the unit as changed")
 	}
-	if _, err := ui.saveUnitDetails(); err == nil {
+	if _, err := SaveUnitDetails(ui); err == nil {
 		t.Error("a unit with nothing valid to save was written anyway")
 	}
 	now, err := os.ReadFile(disk)
@@ -285,16 +285,16 @@ func TestAValueThatWouldNotParseIsRefusedAndNothingIsWritten(t *testing.T) {
 func TestABooleanIsChangedThroughTheSameParserAsATypedValue(t *testing.T) {
 	ui, tree := unitEditUI(t)
 	f := selectUnitField(t, ui, "Can be repaired")
-	if f.entry.Type != rgd.RgdTypeBool {
-		t.Fatalf("the row %q is a %s, not a boolean", f.label, f.entry.TypeLabel())
+	if f.Entry.Type != rgd.RgdTypeBool {
+		t.Fatalf("the row %q is a %s, not a boolean", f.Label, f.Entry.TypeLabel())
 	}
-	if err := ui.applyUnitFieldText(f, unitBoolText(f.entry.BoolVal)); err != nil {
+	if err := ApplyUnitFieldText(ui, f, unitBoolText(f.Entry.BoolVal)); err != nil {
 		t.Fatalf("flip: %v", err)
 	}
-	if got := f.entry.DisplayValue(); got != "True" {
+	if got := f.Entry.DisplayValue(); got != "True" {
 		t.Errorf("the field is now %q, want True", got)
 	}
-	if _, err := ui.saveUnitDetails(); err != nil {
+	if _, err := SaveUnitDetails(ui); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	if got := fieldAt(t, tree, unitEditTroop, "health_ext.can_be_repaired"); got != "True" {
@@ -308,13 +308,13 @@ func TestABooleanIsChangedThroughTheSameParserAsATypedValue(t *testing.T) {
 func TestAValueThatIsAlreadyThereIsNotAChange(t *testing.T) {
 	ui, _ := unitEditUI(t)
 	f := selectUnitField(t, ui, "Speed")
-	if err := ui.applyUnitFieldText(f, f.entry.DisplayValue()); err != nil {
+	if err := ApplyUnitFieldText(ui, f, f.Entry.DisplayValue()); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if ui.unitInfoDirty {
+	if ui.UnitInfoDirty {
 		t.Error("typing what the field already held marked the unit as changed")
 	}
-	if _, err := ui.saveUnitDetails(); err == nil {
+	if _, err := SaveUnitDetails(ui); err == nil {
 		t.Error("an unchanged unit was written out anyway")
 	}
 }
@@ -342,10 +342,10 @@ func TestEditingABaseGameUnitWritesTheModsOwnCopyAndLeavesTheOriginalAlone(t *te
 	}
 	selectUnit(t, ui, unitEditEngine)
 	f := selectUnitField(t, ui, "Hit points")
-	if err := ui.applyUnitFieldText(f, "3100"); err != nil {
+	if err := ApplyUnitFieldText(ui, f, "3100"); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if _, err := ui.saveUnitDetails(); err != nil {
+	if _, err := SaveUnitDetails(ui); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	now, err := os.ReadFile(engineDisk)
@@ -375,16 +375,16 @@ func TestEditingABaseGameUnitWritesTheModsOwnCopyAndLeavesTheOriginalAlone(t *te
 func TestRevertThrowsTheChangeAway(t *testing.T) {
 	ui, tree := unitEditUI(t)
 	f := selectUnitField(t, ui, "Hit points")
-	if err := ui.applyUnitFieldText(f, "1"); err != nil {
+	if err := ApplyUnitFieldText(ui, f, "1"); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	ui.revertUnitDetails()
-	if ui.unitInfoDirty {
+	RevertUnitDetails(ui)
+	if ui.UnitInfoDirty {
 		t.Error("the unit is still marked as changed after being reverted")
 	}
 	f = selectUnitField(t, ui, "Hit points")
-	if f.value != "100" {
-		t.Errorf("the row shows %q after the change was thrown away, want the file's own 100", f.value)
+	if f.Value != "100" {
+		t.Errorf("the row shows %q after the change was thrown away, want the file's own 100", f.Value)
 	}
 	// And the file was never written, so the revert had nothing to undo there.
 	if got := fieldAt(t, tree, unitEditTroop, "health_ext.hitpoints"); got != "100" {
@@ -397,16 +397,16 @@ func TestRevertThrowsTheChangeAway(t *testing.T) {
 // an editor that accepted it would write a number over a list.
 func TestARowThatIsNotAFieldCannotBeSelectedForEditing(t *testing.T) {
 	ui, _ := unitEditUI(t)
-	d := ui.currentUnitDetails()
+	d := CurrentUnitDetails(ui)
 	counts := 0
-	for i := range d.fields {
-		if d.fields[i].entry != nil {
+	for i := range d.Fields {
+		if d.Fields[i].Entry != nil {
 			continue
 		}
 		counts++
-		ui.unitInfoSel = i
-		if f := ui.unitInfoFieldSelected(); f != nil {
-			t.Errorf("the row %q was offered for editing", d.fields[i].label)
+		ui.UnitInfoSel = i
+		if f := UnitInfoFieldSelected(ui); f != nil {
+			t.Errorf("the row %q was offered for editing", d.Fields[i].Label)
 		}
 	}
 	if counts == 0 {
@@ -419,18 +419,18 @@ func TestARowThatIsNotAFieldCannotBeSelectedForEditing(t *testing.T) {
 // panicking is a view, and one that never draws is not.
 func TestThePanelDrawsOverEachKindOfField(t *testing.T) {
 	ui, _ := unitEditUI(t)
-	d := ui.currentUnitDetails()
+	d := CurrentUnitDetails(ui)
 	seen := map[uint32]bool{}
-	for i := range d.fields {
+	for i := range d.Fields {
 		f := unitInfoFieldAt(d, i)
 		if f == nil {
 			continue
 		}
-		if f.entry != nil {
-			seen[f.entry.Type] = true
+		if f.Entry != nil {
+			seen[f.Entry.Type] = true
 		}
-		ui.unitInfoSel = i
-		ui.layoutUnitFieldPanel(unitTestContext(), ui.currentUnitSection())
+		ui.UnitInfoSel = i
+		LayoutUnitFieldPanel(ui, unitTestContext(), CurrentUnitSection(ui))
 	}
 	for _, typ := range []uint32{rgd.RgdTypeFloat, rgd.RgdTypeBool, rgd.RgdTypeString} {
 		if !seen[typ] {
@@ -445,26 +445,26 @@ func TestThePanelDrawsOverEachKindOfField(t *testing.T) {
 // unit would have shown a name in the app and none at all in the game.
 func TestAFieldPointedAtANewStringIsWrittenOutWithTheUnit(t *testing.T) {
 	ui, tree := unitEditUI(t)
-	d := ui.currentUnitDetails()
-	nameField := rgdFindPath(d.file.Root, "ui_ext", "ui_info", "screen_name_id")
+	d := CurrentUnitDetails(ui)
+	nameField := rgdFindPath(d.File.Root, "ui_ext", "ui_info", "screen_name_id")
 	if nameField == nil {
 		t.Fatal("the fixture unit has no screen name field")
 	}
 	nameField.WStrVal = "$1000000123"
-	ui.markUnitFieldDirty(nameField)
-	if !ui.unitInfoDirty {
+	MarkUnitFieldDirty(ui, nameField)
+	if !ui.UnitInfoDirty {
 		t.Fatal("a field of the unit on screen was changed and the unit was not marked unsaved")
 	}
-	if _, err := ui.saveUnitDetails(); err != nil {
+	if _, err := SaveUnitDetails(ui); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	if got := fieldAt(t, tree, unitEditTroop, "ui_ext.ui_info.screen_name_id"); got != "$1000000123" {
 		t.Errorf("the file says the screen name is %q, want the new id", got)
 	}
 	// A field of some other file is not the unit's business.
-	ui.unitInfoDirty = false
-	ui.markUnitFieldDirty(rgdTemplateFloat("somewhere_else", 1))
-	if ui.unitInfoDirty {
+	ui.UnitInfoDirty = false
+	MarkUnitFieldDirty(ui, rgdTemplateFloat("somewhere_else", 1))
+	if ui.UnitInfoDirty {
 		t.Error("a field of another file marked this unit as changed")
 	}
 }
@@ -477,12 +477,12 @@ func TestAFieldPointedAtANewStringIsWrittenOutWithTheUnit(t *testing.T) {
 // editor.
 func TestTheAttributeEditorDrawsInAWholeWindow(t *testing.T) {
 	ui, _ := unitEditUI(t)
-	ui.openUnitTab()
-	ui.unitSection = unitSectionNamed("Unit info")
-	d := ui.currentUnitDetails()
+	OpenUnitTab(ui)
+	ui.UnitSection = unitSectionNamed("Unit info")
+	d := CurrentUnitDetails(ui)
 	f := newWindowFrame(ui, 1000, 700)
-	if got := len(ui.unitInfoClicks); got != len(d.fields) {
-		t.Errorf("the info list has %d click targets for %d rows", got, len(d.fields))
+	if got := len(ui.UnitInfoClicks); got != len(d.Fields) {
+		t.Errorf("the info list has %d click targets for %d rows", got, len(d.Fields))
 	}
 	f.frame()
 }
@@ -524,8 +524,8 @@ func rgdLeaves(root *rgd.RgdEntry) map[string]string {
 func unitFieldValue(t *testing.T, fields []unitField, label string) (string, bool) {
 	t.Helper()
 	for _, f := range fields {
-		if f.label == label {
-			return f.value, true
+		if f.Label == label {
+			return f.Value, true
 		}
 	}
 	return "", false
@@ -557,13 +557,13 @@ func parseCountValue(s string) (n int, noun string) {
 func TestUnitInfoReadsThePreviouslyHiddenSections(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	race := cat.findRace("necrons")
+	race := cat.FindRace("necrons")
 	if race == nil {
 		t.Fatal("necrons missing from the catalog")
 	}
 	var lord *unitEntry
-	for _, u := range race.unitsOf() {
-		if u.name == "necron_lord" && u.kind == unitKindTroop {
+	for _, u := range race.UnitsOf() {
+		if u.Name == "necron_lord" && u.Kind == unitKindTroop {
 			lord = &u
 			break
 		}
@@ -572,8 +572,8 @@ func TestUnitInfoReadsThePreviouslyHiddenSections(t *testing.T) {
 		t.Fatal("necron_lord is not in the necrons catalog")
 	}
 	d := loadUnitDetails(tree, *lord)
-	if d.error != "" {
-		t.Fatalf("could not read the unit: %v", d.error)
+	if d.Error != "" {
+		t.Fatalf("could not read the unit: %v", d.Error)
 	}
 	// A lord is a one-model unit, so its armour and morale are the values the
 	// game's own balance gives it; the point is that the numbers are the file's
@@ -590,9 +590,9 @@ func TestUnitInfoReadsThePreviouslyHiddenSections(t *testing.T) {
 		"Melee leap damage":   "",
 	}
 	for label := range want {
-		v, ok := unitFieldValue(t, d.fields, label)
+		v, ok := unitFieldValue(t, d.Fields, label)
 		if !ok {
-			t.Errorf("the info list has no %q row; it has %v", label, labelList(d.fields))
+			t.Errorf("the info list has no %q row; it has %v", label, labelList(d.Fields))
 			continue
 		}
 		if strings.TrimSpace(v) == "" {
@@ -601,12 +601,12 @@ func TestUnitInfoReadsThePreviouslyHiddenSections(t *testing.T) {
 	}
 	// The values must agree with the file rather than with each other, so one
 	// is checked directly against the parsed entry.
-	rf := d.file
-	if got, want := unitFieldMust(t, d.fields, "Hit points"),
+	rf := d.File
+	if got, want := unitFieldMust(t, d.Fields, "Hit points"),
 		rgdEntryStr(rgdFindPath(rf.Root, "health_ext", "hitpoints")); got != want {
 		t.Errorf("Hit points shows %q but the file says %q", got, want)
 	}
-	if got, want := unitFieldMust(t, d.fields, "Speed"),
+	if got, want := unitFieldMust(t, d.Fields, "Speed"),
 		rgdEntryStr(rgdFindPath(rf.Root, "moving_ext", "speed_max")); got != want {
 		t.Errorf("Speed shows %q but the file says %q", got, want)
 	}
@@ -628,35 +628,35 @@ func unitFieldMust(t *testing.T, fields []unitField, label string) string {
 func TestUnitInfoGroupsAreMarkedOnce(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	race := cat.findRace("necrons")
+	race := cat.FindRace("necrons")
 	if race == nil {
 		t.Fatal("necrons missing from the catalog")
 	}
-	d := loadUnitDetails(tree, race.unitsOf()[0])
-	if d.error != "" {
-		t.Fatalf("could not read the unit: %v", d.error)
+	d := loadUnitDetails(tree, race.UnitsOf()[0])
+	if d.Error != "" {
+		t.Fatalf("could not read the unit: %v", d.Error)
 	}
-	if len(d.fields) < 40 {
-		t.Fatalf("the info list has only %d rows, so this proves nothing", len(d.fields))
+	if len(d.Fields) < 40 {
+		t.Fatalf("the info list has only %d rows, so this proves nothing", len(d.Fields))
 	}
 	seen := map[string]int{}
 	lastGroup := ""
-	for i, f := range d.fields {
-		if f.group == "" {
+	for i, f := range d.Fields {
+		if f.Group == "" {
 			// The ungrouped rows are the name and the hotkey, which lead the
 			// list. A group after one of them would mean a heading was lost.
 			continue
 		}
-		if f.group != lastGroup {
-			if !f.startsGroup {
+		if f.Group != lastGroup {
+			if !f.StartsGroup {
 				t.Errorf("row %d (%s/%s) continues a group without being marked as its start",
-					i, f.group, f.label)
+					i, f.Group, f.Label)
 			}
-			seen[f.group]++
-			lastGroup = f.group
-		} else if f.startsGroup {
+			seen[f.Group]++
+			lastGroup = f.Group
+		} else if f.StartsGroup {
 			t.Errorf("row %d (%s/%s) is marked as a group start but continues the group above",
-				i, f.group, f.label)
+				i, f.Group, f.Label)
 		}
 	}
 	if len(seen) < 8 {
@@ -680,30 +680,30 @@ func TestUnitInfoCountsSkipEmptySections(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
 	shown := 0
-	for _, u := range cat.allUnits() {
-		if u.kind != unitKindTroop {
+	for _, u := range cat.AllUnits() {
+		if u.Kind != unitKindTroop {
 			continue
 		}
 		d := loadUnitDetails(tree, u)
-		if d.error != "" {
+		if d.Error != "" {
 			continue
 		}
-		for _, f := range d.fields {
-			if f.group == "Lists" {
+		for _, f := range d.Fields {
+			if f.Group == "Lists" {
 				// A count is either a range of real entries or nothing at all:
 				// the row is skipped when it is zero, so a row reading zero
 				// would mean the counter was shown rather than its result
 				// suppressed. The value is parsed rather than pattern-matched
 				// because "10 entries" ends in "0 entries".
-				n, noun := parseCountValue(f.value)
+				n, noun := parseCountValue(f.Value)
 				if noun == "" {
-					t.Errorf("%s shows %s = %q, which is not a count at all", u.name, f.label, f.value)
+					t.Errorf("%s shows %s = %q, which is not a count at all", u.Name, f.Label, f.Value)
 				} else if n == 0 {
-					t.Errorf("%s shows a zero count: %s = %s", u.name, f.label, f.value)
+					t.Errorf("%s shows a zero count: %s = %s", u.Name, f.Label, f.Value)
 				} else if n == 1 && noun != "entry" {
-					t.Errorf("%s shows %s = %q, want the singular for one", u.name, f.label, f.value)
+					t.Errorf("%s shows %s = %q, want the singular for one", u.Name, f.Label, f.Value)
 				} else if n > 1 && noun != "entries" {
-					t.Errorf("%s shows %s = %q, want the plural for %d", u.name, f.label, f.value, n)
+					t.Errorf("%s shows %s = %q, want the plural for %d", u.Name, f.Label, f.Value, n)
 				}
 				shown++
 			}
@@ -724,15 +724,15 @@ func TestUnitInfoModifierCountIsNotTheTemplate(t *testing.T) {
 	cat := buildUnitCatalog(tree)
 	counts := map[string]int{}
 	distinct := 0
-	for _, u := range cat.allUnits() {
-		if u.kind != unitKindTroop {
+	for _, u := range cat.AllUnits() {
+		if u.Kind != unitKindTroop {
 			continue
 		}
 		d := loadUnitDetails(tree, u)
-		if d.error != "" {
+		if d.Error != "" {
 			continue
 		}
-		if v, ok := unitFieldValue(t, d.fields, "Modifiers"); ok {
+		if v, ok := unitFieldValue(t, d.Fields, "Modifiers"); ok {
 			counts[v]++
 			distinct++
 		}
@@ -769,11 +769,11 @@ func TestUnitInfoScalarsAreRealPaths(t *testing.T) {
 	seen := make([]int, len(unitInfoScalars))
 	notScalar := map[string]bool{}
 	checked := 0
-	for _, u := range cat.allUnits() {
-		if u.kind != unitKindTroop {
+	for _, u := range cat.AllUnits() {
+		if u.Kind != unitKindTroop {
 			continue
 		}
-		data, err := tree.ReadFile(u.path)
+		data, err := tree.ReadFile(u.Path)
 		if err != nil {
 			continue
 		}
@@ -838,13 +838,13 @@ func TestUnitInfoListsAreDistinctGroups(t *testing.T) {
 func TestUnitListCountOnAMissingSection(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	race := cat.findRace("necrons")
+	race := cat.FindRace("necrons")
 	if race == nil {
 		t.Fatal("necrons missing")
 	}
 	var tau *unitEntry
-	for _, u := range race.unitsOf() {
-		if u.name == "tau_crisis_suit" && u.kind == unitKindTroop {
+	for _, u := range race.UnitsOf() {
+		if u.Name == "tau_crisis_suit" && u.Kind == unitKindTroop {
 			tau = &u
 		}
 	}
@@ -852,7 +852,7 @@ func TestUnitListCountOnAMissingSection(t *testing.T) {
 		t.Skip("tau_crisis_suit not in the catalog")
 	}
 	_ = race
-	data, err := tree.ReadFile(tau.path)
+	data, err := tree.ReadFile(tau.Path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -928,8 +928,8 @@ func keySelViewer() *modelViewer {
 		Bones: []WhmBone{{Name: "root", Parent: -1, Pos: [3]float32{1, 2, 3}}},
 	}
 	return &modelViewer{
-		model: model,
-		anim: &WhmAnimation{
+		Model: model,
+		Anim: &WhmAnimation{
 			Name:      "clip",
 			NumFrames: frames,
 			Bones: []WhmTrack{{
@@ -945,9 +945,9 @@ func keySelViewer() *modelViewer {
 				},
 			}},
 		},
-		boneIndex:    0,
-		boneKeyIndex: -1,
-		boneKeyMode:  -1,
+		BoneIndex:    0,
+		BoneKeyIndex: -1,
+		BoneKeyMode:  -1,
 	}
 }
 
@@ -956,24 +956,24 @@ func keySelViewer() *modelViewer {
 // starts from.
 func keySelUI(v *modelViewer) *uiState {
 	ui := newUI(unitTestTheme())
-	ui.bindBoneKeySelection(v)
+	BindBoneKeySelection(ui, v)
 	return ui
 }
 
 // keySelPosFrames and keySelRotFrames read the track back as frames, which is
 // what both the list and the strip call the place a key stands.
 func keySelPosFrames(v *modelViewer) []int {
-	out := make([]int, 0, len(v.boneTrack().PosKey))
-	for _, k := range v.boneTrack().PosKey {
-		out = append(out, frameAt(float64(k.Time), v.anim.NumFrames))
+	out := make([]int, 0, len(v.BoneTrack().PosKey))
+	for _, k := range v.BoneTrack().PosKey {
+		out = append(out, frameAt(float64(k.Time), v.Anim.NumFrames))
 	}
 	return out
 }
 
 func keySelRotFrames(v *modelViewer) []int {
-	out := make([]int, 0, len(v.boneTrack().RotKey))
-	for _, k := range v.boneTrack().RotKey {
-		out = append(out, frameAt(float64(k.Time), v.anim.NumFrames))
+	out := make([]int, 0, len(v.BoneTrack().RotKey))
+	for _, k := range v.BoneTrack().RotKey {
+		out = append(out, frameAt(float64(k.Time), v.Anim.NumFrames))
 	}
 	return out
 }
@@ -993,7 +993,7 @@ func keySelFramesEqual(got, want []int) bool {
 func TestKeyFrameRowsAreListedPositionKeysThenRotationKeys(t *testing.T) {
 	v := keySelViewer()
 	want := []boneKeyRef{{mode: 0, frame: 2}, {mode: 0, frame: 5}, {mode: 1, frame: 3}, {mode: 1, frame: 7}}
-	got := v.boneKeyRefs()
+	got := v.BoneKeyRefs()
 	if len(got) != len(want) {
 		t.Fatalf("the list has %d rows, want %d (%v)", len(got), len(want), got)
 	}
@@ -1006,23 +1006,23 @@ func TestKeyFrameRowsAreListedPositionKeysThenRotationKeys(t *testing.T) {
 
 func TestInsertBoneKeyCopyTakesTheValueOfTheKeyItCopies(t *testing.T) {
 	v := keySelViewer()
-	if !v.insertBoneKeyCopy(4, 0, 2) {
+	if !v.InsertBoneKeyCopy(4, 0, 2) {
 		t.Fatal("frame 4 carries no key, so a copy of frame 2 was refused")
 	}
 	if got, want := keySelPosFrames(v), []int{2, 4, 5}; !keySelFramesEqual(got, want) {
 		t.Fatalf("the position keys sit on frames %v, want %v — the track has to stay sorted", got, want)
 	}
-	if got := v.boneTrack().PosKey[1].V; got != [3]float32{1, 2, 3} {
+	if got := v.BoneTrack().PosKey[1].V; got != [3]float32{1, 2, 3} {
 		t.Errorf("the new key holds %v, want the copied [1 2 3]", got)
 	}
-	if ref, ok := v.pickedBoneKeyRef(); !ok || ref != (boneKeyRef{mode: 0, frame: 4}) {
+	if ref, ok := v.PickedBoneKeyRef(); !ok || ref != (boneKeyRef{mode: 0, frame: 4}) {
 		t.Errorf("the picked key is %+v (ok=%v), want the new one on frame 4", ref, ok)
 	}
 }
 
 func TestInsertBoneKeyCopyRefusesAFrameThatAlreadyHasAKey(t *testing.T) {
 	v := keySelViewer()
-	if v.insertBoneKeyCopy(2, 0, 5) {
+	if v.InsertBoneKeyCopy(2, 0, 5) {
 		t.Error("a second position key landed on frame 2, which already holds one")
 	}
 	if got := keySelPosFrames(v); len(got) != 2 {
@@ -1032,25 +1032,25 @@ func TestInsertBoneKeyCopyRefusesAFrameThatAlreadyHasAKey(t *testing.T) {
 
 func TestFreeBoneKeyFrameWalksOutToAFreeFrame(t *testing.T) {
 	v := keySelViewer()
-	if got := v.freeBoneKeyFrame(5, 0, -1); got != 4 {
+	if got := v.FreeBoneKeyFrame(5, 0, -1); got != 4 {
 		t.Errorf("the frame before position key 5 is %d, want 4", got)
 	}
 	// A run of taken frames is walked past rather than refused: insert a
 	// position key on 4 and the free frame before 5 becomes 3.
-	if !v.insertBoneKeyCopy(4, 0, 2) {
+	if !v.InsertBoneKeyCopy(4, 0, 2) {
 		t.Fatal("the key on frame 4 could not be inserted for the walk")
 	}
-	if got := v.freeBoneKeyFrame(5, 0, -1); got != 3 {
+	if got := v.FreeBoneKeyFrame(5, 0, -1); got != 3 {
 		t.Errorf("with frame 4 taken the free frame before 5 is %d, want 3", got)
 	}
 	// The other kind has its own keys: frame 4 is free for a rotation.
-	if got := v.freeBoneKeyFrame(5, 1, -1); got != 4 {
+	if got := v.FreeBoneKeyFrame(5, 1, -1); got != 4 {
 		t.Errorf("rotation keys do not stand on frame 4, so the free frame is %d, want 4", got)
 	}
-	if got := v.freeBoneKeyFrame(0, 0, -1); got != -1 {
+	if got := v.FreeBoneKeyFrame(0, 0, -1); got != -1 {
 		t.Errorf("there is no frame before 0, got %d", got)
 	}
-	if got := v.freeBoneKeyFrame(v.anim.NumFrames-1, 0, 1); got != -1 {
+	if got := v.FreeBoneKeyFrame(v.Anim.NumFrames-1, 0, 1); got != -1 {
 		t.Errorf("there is no frame after the last one, got %d", got)
 	}
 }
@@ -1059,29 +1059,29 @@ func TestDeleteBoneKeyAtKeepsThePickedKeyAimedAtItself(t *testing.T) {
 	v := keySelViewer()
 	// The position key on frame 5 is picked: it is the second of its kind,
 	// so taking the key on frame 2 out slides its index down.
-	v.boneKeyIndex, v.boneKeyMode = 1, 0
-	if !v.deleteBoneKeyAt(2, 0) {
+	v.BoneKeyIndex, v.BoneKeyMode = 1, 0
+	if !v.DeleteBoneKeyAt(2, 0) {
 		t.Fatal("the key on frame 2 was not removed")
 	}
 	if got, want := keySelPosFrames(v), []int{5}; !keySelFramesEqual(got, want) {
 		t.Fatalf("the position keys sit on frames %v, want %v", got, want)
 	}
-	if v.boneKeyIndex != 0 || v.boneKeyMode != 0 {
-		t.Fatalf("the picked key is now (idx %d, mode %d), want (0, 0)", v.boneKeyIndex, v.boneKeyMode)
+	if v.BoneKeyIndex != 0 || v.BoneKeyMode != 0 {
+		t.Fatalf("the picked key is now (idx %d, mode %d), want (0, 0)", v.BoneKeyIndex, v.BoneKeyMode)
 	}
-	if ref, ok := v.pickedBoneKeyRef(); !ok || ref != (boneKeyRef{mode: 0, frame: 5}) {
+	if ref, ok := v.PickedBoneKeyRef(); !ok || ref != (boneKeyRef{mode: 0, frame: 5}) {
 		t.Errorf("the picked key is %+v (ok=%v), want the one still standing on frame 5", ref, ok)
 	}
 }
 
 func TestDeleteBoneKeyAtClearsThePickedKeyWhenItIsTheOne(t *testing.T) {
 	v := keySelViewer()
-	v.boneKeyIndex, v.boneKeyMode = 0, 0
-	if !v.deleteBoneKeyAt(2, 0) {
+	v.BoneKeyIndex, v.BoneKeyMode = 0, 0
+	if !v.DeleteBoneKeyAt(2, 0) {
 		t.Fatal("the picked key was not removed")
 	}
-	if v.boneKeyIndex != -1 || v.boneKeyMode != -1 {
-		t.Errorf("the picked key is now (idx %d, mode %d), want nothing picked", v.boneKeyIndex, v.boneKeyMode)
+	if v.BoneKeyIndex != -1 || v.BoneKeyMode != -1 {
+		t.Errorf("the picked key is now (idx %d, mode %d), want nothing picked", v.BoneKeyIndex, v.BoneKeyMode)
 	}
 	if got, want := keySelPosFrames(v), []int{5}; !keySelFramesEqual(got, want) {
 		t.Errorf("the position keys sit on frames %v, want %v", got, want)
@@ -1090,75 +1090,75 @@ func TestDeleteBoneKeyAtClearsThePickedKeyWhenItIsTheOne(t *testing.T) {
 
 func TestRowClickPicksOneRowAndCtrlClickGathersMore(t *testing.T) {
 	v := keySelViewer()
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	ui := keySelUI(v)
 
-	ui.boneKeyRowClicked(v, refs[1], refs, 0)
-	if len(ui.unitBoneKeySel) != 1 || !ui.unitBoneKeySel[refs[1]] {
-		t.Fatalf("a plain click picked %v, want just row %+v", ui.unitBoneKeySel, refs[1])
+	BoneKeyRowClicked(ui, v, refs[1], refs, 0)
+	if len(ui.UnitBoneKeySel) != 1 || !ui.UnitBoneKeySel[refs[1]] {
+		t.Fatalf("a plain click picked %v, want just row %+v", ui.UnitBoneKeySel, refs[1])
 	}
-	if v.boneKeyIndex != 1 || v.boneKeyMode != 0 {
-		t.Errorf("the picked key is (idx %d, mode %d), want the clicked row (1, 0)", v.boneKeyIndex, v.boneKeyMode)
+	if v.BoneKeyIndex != 1 || v.BoneKeyMode != 0 {
+		t.Errorf("the picked key is (idx %d, mode %d), want the clicked row (1, 0)", v.BoneKeyIndex, v.BoneKeyMode)
 	}
 
-	ui.boneKeyRowClicked(v, refs[0], refs, key.ModCtrl)
-	if len(ui.unitBoneKeySel) != 2 || !ui.unitBoneKeySel[refs[0]] {
-		t.Fatalf("Ctrl+click gathered %v, want both rows", ui.unitBoneKeySel)
+	BoneKeyRowClicked(ui, v, refs[0], refs, key.ModCtrl)
+	if len(ui.UnitBoneKeySel) != 2 || !ui.UnitBoneKeySel[refs[0]] {
+		t.Fatalf("Ctrl+click gathered %v, want both rows", ui.UnitBoneKeySel)
 	}
 
 	// Ctrl+clicking a picked row takes it away, and the key the fields work
 	// on moves to the row still picked rather than one that no longer says
 	// so on the list.
-	ui.boneKeyRowClicked(v, refs[1], refs, key.ModCtrl)
-	if len(ui.unitBoneKeySel) != 1 || !ui.unitBoneKeySel[refs[0]] {
-		t.Fatalf("the second Ctrl+click left %v, want the first row alone", ui.unitBoneKeySel)
+	BoneKeyRowClicked(ui, v, refs[1], refs, key.ModCtrl)
+	if len(ui.UnitBoneKeySel) != 1 || !ui.UnitBoneKeySel[refs[0]] {
+		t.Fatalf("the second Ctrl+click left %v, want the first row alone", ui.UnitBoneKeySel)
 	}
-	if v.boneKeyIndex != 0 || v.boneKeyMode != 0 {
-		t.Errorf("the picked key is (idx %d, mode %d), want the row still picked (0, 0)", v.boneKeyIndex, v.boneKeyMode)
+	if v.BoneKeyIndex != 0 || v.BoneKeyMode != 0 {
+		t.Errorf("the picked key is (idx %d, mode %d), want the row still picked (0, 0)", v.BoneKeyIndex, v.BoneKeyMode)
 	}
 
 	// And taking the last one away leaves nothing picked at all.
-	ui.boneKeyRowClicked(v, refs[0], refs, key.ModCtrl)
-	if len(ui.unitBoneKeySel) != 0 {
-		t.Errorf("the selection still holds %v after its last row was taken away", ui.unitBoneKeySel)
+	BoneKeyRowClicked(ui, v, refs[0], refs, key.ModCtrl)
+	if len(ui.UnitBoneKeySel) != 0 {
+		t.Errorf("the selection still holds %v after its last row was taken away", ui.UnitBoneKeySel)
 	}
-	if v.boneKeyIndex != -1 || v.boneKeyMode != -1 {
-		t.Errorf("the picked key is (idx %d, mode %d), want nothing picked", v.boneKeyIndex, v.boneKeyMode)
+	if v.BoneKeyIndex != -1 || v.BoneKeyMode != -1 {
+		t.Errorf("the picked key is (idx %d, mode %d), want nothing picked", v.BoneKeyIndex, v.BoneKeyMode)
 	}
-	if got := ui.boneKeyActionRefs(v); len(got) != 0 {
+	if got := BoneKeyActionRefs(ui, v); len(got) != 0 {
 		t.Errorf("the buttons would act on %v while the list has nothing picked", got)
 	}
 }
 
 func TestShiftClickSpansFromTheAnchor(t *testing.T) {
 	v := keySelViewer()
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	ui := keySelUI(v)
 
-	ui.boneKeyRowClicked(v, refs[1], refs, 0)            // the anchor: position key on frame 5
-	ui.boneKeyRowClicked(v, refs[3], refs, key.ModShift) // rotation key on frame 7
+	BoneKeyRowClicked(ui, v, refs[1], refs, 0)            // the anchor: position key on frame 5
+	BoneKeyRowClicked(ui, v, refs[3], refs, key.ModShift) // rotation key on frame 7
 	want := map[boneKeyRef]bool{refs[1]: true, refs[2]: true, refs[3]: true}
-	if len(ui.unitBoneKeySel) != len(want) {
-		t.Fatalf("Shift+click picked %v, want the %d rows between the anchor and the click", ui.unitBoneKeySel, len(want))
+	if len(ui.UnitBoneKeySel) != len(want) {
+		t.Fatalf("Shift+click picked %v, want the %d rows between the anchor and the click", ui.UnitBoneKeySel, len(want))
 	}
 	for ref := range want {
-		if !ui.unitBoneKeySel[ref] {
-			t.Errorf("row %+v is missing from %v", ref, ui.unitBoneKeySel)
+		if !ui.UnitBoneKeySel[ref] {
+			t.Errorf("row %+v is missing from %v", ref, ui.UnitBoneKeySel)
 		}
 	}
-	if ui.unitBoneKeySel[refs[0]] {
-		t.Errorf("row %+v lies before the anchor and was picked all the same: %v", refs[0], ui.unitBoneKeySel)
+	if ui.UnitBoneKeySel[refs[0]] {
+		t.Errorf("row %+v lies before the anchor and was picked all the same: %v", refs[0], ui.UnitBoneKeySel)
 	}
 }
 
 func TestDeleteTakesEveryPickedRowAway(t *testing.T) {
 	v := keySelViewer()
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	ui := keySelUI(v)
 
-	ui.boneKeyRowClicked(v, refs[0], refs, 0)           // position key on frame 2
-	ui.boneKeyRowClicked(v, refs[3], refs, key.ModCtrl) // rotation key on frame 7
-	ui.deleteBoneKeysAction(v)
+	BoneKeyRowClicked(ui, v, refs[0], refs, 0)           // position key on frame 2
+	BoneKeyRowClicked(ui, v, refs[3], refs, key.ModCtrl) // rotation key on frame 7
+	DeleteBoneKeysAction(ui, v)
 
 	if got, want := keySelPosFrames(v), []int{5}; !keySelFramesEqual(got, want) {
 		t.Errorf("the position keys sit on frames %v, want %v", got, want)
@@ -1166,14 +1166,14 @@ func TestDeleteTakesEveryPickedRowAway(t *testing.T) {
 	if got, want := keySelRotFrames(v), []int{3}; !keySelFramesEqual(got, want) {
 		t.Errorf("the rotation keys sit on frames %v, want %v", got, want)
 	}
-	if len(ui.unitBoneKeySel) != 0 {
-		t.Errorf("the selection kept %v after the keys it named were removed", ui.unitBoneKeySel)
+	if len(ui.UnitBoneKeySel) != 0 {
+		t.Errorf("the selection kept %v after the keys it named were removed", ui.UnitBoneKeySel)
 	}
-	if !ui.unitModelWhmDirty {
+	if !ui.UnitModelWhmDirty {
 		t.Error("removing keys did not mark the file for Save WHM")
 	}
-	if ui.unitBoneKeyErr != "" {
-		t.Errorf("the note after a successful delete says %q", ui.unitBoneKeyErr)
+	if ui.UnitBoneKeyErr != "" {
+		t.Errorf("the note after a successful delete says %q", ui.UnitBoneKeyErr)
 	}
 }
 
@@ -1181,13 +1181,13 @@ func TestKeyButtonsFallBackToTheStripPickedKey(t *testing.T) {
 	v := keySelViewer()
 	ui := keySelUI(v)
 	// No row has been clicked: the strip picked the position key on frame 5.
-	v.boneKeyIndex, v.boneKeyMode = 1, 0
+	v.BoneKeyIndex, v.BoneKeyMode = 1, 0
 
-	got := ui.boneKeyActionRefs(v)
+	got := BoneKeyActionRefs(ui, v)
 	if len(got) != 1 || got[0] != (boneKeyRef{mode: 0, frame: 5}) {
 		t.Fatalf("the buttons would act on %v, want the single key the strip picked", got)
 	}
-	ui.deleteBoneKeysAction(v)
+	DeleteBoneKeysAction(ui, v)
 	if frames := keySelPosFrames(v); !keySelFramesEqual(frames, []int{2}) {
 		t.Errorf("the position keys sit on frames %v, want [2]", frames)
 	}
@@ -1195,76 +1195,76 @@ func TestKeyButtonsFallBackToTheStripPickedKey(t *testing.T) {
 
 func TestPickedRowsLeaveTheSelectionWhenTheirKeysGo(t *testing.T) {
 	v := keySelViewer()
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	ui := keySelUI(v)
 
-	ui.boneKeyRowClicked(v, refs[0], refs, 0)
+	BoneKeyRowClicked(ui, v, refs[0], refs, 0)
 	// The key is carried off its frame some other way — a drag on the strip
 	// dropped it onto another — and the row must not go on naming that frame.
-	if !v.deleteBoneKeyAt(2, 0) {
+	if !v.DeleteBoneKeyAt(2, 0) {
 		t.Fatal("the key on frame 2 was not removed")
 	}
-	if got := ui.pickedBoneKeyRefs(v); len(got) != 0 {
+	if got := PickedBoneKeyRefs(ui, v); len(got) != 0 {
 		t.Errorf("the selection still holds %v for keys that are gone", got)
 	}
-	if len(ui.unitBoneKeySel) != 0 {
-		t.Errorf("the selection map kept %v", ui.unitBoneKeySel)
+	if len(ui.UnitBoneKeySel) != 0 {
+		t.Errorf("the selection map kept %v", ui.UnitBoneKeySel)
 	}
 }
 
 func TestAnotherBoneStartsAFreshSelection(t *testing.T) {
 	v := keySelViewer()
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	ui := keySelUI(v)
-	ui.boneKeyRowClicked(v, refs[0], refs, 0)
+	BoneKeyRowClicked(ui, v, refs[0], refs, 0)
 
-	v.model.Bones = append(v.model.Bones, WhmBone{Name: "child", Parent: 0})
-	v.boneIndex = 1
-	ui.bindBoneKeySelection(v)
-	if len(ui.unitBoneKeySel) != 0 {
-		t.Errorf("the rows picked on the last bone were carried over: %v", ui.unitBoneKeySel)
+	v.Model.Bones = append(v.Model.Bones, WhmBone{Name: "child", Parent: 0})
+	v.BoneIndex = 1
+	BindBoneKeySelection(ui, v)
+	if len(ui.UnitBoneKeySel) != 0 {
+		t.Errorf("the rows picked on the last bone were carried over: %v", ui.UnitBoneKeySel)
 	}
-	if ui.unitBoneKeySelAnchor != (boneKeyRef{mode: -1}) {
-		t.Errorf("the anchor still stands on %+v after the bone changed", ui.unitBoneKeySelAnchor)
+	if ui.UnitBoneKeySelAnchor != (boneKeyRef{mode: -1}) {
+		t.Errorf("the anchor still stands on %+v after the bone changed", ui.UnitBoneKeySelAnchor)
 	}
 }
 
 func TestAddBeforeGivesEveryPickedRowItsOwnFrame(t *testing.T) {
 	v := keySelViewer()
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	ui := keySelUI(v)
 
-	ui.boneKeyRowClicked(v, refs[0], refs, 0)           // position key on frame 2
-	ui.boneKeyRowClicked(v, refs[1], refs, key.ModCtrl) // position key on frame 5
-	ui.addBoneKeysAround(v, -1)
+	BoneKeyRowClicked(ui, v, refs[0], refs, 0)           // position key on frame 2
+	BoneKeyRowClicked(ui, v, refs[1], refs, key.ModCtrl) // position key on frame 5
+	AddBoneKeysAround(ui, v, -1)
 
 	if got, want := keySelPosFrames(v), []int{1, 2, 4, 5}; !keySelFramesEqual(got, want) {
 		t.Fatalf("the position keys sit on frames %v, want %v — each picked row gets the free frame before it", got, want)
 	}
-	if !ui.unitModelWhmDirty {
+	if !ui.UnitModelWhmDirty {
 		t.Error("adding keys did not mark the file for Save WHM")
 	}
 	// The keys just added are what the list shows picked, since editing or
 	// taking them away is what comes next.
 	want := map[boneKeyRef]bool{{mode: 0, frame: 1}: true, {mode: 0, frame: 4}: true}
-	if len(ui.unitBoneKeySel) != len(want) {
-		t.Fatalf("the selection holds %v, want the two keys just added", ui.unitBoneKeySel)
+	if len(ui.UnitBoneKeySel) != len(want) {
+		t.Fatalf("the selection holds %v, want the two keys just added", ui.UnitBoneKeySel)
 	}
 	for ref := range want {
-		if !ui.unitBoneKeySel[ref] {
-			t.Errorf("row %+v is missing from %v", ref, ui.unitBoneKeySel)
+		if !ui.UnitBoneKeySel[ref] {
+			t.Errorf("row %+v is missing from %v", ref, ui.UnitBoneKeySel)
 		}
 	}
 }
 
 func TestAddAfterGivesEveryPickedRowItsOwnFrame(t *testing.T) {
 	v := keySelViewer()
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	ui := keySelUI(v)
 
-	ui.boneKeyRowClicked(v, refs[0], refs, 0)
-	ui.boneKeyRowClicked(v, refs[1], refs, key.ModCtrl)
-	ui.addBoneKeysAround(v, 1)
+	BoneKeyRowClicked(ui, v, refs[0], refs, 0)
+	BoneKeyRowClicked(ui, v, refs[1], refs, key.ModCtrl)
+	AddBoneKeysAround(ui, v, 1)
 
 	if got, want := keySelPosFrames(v), []int{2, 3, 5, 6}; !keySelFramesEqual(got, want) {
 		t.Fatalf("the position keys sit on frames %v, want %v — each picked row gets the free frame after it", got, want)
@@ -1273,13 +1273,13 @@ func TestAddAfterGivesEveryPickedRowItsOwnFrame(t *testing.T) {
 
 func TestAddBeforeWalksFurtherWhenTheNeighbourIsTaken(t *testing.T) {
 	v := keySelViewer()
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	ui := keySelUI(v)
 	// A position key on frame 3 makes frames 2 and 3 neighbours of the run.
-	if !v.insertBoneKeyCopy(3, 0, 2) {
+	if !v.InsertBoneKeyCopy(3, 0, 2) {
 		t.Fatal("the key on frame 3 could not be inserted")
 	}
-	refs = v.boneKeyRefs()
+	refs = v.BoneKeyRefs()
 	row := -1
 	for i, r := range refs {
 		if r == (boneKeyRef{mode: 0, frame: 3}) {
@@ -1289,8 +1289,8 @@ func TestAddBeforeWalksFurtherWhenTheNeighbourIsTaken(t *testing.T) {
 	if row < 0 {
 		t.Fatalf("the list does not show the new key: %v", refs)
 	}
-	ui.boneKeyRowClicked(v, refs[row], refs, 0)
-	ui.addBoneKeysAround(v, -1)
+	BoneKeyRowClicked(ui, v, refs[row], refs, 0)
+	AddBoneKeysAround(ui, v, -1)
 
 	if got, want := keySelPosFrames(v), []int{1, 2, 3, 5}; !keySelFramesEqual(got, want) {
 		t.Errorf("the position keys sit on frames %v, want %v — frame 2 was taken, so the key went to 1", got, want)
@@ -1303,22 +1303,22 @@ func TestAddAroundSaysSoWhenNothingCanBeAdded(t *testing.T) {
 	// Frames 0 and 1 are filled in front of the position key on frame 2, so
 	// the walk backwards runs out of clip before it finds a free frame.
 	for _, frame := range []int{1, 0} {
-		if !v.insertBoneKeyCopy(frame, 0, 2) {
+		if !v.InsertBoneKeyCopy(frame, 0, 2) {
 			t.Fatalf("the key on frame %d could not be inserted", frame)
 		}
 	}
-	refs := v.boneKeyRefs()
+	refs := v.BoneKeyRefs()
 	for _, r := range refs {
 		if r == (boneKeyRef{mode: 0, frame: 2}) {
-			ui.boneKeyRowClicked(v, r, refs, 0)
+			BoneKeyRowClicked(ui, v, r, refs, 0)
 		}
 	}
-	ui.addBoneKeysAround(v, -1)
+	AddBoneKeysAround(ui, v, -1)
 
-	if ui.unitBoneKeyErr == "" {
+	if ui.UnitBoneKeyErr == "" {
 		t.Error("adding before a key with no free frame said nothing")
 	}
-	if ui.unitModelWhmDirty {
+	if ui.UnitModelWhmDirty {
 		t.Error("a refusal still marked the file for Save WHM")
 	}
 	if got, want := keySelPosFrames(v), []int{0, 1, 2, 5}; !keySelFramesEqual(got, want) {
@@ -1406,14 +1406,14 @@ func unitViewportWriteUnit(t *testing.T, tree *modtree.ModTree, name unitTemplat
 	if err != nil {
 		t.Fatal(err)
 	}
-	rgdPath := name.unitTemplateVirtualPath()
+	rgdPath := name.UnitTemplateVirtualPath()
 	writeTreeFile(t, tree, rgdPath, data)
 	if modelPath != "" {
 		writeTreeFile(t, tree, modelPath, []byte("not a real model"))
 	}
 	tree.SortAll(tree.Root)
-	for _, u := range buildUnitCatalog(tree).allUnits() {
-		if strings.EqualFold(u.path, rgdPath) {
+	for _, u := range buildUnitCatalog(tree).AllUnits() {
+		if strings.EqualFold(u.Path, rgdPath) {
 			return u
 		}
 	}
@@ -1434,10 +1434,10 @@ func unitViewportFixture(t *testing.T, name unitTemplateName, modelPath string) 
 func TestUnitAnimatorNameReadsTheBlueprintField(t *testing.T) {
 	tree, entry := unitViewportFixture(t, unitTemplateName{Race: "necrons", Name: "necron_wraith"}, "")
 	d := loadUnitDetails(tree, entry)
-	if d.error != "" {
-		t.Fatal(d.error)
+	if d.Error != "" {
+		t.Fatal(d.Error)
 	}
-	got := unitAnimatorName(d.file)
+	got := unitAnimatorName(d.File)
 	want := "Races/Necrons/Troops/Necron_Wraith"
 	if got != want {
 		t.Fatalf("animator is %q, want %q", got, want)
@@ -1447,7 +1447,7 @@ func TestUnitAnimatorNameReadsTheBlueprintField(t *testing.T) {
 func TestModelInfoTableHandlesMissingTabAndViewer(t *testing.T) {
 	ui := &uiState{}
 	for _, tab := range []*fileTab{nil, {}} {
-		if got := ui.modelInfoTable(layout.Context{}, tab); got != (layout.Dimensions{}) {
+		if got := ModelInfoTable(ui, layout.Context{}, tab); got != (layout.Dimensions{}) {
 			t.Errorf("model info for tab %v = %+v, want empty dimensions", tab, got)
 		}
 	}
@@ -1576,7 +1576,7 @@ func TestLookThroughCameraAimsAtTheFocusPoint(t *testing.T) {
 		BoundMax: [3]float32{1, 1, 1},
 	}, "")
 	cam := WhmCamera{Name: "port_hud", Pos: [3]float32{4, 0, 6}, Fov: 30, FocusPoint: [3]float32{0, 1, 0}}
-	v.lookThroughCamera(cam)
+	v.LookThroughCamera(cam)
 
 	eye := boneRootFrame.MulPosition(render.Vec3From(cam.Pos))
 	focus := boneRootFrame.MulPosition(render.Vec3From(cam.FocusPoint))
@@ -1605,7 +1605,7 @@ func TestLookThroughCameraAimsAtTheFocusPoint(t *testing.T) {
 func TestLookThroughCameraKeepsAnUnusableFieldOfView(t *testing.T) {
 	v := newModelViewer(&WhmModel{Model: whm.Model{Vertices: []WhmVertex{{}}, BoundMax: [3]float32{1, 1, 1}}}, "")
 	for _, fov := range []float32{0, -20, 180} {
-		v.lookThroughCamera(WhmCamera{Name: "c", Pos: [3]float32{0, 0, 5}, Fov: fov})
+		v.LookThroughCamera(WhmCamera{Name: "c", Pos: [3]float32{0, 0, 5}, Fov: fov})
 		if v.FOV != render.DefaultFov {
 			t.Errorf("a field of view of %v was taken, leaving the view at %v", fov, v.FOV)
 		}
@@ -1622,8 +1622,8 @@ func TestResetCameraForgetsTheModelsCamera(t *testing.T) {
 	}
 	v := newModelViewer(model, "")
 	_, fit := model.ModelCenter()
-	v.lookThroughCamera(WhmCamera{Name: "shot", Pos: [3]float32{9, 9, 9}, Fov: 60})
-	v.resetCamera()
+	v.LookThroughCamera(WhmCamera{Name: "shot", Pos: [3]float32{9, 9, 9}, Fov: 60})
+	v.ResetCamera()
 	if v.ActiveCamera != "" {
 		t.Errorf("the active camera survived a reset: %q", v.ActiveCamera)
 	}
@@ -1648,7 +1648,7 @@ func TestLookThroughCameraOnItsFocusPoint(t *testing.T) {
 	}
 	v := newModelViewer(model, "")
 	_, fit := model.ModelCenter()
-	v.lookThroughCamera(WhmCamera{Name: "degenerate", Pos: [3]float32{2, 2, 2}, FocusPoint: [3]float32{2, 2, 2}})
+	v.LookThroughCamera(WhmCamera{Name: "degenerate", Pos: [3]float32{2, 2, 2}, FocusPoint: [3]float32{2, 2, 2}})
 	if math.IsNaN(v.Distance) || math.IsInf(v.Distance, 0) {
 		t.Fatalf("the distance became %v", v.Distance)
 	}
@@ -1662,8 +1662,8 @@ func TestLookThroughCameraOnItsFocusPoint(t *testing.T) {
 func runSquadScanToCompletion(t *testing.T, ui *uiState) {
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
-	for !ui.unitSquadsDone {
-		if !ui.pollUnitSquads() {
+	for !ui.UnitSquadsDone {
+		if !PollUnitSquads(ui) {
 			if time.Now().After(deadline) {
 				t.Fatal("the squad scan did not finish within a minute")
 			}
@@ -1679,21 +1679,21 @@ func runSquadScanToCompletion(t *testing.T, ui *uiState) {
 func TestRealSquadScanFindsTheLinkage(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	necrons := cat.findRace("necrons")
+	necrons := cat.FindRace("necrons")
 	if necrons == nil {
 		t.Fatal("necrons missing from the catalog")
 	}
-	lord, ok := cat.byPath[strings.ToLower(`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`)]
+	lord, ok := cat.ByPath[strings.ToLower(`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`)]
 	if !ok {
 		t.Fatal("necron_lord is not in the catalog")
 	}
 
 	ui := &uiState{}
-	ui.startUnitSquadScan(tree)
-	defer ui.stopUnitSquadScan()
+	StartUnitSquadScan(ui, tree)
+	defer StopUnitSquadScan(ui)
 	runSquadScanToCompletion(t, ui)
 
-	squads := ui.squadsOfUnitOf(lord)
+	squads := SquadsOfUnitOf(ui, lord)
 	if len(squads) == 0 {
 		t.Fatal("necron_lord is in no squad, but the game fields it in one")
 	}
@@ -1723,16 +1723,16 @@ func TestRealSquadScanFindsTheLinkage(t *testing.T) {
 func TestRealSquadScanFindsAScaledSquad(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	warrior, ok := cat.byPath[strings.ToLower(`Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`)]
+	warrior, ok := cat.ByPath[strings.ToLower(`Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`)]
 	if !ok {
 		t.Fatal("necron_basic_warrior is not in the catalog")
 	}
 	ui := &uiState{}
-	ui.startUnitSquadScan(tree)
-	defer ui.stopUnitSquadScan()
+	StartUnitSquadScan(ui, tree)
+	defer StopUnitSquadScan(ui)
 	runSquadScanToCompletion(t, ui)
 
-	squads := ui.squadsOfUnitOf(warrior)
+	squads := SquadsOfUnitOf(ui, warrior)
 	if len(squads) == 0 {
 		t.Fatal("necron_basic_warrior is in no squad")
 	}
@@ -1756,21 +1756,21 @@ func TestRealSquadScanCoversTheTree(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
 	ui := &uiState{}
-	ui.startUnitSquadScan(tree)
-	defer ui.stopUnitSquadScan()
+	StartUnitSquadScan(ui, tree)
+	defer StopUnitSquadScan(ui)
 	runSquadScanToCompletion(t, ui)
 
-	if len(ui.unitSquads) < 300 {
-		t.Errorf("indexed only %d units, expected the ~369 the tree's squads name", len(ui.unitSquads))
+	if len(ui.UnitSquads) < 300 {
+		t.Errorf("indexed only %d units, expected the ~369 the tree's squads name", len(ui.UnitSquads))
 	}
 	max := 0
-	for path, refs := range ui.unitSquads {
+	for path, refs := range ui.UnitSquads {
 		if len(refs) > max {
 			max = len(refs)
 		}
 		// The key is the unit's own tree path, which is what the dialog looks
 		// units up by, so a key that is not one would make the column empty.
-		if _, ok := cat.byPath[path]; !ok {
+		if _, ok := cat.ByPath[path]; !ok {
 			t.Fatalf("index key %q is not a unit of the catalog", path)
 		}
 	}
@@ -1878,34 +1878,34 @@ func TestSquadSizeLabel(t *testing.T) {
 func TestSquadScanStopsCleanly(t *testing.T) {
 	tree := openTestDXP3(t)
 	ui := &uiState{}
-	ui.startUnitSquadScan(tree)
-	if !ui.unitSquadsRunning {
+	StartUnitSquadScan(ui, tree)
+	if !ui.UnitSquadsRunning {
 		t.Fatal("a scan that was started reports itself as not running")
 	}
 	// A second start for the same tree is left alone rather than duplicated.
-	stop := ui.unitSquadsStop
-	ui.startUnitSquadScan(tree)
-	if ui.unitSquadsStop != stop {
+	stop := ui.UnitSquadsStop
+	StartUnitSquadScan(ui, tree)
+	if ui.UnitSquadsStop != stop {
 		t.Error("starting a scan again for the same tree replaced the running one")
 	}
-	ui.stopUnitSquadScan()
-	if ui.unitSquadsRunning {
+	StopUnitSquadScan(ui)
+	if ui.UnitSquadsRunning {
 		t.Error("a stopped scan still reports itself as running")
 	}
-	if ui.unitSquadsCh != nil {
+	if ui.UnitSquadsCh != nil {
 		t.Error("a stopped scan left its channel behind")
 	}
 	// Polling a stopped scan must be inert rather than panic: the input path
 	// polls it on every frame, including the frame the mod was closed.
-	if ui.pollUnitSquads() {
+	if PollUnitSquads(ui) {
 		t.Error("polling a stopped scan reported results")
 	}
 	// And it must be startable again afterwards.
-	ui.startUnitSquadScan(tree)
-	if !ui.unitSquadsRunning {
+	StartUnitSquadScan(ui, tree)
+	if !ui.UnitSquadsRunning {
 		t.Error("a scan could not be restarted after being stopped")
 	}
-	ui.stopUnitSquadScan()
+	StopUnitSquadScan(ui)
 }
 
 // TestSquadsOfUnitBeforeScan checks the state the column is in while the scan is
@@ -1914,21 +1914,21 @@ func TestSquadScanStopsCleanly(t *testing.T) {
 // dialog and then change its mind.
 func TestSquadsOfUnitBeforeScan(t *testing.T) {
 	ui := &uiState{}
-	u := unitEntry{path: `Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`}
-	if refs := ui.squadsOfUnitOf(u); refs != nil {
+	u := unitEntry{Path: `Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`}
+	if refs := SquadsOfUnitOf(ui, u); refs != nil {
 		t.Errorf("an unstarted index returned %d squads, want nil", len(refs))
 	}
 	ui = squadRowsForTest(map[string][]unitSquadRef{
-		strings.ToLower(u.path): {{name: "necron_lord_squad", unitMin: "1", unitMax: "1"}},
+		strings.ToLower(u.Path): {{name: "necron_lord_squad", unitMin: "1", unitMax: "1"}},
 	})
-	if refs := ui.squadsOfUnitOf(u); len(refs) != 1 {
+	if refs := SquadsOfUnitOf(ui, u); len(refs) != 1 {
 		t.Errorf("a filled index returned %d squads, want 1", len(refs))
 	}
 	// A unit the index has no entry for is genuinely in no squad, and that is
 	// nil too — the distinction that matters is the index's existence, which
 	// the column reads through unitSquadsDone.
-	other := unitEntry{path: `Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`}
-	if refs := ui.squadsOfUnitOf(other); len(refs) != 1 {
+	other := unitEntry{Path: `Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`}
+	if refs := SquadsOfUnitOf(ui, other); len(refs) != 1 {
 		t.Errorf("lookup is not case-insensitive: got %d squads", len(refs))
 	}
 }
@@ -1940,22 +1940,22 @@ func TestSquadsOfUnitBeforeScan(t *testing.T) {
 func TestBirthCostSkipsZero(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	lord, ok := cat.byPath[strings.ToLower(`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`)]
+	lord, ok := cat.ByPath[strings.ToLower(`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`)]
 	if !ok {
 		t.Skip("necron_lord not in the catalog")
 	}
 	ui := &uiState{}
-	ui.startUnitSquadScan(tree)
-	defer ui.stopUnitSquadScan()
+	StartUnitSquadScan(ui, tree)
+	defer StopUnitSquadScan(ui)
 	runSquadScanToCompletion(t, ui)
-	squads := ui.squadsOfUnitOf(lord)
+	squads := SquadsOfUnitOf(ui, lord)
 	if len(squads) == 0 {
 		t.Skip("no squad found for necron_lord")
 	}
 	for _, s := range squads {
 		for _, f := range squadFields(tree, s) {
-			if f.group == "Birth cost" {
-				t.Errorf("a zero birth cost was drawn: %s = %s", f.label, f.value)
+			if f.Group == "Birth cost" {
+				t.Errorf("a zero birth cost was drawn: %s = %s", f.Label, f.Value)
 			}
 		}
 	}
@@ -1978,7 +1978,7 @@ func TestSquadFieldsCarrySquadOnlyValues(t *testing.T) {
 	}
 	byLabel := map[string]string{}
 	for _, f := range fields {
-		byLabel[f.label] = f.value
+		byLabel[f.Label] = f.Value
 	}
 	for _, want := range []string{"Squad cap", "Starting morale", "Max morale", "Ranged attack range", "Idle formation"} {
 		if _, ok := byLabel[want]; !ok {
@@ -1990,7 +1990,7 @@ func TestSquadFieldsCarrySquadOnlyValues(t *testing.T) {
 func labelList(fields []unitField) []string {
 	out := make([]string, 0, len(fields))
 	for _, f := range fields {
-		out = append(out, f.label)
+		out = append(out, f.Label)
 	}
 	return out
 }
@@ -2059,9 +2059,9 @@ func TestUnitScreenNameIDRejectsUnitsWithNoName(t *testing.T) {
 // gives it.
 func testUnitEntry(name string) unitEntry {
 	return unitEntry{
-		path: `Data\attrib\ebps\races\necron\troops\` + name + ".rgd",
-		name: name,
-		race: "necron",
+		Path: `Data\attrib\ebps\races\necron\troops\` + name + ".rgd",
+		Name: name,
+		Race: "necron",
 	}
 }
 
@@ -2070,10 +2070,10 @@ func testUnitEntry(name string) unitEntry {
 func TestUnitLabelUsesTheLocalisedText(t *testing.T) {
 	lord := testUnitEntry("necron_lord")
 	ui := newUI(unitTestTheme())
-	ui.unitNames = map[string]string{strings.ToLower(lord.path): "705754"}
-	ui.testLocaleTable(t, "705754", "Necron Lord")
+	ui.UnitNames = map[string]string{strings.ToLower(lord.Path): "705754"}
+	TestLocaleTable(ui, t, "705754", "Necron Lord")
 
-	got := ui.unitLabel(lord)
+	got := UnitLabel(ui, lord)
 	if got != "Necron Lord" {
 		t.Errorf("the list reads %q, want the localised text", got)
 	}
@@ -2091,18 +2091,18 @@ func TestUnitLabelFallsBackToTheFileName(t *testing.T) {
 		ids  map[string]string
 	}{
 		{"nothing scanned yet", nil},
-		{"the unit has no id of its own", map[string]string{strings.ToLower(testUnitEntry("necron_lord").path): "999"}},
-		{"the chosen language has no entry for it", map[string]string{strings.ToLower(testUnitEntry("necron_lord").path): "705754"}},
+		{"the unit has no id of its own", map[string]string{strings.ToLower(testUnitEntry("necron_lord").Path): "999"}},
+		{"the chosen language has no entry for it", map[string]string{strings.ToLower(testUnitEntry("necron_lord").Path): "705754"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			lord := testUnitEntry("necron_lord")
 			ui := newUI(unitTestTheme())
-			ui.unitNames = tc.ids
+			ui.UnitNames = tc.ids
 			// A table that knows nothing, so the third case is a real miss
 			// rather than a missing table.
-			ui.testLocaleTable(t, "1", "One")
+			TestLocaleTable(ui, t, "1", "One")
 
-			if got := ui.unitLabel(lord); got != "necron_lord" {
+			if got := UnitLabel(ui, lord); got != "necron_lord" {
 				t.Errorf("the list reads %q, want the file name", got)
 			}
 		})
@@ -2117,7 +2117,7 @@ func TestUnitFileLabelIsTheFilesOwnName(t *testing.T) {
 		{`Data\attrib\ebps\races\necrons\structures\necron_dreadnought.rgd`, "necron_dreadnought"},
 		{"plain.rgd", "plain"},
 	} {
-		if got := unitFileLabel(unitEntry{path: tc.path}); got != tc.want {
+		if got := unitFileLabel(unitEntry{Path: tc.path}); got != tc.want {
 			t.Errorf("unitFileLabel(%q) = %q, want %q", tc.path, got, tc.want)
 		}
 	}
@@ -2135,16 +2135,16 @@ func TestUnitNameScanIsNotRestartedForTheSameTree(t *testing.T) {
 	cat := buildUnitCatalog(tree)
 	ui := newUI(unitTestTheme())
 
-	ui.startUnitNameScan(tree, cat)
-	first := ui.unitNamesCh
+	StartUnitNameScan(ui, tree, cat)
+	first := ui.UnitNamesCh
 	if first == nil {
 		t.Fatal("the scan did not start")
 	}
-	ui.startUnitNameScan(tree, cat)
-	if ui.unitNamesCh != first {
+	StartUnitNameScan(ui, tree, cat)
+	if ui.UnitNamesCh != first {
 		t.Error("a second scan was started for the same tree")
 	}
-	ui.stopUnitNameScan()
+	StopUnitNameScan(ui)
 }
 
 // TestUnitNameScanStopsWhenTheModGoesAway is the case that matters: a reload
@@ -2156,20 +2156,20 @@ func TestUnitNameScanStopsWhenTheModGoesAway(t *testing.T) {
 	})
 	cat := buildUnitCatalog(tree)
 	ui := newUI(unitTestTheme())
-	ui.modTree = tree
-	ui.unitCatalog = cat
-	ui.unitCatalogMod = tree.FileMapName
-	ui.startUnitNameScan(tree, cat)
+	ui.ModTree = tree
+	ui.UnitCatalog = cat
+	ui.UnitCatalogMod = tree.FileMapName
+	StartUnitNameScan(ui, tree, cat)
 
 	// What the catalog asks for once there is no mod at all.
-	ui.modTree = nil
-	if got := ui.unitCatalogFor(); got != nil {
+	ui.ModTree = nil
+	if got := UnitCatalogFor(ui); got != nil {
 		t.Fatal("the catalog survived the mod going away")
 	}
-	if ui.unitNamesRunning {
+	if ui.UnitNamesRunning {
 		t.Error("the scan is still running against a tree that is being closed")
 	}
-	if ui.unitNames != nil {
+	if ui.UnitNames != nil {
 		t.Error("the name index outlived the mod it belonged to")
 	}
 }
@@ -2178,7 +2178,7 @@ func TestUnitNameScanStopsWhenTheModGoesAway(t *testing.T) {
 // must not report work, or every frame would ask for a redraw it does not need.
 func TestPollUnitNamesIsQuietWithNothingToSay(t *testing.T) {
 	ui := newUI(unitTestTheme())
-	if ui.pollUnitNames() {
+	if PollUnitNames(ui) {
 		t.Error("pollUnitNames reported work before any scan was started")
 	}
 
@@ -2186,9 +2186,9 @@ func TestPollUnitNamesIsQuietWithNothingToSay(t *testing.T) {
 		`Data\attrib\ebps\races\necron\troops\necron_lord.rgd`: "not a real rgd",
 	})
 	cat := buildUnitCatalog(tree)
-	ui.startUnitNameScan(tree, cat)
+	StartUnitNameScan(ui, tree, cat)
 	waitForUnitNames(t, ui)
-	if ui.pollUnitNames() {
+	if PollUnitNames(ui) {
 		t.Error("pollUnitNames reported work after the scan had finished")
 	}
 }
@@ -2202,8 +2202,8 @@ func waitForUnitNames(t *testing.T, ui *uiState) {
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		ui.pollUnitNames()
-		if ui.unitNamesDone || (!ui.unitNamesRunning && ui.unitNamesCh == nil) {
+		PollUnitNames(ui)
+		if ui.UnitNamesDone || (!ui.UnitNamesRunning && ui.UnitNamesCh == nil) {
 			return
 		}
 		if !time.Now().Before(deadline) {
@@ -2216,7 +2216,7 @@ func waitForUnitNames(t *testing.T, ui *uiState) {
 // testLocaleTable installs a string table holding exactly the ids given, so a
 // test can say what the language knows without reading a .ucs. The tables are
 // package level state, so they are reset afterwards.
-func (ui *uiState) testLocaleTable(t *testing.T, entries ...string) {
+func TestLocaleTable(ui *uiState, t *testing.T, entries ...string) {
 	t.Helper()
 	resetLocales(t)
 	if len(entries)%2 != 0 {
@@ -2226,9 +2226,9 @@ func (ui *uiState) testLocaleTable(t *testing.T, entries ...string) {
 	for i := 0; i < len(entries); i += 2 {
 		index[entries[i]] = localeEntry{Text: entries[i+1]}
 	}
-	localeState.mu.Lock()
-	localeState.cur = &localeTable{Lang: "Test", Index: index, Files: 1, Lines: len(index)}
-	localeState.mu.Unlock()
+	localeState.Mu.Lock()
+	localeState.Cur = &localeTable{Lang: "Test", Index: index, Files: 1, Lines: len(index)}
+	localeState.Mu.Unlock()
 }
 
 // ─── merged from x_test_unit_template_test.go ────────────────────────────────────────
@@ -2347,7 +2347,7 @@ func TestNewUnitRgdCarriesTheGivenName(t *testing.T) {
 			t.Errorf("%s is %q, want %q", path, got, expect)
 		}
 	}
-	if path := `Data\attrib\ebps\races\space_marines\troops\marine_veteran.rgd`; (unitTemplateName{Race: "space_marines", Name: "marine_veteran"}).unitTemplateVirtualPath() != path {
+	if path := `Data\attrib\ebps\races\space_marines\troops\marine_veteran.rgd`; (unitTemplateName{Race: "space_marines", Name: "marine_veteran"}).UnitTemplateVirtualPath() != path {
 		t.Errorf("the unit would be written to the wrong place")
 	}
 }
@@ -2361,8 +2361,8 @@ func TestNewUnitRgdInventsNothingTheGameDoesNotAskFor(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
 	var troops []unitEntry
-	for _, r := range cat.races {
-		troops = append(troops, r.troops...)
+	for _, r := range cat.Races {
+		troops = append(troops, r.Troops...)
 	}
 	if len(troops) < 100 {
 		t.Skipf("only %d units in the installed game, too few to compare against", len(troops))
@@ -2423,14 +2423,14 @@ const testUADEModule = "/mnt/windows/Program Files/Steam/steamapps/common/Dawn o
 // findUAUnit returns the unit with the given file name from any race.
 func findUAUnit(t *testing.T, cat *unitCatalog, name string) unitEntry {
 	t.Helper()
-	for _, r := range cat.races {
-		for _, u := range append(append([]unitEntry{}, r.troops...), r.structures...) {
-			if u.name == name {
+	for _, r := range cat.Races {
+		for _, u := range append(append([]unitEntry{}, r.Troops...), r.Structures...) {
+			if u.Name == name {
 				return u
 			}
 		}
 	}
-	t.Fatalf("unit %q not in catalog (%d races)", name, len(cat.races))
+	t.Fatalf("unit %q not in catalog (%d races)", name, len(cat.Races))
 	return unitEntry{}
 }
 
@@ -2465,38 +2465,38 @@ func TestUADEDiagnoseUnitPipeline(t *testing.T) {
 	// 2. The catalog and the background name scan.
 	cat := buildUnitCatalog(tree)
 	total := 0
-	for _, r := range cat.races {
-		total += r.unitCount()
+	for _, r := range cat.Races {
+		total += r.UnitCount()
 	}
-	t.Logf("catalog: %d races, %d units", len(cat.races), total)
+	t.Logf("catalog: %d races, %d units", len(cat.Races), total)
 
 	ui := newUI(unitTestTheme())
-	ui.modTree = tree
-	ui.modulePath = testUADEModule
-	ui.gamePath = tree.AppPath
-	ui.unitCatalog = cat
-	ui.unitCatalogMod = tree.FileMapName
-	ui.startUnitNameScan(tree, cat)
+	ui.ModTree = tree
+	ui.ModulePath = testUADEModule
+	ui.GamePath = tree.AppPath
+	ui.UnitCatalog = cat
+	ui.UnitCatalogMod = tree.FileMapName
+	StartUnitNameScan(ui, tree, cat)
 	waitForUnitNames(t, ui)
-	t.Logf("scan: %d ids cached, done=%v", len(ui.unitNames), ui.unitNamesDone)
+	t.Logf("scan: %d ids cached, done=%v", len(ui.UnitNames), ui.UnitNamesDone)
 
 	// Coverage over the whole catalogue: how many units get a localised name,
 	// a decoded icon and a model path, with a few misses of each kind logged
 	// so a systemic gap cannot hide behind a good total.
 	var noID, noName, noIcon, noModel int
 	shownModel := 0
-	for _, r := range cat.races {
-		for _, u := range r.unitsOf() {
-			if ui.unitNames[strings.ToLower(u.path)] == "" {
+	for _, r := range cat.Races {
+		for _, u := range r.UnitsOf() {
+			if ui.UnitNames[strings.ToLower(u.Path)] == "" {
 				noID++
 			}
-			if ui.unitLocalisedName(u) == "" {
+			if UnitLocalisedName(ui, u) == "" {
 				noName++
 			}
-			if ui.unitIcon(u) == nil {
+			if UnitIcon(ui, u) == nil {
 				noIcon++
 				if noIcon <= 5 {
-					t.Logf("coverage: no icon for %s", u.path)
+					t.Logf("coverage: no icon for %s", u.Path)
 				}
 			}
 			d := loadUnitDetails(tree, u)
@@ -2505,7 +2505,7 @@ func TestUADEDiagnoseUnitPipeline(t *testing.T) {
 				noModel++
 				if shownModel < 5 {
 					shownModel++
-					t.Logf("coverage: no model for %s (detailsErr=%q)", u.path, d.error)
+					t.Logf("coverage: no model for %s (detailsErr=%q)", u.Path, d.Error)
 				}
 			}
 		}
@@ -2516,13 +2516,13 @@ func TestUADEDiagnoseUnitPipeline(t *testing.T) {
 	// 3. The three units the screenshots show, walked through every step.
 	for _, name := range []string{"inquisition_damocles", "necron_basic_warrior", "necron_basic_warrior_advance_sp"} {
 		u := findUAUnit(t, cat, name)
-		id := ui.unitNames[strings.ToLower(u.path)]
+		id := ui.UnitNames[strings.ToLower(u.Path)]
 		t.Logf("unit %s: id=%q localised=%q label=%q fileLabel=%q",
-			u.name, id, ui.unitLocalisedName(u), ui.unitLabel(u), unitFileLabel(u))
+			u.Name, id, UnitLocalisedName(ui, u), UnitLabel(ui, u), unitFileLabel(u))
 
-		data, rerr := tree.ReadFile(u.path)
+		data, rerr := tree.ReadFile(u.Path)
 		if rerr != nil {
-			t.Errorf("  ReadFile(%q): %v", u.path, rerr)
+			t.Errorf("  ReadFile(%q): %v", u.Path, rerr)
 			continue
 		}
 		rf, perr := rgd.ParseRgd(data)
@@ -2547,21 +2547,21 @@ func TestUADEDiagnoseUnitPipeline(t *testing.T) {
 			unitAnimatorName(rf))
 
 		// Icon chain: convention, by-name, then rgd icon_name.
-		img := ui.unitIcon(u)
+		img := UnitIcon(ui, u)
 		if img != nil {
 			t.Logf("  icon: ok bounds=%v", img.Bounds())
 		} else {
-			conv := `art\ui\ingame\` + unitTemplateIconBase(u.race) + `\` + u.name + "_icon.tga"
+			conv := `art\ui\ingame\` + unitTemplateIconBase(u.Race) + `\` + u.Name + "_icon.tga"
 			t.Logf("  icon: MISSING; convention %q found=%v; byName %q found=%v; rgd icon_name=%q",
 				conv, tree.FindFile(conv) != nil,
-				u.name+"_icon.tga", tree.FindByName(u.name+"_icon.tga") != nil,
+				u.Name+"_icon.tga", tree.FindByName(u.Name+"_icon.tga") != nil,
 				rgdEntryStr(rgdFindPath(rf.Root, "ui_ext", "ui_info", "icon_name")))
 		}
 
 		// Model resolution as the viewport does it.
 		d := loadUnitDetails(tree, u)
-		if d.error != "" {
-			t.Logf("  details: error %q", d.error)
+		if d.Error != "" {
+			t.Logf("  details: error %q", d.Error)
 			continue
 		}
 		src, ok := newUnitModelSource(tree, d)
@@ -2609,13 +2609,13 @@ func unitSectionLabels() []string {
 // the first section rather than panic in the middle of a frame.
 func TestCurrentUnitSectionSurvivesBadIndex(t *testing.T) {
 	for _, bad := range []int{-1, len(unitSections), len(unitSections) + 5} {
-		ui := &uiState{unitSection: bad}
-		if got := ui.currentUnitSection().label; got != unitSections[0].label {
+		ui := &uiState{UnitSection: bad}
+		if got := CurrentUnitSection(ui).label; got != unitSections[0].label {
 			t.Errorf("section index %d gave %q, want fallback %q", bad, got, unitSections[0].label)
 		}
 	}
-	ui := &uiState{unitSection: 1}
-	if got := ui.currentUnitSection().label; got != "Weapons" {
+	ui := &uiState{UnitSection: 1}
+	if got := CurrentUnitSection(ui).label; got != "Weapons" {
 		t.Errorf("section index 1 gave %q, want Weapons", got)
 	}
 }
@@ -2676,21 +2676,21 @@ func TestUnitColumnWidthsNarrowWindow(t *testing.T) {
 // unit — and with no mod loaded there is nothing to name.
 func TestUnitObjectLabelFallsBack(t *testing.T) {
 	ui := &uiState{}
-	if got := ui.unitObjectLabel(); got != "No unit selected" {
+	if got := UnitObjectLabel(ui); got != "No unit selected" {
 		t.Errorf("with no mod loaded the label is %q, want %q", got, "No unit selected")
 	}
 	// With a catalog but a stale selection, the label still resolves to a real
 	// unit rather than coming out blank.
-	ui.modTree = testModTreeWithFiles(t, map[string]string{
+	ui.ModTree = testModTreeWithFiles(t, map[string]string{
 		`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`: "",
 	})
-	if got := ui.unitObjectLabel(); got != "necron_lord" {
+	if got := UnitObjectLabel(ui); got != "necron_lord" {
 		t.Errorf("label = %q, want the selected unit's name", got)
 	}
 	// An out of range index must not panic and must still name a unit.
-	ui.unitRaceSel = 99
-	ui.unitSel = 99
-	if got := ui.unitObjectLabel(); got == "" {
+	ui.UnitRaceSel = 99
+	ui.UnitSel = 99
+	if got := UnitObjectLabel(ui); got == "" {
 		t.Error("a stale selection index produced an empty label")
 	}
 }
@@ -2699,18 +2699,18 @@ func TestUnitObjectLabelFallsBack(t *testing.T) {
 
 func TestUnitTabIsSingleton(t *testing.T) {
 	ui := &uiState{}
-	if ui.unitTabIndex() != -1 {
+	if UnitTabIndex(ui) != -1 {
 		t.Fatal("a fresh ui must have no object tab")
 	}
-	ui.openUnitTab()
-	if got := len(ui.openTabs); got != 1 {
+	OpenUnitTab(ui)
+	if got := len(ui.OpenTabs); got != 1 {
 		t.Fatalf("openTabs = %d, want 1", got)
 	}
-	if !ui.unitTabActive() {
+	if !UnitTabActive(ui) {
 		t.Error("the object tab should be active after opening it")
 	}
-	ui.openUnitTab()
-	if got := len(ui.openTabs); got != 1 {
+	OpenUnitTab(ui)
+	if got := len(ui.OpenTabs); got != 1 {
 		t.Fatalf("opening twice produced %d tabs, want 1", got)
 	}
 }
@@ -2719,13 +2719,13 @@ func TestUnitTabIsSingleton(t *testing.T) {
 // it must make it active again — the tab bar is the only thing that decides.
 func TestUnitTabTracksSelection(t *testing.T) {
 	ui := &uiState{}
-	ui.openUnitTab()
-	ui.tabSel = 0
-	if ui.unitTabActive() {
+	OpenUnitTab(ui)
+	ui.TabSel = 0
+	if UnitTabActive(ui) {
 		t.Error("the object tab is still active with the Module tab selected")
 	}
-	ui.openUnitTab()
-	if !ui.unitTabActive() {
+	OpenUnitTab(ui)
+	if !UnitTabActive(ui) {
 		t.Error("reopening did not bring the object tab forward")
 	}
 }
@@ -2733,34 +2733,34 @@ func TestUnitTabTracksSelection(t *testing.T) {
 // Closing the tab must leave the selection in a state the rest of the app can
 // use, and reopening must land on the same unit rather than resetting it.
 func TestUnitTabCloseKeepsSelection(t *testing.T) {
-	ui := &uiState{modTree: testModTreeWithFiles(t, map[string]string{
+	ui := &uiState{ModTree: testModTreeWithFiles(t, map[string]string{
 		`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`:  "",
 		`Data\attrib\ebps\races\necrons\troops\necron_lord2.rgd`: "",
 	})}
-	ui.openUnitTab()
-	ui.unitSel = 1
-	want := ui.currentUnit()
+	OpenUnitTab(ui)
+	ui.UnitSel = 1
+	want := CurrentUnit(ui)
 	if want == nil {
 		t.Fatal("no unit selected to begin with")
 	}
-	ui.closeUnitTab()
-	if ui.unitTabIndex() != -1 {
+	CloseUnitTab(ui)
+	if UnitTabIndex(ui) != -1 {
 		t.Error("the object tab survived being closed")
 	}
-	if ui.unitTabActive() {
+	if UnitTabActive(ui) {
 		t.Error("a closed object tab is still active")
 	}
 	// An open dropdown belongs to the tab that went away. Closing through the
 	// tab bar's × calls closeTabAt directly, so that is the path exercised
 	// here rather than closeUnitTab.
-	ui.openUnitTab()
-	ui.unitListOpen = true
-	ui.closeTabAt(ui.unitTabIndex())
-	if ui.unitListOpen || ui.unitRaceOpen {
+	OpenUnitTab(ui)
+	ui.UnitListOpen = true
+	CloseTabAt(ui, UnitTabIndex(ui))
+	if ui.UnitListOpen || ui.UnitRaceOpen {
 		t.Error("a dropdown was left open after its tab closed")
 	}
-	ui.openUnitTab()
-	if got := ui.currentUnit(); got == nil || got.name != want.name {
+	OpenUnitTab(ui)
+	if got := CurrentUnit(ui); got == nil || got.Name != want.Name {
 		t.Errorf("reopening landed on %v, want %v", got, want)
 	}
 }
@@ -2769,24 +2769,24 @@ func TestUnitTabCloseKeepsSelection(t *testing.T) {
 // selection alone.
 func TestUnitTabCoexistsWithFileTabs(t *testing.T) {
 	ui := &uiState{}
-	ui.openTabs = append(ui.openTabs, &fileTab{kind: "rgd", path: `Data\attrib\x.rgd`})
-	ui.ensureTabClicks()
-	ui.openUnitTab()
-	if got := len(ui.openTabs); got != 2 {
+	ui.OpenTabs = append(ui.OpenTabs, &fileTab{Kind: "rgd", Path: `Data\attrib\x.rgd`})
+	EnsureTabClicks(ui)
+	OpenUnitTab(ui)
+	if got := len(ui.OpenTabs); got != 2 {
 		t.Fatalf("openTabs = %d, want 2", got)
 	}
-	if ui.unitTabIndex() != 1 {
-		t.Errorf("object tab index = %d, want 1", ui.unitTabIndex())
+	if UnitTabIndex(ui) != 1 {
+		t.Errorf("object tab index = %d, want 1", UnitTabIndex(ui))
 	}
-	if ui.tabSel != 2 {
-		t.Errorf("tabSel = %d, want the object tab selected", ui.tabSel)
+	if ui.TabSel != 2 {
+		t.Errorf("tabSel = %d, want the object tab selected", ui.TabSel)
 	}
 	// The file tab must still be the one before it.
-	ui.tabSel = 1
-	if got := ui.activeTab(); got == nil || got.kind != "rgd" {
+	ui.TabSel = 1
+	if got := ActiveTab(ui); got == nil || got.Kind != "rgd" {
 		t.Errorf("activeTab = %+v, want the rgd tab", got)
 	}
-	if ui.unitTabActive() {
+	if UnitTabActive(ui) {
 		t.Error("the object tab claims to be active while a file tab is selected")
 	}
 }
@@ -2794,7 +2794,7 @@ func TestUnitTabCoexistsWithFileTabs(t *testing.T) {
 // The object tab is not backed by a file, so a mod reload must not close it and
 // the session writer must not try to remember a path for it.
 func TestUnitTabSurvivesModReloadAndIsNotPersisted(t *testing.T) {
-	tab := &fileTab{kind: unitTabKind, path: unitTabPath}
+	tab := &fileTab{Kind: unitTabKind, Path: unitTabPath}
 	if !unitTabHasNoFile(tab) {
 		t.Error("the object tab must count as having no file")
 	}
@@ -2805,7 +2805,7 @@ func TestUnitTabSurvivesModReloadAndIsNotPersisted(t *testing.T) {
 		t.Errorf("tab label = %q, want %q", got, unitTabLabel)
 	}
 	// A real file tab is not confused for the object tab.
-	file := &fileTab{kind: "rgd", path: `Data\attrib\x.rgd`}
+	file := &fileTab{Kind: "rgd", Path: `Data\attrib\x.rgd`}
 	if unitTabHasNoFile(file) {
 		t.Error("a real file tab must not count as having no file")
 	}
@@ -2821,11 +2821,11 @@ func TestUnitTabSurvivesModReloadAndIsNotPersisted(t *testing.T) {
 func TestObjectTabNotWrittenToSession(t *testing.T) {
 	t.Setenv("AppData", t.TempDir())
 	ui := newUI(unitTestTheme())
-	ui.modTree = testModTreeWithFiles(t, map[string]string{
+	ui.ModTree = testModTreeWithFiles(t, map[string]string{
 		`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`: "",
 	})
-	ui.openTabs = append(ui.openTabs, &fileTab{kind: "rgd", path: `Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`})
-	ui.openUnitTab()
+	ui.OpenTabs = append(ui.OpenTabs, &fileTab{Kind: "rgd", Path: `Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`})
+	OpenUnitTab(ui)
 	if err := savePersistedState(ui); err != nil {
 		t.Fatalf("savePersistedState: %v", err)
 	}

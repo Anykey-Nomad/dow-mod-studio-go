@@ -24,7 +24,7 @@ func renderUnitDropdown(t *testing.T, ui *uiState, w, h int) (*image.RGBA, image
 
 	var ops op.Ops
 	gtx := testutil.NewLayoutContext(&ops, w, h)
-	ui.layoutUnitTabBody(gtx)
+	LayoutUnitTabBody(ui, gtx)
 
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	if err := win.Frame(&ops); err != nil {
@@ -33,10 +33,10 @@ func renderUnitDropdown(t *testing.T, ui *uiState, w, h int) (*image.RGBA, image
 	if err := win.Screenshot(img); err != nil {
 		t.Fatalf("Screenshot: %v", err)
 	}
-	if ui.unitDropBox.Empty() {
+	if ui.UnitDropBox.Empty() {
 		t.Fatal("the layout reported no dropdown box at all")
 	}
-	return img, ui.unitDropBox
+	return img, ui.UnitDropBox
 }
 
 // pixelsThatDiffer counts the pixels of a that b does not have. Comparing two
@@ -70,17 +70,17 @@ func newUnitRowFixture(t *testing.T) unitRowFixture {
 	t.Helper()
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	if cat == nil || len(cat.races) == 0 {
+	if cat == nil || len(cat.Races) == 0 {
 		t.Skip("the module has no races")
 	}
-	shown := cat.races[0]
-	units := shown.unitsOf()
+	shown := cat.Races[0]
+	units := shown.UnitsOf()
 	if len(units) == 0 {
-		t.Skipf("race %q has no units", shown.name)
+		t.Skipf("race %q has no units", shown.Name)
 	}
-	ui := &uiState{th: unitTestTheme(), modTree: tree}
-	ui.openUnitTab()
-	ui.unitListOpen = true
+	ui := &uiState{Th: unitTestTheme(), ModTree: tree}
+	OpenUnitTab(ui)
+	ui.UnitListOpen = true
 	return unitRowFixture{ui: ui, unit: units[0]}
 }
 
@@ -88,8 +88,8 @@ func newUnitRowFixture(t *testing.T) unitRowFixture {
 // the row shows a word nothing else in the module uses.
 func (f unitRowFixture) nameUnit(t *testing.T, id, text string) {
 	t.Helper()
-	f.ui.unitNames = map[string]string{strings.ToLower(f.unit.path): id}
-	f.ui.testLocaleTable(t, id, text)
+	f.ui.UnitNames = map[string]string{strings.ToLower(f.unit.Path): id}
+	f.TestLocaleTable(ui, t, id, text)
 }
 
 // unitRowTextPixels is how many pixels a change of words on these rows is worth.
@@ -139,8 +139,8 @@ func TestUnitRowsFallBackToTheFileName(t *testing.T) {
 	f := newUnitRowFixture(t)
 	const w, h = 900, 700
 
-	f.ui.unitNames = nil
-	f.ui.testLocaleTable(t, "900001", "Qqzz First Localised Name")
+	f.ui.UnitNames = nil
+	f.TestLocaleTable(ui, t, "900001", "Qqzz First Localised Name")
 	byFileName, box := renderUnitDropdown(t, f.ui, w, h)
 
 	f.nameUnit(t, "900001", "Qqzz First Localised Name")
@@ -184,53 +184,53 @@ func TestUnitNamesOnTheRealModule(t *testing.T) {
 
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
-	if cat == nil || len(cat.races) == 0 {
+	if cat == nil || len(cat.Races) == 0 {
 		t.Skip("no races in the module")
 	}
 	total := 0
-	for _, r := range cat.races {
-		total += len(r.troops) + len(r.structures)
+	for _, r := range cat.Races {
+		total += len(r.Troops) + len(r.Structures)
 	}
 
 	ui := newUI(unitTestTheme())
 	// setLocaleLanguage finds the .ucs files through the game folder, so the
 	// state needs one, not just the table the test installed by hand.
-	ui.gamePath = gamePath
-	ui.modulePath = tree.AppPath
-	ui.modTree = tree
-	ui.unitCatalog = cat
-	ui.unitCatalogMod = tree.FileMapName
-	ui.startUnitNameScan(tree, cat)
+	ui.GamePath = gamePath
+	ui.ModulePath = tree.AppPath
+	ui.ModTree = tree
+	ui.UnitCatalog = cat
+	ui.UnitCatalogMod = tree.FileMapName
+	StartUnitNameScan(ui, tree, cat)
 	waitForUnitNames(t, ui)
 
 	// Every unit that carries an id should have it cached. Measured on DXP3:
 	// 582 units, all but a handful carrying one, so a scan that resolved far
 	// fewer means the path into ui_info is wrong, not that the mod is sparse.
-	if len(ui.unitNames) < total-8 {
+	if len(ui.UnitNames) < total-8 {
 		t.Errorf("the scan resolved %d ids for %d units; the walk into ui_ext\\ui_info is probably wrong",
-			len(ui.unitNames), total)
+			len(ui.UnitNames), total)
 	}
 
 	// Every race's units should mostly resolve to real text in English.
-	for _, r := range cat.races {
-		units := r.unitsOf()
+	for _, r := range cat.Races {
+		units := r.UnitsOf()
 		resolved := 0
 		for _, u := range units {
-			if ui.unitLocalisedName(u) != "" {
+			if UnitLocalisedName(ui, u) != "" {
 				resolved++
 			}
 		}
 		if resolved == 0 {
-			t.Errorf("race %q resolved no names at all", r.name)
+			t.Errorf("race %q resolved no names at all", r.Name)
 		}
 		if resolved < len(units)-4 {
-			t.Errorf("race %q resolved %d of %d names", r.name, resolved, len(units))
+			t.Errorf("race %q resolved %d of %d names", r.Name, resolved, len(units))
 		}
 	}
 
 	// The label is the text, never the id, and the fallback is the file name.
 	lord := findRealUnit(t, cat, "necron_lord")
-	got := ui.unitLabel(lord)
+	got := UnitLabel(ui, lord)
 	if got == "necron_lord" {
 		t.Errorf("necron_lord still reads as its file name; the English table has %q",
 			localisedString("705754"))
@@ -245,23 +245,23 @@ func TestUnitNamesOnTheRealModule(t *testing.T) {
 
 	// Switching the language must relabel from the cache. The index is keyed by
 	// id and holds no text, so this is the whole point of caching the id.
-	english := ui.unitLabel(lord)
-	ui.setLocaleLanguage("Russian")
-	russian := ui.unitLabel(lord)
+	english := UnitLabel(ui, lord)
+	SetLocaleLanguage(ui, "Russian")
+	russian := UnitLabel(ui, lord)
 	if russian == english {
 		t.Errorf("switching to Russian left the label as %q", russian)
 	}
-	if ui.unitNamesRunning {
+	if ui.UnitNamesRunning {
 		t.Error("switching the language restarted the scan; the cached ids should have been enough")
 	}
 	if russian == "necron_lord" {
 		t.Error("the Russian label fell back to the file name")
 	}
 	t.Logf("Russian: %q", russian)
-	ui.setLocaleLanguage("English")
+	SetLocaleLanguage(ui, "English")
 
 	// And back again, to catch a table swap that did not restore.
-	if again := ui.unitLabel(lord); again != english {
+	if again := UnitLabel(ui, lord); again != english {
 		t.Errorf("switching back gave %q, want %q", again, english)
 	}
 }
@@ -275,23 +275,23 @@ func TestRealUnitsShareNamesWithinARace(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
 	ui := newUI(unitTestTheme())
-	ui.modTree = tree
-	ui.unitCatalog = cat
-	ui.unitCatalogMod = tree.FileMapName
-	ui.startUnitNameScan(tree, cat)
+	ui.ModTree = tree
+	ui.UnitCatalog = cat
+	ui.UnitCatalogMod = tree.FileMapName
+	StartUnitNameScan(ui, tree, cat)
 	waitForUnitNames(t, ui)
 
 	shared := 0
-	for _, r := range cat.races {
+	for _, r := range cat.Races {
 		seen := map[string][]string{}
-		for _, u := range r.unitsOf() {
-			seen[ui.unitLabel(u)] = append(seen[ui.unitLabel(u)], u.name)
+		for _, u := range r.UnitsOf() {
+			seen[UnitLabel(ui, u)] = append(seen[UnitLabel(ui, u)], u.Name)
 		}
 		for label, files := range seen {
 			if len(files) > 1 {
 				shared++
 				if shared <= 3 {
-					t.Logf("race %q: %d units all read %q (%s)", r.name, len(files), label, strings.Join(files, ", "))
+					t.Logf("race %q: %d units all read %q (%s)", r.Name, len(files), label, strings.Join(files, ", "))
 				}
 			}
 		}
@@ -304,9 +304,9 @@ func TestRealUnitsShareNamesWithinARace(t *testing.T) {
 
 func findRealUnit(t *testing.T, cat *unitCatalog, name string) unitEntry {
 	t.Helper()
-	for _, r := range cat.races {
-		for _, u := range append(append([]unitEntry{}, r.troops...), r.structures...) {
-			if u.name == name {
+	for _, r := range cat.Races {
+		for _, u := range append(append([]unitEntry{}, r.Troops...), r.Structures...) {
+			if u.Name == name {
 				return u
 			}
 		}

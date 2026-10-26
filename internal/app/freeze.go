@@ -198,11 +198,11 @@ func (b *freezeBook) frozenPaths() []string {
 // are found and written down, the record is saved, and only then is anything
 // changed. A failure before the save leaves the mod untouched, which is the
 // only safe way for this to fail.
-func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
-	if ui == nil || ui.modTree == nil {
+func FreezeEntity(ui *uiState, virtualPath string) (*freezeRecord, error) {
+	if ui == nil || ui.ModTree == nil {
 		return nil, fmt.Errorf("no mod is loaded")
 	}
-	graph := ui.graphFor()
+	graph := GraphFor(ui)
 	e := graph.Entity(virtualPath)
 	if e == nil {
 		return nil, fmt.Errorf("%s is not in the mod", virtualPath)
@@ -210,7 +210,7 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 	if e.Kind != graphKindUnit && e.Kind != graphKindStructure {
 		return nil, fmt.Errorf("only a unit or a building can be frozen, and %s is a %s", e.Name, e.Kind.Label())
 	}
-	book, err := readFreezeBook(ui.modTree, ui.modulePath)
+	book, err := readFreezeBook(ui.ModTree, ui.ModulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 	// leave the game still loading a unit the author believes is gone. The
 	// path itself is not needed here — it is asked for again when the file
 	// actually moves — so what matters is that this refuses.
-	if _, err := ui.managedFileDiskPath(e.Path); err != nil {
+	if _, err := ManagedFileDiskPath(ui, e.Path); err != nil {
 		return nil, fmt.Errorf("%s cannot be frozen: %v", e.Name, err)
 	}
 
@@ -260,7 +260,7 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 	// sbps rather than ebps. It is part of the same unit to the game, so it
 	// moves with it.
 	squadPath := ebpsSquadPathFor(e)
-	if squadPath != "" && ui.modTree.FindFile(squadPath) != nil {
+	if squadPath != "" && ui.ModTree.FindFile(squadPath) != nil {
 		record.Files = append(record.Files, freezeFile{From: e.Path, To: e.Name + ".rgd"})
 		record.Files = append(record.Files, freezeFile{From: squadPath, To: e.Name + "_squad.rgd"})
 	} else {
@@ -270,7 +270,7 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 	// Saved before anything is touched: a record that does not exist cannot
 	// undo anything.
 	book.Frozen = append(book.Frozen, record)
-	if err := writeFreezeBook(ui.modTree, ui.modulePath, book); err != nil {
+	if err := writeFreezeBook(ui.ModTree, ui.ModulePath, book); err != nil {
 		return nil, fmt.Errorf("the record of what freezing changes could not be written, so nothing was changed: %w", err)
 	}
 
@@ -278,13 +278,13 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 	// time; a file that cannot be rewritten stops the freeze there, with the
 	// record already written, so the state is still recoverable.
 	for _, m := range record.Mentions {
-		if err := ui.clearRgdField(m.File, m.Field, ""); err != nil {
+		if err := ClearRgdField(ui, m.File, m.Field, ""); err != nil {
 			return nil, fmt.Errorf("%s could not be cleared from %s: %w", m.Value, m.File, err)
 		}
 	}
 
 	// And the files themselves, moved into the project's Units folder.
-	unitsDir, err := freezeUnitsDir(ui.modTree, ui.modulePath)
+	unitsDir, err := freezeUnitsDir(ui.ModTree, ui.ModulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -292,25 +292,25 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 		return nil, err
 	}
 	for _, f := range record.Files {
-		disk, err := ui.managedFileDiskPath(f.From)
+		disk, err := ManagedFileDiskPath(ui, f.From)
 		if err != nil {
 			return nil, fmt.Errorf("%s could not be moved: %v", f.From, err)
 		}
 		if err := moveFileKeeping(disk, filepath.Join(unitsDir, f.To)); err != nil {
 			return nil, fmt.Errorf("%s could not be moved into the project folder: %w", f.From, err)
 		}
-		ui.modTree.RemoveFile(f.From)
+		ui.ModTree.RemoveFile(f.From)
 	}
 
 	// The indexes are snapshots: a frozen unit is not in the mod any more, so
 	// the catalogue, the graph and the cached detail all have to be read
 	// again.
-	ui.unitCatalog = nil
-	ui.modGraph = nil
-	ui.unitDetails = nil
-	ui.unitDetailsPath = ""
-	ui.forgetFreezeBook()
-	ui.markStateDirty()
+	ui.UnitCatalog = nil
+	ui.ModGraph = nil
+	ui.UnitDetails = nil
+	ui.UnitDetailsPath = ""
+	ForgetFreezeBook(ui)
+	MarkStateDirty(ui)
 	return &record, nil
 }
 
@@ -321,11 +321,11 @@ func (ui *uiState) freezeEntity(virtualPath string) (*freezeRecord, error) {
 // which the files are visible to the game but nothing names them. If a file
 // cannot be rewritten the freeze is left in place, because a half-restored
 // unit is worse than a frozen one.
-func (ui *uiState) unfreezeEntity(virtualPath string) (*freezeRecord, error) {
-	if ui == nil || ui.modTree == nil {
+func UnfreezeEntity(ui *uiState, virtualPath string) (*freezeRecord, error) {
+	if ui == nil || ui.ModTree == nil {
 		return nil, fmt.Errorf("no mod is loaded")
 	}
-	book, err := readFreezeBook(ui.modTree, ui.modulePath)
+	book, err := readFreezeBook(ui.ModTree, ui.ModulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -335,12 +335,12 @@ func (ui *uiState) unfreezeEntity(virtualPath string) (*freezeRecord, error) {
 	}
 
 	for _, m := range record.Mentions {
-		if err := ui.clearRgdField(m.File, m.Field, m.Value); err != nil {
+		if err := ClearRgdField(ui, m.File, m.Field, m.Value); err != nil {
 			return nil, fmt.Errorf("the reference to %s could not be put back into %s: %w", record.Name, m.File, err)
 		}
 	}
 
-	unitsDir, err := freezeUnitsDir(ui.modTree, ui.modulePath)
+	unitsDir, err := freezeUnitsDir(ui.ModTree, ui.ModulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (ui *uiState) unfreezeEntity(virtualPath string) (*freezeRecord, error) {
 		if err != nil {
 			return nil, fmt.Errorf("the saved %s could not be read, so nothing was moved back: %w", f.To, err)
 		}
-		if _, err := ui.modTree.WriteOverlayFile(f.From, data); err != nil {
+		if _, err := ui.ModTree.WriteOverlayFile(f.From, data); err != nil {
 			return nil, fmt.Errorf("%s could not be put back: %w", f.From, err)
 		}
 		if err := os.Remove(saved); err != nil {
@@ -365,16 +365,16 @@ func (ui *uiState) unfreezeEntity(virtualPath string) (*freezeRecord, error) {
 		}
 	}
 	book.Frozen = kept
-	if err := writeFreezeBook(ui.modTree, ui.modulePath, book); err != nil {
+	if err := writeFreezeBook(ui.ModTree, ui.ModulePath, book); err != nil {
 		return nil, err
 	}
 
-	ui.unitCatalog = nil
-	ui.modGraph = nil
-	ui.unitDetails = nil
-	ui.unitDetailsPath = ""
-	ui.forgetFreezeBook()
-	ui.markStateDirty()
+	ui.UnitCatalog = nil
+	ui.ModGraph = nil
+	ui.UnitDetails = nil
+	ui.UnitDetailsPath = ""
+	ForgetFreezeBook(ui)
+	MarkStateDirty(ui)
 	return record, nil
 }
 
@@ -394,31 +394,31 @@ func freezeUnitsDir(tree *modtree.ModTree, modulePath string) (string, error) {
 // would be a disk read per frame for a question whose answer changes only when
 // a freeze happens. The cache is dropped when the mod changes and after every
 // freeze and unfreeze, which are the only things that change it.
-func (ui *uiState) freezeBookFor() *freezeBook {
-	if ui == nil || ui.modTree == nil {
+func FreezeBookFor(ui *uiState) *freezeBook {
+	if ui == nil || ui.ModTree == nil {
 		return nil
 	}
-	mod := ui.modTree.FileMapName
-	if ui.freezeBook != nil && ui.freezeBookMod == mod {
-		return ui.freezeBook
+	mod := ui.ModTree.FileMapName
+	if ui.FreezeBook != nil && ui.FreezeBookMod == mod {
+		return ui.FreezeBook
 	}
-	book, err := readFreezeBook(ui.modTree, ui.modulePath)
+	book, err := readFreezeBook(ui.ModTree, ui.ModulePath)
 	if err != nil {
 		// A record that cannot be read is treated as an empty one for
 		// drawing, and the error is said when something is actually
 		// attempted, which is where the user can act on it.
 		book = &freezeBook{Version: freezeBookVersion, Mod: mod}
 	}
-	ui.freezeBook = book
-	ui.freezeBookMod = mod
+	ui.FreezeBook = book
+	ui.FreezeBookMod = mod
 	return book
 }
 
 // forgetFreezeBook drops the cached record, which is what a freeze, an
 // unfreeze and a module change all have to do.
-func (ui *uiState) forgetFreezeBook() {
-	ui.freezeBook = nil
-	ui.freezeBookMod = ""
+func ForgetFreezeBook(ui *uiState) {
+	ui.FreezeBook = nil
+	ui.FreezeBookMod = ""
 }
 
 // ebpsSquadPathFor is the squad file that goes with a unit: the same name in
@@ -441,11 +441,11 @@ func ebpsSquadPathFor(e *graphEntity) string {
 // mod inherits from the base game, and writing a changed copy of it into the
 // mod's own folder is how the mod's version takes the place of the base one.
 // A file the mod owns is simply rewritten.
-func (ui *uiState) clearRgdField(virtualPath, field, value string) error {
-	if ui == nil || ui.modTree == nil {
+func ClearRgdField(ui *uiState, virtualPath, field, value string) error {
+	if ui == nil || ui.ModTree == nil {
 		return fmt.Errorf("no mod is loaded")
 	}
-	data, err := ui.modTree.ReadFile(virtualPath)
+	data, err := ui.ModTree.ReadFile(virtualPath)
 	if err != nil {
 		return err
 	}
@@ -464,7 +464,7 @@ func (ui *uiState) clearRgdField(virtualPath, field, value string) error {
 	if err != nil {
 		return err
 	}
-	_, err = ui.modTree.WriteOverlayFile(virtualPath, out)
+	_, err = ui.ModTree.WriteOverlayFile(virtualPath, out)
 	return err
 }
 
@@ -539,24 +539,24 @@ func ensureProjectDirs(tree *modtree.ModTree, modulePath string) (string, error)
 
 // layoutFreezeButtons draws the freeze or unfreeze button for the selected
 // object. A nil selection draws nothing, because there is nothing to act on.
-func (ui *uiState) layoutFreezeButtons(gtx layout.Context, sel *unitEntry) layout.Dimensions {
-	if sel == nil || ui.modTree == nil {
+func LayoutFreezeButtons(ui *uiState, gtx layout.Context, sel *unitEntry) layout.Dimensions {
+	if sel == nil || ui.ModTree == nil {
 		return layout.Dimensions{}
 	}
-	if ui.isFrozen(sel.Path) {
-		return ui.smallButtonDisabled(gtx, &ui.unitUnfreezeTrigger, "Unfreeze…", false)
+	if IsFrozen(ui, sel.Path) {
+		return SmallButtonDisabled(ui, gtx, &ui.UnitUnfreezeTrigger, "Unfreeze…", false)
 	}
 	// Only a file the mod itself owns can be moved out of it, so a unit that
 	// comes from the base game gets no button rather than one that fails.
-	return ui.smallButtonDisabled(gtx, &ui.unitFreezeTrigger, "Freeze…", !ui.canFreeze(sel.Path))
+	return SmallButtonDisabled(ui, gtx, &ui.UnitFreezeTrigger, "Freeze…", !CanFreeze(ui, sel.Path))
 }
 
 // isFrozen reports whether an object has been moved out of the mod.
-func (ui *uiState) isFrozen(path string) bool {
-	if ui == nil || ui.modTree == nil {
+func IsFrozen(ui *uiState, path string) bool {
+	if ui == nil || ui.ModTree == nil {
 		return false
 	}
-	return ui.freezeBookFor().isFrozen(path)
+	return FreezeBookFor(ui).isFrozen(path)
 }
 
 // canFreeze reports whether an object is one this mod owns, which is the only
@@ -564,22 +564,22 @@ func (ui *uiState) isFrozen(path string) bool {
 // the strip is drawn, so it reads the record rather than caching it: the record
 // changes when a freeze happens, and a stale answer would offer a button that
 // does the wrong thing.
-func (ui *uiState) canFreeze(path string) bool {
-	if ui == nil || ui.modTree == nil {
+func CanFreeze(ui *uiState, path string) bool {
+	if ui == nil || ui.ModTree == nil {
 		return false
 	}
-	_, err := ui.managedFileDiskPath(path)
+	_, err := ManagedFileDiskPath(ui, path)
 	return err == nil
 }
 
 // frozenRows is the list of what has been moved out of the mod, read from the
 // record rather than from the mod: a frozen unit is not in the mod, so this is
 // the only place it is.
-func (ui *uiState) frozenRows() []unitWeaponRow {
-	if ui == nil || ui.modTree == nil {
+func FrozenRows(ui *uiState) []unitWeaponRow {
+	if ui == nil || ui.ModTree == nil {
 		return nil
 	}
-	book := ui.freezeBookFor()
+	book := FreezeBookFor(ui)
 	out := make([]unitWeaponRow, 0, len(book.Frozen))
 	for _, r := range book.Frozen {
 		out = append(out, unitWeaponRow{
@@ -594,26 +594,26 @@ func (ui *uiState) frozenRows() []unitWeaponRow {
 // layoutFrozenList is the "Frozen" column. Each row is one object that has been
 // moved out of the mod, and pressing it puts it back — the list is the way back,
 // because the object itself is no longer anywhere else.
-func (ui *uiState) layoutFrozenList(gtx layout.Context) layout.Dimensions {
-	rows := ui.frozenRows()
+func LayoutFrozenList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	rows := FrozenRows(ui)
 	if len(rows) == 0 {
-		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), "Nothing has been frozen. Freezing a unit moves it out of the mod and clears what pointed at it; unfreezing puts both back.")
+				l := material.Label(ui.Th, unit.Sp(10), "Nothing has been frozen. Freezing a unit moves it out of the mod and clears what pointed at it; unfreezing puts both back.")
 				l.Color = cTextDim
 				l.MaxLines = 6
 				return l.Layout(gtx)
 			})
 		})
 	}
-	ui.ensureUnitRowClicks(len(rows))
-	return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+	EnsureUnitRowClicks(ui, len(rows))
+	return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			var children []layout.FlexChild
 			for i := range rows {
 				i := i
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutUnitSelectableRow(gtx, i, len(rows), rows[i].hardpoint, rows[i].name, "put back", false)
+					return LayoutUnitSelectableRow(ui, gtx, i, len(rows), rows[i].hardpoint, rows[i].name, "put back", false)
 				}))
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -626,19 +626,19 @@ func (ui *uiState) layoutFrozenList(gtx layout.Context) layout.Dimensions {
 // It is a single click rather than a button on each row because the rows are
 // the only thing in the column, and because the operation is the same for all
 // of them: the row says which object, and pressing it undoes that one freeze.
-func (ui *uiState) handleFrozenRowInput(gtx layout.Context) {
-	rows := ui.frozenRows()
-	ui.ensureUnitRowClicks(len(rows))
+func HandleFrozenRowInput(ui *uiState, gtx layout.Context) {
+	rows := FrozenRows(ui)
+	EnsureUnitRowClicks(ui, len(rows))
 	for i := range rows {
-		if i < len(ui.unitRowClicks) && ui.unitRowClicks[i].Clicked(gtx) {
-			ui.unitSelRow = i
-			record, err := ui.unfreezeEntity(rows[i].ref)
+		if i < len(ui.UnitRowClicks) && ui.UnitRowClicks[i].Clicked(gtx) {
+			ui.UnitSelRow = i
+			record, err := UnfreezeEntity(ui, rows[i].ref)
 			if err != nil {
-				ui.statusText = "Could not put " + rows[i].name + " back: " + err.Error()
+				ui.StatusText = "Could not put " + rows[i].name + " back: " + err.Error()
 			} else {
-				ui.statusText = freezeStatusLine("Put back into the mod", record)
+				ui.StatusText = freezeStatusLine("Put back into the mod", record)
 			}
-			ui.markStateDirty()
+			MarkStateDirty(ui)
 			return
 		}
 	}
@@ -647,34 +647,34 @@ func (ui *uiState) handleFrozenRowInput(gtx layout.Context) {
 // handleFreezeInput acts on the freeze buttons. Both are one-way operations
 // that rewrite other files, so neither of them is a toggle: the button says
 // which one it is, and the status line says what happened.
-func (ui *uiState) handleFreezeInput(gtx layout.Context) {
-	sel := ui.currentUnit()
+func HandleFreezeInput(ui *uiState, gtx layout.Context) {
+	sel := CurrentUnit(ui)
 	if sel == nil {
 		return
 	}
-	if ui.unitFreezeTrigger.Clicked(gtx) {
-		record, err := ui.freezeEntity(sel.Path)
+	if ui.UnitFreezeTrigger.Clicked(gtx) {
+		record, err := FreezeEntity(ui, sel.Path)
 		if err != nil {
-			ui.statusText = "Could not freeze " + sel.Name + ": " + err.Error()
-			ui.markStateDirty()
+			ui.StatusText = "Could not freeze " + sel.Name + ": " + err.Error()
+			MarkStateDirty(ui)
 			return
 		}
-		ui.statusText = freezeStatusLine("Moved out of the mod", record)
+		ui.StatusText = freezeStatusLine("Moved out of the mod", record)
 		// The object is no longer in the mod, so the section that lists what
 		// was frozen is where the user is sent to undo it.
-		ui.unitSection = unitSectionNamed("Frozen")
-		ui.markStateDirty()
+		ui.UnitSection = unitSectionNamed("Frozen")
+		MarkStateDirty(ui)
 		return
 	}
-	if ui.unitUnfreezeTrigger.Clicked(gtx) {
-		record, err := ui.unfreezeEntity(sel.Path)
+	if ui.UnitUnfreezeTrigger.Clicked(gtx) {
+		record, err := UnfreezeEntity(ui, sel.Path)
 		if err != nil {
-			ui.statusText = "Could not unfreeze " + sel.Name + ": " + err.Error()
-			ui.markStateDirty()
+			ui.StatusText = "Could not unfreeze " + sel.Name + ": " + err.Error()
+			MarkStateDirty(ui)
 			return
 		}
-		ui.statusText = freezeStatusLine("Put back into the mod", record)
-		ui.markStateDirty()
+		ui.StatusText = freezeStatusLine("Put back into the mod", record)
+		MarkStateDirty(ui)
 	}
 }
 

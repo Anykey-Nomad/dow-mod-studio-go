@@ -21,8 +21,8 @@ func TestOpenModuleListRowsAreOnScreen(t *testing.T) {
 		}
 	}
 	ui := newUI(unitTestTheme())
-	ui.openModulePicker()
-	ui.fpBrowse(dir)
+	OpenModulePicker(ui)
+	FpBrowse(ui, dir)
 	f := newWindowFrame(ui, w, h)
 
 	found := false
@@ -31,13 +31,13 @@ func TestOpenModuleListRowsAreOnScreen(t *testing.T) {
 	for y := 150; y < 800 && !found; y += 5 {
 		f.send(pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: f32.Pt(60, float32(y))})
 		f.frame()
-		for i := range ui.filePick.clicks {
-			if ui.filePick.clicks[i].Hovered() {
+		for i := range ui.FilePick.clicks {
+			if ui.FilePick.clicks[i].Hovered() {
 				found = true
 			}
 		}
 	}
 	if !found {
-		t.Fatalf("no row of the %d-row list takes the pointer: the list is not drawn", len(ui.filePick.rows))
+		t.Fatalf("no row of the %d-row list takes the pointer: the list is not drawn", len(ui.FilePick.rows))
 	}
 }

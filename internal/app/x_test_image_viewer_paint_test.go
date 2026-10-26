@@ -31,19 +31,19 @@ func TestImageViewerPaintsTheImage(t *testing.T) {
 
 	ui := newUI(unitTestTheme())
 	tab := &fileTab{
-		path:        `Data\test\pink.png`,
-		kind:        "image",
-		imageData:   img,
-		imageFormat: "PNG",
-		imageZoom:   1,
+		Path:        `Data\test\pink.png`,
+		Kind:        "image",
+		ImageData:   img,
+		ImageFormat: "PNG",
+		ImageZoom:   1,
 	}
-	ui.openTabs = []*fileTab{tab}
-	ui.tabSel = 1
-	ui.ensureTabClicks()
+	ui.OpenTabs = []*fileTab{tab}
+	ui.TabSel = 1
+	EnsureTabClicks(ui)
 
 	var ops op.Ops
 	gtx := testutil.NewLayoutContext(&ops, size.X, size.Y)
-	ui.layoutContent(gtx)
+	LayoutContent(ui, gtx)
 
 	shot := image.NewRGBA(image.Rect(0, 0, size.X, size.Y))
 	if err := win.Frame(&ops); err != nil {
@@ -91,12 +91,12 @@ func TestImageViewerPaintsTheImage(t *testing.T) {
 func TestImageCache(t *testing.T) {
 	ui := newUI(nil)
 	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
-	ui.cacheDecodedImage(`Data\attrib\textures\icon.dds`, img, nil, "DDS", 123)
-	entry, ok := ui.cachedImage(`data/attrib/textures/icon.DDS`)
+	CacheDecodedImage(ui, `Data\attrib\textures\icon.dds`, img, nil, "DDS", 123)
+	entry, ok := CachedImage(ui, `data/attrib/textures/icon.DDS`)
 	if !ok || entry.data == nil || entry.bytes != 123 || entry.format != "DDS" {
 		t.Fatalf("cache lookup failed: %#v", entry)
 	}
-	if ui.imageCacheBytes != 16 {
-		t.Fatalf("unexpected cache size: %d", ui.imageCacheBytes)
+	if ui.ImageCacheBytes != 16 {
+		t.Fatalf("unexpected cache size: %d", ui.ImageCacheBytes)
 	}
 }

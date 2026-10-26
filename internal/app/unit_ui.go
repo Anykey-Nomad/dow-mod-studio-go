@@ -129,19 +129,19 @@ const (
 // layoutUnitPickerRow places the race and unit strip above the three columns.
 // The strip's height is fixed and the dropdowns are drawn over the columns, so
 // opening one does not move the columns the user is reading.
-func (ui *uiState) layoutUnitPickerRow(gtx layout.Context) layout.Dimensions {
+func LayoutUnitPickerRow(ui *uiState, gtx layout.Context) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(unitPickerStripHeightDp))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
-	return ui.layoutUnitPickerStrip(gtx)
+	return LayoutUnitPickerStrip(ui, gtx)
 }
 
 // unitObjectLabel is what the dialog calls the object it was opened for. It
 // names the unit the pickers have selected, because that is what the columns
 // below show; the unit's own display name is preferred, and its file name is
 // the fallback, since that is the name the game itself uses.
-func (ui *uiState) unitObjectLabel() string {
-	if d := ui.currentUnitDetails(); d != nil {
+func UnitObjectLabel(ui *uiState) string {
+	if d := CurrentUnitDetails(ui); d != nil {
 		if d.Name != "" {
 			return d.Name
 		}
@@ -149,7 +149,7 @@ func (ui *uiState) unitObjectLabel() string {
 			return d.Entry.Name
 		}
 	}
-	if u := ui.currentUnit(); u != nil {
+	if u := CurrentUnit(ui); u != nil {
 		return u.DisplayName()
 	}
 	return "No unit selected"
@@ -157,11 +157,11 @@ func (ui *uiState) unitObjectLabel() string {
 
 // currentUnitSection is the section the dialog is showing, guarded so an index
 // left over from a future section list cannot panic the layout.
-func (ui *uiState) currentUnitSection() unitSection {
-	if ui.unitSection < 0 || ui.unitSection >= len(unitSections) {
+func CurrentUnitSection(ui *uiState) unitSection {
+	if ui.UnitSection < 0 || ui.UnitSection >= len(unitSections) {
 		return unitSections[0]
 	}
-	return unitSections[ui.unitSection]
+	return unitSections[ui.UnitSection]
 }
 
 // ── tool bar panel ─────────────────────────────────────────────────────────
@@ -178,8 +178,8 @@ var unitToolButtons = []struct {
 
 // layoutUnitPanelSlot places the tool panel left of the search field, with the
 // same margins so both sit on one baseline in the menu bar.
-func (ui *uiState) layoutUnitPanelSlot(gtx layout.Context) layout.Dimensions {
-	return layout.Inset{Right: unitPanelGapDp, Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, ui.layoutUnitPanel)
+func LayoutUnitPanelSlot(ui *uiState, gtx layout.Context) layout.Dimensions {
+	return layout.Inset{Right: unitPanelGapDp, Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return LayoutUnitPanel(ui, gtx) })
 }
 
 const unitPanelGapDp = 10
@@ -188,8 +188,8 @@ const unitPanelGapDp = 10
 // content first: the panel is a Rigid in the menu bar's flex row, so its
 // constraints still hold all the free width of the bar, and a background sized
 // from them would stretch from the buttons to the right edge.
-func (ui *uiState) layoutUnitPanel(gtx layout.Context) layout.Dimensions {
-	ui.ensureUnitClicks()
+func LayoutUnitPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
+	EnsureUnitClicks(ui)
 	buttons := func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2), Left: unit.Dp(2), Right: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			var children []layout.FlexChild
@@ -197,7 +197,7 @@ func (ui *uiState) layoutUnitPanel(gtx layout.Context) layout.Dimensions {
 				i := i
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Right: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.unitToolButton(gtx, &ui.unitToolClicks[i], unitToolButtons[i].label, ui.unitTabActive())
+						return UnitToolButton(ui, gtx, &ui.UnitToolClicks[i], unitToolButtons[i].label, UnitTabActive(ui))
 					})
 				}))
 			}
@@ -209,7 +209,7 @@ func (ui *uiState) layoutUnitPanel(gtx layout.Context) layout.Dimensions {
 
 // unitToolButton is one button of the tool panel: a label with its own frame,
 // measured the same way because it too sits in a flex row.
-func (ui *uiState) unitToolButton(gtx layout.Context, btn *widget.Clickable, label string, active bool) layout.Dimensions {
+func UnitToolButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, active bool) layout.Dimensions {
 	bg := cSaveBg
 	col := cSaveBd
 	if active {
@@ -224,7 +224,7 @@ func (ui *uiState) unitToolButton(gtx layout.Context, btn *widget.Clickable, lab
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return frameMeasured(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(3), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(11), label)
+				l := material.Label(ui.Th, unit.Sp(11), label)
 				l.Color = textCol
 				l.MaxLines = 1
 				return l.Layout(gtx)
@@ -253,12 +253,12 @@ func frameMeasured(gtx layout.Context, content layout.Widget, bg, border color.N
 	return layout.Dimensions{Size: sz}
 }
 
-func (ui *uiState) ensureUnitClicks() {
-	if len(ui.unitSectionClicks) != len(unitSections) {
-		ui.unitSectionClicks = make([]widget.Clickable, len(unitSections))
+func EnsureUnitClicks(ui *uiState) {
+	if len(ui.UnitSectionClicks) != len(unitSections) {
+		ui.UnitSectionClicks = make([]widget.Clickable, len(unitSections))
 	}
-	if len(ui.unitToolClicks) != len(unitToolButtons) {
-		ui.unitToolClicks = make([]widget.Clickable, len(unitToolButtons))
+	if len(ui.UnitToolClicks) != len(unitToolButtons) {
+		ui.UnitToolClicks = make([]widget.Clickable, len(unitToolButtons))
 	}
 }
 
@@ -268,24 +268,24 @@ func (ui *uiState) ensureUnitClicks() {
 // every frame, so a click here must not be swallowed by another branch. The
 // interface is a tab now, so the button selects or opens that tab rather than
 // raising a window.
-func (ui *uiState) handleUnitToolInput(gtx layout.Context) {
-	ui.ensureUnitClicks()
-	for i := range ui.unitToolClicks {
-		if !ui.unitToolClicks[i].Clicked(gtx) {
+func HandleUnitToolInput(ui *uiState, gtx layout.Context) {
+	EnsureUnitClicks(ui)
+	for i := range ui.UnitToolClicks {
+		if !ui.UnitToolClicks[i].Clicked(gtx) {
 			continue
 		}
 		switch unitToolButtons[i].action {
 		case "unit-interface":
-			alreadyOpen := ui.unitTabActive()
-			ui.openUnitTab()
-			ui.unitSection = 0
-			ui.markStateDirty()
+			alreadyOpen := UnitTabActive(ui)
+			OpenUnitTab(ui)
+			ui.UnitSection = 0
+			MarkStateDirty(ui)
 			if alreadyOpen {
 				// Pressing the button while the tab is on screen would
 				// otherwise leave it looking like nothing happened.
-				ui.statusText = "Object interface is already open"
+				ui.StatusText = "Object interface is already open"
 			} else {
-				ui.statusText = "Object interface: " + ui.unitObjectLabel()
+				ui.StatusText = "Object interface: " + UnitObjectLabel(ui)
 			}
 		}
 		return
@@ -295,32 +295,32 @@ func (ui *uiState) handleUnitToolInput(gtx layout.Context) {
 // handleUnitTabInput owns the object tab's own clicks: the pickers, the
 // selectable rows of the populated columns, and the section list. It runs as
 // part of the ordinary input path, so each part consumes only its own clicks.
-func (ui *uiState) handleUnitTabInput(gtx layout.Context) {
-	ui.ensureUnitClicks()
+func HandleUnitTabInput(ui *uiState, gtx layout.Context) {
+	EnsureUnitClicks(ui)
 	// The pickers come first: a click on an open dropdown row belongs to the
 	// dropdown, not to the section list or the columns underneath it.
-	ui.handleUnitPickerKeys(gtx)
-	ui.handleUnitPickerInput(gtx)
-	ui.handleUnitRowInput(gtx)
-	ui.handleUnitSquadInput(gtx)
-	for i := range ui.unitSectionClicks {
-		if i < len(unitSections) && ui.unitSectionClicks[i].Clicked(gtx) {
-			ui.unitSection = i
+	HandleUnitPickerKeys(ui, gtx)
+	HandleUnitPickerInput(ui, gtx)
+	HandleUnitRowInput(ui, gtx)
+	HandleUnitSquadInput(ui, gtx)
+	for i := range ui.UnitSectionClicks {
+		if i < len(unitSections) && ui.UnitSectionClicks[i].Clicked(gtx) {
+			ui.UnitSection = i
 			// The section the Object window was left on is part of the
 			// saved session along with its pickers.
-			ui.markStateDirty()
+			MarkStateDirty(ui)
 		}
 	}
 	// Last, because it acts on the section that was just chosen: a press that
 	// left the info section must not be read as a press inside it.
-	ui.handleUnitFieldInput(gtx)
+	HandleUnitFieldInput(ui, gtx)
 	// The mesh eye toggles belong to whichever section shows the mesh list —
 	// Events and Classic OE both — so they are drained here rather than
 	// inside the Events handler, which returns early for other sections.
-	ui.handleUnitMeshToggles(gtx)
-	ui.handleUnitEventsInput(gtx)
-	ui.handleClassicOEWheInput(gtx)
-	ui.handleClassicOEClauseConditionInput(gtx)
+	HandleUnitMeshToggles(ui, gtx)
+	HandleUnitEventsInput(ui, gtx)
+	HandleClassicOEWheInput(ui, gtx)
+	HandleClassicOEClauseConditionInput(ui, gtx)
 }
 
 // ── column geometry ─────────────────────────────────────────────────────────
@@ -347,7 +347,7 @@ func unitColumnWidths(bodyW, leftW, gap, minW int) (left, mid, right int) {
 // layoutUnitBody splits the given space into the three columns. The widths are
 // worked out in pixels rather than with flex weights, because the middle column
 // is specified as a third of the space and the left one as a fixed menu width.
-func (ui *uiState) layoutUnitBody(gtx layout.Context) layout.Dimensions {
+func LayoutUnitBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 	// The columns themselves; the material dialog's dim and card wrap them
 	// below, so a double press on a mesh row raises that editor over
 	// whichever section is on show — Viewport and Classic OE both.
@@ -357,57 +357,57 @@ func (ui *uiState) layoutUnitBody(gtx layout.Context) layout.Dimensions {
 		// The card's own padding was already consumed by the caller's inset.
 		// The caller's own padding was already consumed before this was called.
 		leftW, midW, rightW := unitColumnWidths(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(unitLeftColumnDp)), gap, minW)
-		if ui.currentUnitSection().label == unitSectionViewport {
+		if CurrentUnitSection(ui).label == unitSectionViewport {
 			// The 3D view takes the middle and right columns together. A model in a
 			// third of the window is a thumbnail, and the cameras the section lists
 			// need a column of their own to be picked out of.
 			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-				layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
+				layout.Rigid(FixedPanel(ui, leftW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitLeftColumn(ui, gtx) })),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-				layout.Flexed(1, ui.layoutUnitViewportArea),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutUnitViewportArea(ui, gtx) }),
 			)
 		}
-		if ui.currentUnitSection().label == unitSectionClassicOE {
+		if CurrentUnitSection(ui).label == unitSectionClassicOE {
 			// The classic editor's layout takes the middle and right columns
 			// together for the same reason the Viewport section does: its panel
 			// column plus a model preview needs the room, and a properties panel
 			// beside a preview would squeeze both.
 			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-				layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
+				layout.Rigid(FixedPanel(ui, leftW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitLeftColumn(ui, gtx) })),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-				layout.Flexed(1, ui.layoutClassicOEArea),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutClassicOEArea(ui, gtx) }),
 			)
 		}
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-			layout.Rigid(ui.fixedPanel(leftW, ui.layoutUnitLeftColumn)),
+			layout.Rigid(FixedPanel(ui, leftW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitLeftColumn(ui, gtx) })),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-			layout.Rigid(ui.fixedPanel(midW, ui.layoutUnitMiddleColumn)),
+			layout.Rigid(FixedPanel(ui, midW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitMiddleColumn(ui, gtx) })),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-			layout.Rigid(ui.fixedPanel(rightW, ui.layoutUnitRightColumn)),
+			layout.Rigid(FixedPanel(ui, rightW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitRightColumn(ui, gtx) })),
 		)
 	}
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(columns),
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			if !ui.unitMeshMatOpen {
+			if !ui.UnitMeshMatOpen {
 				return layout.Dimensions{}
 			}
-			return ui.layoutUnitMeshMatDialog(gtx)
+			return LayoutUnitMeshMatDialog(ui, gtx)
 		}),
 	)
 }
 
 // unitColumn frames one of the three columns: a header strip and a body.
-func (ui *uiState) unitColumn(gtx layout.Context, title, hint string) layout.Dimensions {
+func UnitColumn(ui *uiState, gtx layout.Context, title, hint string) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, title)
+				return LayoutUnitColumnHeader(ui, gtx, title)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(10), hint)
+					l := material.Label(ui.Th, unit.Sp(10), hint)
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				})
@@ -416,19 +416,19 @@ func (ui *uiState) unitColumn(gtx layout.Context, title, hint string) layout.Dim
 	})
 }
 
-func (ui *uiState) layoutUnitLeftColumn(gtx layout.Context) layout.Dimensions {
+func LayoutUnitLeftColumn(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, "Sections")
+				return LayoutUnitColumnHeader(ui, gtx, "Sections")
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-			layout.Flexed(1, ui.layoutUnitSectionList),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutUnitSectionList(ui, gtx) }),
 		)
 	})
 }
 
-func (ui *uiState) layoutUnitColumnHeader(gtx layout.Context, title string) layout.Dimensions {
+func LayoutUnitColumnHeader(ui *uiState, gtx layout.Context, title string) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(unitColHeaderHeight))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
@@ -442,7 +442,7 @@ func (ui *uiState) layoutUnitColumnHeader(gtx layout.Context, title string) layo
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(11), title)
+						l := material.Label(ui.Th, unit.Sp(11), title)
 						l.Color = cText
 						l.MaxLines = 1
 						return l.Layout(gtx)
@@ -457,33 +457,33 @@ func (ui *uiState) layoutUnitColumnHeader(gtx layout.Context, title string) layo
 // highlighted, keyboard reachable through the row's own clickable. It makes
 // sure its click targets exist, since the tab can be drawn without anything
 // having opened the tool panel first.
-func (ui *uiState) layoutUnitSectionList(gtx layout.Context) layout.Dimensions {
-	ui.ensureUnitClicks()
+func LayoutUnitSectionList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	EnsureUnitClicks(ui)
 	return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(2), Right: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		var children []layout.FlexChild
 		for i := range unitSections {
 			i := i
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitSectionRow(gtx, i)
+				return LayoutUnitSectionRow(ui, gtx, i)
 			}))
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
 }
 
-func (ui *uiState) layoutUnitSectionRow(gtx layout.Context, index int) layout.Dimensions {
-	ui.ensureUnitClicks()
+func LayoutUnitSectionRow(ui *uiState, gtx layout.Context, index int) layout.Dimensions {
+	EnsureUnitClicks(ui)
 	if index < 0 || index >= len(unitSections) {
 		return layout.Dimensions{}
 	}
-	selected := index == ui.unitSection
+	selected := index == ui.UnitSection
 	bg := cPanelBg
 	if selected {
 		bg = cSelectBg
-	} else if ui.unitSectionClicks[index].Hovered() {
+	} else if ui.UnitSectionClicks[index].Hovered() {
 		bg = cMenuHover
 	}
-	return ui.unitSectionClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.UnitSectionClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp))
 		// The row spans its column, so the width is pinned before the stack
 		// lays out: with a zero minimum a background would fall back to the
@@ -502,7 +502,7 @@ func (ui *uiState) layoutUnitSectionRow(gtx layout.Context, index int) layout.Di
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(11), unitSections[index].label)
+							l := material.Label(ui.Th, unit.Sp(11), unitSections[index].label)
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -514,12 +514,12 @@ func (ui *uiState) layoutUnitSectionRow(gtx layout.Context, index int) layout.Di
 	})
 }
 
-func (ui *uiState) layoutUnitMiddleColumn(gtx layout.Context) layout.Dimensions {
-	return ui.layoutUnitMiddleColumnBody(gtx)
+func LayoutUnitMiddleColumn(ui *uiState, gtx layout.Context) layout.Dimensions {
+	return LayoutUnitMiddleColumnBody(ui, gtx)
 }
 
-func (ui *uiState) layoutUnitRightColumn(gtx layout.Context) layout.Dimensions {
-	return ui.layoutUnitRightColumnBody(gtx)
+func LayoutUnitRightColumn(ui *uiState, gtx layout.Context) layout.Dimensions {
+	return LayoutUnitRightColumnBody(ui, gtx)
 }
 
 // ─── merged from unit_action_icons.go ───────────────────────────────────────────────
@@ -543,22 +543,22 @@ const actionIconCommandsDir = `art\ui\ingame\command_icons`
 
 // actionIcon returns the decoded command icon of an action or motion, or nil
 // when the game's vocabulary has none for it.
-func (ui *uiState) actionIcon(name string) image.Image {
+func ActionIcon(ui *uiState, name string) image.Image {
 	file := actionIconFile(name)
-	if file == "" || ui.modTree == nil {
+	if file == "" || ui.ModTree == nil {
 		return nil
 	}
-	mod := ui.modTree.FileMapName
-	if ui.actionIcons == nil || ui.actionIconsMod != mod {
-		ui.actionIcons = make(map[string]iconCacheEntry)
-		ui.actionIconsMod = mod
+	mod := ui.ModTree.FileMapName
+	if ui.ActionIcons == nil || ui.ActionIconsMod != mod {
+		ui.ActionIcons = make(map[string]iconCacheEntry)
+		ui.ActionIconsMod = mod
 	}
 	key := strings.ToLower(strings.TrimSpace(name))
-	if e, ok := ui.actionIcons[key]; ok {
+	if e, ok := ui.ActionIcons[key]; ok {
 		return e.img
 	}
-	img := ui.readIconAt(actionIconCommandsDir + `\` + file)
-	ui.actionIcons[key] = iconCacheEntry{img: img, tried: true}
+	img := ReadIconAt(ui, actionIconCommandsDir+`\`+file)
+	ui.ActionIcons[key] = iconCacheEntry{img: img, tried: true}
 	return img
 }
 
@@ -707,20 +707,20 @@ type iconCacheEntry struct {
 
 // unitIcon returns the decoded icon of a unit or building, or nil when the mod
 // has none.
-func (ui *uiState) unitIcon(u unitEntry) image.Image {
-	if ui.modTree == nil || u.Path == "" {
+func UnitIcon(ui *uiState, u unitEntry) image.Image {
+	if ui.ModTree == nil || u.Path == "" {
 		return nil
 	}
-	mod := ui.modTree.FileMapName
-	if ui.unitIcons == nil || ui.unitIconsMod != mod {
-		ui.unitIcons = make(map[string]iconCacheEntry)
-		ui.unitIconsMod = mod
+	mod := ui.ModTree.FileMapName
+	if ui.UnitIcons == nil || ui.UnitIconsMod != mod {
+		ui.UnitIcons = make(map[string]iconCacheEntry)
+		ui.UnitIconsMod = mod
 	}
-	if e, ok := ui.unitIcons[u.Path]; ok {
+	if e, ok := ui.UnitIcons[u.Path]; ok {
 		return e.img
 	}
-	img := ui.loadUnitIcon(u)
-	ui.unitIcons[u.Path] = iconCacheEntry{img: img, tried: true}
+	img := LoadUnitIcon(ui, u)
+	ui.UnitIcons[u.Path] = iconCacheEntry{img: img, tried: true}
 	return img
 }
 
@@ -728,18 +728,18 @@ func (ui *uiState) unitIcon(u unitEntry) image.Image {
 // first: the game's naming convention, then the file anywhere in the tree,
 // then the name the unit's own .rgd records — reading the unit is the
 // expensive part, so it is last.
-func (ui *uiState) loadUnitIcon(u unitEntry) image.Image {
-	if ui.modTree == nil {
+func LoadUnitIcon(ui *uiState, u unitEntry) image.Image {
+	if ui.ModTree == nil {
 		return nil
 	}
 	stem := unitTemplateIconBase(u.Race) + `\` + u.Name + "_icon"
-	if img := ui.readIconAt(`art\ui\ingame\` + stem); img != nil {
+	if img := ReadIconAt(ui, `art\ui\ingame\`+stem); img != nil {
 		return img
 	}
-	if img := ui.readIconByName(u.Name + "_icon"); img != nil {
+	if img := ReadIconByName(ui, u.Name+"_icon"); img != nil {
 		return img
 	}
-	data, err := ui.modTree.ReadFile(u.Path)
+	data, err := ui.ModTree.ReadFile(u.Path)
 	if err != nil {
 		return nil
 	}
@@ -753,27 +753,27 @@ func (ui *uiState) loadUnitIcon(u unitEntry) image.Image {
 		return nil
 	}
 	icon = strings.ReplaceAll(icon, "/", `\`)
-	if img := ui.readIconAt(`art\ui\ingame\` + icon); img != nil {
+	if img := ReadIconAt(ui, `art\ui\ingame\`+icon); img != nil {
 		return img
 	}
 	// icon_name carries the race folder in front ("necrons/necron_icons/...")
 	// while the file sits directly under the icons folder.
 	if i := strings.Index(icon, `\`); i >= 0 {
-		if img := ui.readIconAt(`art\ui\ingame\` + icon[i+1:]); img != nil {
+		if img := ReadIconAt(ui, `art\ui\ingame\`+icon[i+1:]); img != nil {
 			return img
 		}
 	}
 	if i := strings.LastIndex(icon, `\`); i >= 0 {
 		icon = icon[i+1:]
 	}
-	return ui.readIconByName(icon)
+	return ReadIconByName(ui, icon)
 }
 
 // readIconAt looks for the given tree path without an extension, trying the
 // two forms an icon ships in.
-func (ui *uiState) readIconAt(virtualPathNoExt string) image.Image {
+func ReadIconAt(ui *uiState, virtualPathNoExt string) image.Image {
 	for _, ext := range []string{".tga", ".rsh"} {
-		data, err := ui.modTree.ReadFile(virtualPathNoExt + ext)
+		data, err := ui.ModTree.ReadFile(virtualPathNoExt + ext)
 		if err != nil {
 			continue
 		}
@@ -786,13 +786,13 @@ func (ui *uiState) readIconAt(virtualPathNoExt string) image.Image {
 
 // readIconByName finds an icon file by its base name anywhere in the tree,
 // which covers a mod that filed its icons somewhere of its own.
-func (ui *uiState) readIconByName(stem string) image.Image {
+func ReadIconByName(ui *uiState, stem string) image.Image {
 	for _, ext := range []string{".tga", ".rsh"} {
-		f := ui.modTree.FindByName(stem + ext)
+		f := ui.ModTree.FindByName(stem + ext)
 		if f == nil {
 			continue
 		}
-		data, err := ui.modTree.ReadFile(f.FullPath)
+		data, err := ui.ModTree.ReadFile(f.FullPath)
 		if err != nil {
 			continue
 		}

@@ -25,7 +25,7 @@ func testExportTree(t *testing.T) (*uiState, *modtree.ModTree, string) {
 	}
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
-	ui := &uiState{modTree: tree, tabSel: 1, openTabs: []*fileTab{{path: file.FullPath, kind: "rgd"}}}
+	ui := &uiState{ModTree: tree, TabSel: 1, OpenTabs: []*fileTab{{Path: file.FullPath, Kind: "rgd"}}}
 	return ui, tree, file.FullPath
 }
 
@@ -54,11 +54,11 @@ func TestWavToFDAUsesCurrentModFolder(t *testing.T) {
 
 func TestExportEligible_SGAWithoutCurrentOverlay(t *testing.T) {
 	ui, _, path := testExportTree(t)
-	eligible, reason := ui.exportEligible(ui.activeTab())
+	eligible, reason := ExportEligible(ui, ActiveTab(ui))
 	if !eligible {
 		t.Fatalf("expected SGA file to be exportable: %s", reason)
 	}
-	overlay, err := ui.modTree.OverlayPath(path)
+	overlay, err := ui.ModTree.OverlayPath(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestExportEligible_BlockedByCurrentOverlay(t *testing.T) {
 	if _, err := tree.WriteOverlayFile(path, []byte("overlay")); err != nil {
 		t.Fatal(err)
 	}
-	eligible, reason := ui.exportEligible(ui.activeTab())
+	eligible, reason := ExportEligible(ui, ActiveTab(ui))
 	if eligible {
 		t.Fatal("expected file already present in current mod to be blocked")
 	}
@@ -86,7 +86,7 @@ func TestExportEligible_FSSourceNotEligible(t *testing.T) {
 	file := tree.FindFile(path)
 	file.Source.IsSGA = false
 	file.Source.Kind = modtree.KindThisMod
-	eligible, reason := ui.exportEligible(ui.activeTab())
+	eligible, reason := ExportEligible(ui, ActiveTab(ui))
 	if eligible {
 		t.Fatal("expected filesystem source to be blocked")
 	}

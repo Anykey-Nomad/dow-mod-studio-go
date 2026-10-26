@@ -47,56 +47,56 @@ const unitListVisibleRows = 12
 // dropdown is open: the first call happens lazily, on whatever frame first asks
 // for the catalog — which is the frame the user clicked the picker — so
 // clearing the open state here would shut the list the instant it opened.
-func (ui *uiState) unitCatalogFor() *unitCatalog {
-	if ui.modTree == nil {
-		ui.unitCatalog = nil
-		ui.unitCatalogMod = ""
-		ui.modGraph = nil
-		ui.modGraphMod = ""
+func UnitCatalogFor(ui *uiState) *unitCatalog {
+	if ui.ModTree == nil {
+		ui.UnitCatalog = nil
+		ui.UnitCatalogMod = ""
+		ui.ModGraph = nil
+		ui.ModGraphMod = ""
 		// With no mod there is nothing for a running scan to be reading, and
 		// a tree that is being closed is the last place to find that out.
-		ui.stopUnitNameScan()
-		ui.unitNames = nil
-		ui.unitNamesDone = false
-		ui.stopUnitSquadScan()
-		ui.unitSquads = nil
-		ui.unitSquadsDone = false
-		ui.forgetFreezeBook()
+		StopUnitNameScan(ui)
+		ui.UnitNames = nil
+		ui.UnitNamesDone = false
+		StopUnitSquadScan(ui)
+		ui.UnitSquads = nil
+		ui.UnitSquadsDone = false
+		ForgetFreezeBook(ui)
 		return nil
 	}
-	mod := ui.modTree.FileMapName + "|" + ui.modTree.ModFilePath
-	if ui.unitCatalog != nil && ui.unitCatalogMod == mod {
-		return ui.unitCatalog
+	mod := ui.ModTree.FileMapName + "|" + ui.ModTree.ModFilePath
+	if ui.UnitCatalog != nil && ui.UnitCatalogMod == mod {
+		return ui.UnitCatalog
 	}
 	// A different mod means a different set of files, so the graph of the old
 	// one is meaningless as well.
-	ui.modGraph = nil
-	ui.modGraphMod = ""
-	ui.forgetFreezeBook()
-	ui.unitCatalog = buildUnitCatalog(ui.modTree)
-	ui.unitCatalogMod = mod
+	ui.ModGraph = nil
+	ui.ModGraphMod = ""
+	ForgetFreezeBook(ui)
+	ui.UnitCatalog = buildUnitCatalog(ui.ModTree)
+	ui.UnitCatalogMod = mod
 	// The catalog is only the file names; the names the lists show come from
 	// each unit's own localisation id, which is a .rgd read per unit. That
 	// starts here, in the background, so the dropdown is never the thing that
 	// waits for it.
-	ui.unitNamesDone = false
-	ui.startUnitNameScan(ui.modTree, ui.unitCatalog)
+	ui.UnitNamesDone = false
+	StartUnitNameScan(ui, ui.ModTree, ui.UnitCatalog)
 	// The squad index has the same shape of problem and the same answer: the
 	// link from a unit to its squads exists only in the squad files, so those
 	// are walked in the background too. Measured at 880ms for the 431 squads of
 	// the DXP3 tree, which is far too long to spend on the frame the dialog
 	// opens.
-	ui.unitSquadsDone = false
-	ui.startUnitSquadScan(ui.modTree)
+	ui.UnitSquadsDone = false
+	StartUnitSquadScan(ui, ui.ModTree)
 	// A different mod means a different set of races and units, so the old
 	// indexes and the cached unit are meaningless.
-	ui.unitRaceSel = 0
-	ui.unitSel = 0
-	ui.unitDetails = nil
-	ui.unitDetailsPath = ""
-	ui.unitSelRow = 0
-	ui.applyPendingUnitPick()
-	return ui.unitCatalog
+	ui.UnitRaceSel = 0
+	ui.UnitSel = 0
+	ui.UnitDetails = nil
+	ui.UnitDetailsPath = ""
+	ui.UnitSelRow = 0
+	ApplyPendingUnitPick(ui)
+	return ui.UnitCatalog
 }
 
 // applyPendingUnitPick puts the pickers back where the last session left them.
@@ -110,25 +110,25 @@ func (ui *uiState) unitCatalogFor() *unitCatalog {
 // This is the only place that consumes them, so a mod opened later in the
 // session starts from the top rather than being dragged back to a unit of the
 // one that was open when the app started.
-func (ui *uiState) applyPendingUnitPick() {
-	if ui.unitCatalog == nil || (ui.unitPickRace == "" && ui.unitPickPath == "") {
+func ApplyPendingUnitPick(ui *uiState) {
+	if ui.UnitCatalog == nil || (ui.UnitPickRace == "" && ui.UnitPickPath == "") {
 		return
 	}
-	race, path := ui.unitPickRace, ui.unitPickPath
-	ui.unitPickRace, ui.unitPickPath = "", ""
-	for i := range ui.unitCatalog.Races {
-		r := &ui.unitCatalog.Races[i]
+	race, path := ui.UnitPickRace, ui.UnitPickPath
+	ui.UnitPickRace, ui.UnitPickPath = "", ""
+	for i := range ui.UnitCatalog.Races {
+		r := &ui.UnitCatalog.Races[i]
 		if race != "" && !strings.EqualFold(r.Name, race) {
 			continue
 		}
-		ui.unitRaceSel = i
+		ui.UnitRaceSel = i
 		if path == "" {
 			return
 		}
 		units := r.UnitsOf()
 		for j := range units {
 			if strings.EqualFold(units[j].Path, path) {
-				ui.unitSel = j
+				ui.UnitSel = j
 				return
 			}
 		}
@@ -146,70 +146,70 @@ func (ui *uiState) applyPendingUnitPick() {
 // references is not, and a session that never opens the relationships view
 // should never pay for it. The links themselves are read even later, by
 // ensureLinks, for the same reason.
-func (ui *uiState) graphFor() *modGraph {
-	if ui.modTree == nil {
-		ui.modGraph = nil
-		ui.modGraphMod = ""
+func GraphFor(ui *uiState) *modGraph {
+	if ui.ModTree == nil {
+		ui.ModGraph = nil
+		ui.ModGraphMod = ""
 		return nil
 	}
-	mod := ui.modTree.FileMapName
-	if ui.modGraph == nil || ui.modGraphMod != mod {
-		ui.modGraph = newModGraph(ui.modTree)
-		ui.modGraphMod = mod
+	mod := ui.ModTree.FileMapName
+	if ui.ModGraph == nil || ui.ModGraphMod != mod {
+		ui.ModGraph = newModGraph(ui.ModTree)
+		ui.ModGraphMod = mod
 	}
-	return ui.modGraph
+	return ui.ModGraph
 }
 
 // currentUnit is the unit the dialog is showing, or nil when the mod has none.
-func (ui *uiState) currentUnit() *unitEntry {
-	return ui.unitCatalogFor().SelectedUnit(ui.unitRaceSel, ui.unitSel)
+func CurrentUnit(ui *uiState) *unitEntry {
+	return UnitCatalogFor(ui).SelectedUnit(ui.UnitRaceSel, ui.UnitSel)
 }
 
 // currentRace is the race the dialog is showing, or nil when there is none.
-func (ui *uiState) currentRace() *raceEntry {
-	return ui.unitCatalogFor().SelectedRace(ui.unitRaceSel)
+func CurrentRace(ui *uiState) *raceEntry {
+	return UnitCatalogFor(ui).SelectedRace(ui.UnitRaceSel)
 }
 
 // currentUnitDetails parses the selected unit once and caches it, so switching
 // between the sections does not re-read and re-parse the file each time.
-func (ui *uiState) currentUnitDetails() *unitDetails {
-	u := ui.currentUnit()
+func CurrentUnitDetails(ui *uiState) *unitDetails {
+	u := CurrentUnit(ui)
 	if u == nil {
 		return nil
 	}
-	if ui.unitDetails != nil && strings.EqualFold(ui.unitDetailsPath, u.Path) {
-		return ui.unitDetails
+	if ui.UnitDetails != nil && strings.EqualFold(ui.UnitDetailsPath, u.Path) {
+		return ui.UnitDetails
 	}
-	d := loadUnitDetails(ui.modTree, *u)
-	ui.unitDetails = d
-	ui.unitDetailsPath = u.Path
+	d := loadUnitDetails(ui.ModTree, *u)
+	ui.UnitDetails = d
+	ui.UnitDetailsPath = u.Path
 	// A different unit means different fields, so the pointer targets of the
 	// previous unit's localised rows are dead weight. Dropping them here keeps
 	// the map the size of one unit's rows rather than one per unit ever opened.
-	ui.localeEditTags = nil
+	ui.LocaleEditTags = nil
 	// A different unit means the editor's field is not in this file any more,
 	// and any change that had not been written is the previous unit's. The
 	// unsaved state is deliberately not carried over: unitInfoDirty says the
 	// unit on screen has been changed, and it is asking about a different one.
-	ui.unitInfoDirty = false
-	ui.unitValError = ""
-	ui.unitValBound = ""
-	ui.unitValEditor.SetText("")
-	ui.unitInfoSel = 0
+	ui.UnitInfoDirty = false
+	ui.UnitValError = ""
+	ui.UnitValBound = ""
+	ui.UnitValEditor.SetText("")
+	ui.UnitInfoSel = 0
 	// A different unit means the selected row of the populated columns points
 	// at nothing, so the selection starts over.
-	ui.unitSelRow = 0
+	ui.UnitSelRow = 0
 	// The columns are scrolled to the top for a new unit: the previous unit's
 	// offset is meaningless against a different list, and keeping it would drop
 	// the reader into the middle of the fields with no way to know they had
 	// scrolled at all.
-	ui.unitInfoList = layout.List{}
-	ui.unitSquadList = layout.List{}
+	ui.UnitInfoList = layout.List{}
+	ui.UnitSquadList = layout.List{}
 	// A different unit is a different model, so the viewport's viewer and the
 	// textures it loaded go with the previous one. The next load only happens
 	// if the Viewport section is looked at again, which is what keeps browsing
 	// units from parsing five megabytes of geometry per click.
-	ui.resetUnitModel()
+	ResetUnitModel(ui)
 	return d
 }
 
@@ -218,26 +218,26 @@ func (ui *uiState) currentUnitDetails() *unitDetails {
 // layoutUnitPickerStrip draws the race and unit pickers. It is a Rigid above
 // the columns, so its height is fixed and an open dropdown is drawn as an
 // overlay on top rather than pushing the columns down.
-func (ui *uiState) layoutUnitPickerStrip(gtx layout.Context) layout.Dimensions {
-	cat := ui.unitCatalogFor()
-	race := ui.currentRace()
-	sel := ui.currentUnit()
+func LayoutUnitPickerStrip(ui *uiState, gtx layout.Context) layout.Dimensions {
+	cat := UnitCatalogFor(ui)
+	race := CurrentRace(ui)
+	sel := CurrentUnit(ui)
 
-	raceLabel := ui.pickerRaceLabel()
-	unitLabel := ui.pickerUnitLabel()
+	raceLabel := PickerRaceLabel(ui)
+	unitLabel := PickerUnitLabel(ui)
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Right: unit.Dp(unitColGapDp)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.unitRaceTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							return ui.unitPickerField(gtx, "Race", raceLabel, cat != nil && len(cat.Races) > 0, ui.unitRaceOpen)
+						return ui.UnitRaceTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							return UnitPickerField(ui, gtx, "Race", raceLabel, cat != nil && len(cat.Races) > 0, ui.UnitRaceOpen)
 						})
 					})
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.unitListTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ui.unitPickerField(gtx, "Unit", unitLabel, sel != nil, ui.unitListOpen)
+					return ui.UnitListTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return UnitPickerField(ui, gtx, "Unit", unitLabel, sel != nil, ui.UnitListOpen)
 					})
 				}),
 				// The buttons that start a new unit or a new building of the
@@ -250,10 +250,10 @@ func (ui *uiState) layoutUnitPickerStrip(gtx layout.Context) layout.Dimensions {
 						gtx.Constraints.Max.Y = h
 						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								return ui.smallButtonDisabled(gtx, &ui.unitNewTrigger, "New unit…", race == nil)
+								return SmallButtonDisabled(ui, gtx, &ui.UnitNewTrigger, "New unit…", race == nil)
 							}), layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								return layout.Inset{Left: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-									return ui.smallButtonDisabled(gtx, &ui.unitBuildingTrigger, "New building…", race == nil)
+									return SmallButtonDisabled(ui, gtx, &ui.UnitBuildingTrigger, "New building…", race == nil)
 								})
 							}),
 							// The freeze buttons. They sit with the
@@ -262,7 +262,7 @@ func (ui *uiState) layoutUnitPickerStrip(gtx layout.Context) layout.Dimensions {
 							// one place the selected object is named.
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								return layout.Inset{Left: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-									return ui.layoutFreezeButtons(gtx, sel)
+									return LayoutFreezeButtons(ui, gtx, sel)
 								})
 							}),
 						)
@@ -274,7 +274,7 @@ func (ui *uiState) layoutUnitPickerStrip(gtx layout.Context) layout.Dimensions {
 						return layout.Dimensions{}
 					}
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(10), raceCountLabel(race))
+						l := material.Label(ui.Th, unit.Sp(10), raceCountLabel(race))
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					})
@@ -286,8 +286,8 @@ func (ui *uiState) layoutUnitPickerStrip(gtx layout.Context) layout.Dimensions {
 
 // pickerRaceLabel is what the Race field reads. It is a plain string so the
 // strip can be measured and drawn from the same value.
-func (ui *uiState) pickerRaceLabel() string {
-	if r := ui.currentRace(); r != nil {
+func PickerRaceLabel(ui *uiState) string {
+	if r := CurrentRace(ui); r != nil {
 		return r.Name
 	}
 	return "No race"
@@ -297,12 +297,12 @@ func (ui *uiState) pickerRaceLabel() string {
 // of the two folders it came from. The name is the localised one where the
 // string table has it, the same text the open list shows, so the field and the
 // rows it opens never disagree.
-func (ui *uiState) pickerUnitLabel() string {
-	u := ui.currentUnit()
+func PickerUnitLabel(ui *uiState) string {
+	u := CurrentUnit(ui)
 	if u == nil {
 		return "No unit"
 	}
-	return ui.unitLabel(*u) + "  (" + u.Kind.Label + ")"
+	return UnitLabel(ui, *u) + "  (" + u.Kind.Label + ")"
 }
 
 func raceCountLabel(r *raceEntry) string {
@@ -314,12 +314,12 @@ func raceCountLabel(r *raceEntry) string {
 
 // unitPickerField is one labelled dropdown trigger. The label sits in front of
 // the value so the strip reads "Race  necrons" without needing a header row.
-func (ui *uiState) unitPickerField(gtx layout.Context, label, value string, enabled, open bool) layout.Dimensions {
+func UnitPickerField(ui *uiState, gtx layout.Context, label, value string, enabled, open bool) layout.Dimensions {
 	return frameMeasured(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(3), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(10), label)
+					l := material.Label(ui.Th, unit.Sp(10), label)
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				}),
@@ -329,7 +329,7 @@ func (ui *uiState) unitPickerField(gtx layout.Context, label, value string, enab
 					if len(text) > 42 {
 						text = text[:39] + "…"
 					}
-					l := material.Label(ui.th, unit.Sp(11), text)
+					l := material.Label(ui.Th, unit.Sp(11), text)
 					l.Color = cText
 					if !enabled {
 						l.Color = cTextDim
@@ -340,7 +340,7 @@ func (ui *uiState) unitPickerField(gtx layout.Context, label, value string, enab
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					// A caret, drawn as text so it needs no icon font.
-					l := material.Label(ui.th, unit.Sp(9), "▼")
+					l := material.Label(ui.Th, unit.Sp(9), "▼")
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				}),
@@ -361,12 +361,12 @@ func unitPickerBorder(open bool) color.NRGBA {
 // layoutUnitRaceDropdown is the open race list. It hangs below the strip, over
 // the columns, and its own rows carry the click targets. xOffset is where the
 // Race field sits, so the list lines up with the field that opened it.
-func (ui *uiState) layoutUnitRaceDropdown(gtx layout.Context, xOffset int) layout.Dimensions {
-	cat := ui.unitCatalogFor()
+func LayoutUnitRaceDropdown(ui *uiState, gtx layout.Context, xOffset int) layout.Dimensions {
+	cat := UnitCatalogFor(ui)
 	if cat == nil || len(cat.Races) == 0 {
 		return layout.Dimensions{}
 	}
-	ui.ensureUnitRaceClicks(len(cat.Races))
+	EnsureUnitRaceClicks(ui, len(cat.Races))
 	rowH := gtx.Dp(unit.Dp(unitRowHeightDp))
 	listH := rowH * len(cat.Races)
 	if maxH := gtx.Constraints.Max.Y; listH > maxH && maxH > 0 {
@@ -394,8 +394,8 @@ func (ui *uiState) layoutUnitRaceDropdown(gtx layout.Context, xOffset int) layou
 				for i := range cat.Races {
 					i := i
 					children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						sel := i == cat.ClampRaceSel(ui.unitRaceSel)
-						return ui.unitRaceClicks[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						sel := i == cat.ClampRaceSel(ui.UnitRaceSel)
+						return ui.UnitRaceClicks[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							h := gtx.Dp(unit.Dp(unitRowHeightDp))
 							sz := image.Pt(gtx.Constraints.Max.X, h)
 							gtx.Constraints.Min = sz
@@ -404,7 +404,7 @@ func (ui *uiState) layoutUnitRaceDropdown(gtx layout.Context, xOffset int) layou
 								layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 									if sel {
 										rrect(gtx, cSelectBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
-									} else if ui.unitRaceClicks[i].Hovered() {
+									} else if ui.UnitRaceClicks[i].Hovered() {
 										rrect(gtx, cMenuHover, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 									}
 									return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -413,14 +413,14 @@ func (ui *uiState) layoutUnitRaceDropdown(gtx layout.Context, xOffset int) layou
 									return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(11), cat.Races[i].Name)
+												l := material.Label(ui.Th, unit.Sp(11), cat.Races[i].Name)
 												l.Color = cText
 												l.MaxLines = 1
 												return l.Layout(gtx)
 											}),
 											layout.Flexed(1, flexGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(10), itoaPlain(cat.Races[i].UnitCount()))
+												l := material.Label(ui.Th, unit.Sp(10), itoaPlain(cat.Races[i].UnitCount()))
 												l.Color = cTextDim
 												return l.Layout(gtx)
 											}),
@@ -439,18 +439,18 @@ func (ui *uiState) layoutUnitRaceDropdown(gtx layout.Context, xOffset int) layou
 
 // layoutUnitDropdown draws whichever list is open, so the caller does not have
 // to branch and so both lists are positioned by the same code.
-func (ui *uiState) layoutUnitDropdown(gtx layout.Context, xOffset int) layout.Dimensions {
-	if ui.unitRaceOpen {
-		return ui.layoutUnitRaceDropdown(gtx, xOffset)
+func LayoutUnitDropdown(ui *uiState, gtx layout.Context, xOffset int) layout.Dimensions {
+	if ui.UnitRaceOpen {
+		return LayoutUnitRaceDropdown(ui, gtx, xOffset)
 	}
-	return ui.layoutUnitListDropdown(gtx, xOffset)
+	return LayoutUnitListDropdown(ui, gtx, xOffset)
 }
 
 // layoutUnitListDropdown is the open unit list of the selected race. It hangs
 // below the strip, over the columns, and scrolls with the same list helper the
 // rest of the app uses. xOffset is where the Unit field sits.
-func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layout.Dimensions {
-	race := ui.currentRace()
+func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout.Dimensions {
+	race := CurrentRace(ui)
 	if race == nil {
 		return layout.Dimensions{}
 	}
@@ -458,7 +458,7 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 	if len(units) == 0 {
 		return layout.Dimensions{}
 	}
-	ui.ensureUnitDropdownClicks(len(units))
+	EnsureUnitDropdownClicks(ui, len(units))
 	rowH := gtx.Dp(unit.Dp(unitRowHeightDp))
 	listH := rowH * unitListVisibleRows
 	if maxH := gtx.Constraints.Max.Y; listH > maxH && maxH > 0 {
@@ -488,13 +488,13 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutListWithScrollbar(gtx, &ui.unitListScroll, &ui.unitList, rowH, len(units), func(gtx layout.Context, index int) layout.Dimensions {
+				return LayoutListWithScrollbar(ui, gtx, &ui.UnitListScroll, &ui.UnitList, rowH, len(units), func(gtx layout.Context, index int) layout.Dimensions {
 					if index < 0 || index >= len(units) {
 						return layout.Dimensions{}
 					}
 					u := units[index]
-					sel := index == race.ClampUnitSel(ui.unitSel)
-					return ui.unitClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					sel := index == race.ClampUnitSel(ui.UnitSel)
+					return ui.UnitClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						// The row's height is rowH, not gtx.Constraints.Min.Y:
 						// inside a layout.List the element is handed its own
 						// position as the minimum, which is 0 for the first row
@@ -508,7 +508,7 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 							layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 								if sel {
 									rrect(gtx, cSelectBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
-								} else if ui.unitClicks[index].Hovered() {
+								} else if ui.UnitClicks[index].Hovered() {
 									rrect(gtx, cMenuHover, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 								}
 								return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -521,7 +521,7 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 										// none of them.
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 											return layout.Inset{Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												return unitIconLayout(gtx, ui.unitIcon(u), 24, 18)
+												return unitIconLayout(gtx, UnitIcon(ui, u), 24, 18)
 											})
 										}),
 										// The display name takes what is left and is
@@ -533,21 +533,21 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 										// is what tells two rows apart and must
 										// never be the part that disappears.
 										layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-											l := material.Label(ui.th, unit.Sp(11), ui.unitLabel(u))
+											l := material.Label(ui.Th, unit.Sp(11), UnitLabel(ui, u))
 											l.Color = cText
 											l.MaxLines = 1
 											return l.Layout(gtx)
 										}),
 										layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-											l := material.Label(ui.th, unit.Sp(9), unitFileLabel(u))
+											l := material.Label(ui.Th, unit.Sp(9), unitFileLabel(u))
 											l.Color = cTextDim
 											l.MaxLines = 1
 											return l.Layout(gtx)
 										}),
 										layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-											l := material.Label(ui.th, unit.Sp(10), u.Kind.Label)
+											l := material.Label(ui.Th, unit.Sp(10), u.Kind.Label)
 											l.Color = cTextDim
 											l.MaxLines = 1
 											return l.Layout(gtx)
@@ -563,17 +563,17 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 	})
 }
 
-func (ui *uiState) ensureUnitRaceClicks(n int) {
-	if len(ui.unitRaceClicks) != n {
-		ui.unitRaceClicks = make([]widget.Clickable, n)
+func EnsureUnitRaceClicks(ui *uiState, n int) {
+	if len(ui.UnitRaceClicks) != n {
+		ui.UnitRaceClicks = make([]widget.Clickable, n)
 	}
 }
 
 // ensureUnitDropdownClicks sizes the unit dropdown's row click targets. It is
 // distinct from the section list's ensureUnitClicks, which takes no count.
-func (ui *uiState) ensureUnitDropdownClicks(n int) {
-	if len(ui.unitClicks) != n {
-		ui.unitClicks = make([]widget.Clickable, n)
+func EnsureUnitDropdownClicks(ui *uiState, n int) {
+	if len(ui.UnitClicks) != n {
+		ui.UnitClicks = make([]widget.Clickable, n)
 	}
 }
 
@@ -582,49 +582,49 @@ func (ui *uiState) ensureUnitDropdownClicks(n int) {
 // layoutUnitMiddleColumnBody fills the middle column. The sections that have
 // data show it. "Viewport" is here as well even though layoutUnitBody gives it
 // both columns, so that rendering this column on its own still shows the model.
-func (ui *uiState) layoutUnitMiddleColumnBody(gtx layout.Context) layout.Dimensions {
-	sec := ui.currentUnitSection()
+func LayoutUnitMiddleColumnBody(ui *uiState, gtx layout.Context) layout.Dimensions {
+	sec := CurrentUnitSection(ui)
 	switch sec.label {
 	case unitSectionViewport:
-		return ui.layoutUnitViewportArea(gtx)
+		return LayoutUnitViewportArea(ui, gtx)
 	case unitSectionClassicOE:
 		// Rendered here as well as in layoutUnitBody, the same way Viewport
 		// is: laying this column out on its own still has to show the
 		// editor's panels rather than fall through to a hint.
-		return ui.layoutClassicOEArea(gtx)
+		return LayoutClassicOEArea(ui, gtx)
 	case unitSectionEvents:
-		return ui.layoutUnitEventTimelines(gtx)
+		return LayoutUnitEventTimelines(ui, gtx)
 	case "Unit info":
-		return ui.layoutUnitInfoList(gtx)
+		return LayoutUnitInfoList(ui, gtx)
 	case "Weapons":
-		return ui.layoutUnitWeaponList(gtx)
+		return LayoutUnitWeaponList(ui, gtx)
 	case "Abilities":
-		return ui.layoutUnitAbilityList(gtx)
+		return LayoutUnitAbilityList(ui, gtx)
 	case "Squads":
-		return ui.layoutUnitSquadList(gtx)
+		return LayoutUnitSquadList(ui, gtx)
 	case "Links":
-		return ui.layoutUnitLinksList(gtx)
+		return LayoutUnitLinksList(ui, gtx)
 	case "Frozen":
-		return ui.layoutFrozenList(gtx)
+		return LayoutFrozenList(ui, gtx)
 	case "Problems":
-		return ui.layoutUnitProblemsList(gtx)
+		return LayoutUnitProblemsList(ui, gtx)
 	default:
-		return ui.unitColumnBody(gtx, sec.hint)
+		return UnitColumnBody(ui, gtx, sec.hint)
 	}
 }
 
 // unitColumnBody is the column's shared frame: header, rule, and a body that is
 // either the section's list or its hint.
-func (ui *uiState) unitColumnBody(gtx layout.Context, hint string) layout.Dimensions {
+func UnitColumnBody(ui *uiState, gtx layout.Context, hint string) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, ui.currentUnitSection().middleTitle)
+				return LayoutUnitColumnHeader(ui, gtx, CurrentUnitSection(ui).middleTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(10), hint)
+					l := material.Label(ui.Th, unit.Sp(10), hint)
 					l.Color = cTextDim
 					return l.Layout(gtx)
 				})
@@ -635,25 +635,25 @@ func (ui *uiState) unitColumnBody(gtx layout.Context, hint string) layout.Dimens
 
 // unitEmptyState is what a populated column shows when there is no unit, or the
 // unit could not be read.
-func (ui *uiState) unitEmptyState(gtx layout.Context) layout.Dimensions {
-	d := ui.currentUnitDetails()
+func UnitEmptyState(ui *uiState, gtx layout.Context) layout.Dimensions {
+	d := CurrentUnitDetails(ui)
 	msg := "No unit selected."
 	if d != nil && d.Error != "" {
 		msg = "Could not read this unit:\n" + d.Error
 	}
 	return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		l := material.Label(ui.th, unit.Sp(10), msg)
+		l := material.Label(ui.Th, unit.Sp(10), msg)
 		l.Color = cTextDim
 		return l.Layout(gtx)
 	})
 }
 
 // unitSectionFrame is the frame of a column that carries a list.
-func (ui *uiState) unitSectionFrame(gtx layout.Context, body layout.Widget) layout.Dimensions {
+func UnitSectionFrame(ui *uiState, gtx layout.Context, body layout.Widget) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, ui.currentUnitSection().middleTitle)
+				return LayoutUnitColumnHeader(ui, gtx, CurrentUnitSection(ui).middleTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, body),
@@ -667,19 +667,19 @@ func (ui *uiState) unitSectionFrame(gtx layout.Context, body layout.Widget) layo
 // A value that is a localisation id is drawn as an editable row instead: it
 // shows the text rather than the id, says the id on hover, and takes the
 // presses that change the text. Everything else is a plain line.
-func (ui *uiState) unitKeyValueRow(gtx layout.Context, label, value string, isLocID bool) layout.Dimensions {
-	return ui.unitKeyValueRowFor(gtx, label, value, isLocID, "", nil)
+func UnitKeyValueRow(ui *uiState, gtx layout.Context, label, value string, isLocID bool) layout.Dimensions {
+	return UnitKeyValueRowFor(ui, gtx, label, value, isLocID, "", nil)
 }
 
 // unitKeyValueRowFor is unitKeyValueRow with the field behind a localisation
 // row, which is what the presses act on. A non-localised row ignores them.
-func (ui *uiState) unitKeyValueRowFor(gtx layout.Context, label, value string, isLocID bool, locID string, field *rgd.RgdEntry) layout.Dimensions {
+func UnitKeyValueRowFor(ui *uiState, gtx layout.Context, label, value string, isLocID bool, locID string, field *rgd.RgdEntry) layout.Dimensions {
 	if isLocID {
-		return ui.localeEditableRow(gtx, label, locID, field, localeRowKey(field, label))
+		return LocaleEditableRow(ui, gtx, label, locID, field, localeRowKey(field, label))
 	}
 	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), label)
+			l := material.Label(ui.Th, unit.Sp(10), label)
 			l.Color = cTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
@@ -690,7 +690,7 @@ func (ui *uiState) unitKeyValueRowFor(gtx layout.Context, label, value string, i
 			if len(text) > 64 {
 				text = text[:61] + "…"
 			}
-			l := material.Label(ui.th, unit.Sp(10), text)
+			l := material.Label(ui.Th, unit.Sp(10), text)
 			// A localisation id is a reference, not text, so it is shown in the
 			// dimmer colour that marks a reference elsewhere in the app.
 			if isLocID {
@@ -705,33 +705,33 @@ func (ui *uiState) unitKeyValueRowFor(gtx layout.Context, label, value string, i
 }
 
 // layoutUnitInfoList is the "Unit info" column: the selected unit's own fields.
-func (ui *uiState) layoutUnitInfoList(gtx layout.Context) layout.Dimensions {
-	d := ui.currentUnitDetails()
+func LayoutUnitInfoList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	d := CurrentUnitDetails(ui)
 	if d == nil {
-		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions { return UnitEmptyState(ui, gtx) })
 	}
 	if d.Error != "" {
-		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
-			return ui.unitEmptyState(gtx)
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
+			return UnitEmptyState(ui, gtx)
 		})
 	}
 	if len(d.Fields) == 0 {
-		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), "This unit declares no readable properties.")
+				l := material.Label(ui.Th, unit.Sp(10), "This unit declares no readable properties.")
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			})
 		})
 	}
-	ui.ensureUnitInfoClicks(len(d.Fields))
-	return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+	EnsureUnitInfoClicks(ui, len(d.Fields))
+	return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(ui.layoutUnitInfoIconHeader),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutUnitInfoIconHeader(ui, gtx) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(10), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutListWithScrollbar(gtx, &ui.unitInfoScroll, &ui.unitInfoList, unitInfoRowHeightDp, len(d.Fields), func(gtx layout.Context, index int) layout.Dimensions {
-						return ui.layoutUnitInfoRow(gtx, index, unitInfoFieldAt(d, index))
+					return LayoutListWithScrollbar(ui, gtx, &ui.UnitInfoScroll, &ui.UnitInfoList, unitInfoRowHeightDp, len(d.Fields), func(gtx layout.Context, index int) layout.Dimensions {
+						return LayoutUnitInfoRow(ui, gtx, index, unitInfoFieldAt(d, index))
 					})
 				})
 			}),
@@ -742,27 +742,27 @@ func (ui *uiState) layoutUnitInfoList(gtx layout.Context) layout.Dimensions {
 // layoutUnitInfoIconHeader is the top of the info page: the object's own icon
 // beside its name, the way the game presents a unit in its own dialogs. The
 // box is fixed at 40dp so switching units does not move the list underneath.
-func (ui *uiState) layoutUnitInfoIconHeader(gtx layout.Context) layout.Dimensions {
-	u := ui.currentUnit()
+func LayoutUnitInfoIconHeader(ui *uiState, gtx layout.Context) layout.Dimensions {
+	u := CurrentUnit(ui)
 	if u == nil {
 		return layout.Dimensions{}
 	}
 	return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return unitIconLayout(gtx, ui.unitIcon(*u), 52, 40)
+				return unitIconLayout(gtx, UnitIcon(ui, *u), 52, 40)
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(12), ui.unitLabel(*u))
+						l := material.Label(ui.Th, unit.Sp(12), UnitLabel(ui, *u))
 						l.Color = cText
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), unitFileLabel(*u)+"  ·  "+u.Kind.Label)
+						l := material.Label(ui.Th, unit.Sp(9), unitFileLabel(*u)+"  ·  "+u.Kind.Label)
 						l.Color = cTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
@@ -781,22 +781,22 @@ const unitInfoRowHeightDp = 17
 
 // layoutUnitWeaponList is the "Weapons" column. The rows are the hardpoints that
 // actually hold a weapon, and selecting one is what the right column describes.
-func (ui *uiState) layoutUnitWeaponList(gtx layout.Context) layout.Dimensions {
-	d := ui.currentUnitDetails()
+func LayoutUnitWeaponList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	d := CurrentUnitDetails(ui)
 	if d == nil || d.Error != "" || len(d.Weapons) == 0 {
-		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions { return UnitEmptyState(ui, gtx) })
 	}
 	// One selectable row per weapon slot, so the right column can describe a
 	// single weapon rather than a whole hardpoint.
 	rows := unitWeaponRows(d)
-	ui.ensureUnitRowClicks(len(rows))
-	return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+	EnsureUnitRowClicks(ui, len(rows))
+	return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			var children []layout.FlexChild
 			for i := range rows {
 				i := i
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutUnitSelectableRow(gtx, i, len(rows), rows[i].hardpoint, rows[i].name, "not found", !rows[i].found)
+					return LayoutUnitSelectableRow(ui, gtx, i, len(rows), rows[i].hardpoint, rows[i].name, "not found", !rows[i].found)
 				}))
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -850,29 +850,29 @@ func unitAbilityRows(d *unitDetails) []unitWeaponRow {
 }
 
 // layoutUnitAbilityList is the "Abilities" column.
-func (ui *uiState) layoutUnitAbilityList(gtx layout.Context) layout.Dimensions {
-	d := ui.currentUnitDetails()
+func LayoutUnitAbilityList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	d := CurrentUnitDetails(ui)
 	if d == nil || d.Error != "" {
-		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions { return UnitEmptyState(ui, gtx) })
 	}
 	rows := unitAbilityRows(d)
 	if len(rows) == 0 {
-		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), "This unit declares no abilities.")
+				l := material.Label(ui.Th, unit.Sp(10), "This unit declares no abilities.")
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			})
 		})
 	}
-	ui.ensureUnitRowClicks(len(rows))
-	return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
+	EnsureUnitRowClicks(ui, len(rows))
+	return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			var children []layout.FlexChild
 			for i := range rows {
 				i := i
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutUnitSelectableRow(gtx, i, len(rows), rows[i].hardpoint, rows[i].name, "missing", !rows[i].found)
+					return LayoutUnitSelectableRow(ui, gtx, i, len(rows), rows[i].hardpoint, rows[i].name, "missing", !rows[i].found)
 				}))
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -882,16 +882,16 @@ func (ui *uiState) layoutUnitAbilityList(gtx layout.Context) layout.Dimensions {
 
 // layoutUnitSelectableRow is one clickable row of the weapons or abilities list.
 // missingLabel says what to print for a row whose reference did not resolve.
-func (ui *uiState) layoutUnitSelectableRow(gtx layout.Context, index, count int, slot, name, missingLabel string, missing bool) layout.Dimensions {
-	sel := index == ui.unitSelRow
+func LayoutUnitSelectableRow(ui *uiState, gtx layout.Context, index, count int, slot, name, missingLabel string, missing bool) layout.Dimensions {
+	sel := index == ui.UnitSelRow
 	bg := cPanelBg
 	switch {
 	case sel:
 		bg = cSelectBg
-	case ui.unitRowClicks[index].Hovered():
+	case ui.UnitRowClicks[index].Hovered():
 		bg = cMenuHover
 	}
-	return ui.unitRowClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return ui.UnitRowClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp))
 		sz := image.Pt(gtx.Constraints.Max.X, h)
 		gtx.Constraints.Min = sz
@@ -907,7 +907,7 @@ func (ui *uiState) layoutUnitSelectableRow(gtx layout.Context, index, count int,
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), slot)
+							l := material.Label(ui.Th, unit.Sp(9), slot)
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -921,7 +921,7 @@ func (ui *uiState) layoutUnitSelectableRow(gtx layout.Context, index, count int,
 							if len(text) > 30 {
 								text = text[:27] + "…"
 							}
-							l := material.Label(ui.th, unit.Sp(11), text)
+							l := material.Label(ui.Th, unit.Sp(11), text)
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -931,7 +931,7 @@ func (ui *uiState) layoutUnitSelectableRow(gtx layout.Context, index, count int,
 							if !missing {
 								return layout.Dimensions{}
 							}
-							l := material.Label(ui.th, unit.Sp(9), missingLabel)
+							l := material.Label(ui.Th, unit.Sp(9), missingLabel)
 							l.Color = rgb(0xC98A8A)
 							return l.Layout(gtx)
 						}),
@@ -944,18 +944,18 @@ func (ui *uiState) layoutUnitSelectableRow(gtx layout.Context, index, count int,
 
 // layoutUnitRightColumnBody is the right column: the properties of whatever the
 // middle column has selected.
-func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensions {
-	sec := ui.currentUnitSection()
+func LayoutUnitRightColumnBody(ui *uiState, gtx layout.Context) layout.Dimensions {
+	sec := CurrentUnitSection(ui)
 	var rows []unitWeaponRow
 	var fields []unitField
 	switch sec.label {
 	case "Unit info":
-		return ui.layoutUnitFieldPanel(gtx, sec)
+		return LayoutUnitFieldPanel(ui, gtx, sec)
 	case "Weapons":
-		d := ui.currentUnitDetails()
+		d := CurrentUnitDetails(ui)
 		rows = unitWeaponRows(d)
 		if len(rows) > 0 {
-			idx := clampInt(ui.unitSelRow, 0, len(rows)-1)
+			idx := clampInt(ui.UnitSelRow, 0, len(rows)-1)
 			if w := unitWeaponAt(d, idx); w != nil {
 				// The weapon's own file is the detail worth showing; the
 				// slot's scalars are only a fallback for a reference that
@@ -967,31 +967,31 @@ func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensio
 			}
 		}
 	case "Abilities":
-		d := ui.currentUnitDetails()
+		d := CurrentUnitDetails(ui)
 		rows = unitAbilityRows(d)
 	case "Squads":
-		return ui.layoutUnitSquadRightColumn(gtx, sec)
+		return LayoutUnitSquadRightColumn(ui, gtx, sec)
 	case unitSectionEvents:
-		return ui.layoutUnitEventPanel(gtx)
+		return LayoutUnitEventPanel(ui, gtx)
 	case unitSectionViewport:
-		return ui.layoutUnitModelSide(gtx)
+		return LayoutUnitModelSide(ui, gtx)
 	case unitSectionClassicOE:
 		// The classic editor had no separate properties column of its own
 		// here; the section draws left panel and preview across both
 		// columns, so this branch is only for the column drawn alone.
-		return ui.layoutClassicOEPreview(gtx)
+		return LayoutClassicOEPreview(ui, gtx)
 	default:
-		return ui.unitColumn(gtx, sec.rightTitle, "Selected entry properties will appear here.")
+		return UnitColumn(ui, gtx, sec.rightTitle, "Selected entry properties will appear here.")
 	}
 	if len(rows) == 0 {
-		return ui.unitColumn(gtx, sec.rightTitle, "No entry is selected.")
+		return UnitColumn(ui, gtx, sec.rightTitle, "No entry is selected.")
 	}
-	idx := clampInt(ui.unitSelRow, 0, len(rows)-1)
+	idx := clampInt(ui.UnitSelRow, 0, len(rows)-1)
 	row := rows[idx]
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, sec.rightTitle)
+				return LayoutUnitColumnHeader(ui, gtx, sec.rightTitle)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -999,12 +999,12 @@ func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensio
 					children := []layout.FlexChild{
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, "Slot", row.hardpoint, false)
+								return UnitKeyValueRow(ui, gtx, "Slot", row.hardpoint, false)
 							})
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, "Name", row.name, false)
+								return UnitKeyValueRow(ui, gtx, "Name", row.name, false)
 							})
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -1016,14 +1016,14 @@ func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensio
 								if row.found {
 									refValue = row.path
 								}
-								return ui.unitKeyValueRow(gtx, "Reference", refValue, false)
+								return UnitKeyValueRow(ui, gtx, "Reference", refValue, false)
 							})
 						}),
 					}
 					if !row.found {
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								l := material.Label(ui.th, unit.Sp(10), "The weapon file was not found in this mod.")
+								l := material.Label(ui.Th, unit.Sp(10), "The weapon file was not found in this mod.")
 								l.Color = rgb(0xC98A8A)
 								return l.Layout(gtx)
 							})
@@ -1034,19 +1034,19 @@ func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensio
 						if f.StartsGroup && f.Group != "" {
 							group := f.Group
 							children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								return ui.unitGroupHeading(gtx, group)
+								return UnitGroupHeading(ui, gtx, group)
 							}))
 						}
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, f.Label, f.Value, false)
+								return UnitKeyValueRow(ui, gtx, f.Label, f.Value, false)
 							})
 						}))
 					}
 					if len(fields) == 0 {
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								l := material.Label(ui.th, unit.Sp(10), "No readable settings for this entry.")
+								l := material.Label(ui.Th, unit.Sp(10), "No readable settings for this entry.")
 								l.Color = cTextDim
 								return l.Layout(gtx)
 							})
@@ -1062,9 +1062,9 @@ func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensio
 // unitGroupHeading is the dimmed, semibold heading above the first row of a
 // group in a properties column — the same shape the info list draws, so a
 // grouped column reads the same wherever it appears.
-func (ui *uiState) unitGroupHeading(gtx layout.Context, text string) layout.Dimensions {
+func UnitGroupHeading(ui *uiState, gtx layout.Context, text string) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		l := material.Label(ui.th, unit.Sp(11), text)
+		l := material.Label(ui.Th, unit.Sp(11), text)
 		l.Color = cTextDim
 		l.Font.Weight = font.SemiBold
 		l.MaxLines = 1
@@ -1099,21 +1099,21 @@ func unitWeaponSlotFields(d *unitDetails, rowIndex int) []unitField {
 	return nil
 }
 
-func (ui *uiState) ensureUnitRowClicks(n int) {
-	if len(ui.unitRowClicks) != n {
-		ui.unitRowClicks = make([]widget.Clickable, n)
+func EnsureUnitRowClicks(ui *uiState, n int) {
+	if len(ui.UnitRowClicks) != n {
+		ui.UnitRowClicks = make([]widget.Clickable, n)
 	}
 }
 
 // ── input ───────────────────────────────────────────────────────────────────
 
 // unitPickerOpen reports whether either dropdown is showing.
-func (ui *uiState) unitPickerOpen() bool { return ui.unitRaceOpen || ui.unitListOpen }
+func UnitPickerOpen(ui *uiState) bool { return ui.UnitRaceOpen || ui.UnitListOpen }
 
 // closeUnitPickers puts both dropdowns away.
-func (ui *uiState) closeUnitPickers() {
-	ui.unitRaceOpen = false
-	ui.unitListOpen = false
+func CloseUnitPickers(ui *uiState) {
+	ui.UnitRaceOpen = false
+	ui.UnitListOpen = false
 }
 
 // handleUnitPickerInput owns the pickers' clicks. It runs before the section
@@ -1125,72 +1125,72 @@ func (ui *uiState) closeUnitPickers() {
 // arrives. It is deliberately never closed just because a frame passed with no
 // row clicked — that would shut the list on the frame after it opened, which
 // is what made it flash and vanish.
-func (ui *uiState) handleUnitPickerInput(gtx layout.Context) {
+func HandleUnitPickerInput(ui *uiState, gtx layout.Context) {
 	// The triggers toggle their own list and put the other one away, so
 	// clicking Race while the unit list is open swaps them rather than
 	// stacking two lists over the columns.
-	if ui.unitRaceTrigger.Clicked(gtx) {
-		ui.unitRaceOpen = !ui.unitRaceOpen
-		ui.unitListOpen = false
+	if ui.UnitRaceTrigger.Clicked(gtx) {
+		ui.UnitRaceOpen = !ui.UnitRaceOpen
+		ui.UnitListOpen = false
 		return
 	}
-	if ui.unitListTrigger.Clicked(gtx) {
-		ui.unitListOpen = !ui.unitListOpen
-		ui.unitRaceOpen = false
+	if ui.UnitListTrigger.Clicked(gtx) {
+		ui.UnitListOpen = !ui.UnitListOpen
+		ui.UnitRaceOpen = false
 		return
 	}
 	// The new object buttons sit with the pickers, so a dropdown that is open is
 	// put away before the dialog goes up rather than over it.
-	if ui.unitNewTrigger.Clicked(gtx) {
-		ui.openNewObjDialog(newObjUnit)
+	if ui.UnitNewTrigger.Clicked(gtx) {
+		OpenNewObjDialog(ui, newObjUnit)
 		return
 	}
-	if ui.unitBuildingTrigger.Clicked(gtx) {
-		ui.openNewObjDialog(newObjBuilding)
+	if ui.UnitBuildingTrigger.Clicked(gtx) {
+		OpenNewObjDialog(ui, newObjBuilding)
 		return
 	}
 	// The freeze buttons are in the same strip, so they are read here with the
 	// rest of it. A dropdown that is open is put away first, for the same
 	// reason: the dialog and the lists are all one strip.
-	ui.handleFreezeInput(gtx)
-	if ui.unitListOpen {
-		race := ui.currentRace()
+	HandleFreezeInput(ui, gtx)
+	if ui.UnitListOpen {
+		race := CurrentRace(ui)
 		if race == nil {
-			ui.unitListOpen = false
+			ui.UnitListOpen = false
 			return
 		}
 		units := race.UnitsOf()
-		ui.ensureUnitDropdownClicks(len(units))
+		EnsureUnitDropdownClicks(ui, len(units))
 		for i := range units {
-			if i < len(ui.unitClicks) && ui.unitClicks[i].Clicked(gtx) {
-				ui.unitSel = i
-				ui.unitListOpen = false
-				ui.unitSelRow = 0
-				ui.statusText = "Unit: " + ui.unitLabel(units[i])
+			if i < len(ui.UnitClicks) && ui.UnitClicks[i].Clicked(gtx) {
+				ui.UnitSel = i
+				ui.UnitListOpen = false
+				ui.UnitSelRow = 0
+				ui.StatusText = "Unit: " + UnitLabel(ui, units[i])
 				// The pickers are part of the saved session, so that the
 				// Object window comes back on the unit it was left on.
-				ui.markStateDirty()
+				MarkStateDirty(ui)
 				return
 			}
 		}
 	}
-	if ui.unitRaceOpen {
-		cat := ui.unitCatalogFor()
+	if ui.UnitRaceOpen {
+		cat := UnitCatalogFor(ui)
 		if cat == nil {
-			ui.unitRaceOpen = false
+			ui.UnitRaceOpen = false
 			return
 		}
-		ui.ensureUnitRaceClicks(len(cat.Races))
+		EnsureUnitRaceClicks(ui, len(cat.Races))
 		for i := range cat.Races {
-			if i < len(ui.unitRaceClicks) && ui.unitRaceClicks[i].Clicked(gtx) {
-				ui.unitRaceSel = i
-				ui.unitRaceOpen = false
+			if i < len(ui.UnitRaceClicks) && ui.UnitRaceClicks[i].Clicked(gtx) {
+				ui.UnitRaceSel = i
+				ui.UnitRaceOpen = false
 				// The unit list belongs to the race, so a new race starts
 				// at its first unit.
-				ui.unitSel = 0
-				ui.unitSelRow = 0
-				ui.statusText = "Race: " + cat.Races[i].Name
-				ui.markStateDirty()
+				ui.UnitSel = 0
+				ui.UnitSelRow = 0
+				ui.StatusText = "Race: " + cat.Races[i].Name
+				MarkStateDirty(ui)
 				return
 			}
 		}
@@ -1198,15 +1198,15 @@ func (ui *uiState) handleUnitPickerInput(gtx layout.Context) {
 	// A click anywhere else puts an open list away. The catcher is laid over
 	// the columns but under the strip and the lists, so it only ever sees the
 	// clicks that landed on neither.
-	if ui.unitPickerOpen() && ui.unitDismissClick.Clicked(gtx) {
-		ui.closeUnitPickers()
+	if UnitPickerOpen(ui) && ui.UnitDismissClick.Clicked(gtx) {
+		CloseUnitPickers(ui)
 	}
 }
 
 // handleUnitPickerKeys puts an open list away on Escape. The key is only read
 // while a list is showing, so Escape keeps meaning "close" everywhere else.
-func (ui *uiState) handleUnitPickerKeys(gtx layout.Context) {
-	if !ui.unitPickerOpen() {
+func HandleUnitPickerKeys(ui *uiState, gtx layout.Context) {
+	if !UnitPickerOpen(ui) {
 		return
 	}
 	for {
@@ -1219,33 +1219,33 @@ func (ui *uiState) handleUnitPickerKeys(gtx layout.Context) {
 			continue
 		}
 		if e.State == key.Press {
-			ui.closeUnitPickers()
+			CloseUnitPickers(ui)
 			return
 		}
 	}
 }
 
 // handleUnitRowInput owns the selectable rows of the populated columns.
-func (ui *uiState) handleUnitRowInput(gtx layout.Context) {
-	sec := ui.currentUnitSection()
+func HandleUnitRowInput(ui *uiState, gtx layout.Context) {
+	sec := CurrentUnitSection(ui)
 	var rows []unitWeaponRow
 	switch sec.label {
 	case "Weapons":
-		rows = unitWeaponRows(ui.currentUnitDetails())
+		rows = unitWeaponRows(CurrentUnitDetails(ui))
 	case "Abilities":
-		rows = unitAbilityRows(ui.currentUnitDetails())
+		rows = unitAbilityRows(CurrentUnitDetails(ui))
 	case "Frozen":
 		// The rows of this list are the way back into the mod, so a press on
 		// one acts on it rather than selecting it.
-		ui.handleFrozenRowInput(gtx)
+		HandleFrozenRowInput(ui, gtx)
 		return
 	default:
 		return
 	}
-	ui.ensureUnitRowClicks(len(rows))
+	EnsureUnitRowClicks(ui, len(rows))
 	for i := range rows {
-		if i < len(ui.unitRowClicks) && ui.unitRowClicks[i].Clicked(gtx) {
-			ui.unitSelRow = i
+		if i < len(ui.UnitRowClicks) && ui.UnitRowClicks[i].Clicked(gtx) {
+			ui.UnitSelRow = i
 			return
 		}
 	}
@@ -1272,18 +1272,18 @@ type unitImpRef struct {
 // openUnitImportDialog shows the file dialog over the module's .whm files; a
 // path typed in full or a file from the list is read when the dialog is
 // confirmed.
-func (ui *uiState) openUnitImportDialog() {
-	ui.openFilePicker(pickConfig{
+func OpenUnitImportDialog(ui *uiState) {
+	OpenFilePicker(ui, pickConfig{
 		title:    "Import frame's timeline",
 		subtitle: "Choose the .whm to read keyframes from — a path, or a file from the module",
 		hint:     `Data\art\ebps\...\model.whm`,
 		exts:     []string{".whm"},
 		modTree:  true,
 		onPick: func(path string) (bool, string) {
-			before := ui.unitImpModel
-			ui.unitImportRead(path)
-			if ui.unitImpModel == before {
-				return false, ui.unitImpStatus
+			before := ui.UnitImpModel
+			UnitImportRead(ui, path)
+			if ui.UnitImpModel == before {
+				return false, ui.UnitImpStatus
 			}
 			return true, ""
 		},
@@ -1293,18 +1293,18 @@ func (ui *uiState) openUnitImportDialog() {
 // unitImportRead loads the picked .whm from disk or from the module and
 // keeps its parsed model for the panel to browse. Nothing of the source is
 // written back: it is a clipboard, read once per dialog confirmation.
-func (ui *uiState) unitImportRead(path string) {
+func UnitImportRead(ui *uiState, path string) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		ui.unitImpStatus = "No file was chosen"
+		ui.UnitImpStatus = "No file was chosen"
 		return
 	}
 	var data []byte
 	var err error
 	if filepath.IsAbs(path) {
 		data, err = os.ReadFile(path)
-	} else if ui.modTree != nil {
-		data, err = ui.modTree.ReadFile(path)
+	} else if ui.ModTree != nil {
+		data, err = ui.ModTree.ReadFile(path)
 		if err != nil {
 			// A bare file name may still be on disk beside the module.
 			if data2, err2 := os.ReadFile(path); err2 == nil {
@@ -1315,39 +1315,39 @@ func (ui *uiState) unitImportRead(path string) {
 		data, err = os.ReadFile(path)
 	}
 	if err != nil {
-		ui.unitImpStatus = "Read failed: " + err.Error()
+		ui.UnitImpStatus = "Read failed: " + err.Error()
 		LogInfo("bone: import: read %q failed: %v", path, err)
 		return
 	}
 	m, perr := ParseWhmModel(data)
 	if perr != nil {
-		ui.unitImpStatus = "Not a .whm: " + perr.Error()
+		ui.UnitImpStatus = "Not a .whm: " + perr.Error()
 		LogInfo("bone: import: parse %q failed: %v", path, perr)
 		return
 	}
-	ui.unitImpModel = m
-	ui.unitImpPath = path
-	ui.unitImpOpen = make([]bool, len(m.Animations))
-	ui.unitImpAnimClicks = make([]widget.Clickable, len(m.Animations))
-	ui.unitImpFrameClicks = make(map[unitImpRef]*widget.Clickable)
-	ui.unitImpSel = make(map[unitImpRef]bool)
-	ui.unitImpAnchor = unitImpRef{anim: -1}
-	ui.unitImpStatus = fmt.Sprintf("Imported %s — %d clip(s)", filepath.Base(path), len(m.Animations))
+	ui.UnitImpModel = m
+	ui.UnitImpPath = path
+	ui.UnitImpOpen = make([]bool, len(m.Animations))
+	ui.UnitImpAnimClicks = make([]widget.Clickable, len(m.Animations))
+	ui.UnitImpFrameClicks = make(map[unitImpRef]*widget.Clickable)
+	ui.UnitImpSel = make(map[unitImpRef]bool)
+	ui.UnitImpAnchor = unitImpRef{anim: -1}
+	ui.UnitImpStatus = fmt.Sprintf("Imported %s — %d clip(s)", filepath.Base(path), len(m.Animations))
 	LogInfo("bone: import: loaded %q (%d animations, %d bones)", path, len(m.Animations), len(m.Bones))
 }
 
 // unitImportBoneIndex is the source file's bone matching the picked bone of
 // the edited model, by name — the two files are assumed to carry the same
 // skeleton, which is the premise of the whole feature. -1 means no match.
-func (ui *uiState) unitImportBoneIndex(v *modelViewer) int {
-	if ui.unitImpModel == nil || v == nil || v.model == nil || v.boneIndex < 0 || v.boneIndex >= len(v.model.Bones) {
+func UnitImportBoneIndex(ui *uiState, v *modelViewer) int {
+	if ui.UnitImpModel == nil || v == nil || v.Model == nil || v.BoneIndex < 0 || v.BoneIndex >= len(v.Model.Bones) {
 		return -1
 	}
-	name := v.model.Bones[v.boneIndex].Name
+	name := v.Model.Bones[v.BoneIndex].Name
 	if name == "" {
 		return -1
 	}
-	return ui.unitImpModel.boneIndexByName(name)
+	return ui.UnitImpModel.boneIndexByName(name)
 }
 
 // unitImportFrames lists the frames the matched bone has keys on in one
@@ -1431,14 +1431,14 @@ func unitImportFrameKinds(a *WhmAnimation, bone, frame int) string {
 // first time a frame is shown. The map rather than a slice: frames appear
 // and vanish as clips are opened, and a click target has to stay the same
 // widget between frames for a press to complete.
-func (ui *uiState) unitImportRowClick(ref unitImpRef) *widget.Clickable {
-	if ui.unitImpFrameClicks == nil {
-		ui.unitImpFrameClicks = make(map[unitImpRef]*widget.Clickable)
+func UnitImportRowClick(ui *uiState, ref unitImpRef) *widget.Clickable {
+	if ui.UnitImpFrameClicks == nil {
+		ui.UnitImpFrameClicks = make(map[unitImpRef]*widget.Clickable)
 	}
-	c := ui.unitImpFrameClicks[ref]
+	c := ui.UnitImpFrameClicks[ref]
 	if c == nil {
 		c = &widget.Clickable{}
-		ui.unitImpFrameClicks[ref] = c
+		ui.UnitImpFrameClicks[ref] = c
 	}
 	return c
 }
@@ -1447,16 +1447,16 @@ func (ui *uiState) unitImportRowClick(ref unitImpRef) *widget.Clickable {
 // frame alone, Ctrl adds or takes it away, Shift picks every frame of the
 // same clip between the anchor and this one. Shift only spans one clip —
 // a range across two clips has no timeline to be a range on.
-func (ui *uiState) unitImportRowClicked(ref unitImpRef, frames []int, mods key.Modifiers) {
-	if ui.unitImpSel == nil {
-		ui.unitImpSel = make(map[unitImpRef]bool)
+func UnitImportRowClicked(ui *uiState, ref unitImpRef, frames []int, mods key.Modifiers) {
+	if ui.UnitImpSel == nil {
+		ui.UnitImpSel = make(map[unitImpRef]bool)
 	}
 	ctrl, shift := mods.Contain(key.ModCtrl), mods.Contain(key.ModShift)
 	switch {
-	case shift && ui.unitImpAnchor.anim == ref.anim && ui.unitImpAnchor.anim >= 0:
+	case shift && ui.UnitImpAnchor.anim == ref.anim && ui.UnitImpAnchor.anim >= 0:
 		lo, hi := -1, -1
 		for i, f := range frames {
-			if f == ui.unitImpAnchor.frame {
+			if f == ui.UnitImpAnchor.frame {
 				lo = i
 			}
 			if f == ref.frame {
@@ -1464,28 +1464,28 @@ func (ui *uiState) unitImportRowClicked(ref unitImpRef, frames []int, mods key.M
 			}
 		}
 		if lo < 0 || hi < 0 {
-			ui.unitImpSel = map[unitImpRef]bool{ref: true}
-			ui.unitImpAnchor = ref
+			ui.UnitImpSel = map[unitImpRef]bool{ref: true}
+			ui.UnitImpAnchor = ref
 			break
 		}
 		if lo > hi {
 			lo, hi = hi, lo
 		}
-		ui.unitImpSel = make(map[unitImpRef]bool, hi-lo+1)
+		ui.UnitImpSel = make(map[unitImpRef]bool, hi-lo+1)
 		for _, f := range frames[lo : hi+1] {
-			ui.unitImpSel[unitImpRef{anim: ref.anim, frame: f}] = true
+			ui.UnitImpSel[unitImpRef{anim: ref.anim, frame: f}] = true
 		}
 		LogInfo("bone: import: Shift+click spans %d frame(s) of clip %d", hi-lo+1, ref.anim)
 	case ctrl:
-		if ui.unitImpSel[ref] {
-			delete(ui.unitImpSel, ref)
+		if ui.UnitImpSel[ref] {
+			delete(ui.UnitImpSel, ref)
 		} else {
-			ui.unitImpSel[ref] = true
-			ui.unitImpAnchor = ref
+			ui.UnitImpSel[ref] = true
+			ui.UnitImpAnchor = ref
 		}
 	default:
-		ui.unitImpSel = map[unitImpRef]bool{ref: true}
-		ui.unitImpAnchor = ref
+		ui.UnitImpSel = map[unitImpRef]bool{ref: true}
+		ui.UnitImpAnchor = ref
 	}
 }
 
@@ -1496,32 +1496,32 @@ func (ui *uiState) unitImportRowClicked(ref unitImpRef, frames []int, mods key.M
 // Frame numbers are mapped by frame number, clamped to the clip's length —
 // the two files are assumed to carry clips of the same length, which is
 // what "analogous set of bones" means in practice.
-func (ui *uiState) unitImportApply(v *modelViewer, replace bool) (added, replaced, skipped int) {
+func UnitImportApply(ui *uiState, v *modelViewer, replace bool) (added, replaced, skipped int) {
 	what := "copy"
 	if replace {
 		what = "replace"
 	}
-	if ui.unitImpModel == nil {
-		ui.unitBoneKeyErr = "no file imported"
+	if ui.UnitImpModel == nil {
+		ui.UnitBoneKeyErr = "no file imported"
 		return 0, 0, 0
 	}
-	if v == nil || v.anim == nil {
-		ui.unitBoneKeyErr = "no clip is on show"
+	if v == nil || v.Anim == nil {
+		ui.UnitBoneKeyErr = "no clip is on show"
 		return 0, 0, 0
 	}
-	if v.boneIndex < 0 || v.boneIndex >= len(v.model.Bones) {
-		ui.unitBoneKeyErr = "no bone is picked"
+	if v.BoneIndex < 0 || v.BoneIndex >= len(v.Model.Bones) {
+		ui.UnitBoneKeyErr = "no bone is picked"
 		return 0, 0, 0
 	}
-	src := ui.unitImportBoneIndex(v)
+	src := UnitImportBoneIndex(ui, v)
 	if src < 0 {
-		ui.unitBoneKeyErr = "the imported file has no bone named " + v.model.Bones[v.boneIndex].Name
+		ui.UnitBoneKeyErr = "the imported file has no bone named " + v.Model.Bones[v.BoneIndex].Name
 		return 0, 0, 0
 	}
 	// The refs are walked in a fixed order — clip then frame — so the
 	// result does not depend on map iteration.
-	refs := make([]unitImpRef, 0, len(ui.unitImpSel))
-	for ref := range ui.unitImpSel {
+	refs := make([]unitImpRef, 0, len(ui.UnitImpSel))
+	for ref := range ui.UnitImpSel {
 		refs = append(refs, ref)
 	}
 	sort.Slice(refs, func(i, j int) bool {
@@ -1531,23 +1531,23 @@ func (ui *uiState) unitImportApply(v *modelViewer, replace bool) (added, replace
 		return refs[i].frame < refs[j].frame
 	})
 	if len(refs) == 0 {
-		ui.unitBoneKeyErr = "no frame is picked"
+		ui.UnitBoneKeyErr = "no frame is picked"
 		return 0, 0, 0
 	}
-	t := v.boneTrack()
+	t := v.BoneTrack()
 	if t == nil {
-		ui.unitBoneKeyErr = "the bone has no track in this clip"
+		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return 0, 0, 0
 	}
 	// The keys written below are also what the copy history keeps: a Copy or
 	// Replace records the source keys it took, so they can be found again.
 	var keys boneKeyClip
 	for _, ref := range refs {
-		if ref.anim < 0 || ref.anim >= len(ui.unitImpModel.Animations) {
+		if ref.anim < 0 || ref.anim >= len(ui.UnitImpModel.Animations) {
 			skipped++
 			continue
 		}
-		sa := &ui.unitImpModel.Animations[ref.anim]
+		sa := &ui.UnitImpModel.Animations[ref.anim]
 		var st *WhmTrack
 		for i := range sa.Bones {
 			if sa.Bones[i].Bone == src {
@@ -1564,7 +1564,7 @@ func (ui *uiState) unitImportApply(v *modelViewer, replace bool) (added, replace
 			skipped++
 			continue
 		}
-		if frame >= v.anim.NumFrames {
+		if frame >= v.Anim.NumFrames {
 			// The source clip runs longer than the one on show:
 			// the frame has nowhere to land.
 			skipped++
@@ -1591,24 +1591,24 @@ func (ui *uiState) unitImportApply(v *modelViewer, replace bool) (added, replace
 			replaced += r
 		}
 	}
-	v.poseValid = false
-	v.invalidate()
+	v.PoseValid = false
+	v.Invalidate()
 	if added+replaced > 0 {
-		ui.unitModelWhmDirty = true
-		ui.unitBoneKeyErr = ""
-		ui.unitClips.Push(clipEntry{
+		ui.UnitModelWhmDirty = true
+		ui.UnitBoneKeyErr = ""
+		ui.UnitClips.Push(clipEntry{
 			Kind:  clipImportKeys,
-			Label: fmt.Sprintf("%d key(s) from %s", len(keys.Pos)+len(keys.Rot), filepath.Base(ui.unitImpPath)),
+			Label: fmt.Sprintf("%d key(s) from %s", len(keys.Pos)+len(keys.Rot), filepath.Base(ui.UnitImpPath)),
 			At:    time.Now(),
 			Keys:  &keys,
 		})
-		ui.fillBoneKeyFields(v, 0)
-		ui.fillBoneKeyFields(v, 1)
-	} else if ui.unitBoneKeyErr == "" {
-		ui.unitBoneKeyErr = "nothing to write"
+		FillBoneKeyFields(ui, v, 0)
+		FillBoneKeyFields(ui, v, 1)
+	} else if ui.UnitBoneKeyErr == "" {
+		ui.UnitBoneKeyErr = "nothing to write"
 	}
 	LogInfo("bone: import %s: %d key(s) added, %d replaced, %d skipped (bone=%q clip=%q)",
-		what, added, replaced, skipped, t.Name, v.anim.Name)
+		what, added, replaced, skipped, t.Name, v.Anim.Name)
 	return added, replaced, skipped
 }
 
@@ -1616,14 +1616,14 @@ func (ui *uiState) unitImportApply(v *modelViewer, replace bool) (added, replace
 // bone's track. It reports whether a key was created and whether an
 // existing one was written over.
 func writeImportPos(t *WhmTrack, v *modelViewer, frame int, val [3]float32, replace bool) (added, replaced int) {
-	if idx := v.boneKeyIndexAtFrame(frame, 0); idx >= 0 {
+	if idx := v.BoneKeyIndexAtFrame(frame, 0); idx >= 0 {
 		if !replace {
 			return 0, 0
 		}
 		t.PosKey[idx].V = val
 		return 0, 1
 	}
-	now := timeForFrame(frame, v.anim.NumFrames)
+	now := timeForFrame(frame, v.Anim.NumFrames)
 	at := 0
 	for at < len(t.PosKey) && t.PosKey[at].Time <= now {
 		at++
@@ -1636,14 +1636,14 @@ func writeImportPos(t *WhmTrack, v *modelViewer, frame int, val [3]float32, repl
 
 // writeImportRot is writeImportPos for rotation keys.
 func writeImportRot(t *WhmTrack, v *modelViewer, frame int, val [4]float32, replace bool) (added, replaced int) {
-	if idx := v.boneKeyIndexAtFrame(frame, 1); idx >= 0 {
+	if idx := v.BoneKeyIndexAtFrame(frame, 1); idx >= 0 {
 		if !replace {
 			return 0, 0
 		}
 		t.RotKey[idx].V = val
 		return 0, 1
 	}
-	now := timeForFrame(frame, v.anim.NumFrames)
+	now := timeForFrame(frame, v.Anim.NumFrames)
 	at := 0
 	for at < len(t.RotKey) && t.RotKey[at].Time <= now {
 		at++
@@ -1659,25 +1659,25 @@ func writeImportRot(t *WhmTrack, v *modelViewer, frame int, val [4]float32, repl
 // and the two buttons that write a multi-selection into the clip on show.
 // With nothing imported it is not drawn at all, so the panel looks as it
 // did before the feature existed.
-func (ui *uiState) unitImportSection(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	if ui.unitImpModel == nil {
+func UnitImportSection(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
+	if ui.UnitImpModel == nil {
 		return layout.Dimensions{}
 	}
 	// Clicks are drained before the buttons are laid out, the order the
 	// pose bar uses: an update read after Layout has already been spent.
-	copyClicked := ui.unitImpCopyClick.Clicked(gtx)
-	replaceClicked := ui.unitImpReplaceClick.Clicked(gtx)
+	copyClicked := ui.UnitImpCopyClick.Clicked(gtx)
+	replaceClicked := ui.UnitImpReplaceClick.Clicked(gtx)
 	if copyClicked {
-		ui.unitImportApply(v, false)
+		UnitImportApply(ui, v, false)
 	}
 	if replaceClicked {
-		ui.unitImportApply(v, true)
+		UnitImportApply(ui, v, true)
 	}
-	src := ui.unitImportBoneIndex(v)
+	src := UnitImportBoneIndex(ui, v)
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return sectionHeader(gtx, ui.th, "Imported · "+filepath.Base(ui.unitImpPath))
+			return sectionHeader(gtx, ui.Th, "Imported · "+filepath.Base(ui.UnitImpPath))
 		}),
 	}
 	// The buttons sit directly under the header rather than after every clip
@@ -1685,24 +1685,24 @@ func (ui *uiState) unitImportSection(gtx layout.Context, v *modelViewer) layout.
 	// frames, and at the far end of that the buttons were effectively
 	// unreachable. With nothing picked they are drawn disabled rather than
 	// hidden, so the row does not jump under the mouse.
-	n := len(ui.unitImpSel)
+	n := len(ui.UnitImpSel)
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(2), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx,
 			func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButtonDisabled(gtx, &ui.unitImpCopyClick, "Copy", n == 0)
+						return SmallButtonDisabled(ui, gtx, &ui.UnitImpCopyClick, "Copy", n == 0)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButtonDisabled(gtx, &ui.unitImpReplaceClick, "Replace", n == 0)
+						return SmallButtonDisabled(ui, gtx, &ui.UnitImpReplaceClick, "Replace", n == 0)
 					}),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 						txt := fmt.Sprintf("%d picked", n)
 						if n == 0 {
 							txt = "Ctrl+click picks more frames"
 						}
-						l := material.Label(ui.th, unit.Sp(9), txt)
+						l := material.Label(ui.Th, unit.Sp(9), txt)
 						l.Color = cTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
@@ -1713,45 +1713,45 @@ func (ui *uiState) unitImportSection(gtx layout.Context, v *modelViewer) layout.
 	if src < 0 {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			msg := "Select a bone to see its frames from the imported file."
-			if v == nil || v.boneIndex < 0 || v.model == nil || v.boneIndex >= len(v.model.Bones) {
+			if v == nil || v.BoneIndex < 0 || v.Model == nil || v.BoneIndex >= len(v.Model.Bones) {
 				// The message already says it; keep it short.
 			} else {
-				msg = "No bone named " + v.model.Bones[v.boneIndex].Name + " in the imported file."
+				msg = "No bone named " + v.Model.Bones[v.BoneIndex].Name + " in the imported file."
 			}
-			l := material.Label(ui.th, unit.Sp(9), msg)
+			l := material.Label(ui.Th, unit.Sp(9), msg)
 			l.Color = cTextDim
 			return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 		}))
 	} else {
-		for i := range ui.unitImpModel.Animations {
+		for i := range ui.UnitImpModel.Animations {
 			i := i
-			if i >= len(ui.unitImpOpen) {
+			if i >= len(ui.UnitImpOpen) {
 				break
 			}
-			c := &ui.unitImpAnimClicks[i]
+			c := &ui.UnitImpAnimClicks[i]
 			if c.Clicked(gtx) {
-				ui.unitImpOpen[i] = !ui.unitImpOpen[i]
+				ui.UnitImpOpen[i] = !ui.UnitImpOpen[i]
 			}
-			a := &ui.unitImpModel.Animations[i]
+			a := &ui.UnitImpModel.Animations[i]
 			frames := unitImportFrames(a, src)
 			note := fmt.Sprintf("%d frame(s)", len(frames))
 			if len(frames) == 0 {
 				note = "no keys for this bone"
 			}
-			open := ui.unitImpOpen[i]
+			open := ui.UnitImpOpen[i]
 			mark := "▸ "
 			if open {
 				mark = "▾ "
 			}
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitViewportRow(gtx, c, open, mark+a.Name, note)
+				return UnitViewportRow(ui, gtx, c, open, mark+a.Name, note)
 			}))
 			if !open {
 				continue
 			}
 			if len(frames) == 0 {
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(9), "This clip gives "+v.model.Bones[v.boneIndex].Name+" no keys.")
+					l := material.Label(ui.Th, unit.Sp(9), "This clip gives "+v.Model.Bones[v.BoneIndex].Name+" no keys.")
 					l.Color = cTextDim
 					return layout.Inset{Left: unit.Dp(16), Bottom: unit.Dp(2)}.Layout(gtx, l.Layout)
 				}))
@@ -1760,22 +1760,22 @@ func (ui *uiState) unitImportSection(gtx layout.Context, v *modelViewer) layout.
 			for _, f := range frames {
 				f := f
 				ref := unitImpRef{anim: i, frame: f}
-				rc := ui.unitImportRowClick(ref)
+				rc := UnitImportRowClick(ui, ref)
 				if rc.Clicked(gtx) {
-					ui.unitImportRowClicked(ref, frames, ui.unitListModifiers())
+					UnitImportRowClicked(ui, ref, frames, UnitListModifiers(ui))
 				}
-				selected := ui.unitImpSel[ref]
+				selected := ui.UnitImpSel[ref]
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.unitViewportRow(gtx, rc, selected,
+					return UnitViewportRow(ui, gtx, rc, selected,
 						fmt.Sprintf("frame %d", f+1), unitImportFrameKinds(a, src, f))
 				}))
 			}
 		}
 	}
-	if ui.unitBoneKeyErr != "" {
-		msg := ui.unitBoneKeyErr
+	if ui.UnitBoneKeyErr != "" {
+		msg := ui.UnitBoneKeyErr
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(9), msg)
+			l := material.Label(ui.Th, unit.Sp(9), msg)
 			l.Color = rgb(0xB00020)
 			l.MaxLines = 1
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)

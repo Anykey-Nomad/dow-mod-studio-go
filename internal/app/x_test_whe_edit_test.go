@@ -3,8 +3,8 @@ package app
 import (
 	"bytes"
 	"dow-mod-studio/internal/chunky"
-	"dow-mod-studio/internal/whe"
 	"dow-mod-studio/internal/testutil"
+	"dow-mod-studio/internal/whe"
 	"os"
 	"path/filepath"
 	"strings"
@@ -442,32 +442,32 @@ func TestEventsSectionSavesEditedWheIntoModOverlay(t *testing.T) {
 	tree.SortAll(tree.Root)
 	engineDisk := filepath.Join(engineRoot, "Data", "art", "ebps", "races", "necrons", "troops", "necron_lancer.whe")
 
-	ui.unitSection = unitSectionNamed("Events")
-	ui.ensureUnitEvents()
-	if ui.unitEvtDoc == nil {
-		t.Fatalf("the Events section did not load a .whe: %s", ui.unitEvtErr)
+	ui.UnitSection = unitSectionNamed("Events")
+	EnsureUnitEvents(ui)
+	if ui.UnitEvtDoc == nil {
+		t.Fatalf("the Events section did not load a .whe: %s", ui.UnitEvtErr)
 	}
-	if !strings.EqualFold(ui.unitEvtPath, unitEventsTestWhePath) {
-		t.Fatalf("the section opened %q, want %q", ui.unitEvtPath, unitEventsTestWhePath)
+	if !strings.EqualFold(ui.UnitEvtPath, unitEventsTestWhePath) {
+		t.Fatalf("the section opened %q, want %q", ui.UnitEvtPath, unitEventsTestWhePath)
 	}
 
 	// A sound added through the form at a chosen moment.
-	ui.unitEvtNameEd.SetText("sound_editor_test")
-	ui.unitEvtTimeEd.SetText("1.5")
-	ui.unitEvtSndEd.SetText(`races\npc\editor`)
-	ui.addUnitEventFromForm("sound")
-	if ui.unitEvtFormErr != "" {
-		t.Fatalf("add sound: %s", ui.unitEvtFormErr)
+	ui.UnitEvtNameEd.SetText("sound_editor_test")
+	ui.UnitEvtTimeEd.SetText("1.5")
+	ui.UnitEvtSndEd.SetText(`races\npc\editor`)
+	AddUnitEventFromForm(ui, "sound")
+	if ui.UnitEvtFormErr != "" {
+		t.Fatalf("add sound: %s", ui.UnitEvtFormErr)
 	}
-	ev, ok := findEvent(timelineByName(t, ui.unitEvtDoc.Timelines(), "phase_in"), "sound_editor_test")
+	ev, ok := findEvent(timelineByName(t, ui.UnitEvtDoc.Timelines(), "phase_in"), "sound_editor_test")
 	if !ok || ev.Time != 1.5 {
 		t.Fatalf("the sound event is %+v, want it on phase_in at 1.5s", ev)
 	}
 
-	if _, err := ui.saveUnitEvents(); err != nil {
+	if _, err := SaveUnitEvents(ui); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if ui.unitEvtDirty {
+	if ui.UnitEvtDirty {
 		t.Error("the file is still marked unsaved after it was written")
 	}
 
@@ -504,8 +504,8 @@ func TestEventsSectionSavesEditedWheIntoModOverlay(t *testing.T) {
 	if s, ok := sounds["sound_editor_test"]; !ok || s.Path != `races\npc\editor` {
 		t.Errorf("the saved file's sound_editor_test resolves to %+v", s)
 	}
-	if ui.unitEvtErr != "" {
-		t.Errorf("the section reports an error after a successful save: %s", ui.unitEvtErr)
+	if ui.UnitEvtErr != "" {
+		t.Errorf("the section reports an error after a successful save: %s", ui.UnitEvtErr)
 	}
 }
 
@@ -517,28 +517,28 @@ func TestTheEventsSectionLayoutsItsColumns(t *testing.T) {
 	ui, tree := unitEditUI(t)
 	writeTreeFile(t, tree, unitEventsTestWhePath, syntheticEventWhe())
 	tree.SortAll(tree.Root)
-	ui.unitSection = unitSectionNamed("Events")
+	ui.UnitSection = unitSectionNamed("Events")
 	var ops op.Ops
 	gtx := testutil.NewLayoutContext(&ops, 1400, 800)
-	ui.layoutUnitBody(gtx)
-	if ui.unitEvtDoc == nil {
-		t.Fatalf("the section did not load a .whe while drawing: %s", ui.unitEvtErr)
+	LayoutUnitBody(ui, gtx)
+	if ui.UnitEvtDoc == nil {
+		t.Fatalf("the section did not load a .whe while drawing: %s", ui.UnitEvtErr)
 	}
-	if len(ui.unitEvtTlClicks) != 2 {
-		t.Errorf("%d timeline rows were laid out, want the two the file carries", len(ui.unitEvtTlClicks))
+	if len(ui.UnitEvtTlClicks) != 2 {
+		t.Errorf("%d timeline rows were laid out, want the two the file carries", len(ui.UnitEvtTlClicks))
 	}
-	if len(ui.unitEvtClicks) == 0 {
+	if len(ui.UnitEvtClicks) == 0 {
 		t.Error("no event rows were laid out for a timeline that fires events")
 	}
 	// The second frame has to work as well: input ran in between, and a stale
 	// selection or click list is what panics then.
-	ui.handleUnitEventsInput(gtx)
-	ui.layoutUnitBody(gtx)
+	HandleUnitEventsInput(ui, gtx)
+	LayoutUnitBody(ui, gtx)
 	// Switching timelines refills the form from the other timeline's rows.
-	ui.selectUnitEventTimeline("phase_out")
-	ui.handleUnitEventsInput(gtx)
-	ui.layoutUnitBody(gtx)
-	if ui.unitEvtTimeline != "phase_out" {
-		t.Errorf("the selected timeline is %q, want phase_out", ui.unitEvtTimeline)
+	SelectUnitEventTimeline(ui, "phase_out")
+	HandleUnitEventsInput(ui, gtx)
+	LayoutUnitBody(ui, gtx)
+	if ui.UnitEvtTimeline != "phase_out" {
+		t.Errorf("the selected timeline is %q, want phase_out", ui.UnitEvtTimeline)
 	}
 }

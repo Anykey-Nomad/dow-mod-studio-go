@@ -700,52 +700,52 @@ func sgbEnvironmentEntries(root *modtree.TreeFolder, expanded map[string]bool) [
 	return entries
 }
 
-func (ui *uiState) ensureSgbObjectTree(tab *fileTab) {
+func EnsureSgbObjectTree(ui *uiState, tab *fileTab) {
 	if tab == nil {
 		return
 	}
-	if tab.sgbObjectExpanded == nil {
-		tab.sgbObjectExpanded = make(map[string]bool)
+	if tab.SgbObjectExpanded == nil {
+		tab.SgbObjectExpanded = make(map[string]bool)
 	}
-	if tab.sgbObjectClicks == nil {
-		tab.sgbObjectClicks = make(map[string]*widget.Clickable)
+	if tab.SgbObjectClicks == nil {
+		tab.SgbObjectClicks = make(map[string]*widget.Clickable)
 	}
-	if tab.sgbObjectRoot == nil && ui.modTree != nil {
-		tab.sgbObjectRoot = ui.modTree.FindFolder(sgbEnvironmentRoot)
+	if tab.SgbObjectRoot == nil && ui.ModTree != nil {
+		tab.SgbObjectRoot = ui.ModTree.FindFolder(sgbEnvironmentRoot)
 	}
 }
 
-func (ui *uiState) ensureSgbObjectModel(tab *fileTab) {
-	if tab == nil || tab.sgbObjectSelected == "" || ui.modTree == nil || tab.sgbObjectModelCh != nil {
+func EnsureSgbObjectModel(ui *uiState, tab *fileTab) {
+	if tab == nil || tab.SgbObjectSelected == "" || ui.ModTree == nil || tab.SgbObjectModelCh != nil {
 		return
 	}
-	blueprint, tree := tab.sgbObjectSelected, ui.modTree
+	blueprint, tree := tab.SgbObjectSelected, ui.ModTree
 	ch := make(chan sgbObjectModelResult, 1)
-	tab.sgbObjectModelPath = blueprint
-	tab.sgbObjectModelCh = ch
+	tab.SgbObjectModelPath = blueprint
+	tab.SgbObjectModelCh = ch
 	go func() {
 		model, modelPath := sgbBlueprintModelWithPath(tree, blueprint)
 		ch <- sgbObjectModelResult{blueprint: blueprint, modelPath: modelPath, model: model}
 	}()
 }
 
-func (ui *uiState) pollSgbObjectModel(tab *fileTab) bool {
-	if tab == nil || tab.sgbObjectModelCh == nil {
+func PollSgbObjectModel(ui *uiState, tab *fileTab) bool {
+	if tab == nil || tab.SgbObjectModelCh == nil {
 		return false
 	}
 	select {
-	case result := <-tab.sgbObjectModelCh:
-		tab.sgbObjectModelCh = nil
-		if strings.EqualFold(tab.sgbObjectSelected, result.blueprint) {
-			tab.sgbObjectModel = result.model
-			tab.sgbObjectModelFile = result.modelPath
+	case result := <-tab.SgbObjectModelCh:
+		tab.SgbObjectModelCh = nil
+		if strings.EqualFold(tab.SgbObjectSelected, result.blueprint) {
+			tab.SgbObjectModel = result.model
+			tab.SgbObjectModelFile = result.modelPath
 			if result.model == nil {
-				tab.sgbPlacementPending = nil
-				ui.statusText = "Could not load selected environment object " + filepath.Base(result.blueprint)
+				tab.SgbPlacementPending = nil
+				ui.StatusText = "Could not load selected environment object " + filepath.Base(result.blueprint)
 			} else if len(result.model.Meshes) == 0 {
-				ui.statusText = "Selected object has no renderable meshes: " + filepath.Base(result.blueprint)
+				ui.StatusText = "Selected object has no renderable meshes: " + filepath.Base(result.blueprint)
 			} else {
-				ui.startSgbObjectMaterials(tab, result.blueprint, result.model)
+				StartSgbObjectMaterials(ui, tab, result.blueprint, result.model)
 			}
 		}
 		return true
@@ -758,84 +758,84 @@ func clearSgbObjectSelection(tab *fileTab) {
 	if tab == nil {
 		return
 	}
-	tab.sgbObjectSelected = ""
-	tab.sgbObjectModel = nil
-	tab.sgbObjectModelPath = ""
-	tab.sgbObjectModelFile = ""
-	tab.sgbPlacementPending = nil
+	tab.SgbObjectSelected = ""
+	tab.SgbObjectModel = nil
+	tab.SgbObjectModelPath = ""
+	tab.SgbObjectModelFile = ""
+	tab.SgbPlacementPending = nil
 }
 
-func (ui *uiState) layoutSgbObjectPanel(gtx layout.Context, tab *fileTab) layout.Dimensions {
-	ui.ensureSgbObjectTree(tab)
-	if tab.sgbObjectSelected != "" && tab.sgbObjectModel == nil {
-		ui.ensureSgbObjectModel(tab)
+func LayoutSgbObjectPanel(ui *uiState, gtx layout.Context, tab *fileTab) layout.Dimensions {
+	EnsureSgbObjectTree(ui, tab)
+	if tab.SgbObjectSelected != "" && tab.SgbObjectModel == nil {
+		EnsureSgbObjectModel(ui, tab)
 	}
-	if tab.sgbObjectModelCh != nil || tab.sgbObjectMaterialsCh != nil || len(tab.sgbObjectMaterialsPending) > 0 || tab.sgbPlacementPending != nil {
+	if tab.SgbObjectModelCh != nil || tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) > 0 || tab.SgbPlacementPending != nil {
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 	}
-	if tab.sgbObjectClear.Clicked(gtx) {
+	if tab.SgbObjectClear.Clicked(gtx) {
 		clearSgbObjectSelection(tab)
-		ui.statusText = "Object placement cancelled"
+		ui.StatusText = "Object placement cancelled"
 	}
-	if tab.sgbPlayerList == nil {
-		tab.sgbPlayerList = sgbNewPlayerList()
+	if tab.SgbPlayerList == nil {
+		tab.SgbPlayerList = sgbNewPlayerList()
 	}
-	if tab.sgbPlayerSet.Clicked(gtx) {
-		if owner, ok := sgbPlayerOwner(tab.sgbPlayerList.Value); ok {
-			ui.setSelectedSgbOwner(tab, owner)
+	if tab.SgbPlayerSet.Clicked(gtx) {
+		if owner, ok := sgbPlayerOwner(tab.SgbPlayerList.Value); ok {
+			SetSelectedSgbOwner(ui, tab, owner)
 		}
 	}
-	entries := sgbEnvironmentEntries(tab.sgbObjectRoot, tab.sgbObjectExpanded)
-	return ui.panelWithScroll(gtx, &tab.sgbObjectScroll, func(gtx layout.Context) layout.Dimensions {
+	entries := sgbEnvironmentEntries(tab.SgbObjectRoot, tab.SgbObjectExpanded)
+	return PanelWithScroll(ui, gtx, &tab.SgbObjectScroll, func(gtx layout.Context) layout.Dimensions {
 		var children []layout.FlexChild
 		children = append(children,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return sectionHeader(gtx, ui.th, "Object Owner")
+				return sectionHeader(gtx, ui.Th, "Object Owner")
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutSgbPlayerSelector(gtx, tab)
+				return LayoutSgbPlayerSelector(ui, gtx, tab)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return hLine(gtx, cHeaderLine, 1)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return sectionHeader(gtx, ui.th, "Objects — EBPS Environment")
+				return sectionHeader(gtx, ui.Th, "Objects — EBPS Environment")
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				msg := "Select an object, then click the map surface to place it."
-				if tab.sgbObjectSelected != "" {
-					msg = "Selected: " + filepath.Base(tab.sgbObjectSelected)
-					if tab.sgbObjectModelCh != nil {
+				if tab.SgbObjectSelected != "" {
+					msg = "Selected: " + filepath.Base(tab.SgbObjectSelected)
+					if tab.SgbObjectModelCh != nil {
 						msg += " (loading…)"
 					}
 				}
-				l := material.Label(ui.th, unit.Sp(9), msg)
+				l := material.Label(ui.Th, unit.Sp(9), msg)
 				l.Color = cTextDim
 				l.MaxLines = 2
 				return layout.Inset{Top: unit.Dp(5), Bottom: unit.Dp(5), Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}),
 		)
-		if tab.sgbObjectSelected != "" {
+		if tab.SgbObjectSelected != "" {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := material.Button(ui.th, &tab.sgbObjectClear, "Clear selection")
+				button := material.Button(ui.Th, &tab.SgbObjectClear, "Clear selection")
 				button.TextSize = unit.Sp(9)
 				button.Inset = layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(5)}.Layout(gtx, button.Layout)
 			}))
 		}
-		if tab.sgbObjectRoot == nil {
+		if tab.SgbObjectRoot == nil {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutClassicOEHint(gtx, "", "Data/attrib/ebps/environment was not found in this module.")
+				return LayoutClassicOEHint(ui, gtx, "", "Data/attrib/ebps/environment was not found in this module.")
 			}))
 		} else if len(entries) == 0 {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutClassicOEHint(gtx, "", "Expand a folder to browse environment objects.")
+				return LayoutClassicOEHint(ui, gtx, "", "Expand a folder to browse environment objects.")
 			}))
 		} else {
 			for _, entry := range entries {
 				entry := entry
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutSgbEnvironmentRow(gtx, tab, entry)
+					return LayoutSgbEnvironmentRow(ui, gtx, tab, entry)
 				}))
 			}
 		}
@@ -865,13 +865,13 @@ func sgbPlayerOwner(key string) (int, bool) {
 	return 0, false
 }
 
-func (ui *uiState) layoutSgbPlayerSelector(gtx layout.Context, tab *fileTab) layout.Dimensions {
+func LayoutSgbPlayerSelector(ui *uiState, gtx layout.Context, tab *fileTab) layout.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, sgbPlayerRadioChildren(ui, tab)...)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			button := material.Button(ui.th, &tab.sgbPlayerSet, "Set")
+			button := material.Button(ui.Th, &tab.SgbPlayerSet, "Set")
 			button.TextSize = unit.Sp(9)
 			button.Inset = layout.Inset{Top: unit.Dp(3), Bottom: unit.Dp(3), Left: unit.Dp(10), Right: unit.Dp(10)}
 			return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(8), Bottom: unit.Dp(5)}.Layout(gtx, button.Layout)
@@ -884,7 +884,7 @@ func sgbPlayerRadioChildren(ui *uiState, tab *fileTab) []layout.FlexChild {
 	for _, option := range sgbPlayerOptions {
 		option := option
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			radio := material.RadioButton(ui.th, tab.sgbPlayerList, option.key, option.label)
+			radio := material.RadioButton(ui.Th, tab.SgbPlayerList, option.key, option.label)
 			radio.TextSize = unit.Sp(9)
 			return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(4), Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, radio.Layout)
 		}))
@@ -892,14 +892,14 @@ func sgbPlayerRadioChildren(ui *uiState, tab *fileTab) []layout.FlexChild {
 	return children
 }
 
-func (ui *uiState) setSelectedSgbOwner(tab *fileTab, owner int) int {
-	if tab == nil || tab.sgbMap == nil || len(tab.sgbSelectedEntities) == 0 || owner < 0 || owner > 8 {
+func SetSelectedSgbOwner(ui *uiState, tab *fileTab, owner int) int {
+	if tab == nil || tab.SgbMap == nil || len(tab.SgbSelectedEntities) == 0 || owner < 0 || owner > 8 {
 		return 0
 	}
 	changed := 0
-	for i := range tab.sgbMap.Entities {
-		entity := &tab.sgbMap.Entities[i]
-		if !tab.sgbSelectedEntities[entity.ID] {
+	for i := range tab.SgbMap.Entities {
+		entity := &tab.SgbMap.Entities[i]
+		if !tab.SgbSelectedEntities[entity.ID] {
 			continue
 		}
 		if entity.Owner == owner {
@@ -909,26 +909,26 @@ func (ui *uiState) setSelectedSgbOwner(tab *fileTab, owner int) int {
 		changed++
 	}
 	if changed > 0 {
-		tab.sgbDirty = true
-		ui.statusText = fmt.Sprintf("Assigned %s to %d selected map object(s)", sgbPlayerOptions[owner].label, changed)
+		tab.SgbDirty = true
+		ui.StatusText = fmt.Sprintf("Assigned %s to %d selected map object(s)", sgbPlayerOptions[owner].label, changed)
 	} else {
 		found := false
-		for _, entity := range tab.sgbMap.Entities {
-			if tab.sgbSelectedEntities[entity.ID] {
+		for _, entity := range tab.SgbMap.Entities {
+			if tab.SgbSelectedEntities[entity.ID] {
 				found = true
 				break
 			}
 		}
 		if !found {
-			ui.statusText = "Select one or more map objects first"
+			ui.StatusText = "Select one or more map objects first"
 		} else {
-			ui.statusText = fmt.Sprintf("Selected map objects already belong to %s", sgbPlayerOptions[owner].label)
+			ui.StatusText = fmt.Sprintf("Selected map objects already belong to %s", sgbPlayerOptions[owner].label)
 		}
 	}
 	return changed
 }
 
-func (ui *uiState) layoutSgbEnvironmentRow(gtx layout.Context, tab *fileTab, entry sgbEnvironmentEntry) layout.Dimensions {
+func LayoutSgbEnvironmentRow(ui *uiState, gtx layout.Context, tab *fileTab, entry sgbEnvironmentEntry) layout.Dimensions {
 	folder := entry.folder != nil
 	key, label := "", ""
 	if folder {
@@ -938,30 +938,30 @@ func (ui *uiState) layoutSgbEnvironmentRow(gtx layout.Context, tab *fileTab, ent
 	} else {
 		return layout.Dimensions{}
 	}
-	click := tab.sgbObjectClicks[key]
+	click := tab.SgbObjectClicks[key]
 	if click == nil {
 		click = &widget.Clickable{}
-		tab.sgbObjectClicks[key] = click
+		tab.SgbObjectClicks[key] = click
 	}
 	if click.Clicked(gtx) {
 		if folder {
-			tab.sgbObjectExpanded[entry.folder.FullPath] = !entry.expanded
+			tab.SgbObjectExpanded[entry.folder.FullPath] = !entry.expanded
 		} else {
-			if strings.EqualFold(tab.sgbObjectSelected, entry.file.FullPath) {
+			if strings.EqualFold(tab.SgbObjectSelected, entry.file.FullPath) {
 				clearSgbObjectSelection(tab)
-				ui.statusText = "Object placement cancelled"
+				ui.StatusText = "Object placement cancelled"
 			} else {
-				tab.sgbObjectSelected = entry.file.FullPath
-				tab.sgbObjectModel = nil
-				tab.sgbObjectModelPath = ""
-				tab.sgbObjectModelFile = ""
-				tab.sgbPlacementPending = nil
-				ui.ensureSgbObjectModel(tab)
-				ui.statusText = "Loading map object " + filepath.Base(entry.file.FullPath)
+				tab.SgbObjectSelected = entry.file.FullPath
+				tab.SgbObjectModel = nil
+				tab.SgbObjectModelPath = ""
+				tab.SgbObjectModelFile = ""
+				tab.SgbPlacementPending = nil
+				EnsureSgbObjectModel(ui, tab)
+				ui.StatusText = "Loading map object " + filepath.Base(entry.file.FullPath)
 			}
 		}
 	}
-	selected := !folder && strings.EqualFold(tab.sgbObjectSelected, entry.file.FullPath)
+	selected := !folder && strings.EqualFold(tab.SgbObjectSelected, entry.file.FullPath)
 	bg := cPanelBg
 	if selected {
 		bg = cSelectBg
@@ -998,13 +998,13 @@ func (ui *uiState) layoutSgbEnvironmentRow(gtx layout.Context, tab *fileTab, ent
 				return layout.Inset{Left: unit.Dp(6 + entry.depth*12), Right: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), marker)
+							l := material.Label(ui.Th, unit.Sp(9), marker)
 							l.Color = cTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), label)
+							l := material.Label(ui.Th, unit.Sp(9), label)
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -1016,80 +1016,80 @@ func (ui *uiState) layoutSgbEnvironmentRow(gtx layout.Context, tab *fileTab, ent
 	})
 }
 
-func (ui *uiState) placeSgbObject(tab *fileTab, point fauxgl.Vector) {
-	if tab == nil || tab.model == nil || tab.sgbMap == nil || tab.sgbObjectSelected == "" {
+func PlaceSgbObject(ui *uiState, tab *fileTab, point fauxgl.Vector) {
+	if tab == nil || tab.Model == nil || tab.SgbMap == nil || tab.SgbObjectSelected == "" {
 		return
 	}
-	if tab.model.loading || tab.modelMaterialCh != nil || tab.model.rendering || tab.model.frameCh != nil || tab.model.gpuRetries > 0 || tab.sgbObjectMaterialsCh != nil || len(tab.sgbObjectMaterialsPending) > 0 {
-		tab.sgbPlacementPending = &sgbPlacementRequest{blueprint: tab.sgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
-		ui.statusText = "Object placement — waiting for the map scene to finish loading"
+	if tab.Model.Loading || tab.ModelMaterialCh != nil || tab.Model.Rendering || tab.Model.FrameCh != nil || tab.Model.GpuRetries > 0 || tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) > 0 {
+		tab.SgbPlacementPending = &sgbPlacementRequest{blueprint: tab.SgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
+		ui.StatusText = "Object placement — waiting for the map scene to finish loading"
 		return
 	}
-	if !strings.EqualFold(tab.sgbObjectModelPath, tab.sgbObjectSelected) || tab.sgbObjectModel == nil {
-		tab.sgbPlacementPending = &sgbPlacementRequest{blueprint: tab.sgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
-		ui.ensureSgbObjectModel(tab)
-		ui.statusText = "Loading selected environment object…"
+	if !strings.EqualFold(tab.SgbObjectModelPath, tab.SgbObjectSelected) || tab.SgbObjectModel == nil {
+		tab.SgbPlacementPending = &sgbPlacementRequest{blueprint: tab.SgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
+		EnsureSgbObjectModel(ui, tab)
+		ui.StatusText = "Loading selected environment object…"
 		return
 	}
-	if tab.sgbObjectMaterialsCh != nil || len(tab.sgbObjectMaterialsPending) > 0 {
-		tab.sgbPlacementPending = &sgbPlacementRequest{blueprint: tab.sgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
-		ui.statusText = "Loading selected object materials…"
+	if tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) > 0 {
+		tab.SgbPlacementPending = &sgbPlacementRequest{blueprint: tab.SgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
+		ui.StatusText = "Loading selected object materials…"
 		return
 	}
-	ui.appendSgbPlacement(tab, sgbPlacementRequest{blueprint: tab.sgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}, tab.sgbObjectModel)
+	AppendSgbPlacement(ui, tab, sgbPlacementRequest{blueprint: tab.SgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}, tab.SgbObjectModel)
 }
 
-func (ui *uiState) startSgbObjectMaterials(tab *fileTab, blueprint string, model *whm.Model) {
-	if tab == nil || model == nil || ui.modTree == nil {
+func StartSgbObjectMaterials(ui *uiState, tab *fileTab, blueprint string, model *whm.Model) {
+	if tab == nil || model == nil || ui.ModTree == nil {
 		return
 	}
-	ui.queueSgbObjectMaterials(tab, sgbObjectMaterialRequest{
+	QueueSgbObjectMaterials(ui, tab, sgbObjectMaterialRequest{
 		blueprint: blueprint,
-		modelPath: tab.sgbObjectModelFile,
+		modelPath: tab.SgbObjectModelFile,
 		model:     model,
 	})
 }
 
-func (ui *uiState) queueSgbObjectMaterials(tab *fileTab, request sgbObjectMaterialRequest) {
+func QueueSgbObjectMaterials(ui *uiState, tab *fileTab, request sgbObjectMaterialRequest) {
 	if tab == nil || request.model == nil {
 		return
 	}
 	key := strings.ToLower(request.modelPath)
-	if result, ok := tab.sgbObjectMaterialsCache[key]; ok {
-		ui.applySgbObjectMaterials(tab, result)
+	if result, ok := tab.SgbObjectMaterialsCache[key]; ok {
+		ApplySgbObjectMaterials(ui, tab, result)
 		return
 	}
-	if tab.sgbObjectMaterialsLoaded == nil {
-		tab.sgbObjectMaterialsLoaded = make(map[string]bool)
+	if tab.SgbObjectMaterialsLoaded == nil {
+		tab.SgbObjectMaterialsLoaded = make(map[string]bool)
 	}
-	if request.modelPath != "" && tab.sgbObjectMaterialsLoaded[key] {
+	if request.modelPath != "" && tab.SgbObjectMaterialsLoaded[key] {
 		return
 	}
-	if tab.sgbObjectMaterialsCh != nil && strings.EqualFold(tab.sgbObjectMaterialsActive.modelPath, request.modelPath) {
-		if request.entityID != 0 && tab.sgbObjectMaterialsActive.entityID == 0 {
-			tab.sgbObjectMaterialsActive.entityID = request.entityID
+	if tab.SgbObjectMaterialsCh != nil && strings.EqualFold(tab.SgbObjectMaterialsActive.modelPath, request.modelPath) {
+		if request.entityID != 0 && tab.SgbObjectMaterialsActive.entityID == 0 {
+			tab.SgbObjectMaterialsActive.entityID = request.entityID
 		}
 		return
 	}
-	for _, queued := range tab.sgbObjectMaterialsPending {
+	for _, queued := range tab.SgbObjectMaterialsPending {
 		if strings.EqualFold(queued.modelPath, request.modelPath) {
 			return
 		}
 	}
-	tab.sgbObjectMaterialsPending = append(tab.sgbObjectMaterialsPending, request)
-	ui.launchNextSgbObjectMaterials(tab)
+	tab.SgbObjectMaterialsPending = append(tab.SgbObjectMaterialsPending, request)
+	LaunchNextSgbObjectMaterials(ui, tab)
 }
 
-func (ui *uiState) launchNextSgbObjectMaterials(tab *fileTab) {
-	if tab == nil || tab.sgbObjectMaterialsCh != nil || len(tab.sgbObjectMaterialsPending) == 0 || ui.modTree == nil {
+func LaunchNextSgbObjectMaterials(ui *uiState, tab *fileTab) {
+	if tab == nil || tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) == 0 || ui.ModTree == nil {
 		return
 	}
-	request := tab.sgbObjectMaterialsPending[0]
-	tab.sgbObjectMaterialsPending = tab.sgbObjectMaterialsPending[1:]
-	tree := ui.modTree
+	request := tab.SgbObjectMaterialsPending[0]
+	tab.SgbObjectMaterialsPending = tab.SgbObjectMaterialsPending[1:]
+	tree := ui.ModTree
 	ch := make(chan sgbObjectMaterialsResult, 1)
-	tab.sgbObjectMaterialsCh = ch
-	tab.sgbObjectMaterialsActive = request
+	tab.SgbObjectMaterialsCh = ch
+	tab.SgbObjectMaterialsActive = request
 	go func() {
 		rsh, materials, missing, diagnostics := sgbEntityMaterials(tree, request.modelPath, request.model, "", nil)
 		ch <- sgbObjectMaterialsResult{
@@ -1099,53 +1099,53 @@ func (ui *uiState) launchNextSgbObjectMaterials(tab *fileTab) {
 	}()
 }
 
-func (ui *uiState) pollSgbObjectMaterials(tab *fileTab) bool {
-	if tab == nil || tab.sgbObjectMaterialsCh == nil {
+func PollSgbObjectMaterials(ui *uiState, tab *fileTab) bool {
+	if tab == nil || tab.SgbObjectMaterialsCh == nil {
 		return false
 	}
 	select {
-	case result := <-tab.sgbObjectMaterialsCh:
-		tab.sgbObjectMaterialsCh = nil
-		tab.sgbObjectMaterialsActive = sgbObjectMaterialRequest{}
+	case result := <-tab.SgbObjectMaterialsCh:
+		tab.SgbObjectMaterialsCh = nil
+		tab.SgbObjectMaterialsActive = sgbObjectMaterialRequest{}
 		key := strings.ToLower(result.request.modelPath)
-		active := tab.sgbObjectMaterialsActive
-		if tab.sgbObjectMaterialsCache == nil {
-			tab.sgbObjectMaterialsCache = make(map[string]sgbObjectMaterialsResult)
+		active := tab.SgbObjectMaterialsActive
+		if tab.SgbObjectMaterialsCache == nil {
+			tab.SgbObjectMaterialsCache = make(map[string]sgbObjectMaterialsResult)
 		}
 		cached := result
 		cached.request.entityID = 0
-		tab.sgbObjectMaterialsCache[key] = cached
-		if tab.sgbObjectMaterialsLoaded == nil {
-			tab.sgbObjectMaterialsLoaded = make(map[string]bool)
+		tab.SgbObjectMaterialsCache[key] = cached
+		if tab.SgbObjectMaterialsLoaded == nil {
+			tab.SgbObjectMaterialsLoaded = make(map[string]bool)
 		}
-		tab.sgbObjectMaterialsLoaded[key] = true
+		tab.SgbObjectMaterialsLoaded[key] = true
 		result.request = active
-		ui.applySgbObjectMaterials(tab, result)
+		ApplySgbObjectMaterials(ui, tab, result)
 		if result.missing > 0 {
-			ui.statusText = fmt.Sprintf("Placed object materials: %d texture(s) could not be resolved", result.missing)
+			ui.StatusText = fmt.Sprintf("Placed object materials: %d texture(s) could not be resolved", result.missing)
 		}
-		ui.launchNextSgbObjectMaterials(tab)
+		LaunchNextSgbObjectMaterials(ui, tab)
 		return true
 	default:
 		return false
 	}
 }
 
-func (ui *uiState) applySgbObjectMaterials(tab *fileTab, result sgbObjectMaterialsResult) {
-	if tab == nil || tab.model == nil {
+func ApplySgbObjectMaterials(ui *uiState, tab *fileTab, result sgbObjectMaterialsResult) {
+	if tab == nil || tab.Model == nil {
 		return
 	}
-	if tab.model.materials == nil {
-		tab.model.materials = make(map[string]render.WhmMaterial)
+	if tab.Model.Materials == nil {
+		tab.Model.Materials = make(map[string]render.WhmMaterial)
 	}
-	if tab.model.rshData == nil {
-		tab.model.rshData = make(map[string][]byte)
+	if tab.Model.RshData == nil {
+		tab.Model.RshData = make(map[string][]byte)
 	}
-	if tab.model.materialDiagnostics == nil {
-		tab.model.materialDiagnostics = make(map[string]modelMaterialDiagnostic)
+	if tab.Model.MaterialDiagnostics == nil {
+		tab.Model.MaterialDiagnostics = make(map[string]modelMaterialDiagnostic)
 	}
-	if result.request.modelPath != "" && tab.sgbEntityModelFiles != nil {
-		for id, modelPath := range tab.sgbEntityModelFiles {
+	if result.request.modelPath != "" && tab.SgbEntityModelFiles != nil {
+		for id, modelPath := range tab.SgbEntityModelFiles {
 			if !strings.EqualFold(modelPath, result.request.modelPath) {
 				continue
 			}
@@ -1160,59 +1160,59 @@ func (ui *uiState) applySgbObjectMaterials(tab *fileTab, result sgbObjectMateria
 					lookup = mesh.MaterialPath
 				}
 				if material, ok := result.materials[lookup]; ok {
-					tab.model.materials[unique] = material
+					tab.Model.Materials[unique] = material
 				}
 				if data, ok := result.rsh[lookup]; ok {
-					tab.model.rshData[unique] = data
+					tab.Model.RshData[unique] = data
 				}
 				if diagnostic, ok := result.diagnostics[lookup]; ok {
-					tab.model.materialDiagnostics[unique] = diagnostic
+					tab.Model.MaterialDiagnostics[unique] = diagnostic
 				}
 			}
 		}
 	}
 	if len(result.materials) > 0 {
-		tab.model.textured = true
+		tab.Model.Textured = true
 	}
-	tab.model.invalidate()
+	tab.Model.Invalidate()
 }
 
-func (ui *uiState) deleteSelectedSgbEntities(tab *fileTab) {
-	if tab == nil || tab.sgbMap == nil || tab.model == nil || len(tab.sgbSelectedEntities) == 0 {
+func DeleteSelectedSgbEntities(ui *uiState, tab *fileTab) {
+	if tab == nil || tab.SgbMap == nil || tab.Model == nil || len(tab.SgbSelectedEntities) == 0 {
 		return
 	}
-	animated, removed := sgbRemoveEntities(tab.sgbMap, tab.model.modelData(), tab.sgbEntityMeshIDs, tab.model.animatedEntities, tab.sgbSelectedEntities)
+	animated, removed := sgbRemoveEntities(tab.SgbMap, tab.Model.ModelData(), tab.SgbEntityMeshIDs, tab.Model.AnimatedEntities, tab.SgbSelectedEntities)
 	if removed == 0 {
 		return
 	}
-	tab.model.animatedEntities = animated
-	for id := range tab.sgbSelectedEntities {
-		delete(tab.sgbEntityModelFiles, id)
+	tab.Model.AnimatedEntities = animated
+	for id := range tab.SgbSelectedEntities {
+		delete(tab.SgbEntityModelFiles, id)
 	}
-	clear(tab.sgbSelectedEntities)
-	ui.geometryChangedModelGpu(tab.model.model)
-	tab.model.invalidate()
-	tab.sgbDirty = true
-	ui.statusText = fmt.Sprintf("Deleted %d selected map object(s)", removed)
+	clear(tab.SgbSelectedEntities)
+	GeometryChangedModelGpu(ui, tab.Model.Model)
+	tab.Model.Invalidate()
+	tab.SgbDirty = true
+	ui.StatusText = fmt.Sprintf("Deleted %d selected map object(s)", removed)
 }
 
 func sgbSelectedPlayerOwner(tab *fileTab) int {
-	if tab == nil || tab.sgbPlayerList == nil {
+	if tab == nil || tab.SgbPlayerList == nil {
 		return 0
 	}
-	owner, ok := sgbPlayerOwner(tab.sgbPlayerList.Value)
+	owner, ok := sgbPlayerOwner(tab.SgbPlayerList.Value)
 	if !ok {
 		return 0
 	}
 	return owner
 }
 
-func (ui *uiState) appendSgbPlacement(tab *fileTab, request sgbPlacementRequest, src *whm.Model) {
-	if tab == nil || tab.sgbMap == nil || tab.model == nil || tab.model.model == nil || src == nil ||
-		!strings.EqualFold(tab.sgbObjectSelected, request.blueprint) {
+func AppendSgbPlacement(ui *uiState, tab *fileTab, request sgbPlacementRequest, src *whm.Model) {
+	if tab == nil || tab.SgbMap == nil || tab.Model == nil || tab.Model.Model == nil || src == nil ||
+		!strings.EqualFold(tab.SgbObjectSelected, request.blueprint) {
 		return
 	}
-	m := tab.sgbMap
+	m := tab.SgbMap
 	blueprint := canonicalSgbBlueprintPath(request.blueprint)
 	bp := -1
 	for i, existing := range m.Blueprints {
@@ -1225,41 +1225,41 @@ func (ui *uiState) appendSgbPlacement(tab *fileTab, request sgbPlacementRequest,
 		bp = len(m.Blueprints)
 		m.Blueprints = append(m.Blueprints, blueprint)
 	}
-	id := sgbNextPlacementID(m.Entities, tab.sgbNextEntityID)
+	id := sgbNextPlacementID(m.Entities, tab.SgbNextEntityID)
 	x, y, z := sgbPlacementWorldToEntity(request.point)
 	if request.owner < 0 || request.owner > 8 {
-		ui.statusText = fmt.Sprintf("Object placement failed: invalid player slot %d", request.owner)
+		ui.StatusText = fmt.Sprintf("Object placement failed: invalid player slot %d", request.owner)
 		return
 	}
 	entity := sgb.Entity{ID: id, BP: bp, Owner: request.owner, Name: blueprint, X: x, Y: y, Z: z}
-	if !sgbSceneAppendEntity(tab.model.modelData(), src, entity.PlacementOf(), entity.ID) {
-		ui.statusText = "Object placement failed: model has no renderable meshes"
+	if !sgbSceneAppendEntity(tab.Model.ModelData(), src, entity.PlacementOf(), entity.ID) {
+		ui.StatusText = "Object placement failed: model has no renderable meshes"
 		return
 	}
 	// The viewer keeps the same WhmModel pointer as the GPU mesh-cache key.
 	// Appending vertices does not change that pointer, so discard the cached
 	// buffers before the next frame or the newly placed object stays invisible.
-	ui.geometryChangedModelGpu(tab.model.model)
-	tab.sgbNextEntityID = id + 1
+	GeometryChangedModelGpu(ui, tab.Model.Model)
+	tab.SgbNextEntityID = id + 1
 	m.Entities = append(m.Entities, entity)
-	tab.sgbDirty = true
-	if tab.sgbEntityMeshIDs == nil {
-		tab.sgbEntityMeshIDs = make(map[string]int)
+	tab.SgbDirty = true
+	if tab.SgbEntityMeshIDs == nil {
+		tab.SgbEntityMeshIDs = make(map[string]int)
 	}
-	tab.sgbEntityMeshIDs[fmt.Sprintf("entity-%d", entity.ID)] = entity.ID
-	tab.sgbSelectedEntities = map[int]bool{entity.ID: true}
-	if tab.sgbEntityModelFiles == nil {
-		tab.sgbEntityModelFiles = make(map[int]string)
+	tab.SgbEntityMeshIDs[fmt.Sprintf("entity-%d", entity.ID)] = entity.ID
+	tab.SgbSelectedEntities = map[int]bool{entity.ID: true}
+	if tab.SgbEntityModelFiles == nil {
+		tab.SgbEntityModelFiles = make(map[int]string)
 	}
-	tab.sgbEntityModelFiles[entity.ID] = tab.sgbObjectModelFile
-	ui.queueSgbObjectMaterials(tab, sgbObjectMaterialRequest{
+	tab.SgbEntityModelFiles[entity.ID] = tab.SgbObjectModelFile
+	QueueSgbObjectMaterials(ui, tab, sgbObjectMaterialRequest{
 		blueprint: request.blueprint,
-		modelPath: tab.sgbObjectModelFile,
+		modelPath: tab.SgbObjectModelFile,
 		model:     src,
 		entityID:  entity.ID,
 	})
-	tab.model.invalidate()
-	ui.statusText = fmt.Sprintf("Placed %s at %.1f, %.1f, %.1f", filepath.Base(request.blueprint), entity.X, entity.Z, entity.Y)
+	tab.Model.Invalidate()
+	ui.StatusText = fmt.Sprintf("Placed %s at %.1f, %.1f, %.1f", filepath.Base(request.blueprint), entity.X, entity.Z, entity.Y)
 }
 
 func sgbBlueprintModel(tree *modtree.ModTree, blueprintPath string) *whm.Model {

@@ -17,136 +17,136 @@ import (
 	"gioui.org/widget/material"
 )
 
-func (ui *uiState) fdaPropertiesTable(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t.fdaFile == nil && t.fdaError == "" {
+func FdaPropertiesTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t.FdaFile == nil && t.FdaError == "" {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), "No FDA selected")
+			l := material.Label(ui.Th, unit.Sp(10), "No FDA selected")
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		})
 	}
-	if t.fdaError != "" {
+	if t.FdaError != "" {
 		return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(10), t.fdaError)
+			l := material.Label(ui.Th, unit.Sp(10), t.FdaError)
 			l.Color = rgb(0xB00020)
 			return l.Layout(gtx)
 		})
 	}
-	info := t.fdaFile.Info
+	info := t.FdaFile.Info
 	bitrateK := float64(info.BlockBitrate) * 86.1328125 * float64(info.Channels) / 1000.0
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "File", filepath.Base(t.path), false)
+			return TableRow2(ui, gtx, "File", filepath.Base(t.Path), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Channels", fmt.Sprintf("%d", info.Channels), true)
+			return TableRow2(ui, gtx, "Channels", fmt.Sprintf("%d", info.Channels), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Sample Rate", fmt.Sprintf("%d Hz", info.SampleRate), false)
+			return TableRow2(ui, gtx, "Sample Rate", fmt.Sprintf("%d Hz", info.SampleRate), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Bits", fmt.Sprintf("%d", info.SampleSize), true)
+			return TableRow2(ui, gtx, "Bits", fmt.Sprintf("%d", info.SampleSize), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Block Bitrate", fmt.Sprintf("%d", info.BlockBitrate), false)
+			return TableRow2(ui, gtx, "Block Bitrate", fmt.Sprintf("%d", info.BlockBitrate), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Bitrate", fmt.Sprintf("%.1f kbps", bitrateK), true)
+			return TableRow2(ui, gtx, "Bitrate", fmt.Sprintf("%.1f kbps", bitrateK), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Duration", fmtDuration(t.fdaTotal), false)
+			return TableRow2(ui, gtx, "Duration", fmtDuration(t.FdaTotal), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Position", fmtDuration(ui.fdaPosFor(t)), true)
+			return TableRow2(ui, gtx, "Position", fmtDuration(FdaPosFor(ui, t)), true)
 		}),
 	)
 }
 
-func (ui *uiState) fdaInfoTable(gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t.fdaFile == nil {
+func FdaInfoTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t.FdaFile == nil {
 		return layout.Dimensions{}
 	}
-	fb := t.fdaFile.FBIF
-	hdr := t.fdaFile.Header
+	fb := t.FdaFile.FBIF
+	hdr := t.FdaFile.Header
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Version", fmt.Sprintf("%d.%d", hdr.MajorVer, hdr.MinorVer), false)
+			return TableRow2(ui, gtx, "Version", fmt.Sprintf("%d.%d", hdr.MajorVer, hdr.MinorVer), false)
 		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableRow2(gtx, "Plugin", fb.PluginName, true) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableRow2(ui, gtx, "Plugin", fb.PluginName, true) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Plugin Ver", fmt.Sprintf("%d", fb.PluginVer), false)
+			return TableRow2(ui, gtx, "Plugin Ver", fmt.Sprintf("%d", fb.PluginVer), false)
 		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableRow2(gtx, "User", fb.UserName, true) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableRow2(gtx, "Burn Time", fb.BurnTime, false) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableRow2(ui, gtx, "User", fb.UserName, true) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableRow2(ui, gtx, "Burn Time", fb.BurnTime, false) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "BeginLoop", fmt.Sprintf("%d", t.fdaFile.Info.BeginLoop), true)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "EndLoop", fmt.Sprintf("%d", t.fdaFile.Info.EndLoop), false)
+			return TableRow2(ui, gtx, "BeginLoop", fmt.Sprintf("%d", t.FdaFile.Info.BeginLoop), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "StartOffset", fmt.Sprintf("%d", t.fdaFile.Info.StartOffset), true)
+			return TableRow2(ui, gtx, "EndLoop", fmt.Sprintf("%d", t.FdaFile.Info.EndLoop), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Raw Data", fmt.Sprintf("%d bytes", len(t.fdaFile.RawData)), false)
+			return TableRow2(ui, gtx, "StartOffset", fmt.Sprintf("%d", t.FdaFile.Info.StartOffset), true)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.tableRow2(gtx, "Decoded", fmt.Sprintf("%d bytes", len(t.fdaPcmBytes)), true)
+			return TableRow2(ui, gtx, "Raw Data", fmt.Sprintf("%d bytes", len(t.FdaFile.RawData)), false)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return TableRow2(ui, gtx, "Decoded", fmt.Sprintf("%d bytes", len(t.FdaPcmBytes)), true)
 		}),
 	)
 }
 
 // ─── merged from fda_layout.go ───────────────────────────────────────────────
 
-func (ui *uiState) fdaUpdateSliders(gtx layout.Context, t *fileTab) {
-	if t.fdaTotal > 0 && !t.fdaSeekFloat.Dragging() {
-		pos := ui.fdaPosFor(t)
-		frac := float32(pos) / float32(t.fdaTotal)
+func FdaUpdateSliders(ui *uiState, gtx layout.Context, t *fileTab) {
+	if t.FdaTotal > 0 && !t.FdaSeekFloat.Dragging() {
+		pos := FdaPosFor(ui, t)
+		frac := float32(pos) / float32(t.FdaTotal)
 		if frac < 0 {
 			frac = 0
 		}
 		if frac > 1 {
 			frac = 1
 		}
-		t.fdaSeekFloat.Value = frac
+		t.FdaSeekFloat.Value = frac
 	}
-	if t.fdaVolumePct < 0 {
-		t.fdaVolumePct = 0
+	if t.FdaVolumePct < 0 {
+		t.FdaVolumePct = 0
 	}
-	if t.fdaVolumePct > 200 {
-		t.fdaVolumePct = 200
+	if t.FdaVolumePct > 200 {
+		t.FdaVolumePct = 200
 	}
-	wantVolFrac := float32(t.fdaVolumePct) / 200
-	if !t.fdaVolFloat.Dragging() {
-		t.fdaVolFloat.Value = wantVolFrac
+	wantVolFrac := float32(t.FdaVolumePct) / 200
+	if !t.FdaVolFloat.Dragging() {
+		t.FdaVolFloat.Value = wantVolFrac
 	}
 }
 
-func (ui *uiState) fdaHandleSliderSeek(gtx layout.Context, t *fileTab) {
-	if t.fdaTotal == 0 || t.fdaChunkBuf == nil || t.fdaPlayer == nil || !t.fdaSeekFloat.Dragging() {
+func FdaHandleSliderSeek(ui *uiState, gtx layout.Context, t *fileTab) {
+	if t.FdaTotal == 0 || t.FdaChunkBuf == nil || t.FdaPlayer == nil || !t.FdaSeekFloat.Dragging() {
 		return
 	}
-	target := time.Duration(float64(t.fdaSeekFloat.Value) * float64(t.fdaTotal))
-	cur := ui.fdaPosFor(t)
+	target := time.Duration(float64(t.FdaSeekFloat.Value) * float64(t.FdaTotal))
+	cur := FdaPosFor(ui, t)
 	diff := target - cur
 	if diff < 0 {
 		diff = -diff
 	}
 	if diff > 250*time.Millisecond {
-		b := int64(float64(target) / float64(time.Second) * float64(t.fdaBytesPerSec))
-		if t.fdaChunkBuf.ChunkBytes() > 0 {
-			b -= b % int64(t.fdaChunkBuf.ChunkBytes())
+		b := int64(float64(target) / float64(time.Second) * float64(t.FdaBytesPerSec))
+		if t.FdaChunkBuf.ChunkBytes() > 0 {
+			b -= b % int64(t.FdaChunkBuf.ChunkBytes())
 		}
-		_, _ = t.fdaPlayer.Seek(b, io.SeekStart)
+		_, _ = t.FdaPlayer.Seek(b, io.SeekStart)
 	}
 }
 
-func (ui *uiState) fdaHandleVolumeSlider(t *fileTab) {
-	if t.fdaVolFloat.Dragging() {
-		pct := int(t.fdaVolFloat.Value*200 + 0.5)
-		ui.fdaSetVolumeFor(t, pct)
+func FdaHandleVolumeSlider(ui *uiState, t *fileTab) {
+	if t.FdaVolFloat.Dragging() {
+		pct := int(t.FdaVolFloat.Value*200 + 0.5)
+		FdaSetVolumeFor(ui, t, pct)
 	}
 }
 
@@ -216,35 +216,35 @@ func buildWavePeaks(pcm []byte, w int) []byte {
 	return peaks
 }
 
-func (ui *uiState) layoutFdaPlayer(gtx layout.Context, t *fileTab) layout.Dimensions {
-	ui.fdaUpdateSliders(gtx, t)
-	if t.fdaPlayer != nil && !t.fdaPaused {
+func LayoutFdaPlayer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+	FdaUpdateSliders(ui, gtx, t)
+	if t.FdaPlayer != nil && !t.FdaPaused {
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(100 * time.Millisecond)})
 	}
-	if t.fdaError != "" {
+	if t.FdaError != "" {
 		return layout.Inset{Top: unit.Dp(16), Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "Failed: "+t.fdaError)
+			l := material.Label(ui.Th, unit.Sp(11), "Failed: "+t.FdaError)
 			l.Color = rgb(0xB00020)
 			return l.Layout(gtx)
 		})
 	}
-	if t.fdaFile == nil {
+	if t.FdaFile == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.th, unit.Sp(11), "No FDA selected")
+			l := material.Label(ui.Th, unit.Sp(11), "No FDA selected")
 			l.Color = cTextDim
 			return l.Layout(gtx)
 		})
 	}
-	pos := ui.fdaPosFor(t)
-	isPlaying := !t.fdaPaused
+	pos := FdaPosFor(ui, t)
+	isPlaying := !t.FdaPaused
 	playLabel := "Play"
 	if isPlaying {
 		playLabel = "Pause"
 	}
 	exportLabel := "Save WAV"
-	if t.fdaExporting {
+	if t.FdaExporting {
 		exportLabel = "Saving…"
-	} else if t.fdaExportDone != "" {
+	} else if t.FdaExportDone != "" {
 		exportLabel = "Saved"
 	}
 	return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -253,23 +253,23 @@ func (ui *uiState) layoutFdaPlayer(gtx layout.Context, t *fileTab) layout.Dimens
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						if isPlaying {
-							return ui.primaryButton(gtx, &t.fdaPlayPause, playLabel)
+							return PrimaryButton(ui, gtx, &t.FdaPlayPause, playLabel)
 						}
-						return ui.smallButton(gtx, &t.fdaPlayPause, playLabel)
+						return SmallButton(ui, gtx, &t.FdaPlayPause, playLabel)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, &t.fdaStopBtn, "Stop") }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.FdaStopBtn, "Stop") }),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						bg := cSaveBg
-						if t.fdaRepeat {
+						if t.FdaRepeat {
 							bg = cMenuOpen
 						}
-						return ui.toggleButton(gtx, &t.fdaRepeatBtn, "Repeat", t.fdaRepeat, bg)
+						return ToggleButton(ui, gtx, &t.FdaRepeatBtn, "Repeat", t.FdaRepeat, bg)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return ui.smallButtonDisabled(gtx, &t.fdaExportBtn, exportLabel, t.fdaExporting)
+						return SmallButtonDisabled(ui, gtx, &t.FdaExportBtn, exportLabel, t.FdaExporting)
 					}),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{} }),
 				)
@@ -279,10 +279,10 @@ func (ui *uiState) layoutFdaPlayer(gtx layout.Context, t *fileTab) layout.Dimens
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						lbl := "Vol"
-						if t.fdaVolumePct == 0 {
+						if t.FdaVolumePct == 0 {
 							lbl = "Mute"
 						}
-						l := material.Label(ui.th, unit.Sp(9), lbl)
+						l := material.Label(ui.Th, unit.Sp(9), lbl)
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					}),
@@ -290,45 +290,45 @@ func (ui *uiState) layoutFdaPlayer(gtx layout.Context, t *fileTab) layout.Dimens
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						gtx.Constraints.Min.X = gtx.Dp(unit.Dp(70))
 						gtx.Constraints.Max.X = gtx.Dp(unit.Dp(110))
-						slider := material.Slider(ui.th, &t.fdaVolFloat)
+						slider := material.Slider(ui.Th, &t.FdaVolFloat)
 						slider.Color = rgb(0x6B6B6B)
 						dims := slider.Layout(gtx)
-						ui.fdaHandleVolumeSlider(t)
+						FdaHandleVolumeSlider(ui, t)
 						return dims
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), fmt.Sprintf("%d%%", t.fdaVolumePct))
+						l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("%d%%", t.FdaVolumePct))
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), fmtDuration(pos))
+						l := material.Label(ui.Th, unit.Sp(9), fmtDuration(pos))
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.layoutWaveform(gtx, t) }),
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutWaveform(ui, gtx, t) }),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), fmtDuration(t.fdaTotal))
+						l := material.Label(ui.Th, unit.Sp(9), fmtDuration(t.FdaTotal))
 						l.Color = cTextDim
 						return l.Layout(gtx)
 					}),
 				)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if audioplayer.SampleRate != 0 && (audioplayer.SampleRate != t.fdaSampleRate || audioplayer.Channels != t.fdaChannels) {
+				if audioplayer.SampleRate != 0 && (audioplayer.SampleRate != t.FdaSampleRate || audioplayer.Channels != t.FdaChannels) {
 					return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), fmt.Sprintf("⚠ context %d Hz/%d ch ≠ %d Hz/%d ch", audioplayer.SampleRate, audioplayer.Channels, t.fdaSampleRate, t.fdaChannels))
+						l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("⚠ context %d Hz/%d ch ≠ %d Hz/%d ch", audioplayer.SampleRate, audioplayer.Channels, t.FdaSampleRate, t.FdaChannels))
 						l.Color = rgb(0xB00020)
 						return l.Layout(gtx)
 					})
 				}
-				if t.fdaExportDone != "" {
+				if t.FdaExportDone != "" {
 					return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), fmt.Sprintf("WAV: %s", filepath.Base(t.fdaExportDone)))
+						l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("WAV: %s", filepath.Base(t.FdaExportDone)))
 						l.Color = rgb(0x2E7D32)
 						return l.Layout(gtx)
 					})
@@ -343,108 +343,108 @@ func (ui *uiState) layoutFdaPlayer(gtx layout.Context, t *fileTab) layout.Dimens
 
 // ── uiState FDA helpers — per fileTab ─────────────────────────────────────────
 
-func (ui *uiState) fdaPosFor(t *fileTab) time.Duration {
-	if t.fdaPlayer == nil || t.fdaSrc == nil || t.fdaChunkBuf == nil || t.fdaBytesPerSec == 0 {
+func FdaPosFor(ui *uiState, t *fileTab) time.Duration {
+	if t.FdaPlayer == nil || t.FdaSrc == nil || t.FdaChunkBuf == nil || t.FdaBytesPerSec == 0 {
 		return 0
 	}
-	read := t.fdaSrc.BytePos()
-	buffered := int64(t.fdaPlayer.BufferedSize())
+	read := t.FdaSrc.BytePos()
+	buffered := int64(t.FdaPlayer.BufferedSize())
 	heard := read - buffered
 	if heard < 0 {
 		heard = 0
 	}
-	if heard >= int64(t.fdaChunkBuf.TotalBytes()) {
-		return t.fdaTotal
+	if heard >= int64(t.FdaChunkBuf.TotalBytes()) {
+		return t.FdaTotal
 	}
-	if t.fdaChunkBuf.ChunkBytes() > 0 {
-		heard -= heard % int64(t.fdaChunkBuf.ChunkBytes())
+	if t.FdaChunkBuf.ChunkBytes() > 0 {
+		heard -= heard % int64(t.FdaChunkBuf.ChunkBytes())
 	}
-	return time.Duration(float64(heard) / float64(t.fdaBytesPerSec) * float64(time.Second))
+	return time.Duration(float64(heard) / float64(t.FdaBytesPerSec) * float64(time.Second))
 }
 
-func (ui *uiState) fdaPos() time.Duration {
-	if tab := ui.activeTab(); tab != nil && tab.kind == "fda" {
-		return ui.fdaPosFor(tab)
+func FdaPos(ui *uiState) time.Duration {
+	if tab := ActiveTab(ui); tab != nil && tab.Kind == "fda" {
+		return FdaPosFor(ui, tab)
 	}
 	return 0
 }
 
-func (ui *uiState) fdaSeekBy(delta time.Duration) {
-	t := ui.activeTab()
-	if t == nil || t.kind != "fda" || t.fdaPlayer == nil || t.fdaSrc == nil || t.fdaChunkBuf == nil {
+func FdaSeekBy(ui *uiState, delta time.Duration) {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "fda" || t.FdaPlayer == nil || t.FdaSrc == nil || t.FdaChunkBuf == nil {
 		return
 	}
-	target := ui.fdaPosFor(t) + delta
+	target := FdaPosFor(ui, t) + delta
 	if target < 0 {
 		target = 0
 	}
-	if target > t.fdaTotal {
-		target = t.fdaTotal
+	if target > t.FdaTotal {
+		target = t.FdaTotal
 	}
-	b := int64(float64(target) / float64(time.Second) * float64(t.fdaBytesPerSec))
-	if t.fdaChunkBuf.ChunkBytes() > 0 {
-		b -= b % int64(t.fdaChunkBuf.ChunkBytes())
+	b := int64(float64(target) / float64(time.Second) * float64(t.FdaBytesPerSec))
+	if t.FdaChunkBuf.ChunkBytes() > 0 {
+		b -= b % int64(t.FdaChunkBuf.ChunkBytes())
 	}
-	if _, err := t.fdaPlayer.Seek(b, io.SeekStart); err != nil {
-		ui.statusText = fmt.Sprintf("Seek error: %v", err)
+	if _, err := t.FdaPlayer.Seek(b, io.SeekStart); err != nil {
+		ui.StatusText = fmt.Sprintf("Seek error: %v", err)
 		log.Printf("fdaSeekBy: %v", err)
 	} else {
-		ui.statusText = fmt.Sprintf("Seek %+s → %s", delta, target.Truncate(time.Millisecond))
+		ui.StatusText = fmt.Sprintf("Seek %+s → %s", delta, target.Truncate(time.Millisecond))
 	}
 }
 
-func (ui *uiState) fdaTogglePlayPause() {
-	t := ui.activeTab()
-	if t == nil || t.fdaPlayer == nil {
+func FdaTogglePlayPause(ui *uiState) {
+	t := ActiveTab(ui)
+	if t == nil || t.FdaPlayer == nil {
 		return
 	}
-	if t.fdaPaused {
-		ui.fdaPauseAllOthers(t)
+	if t.FdaPaused {
+		FdaPauseAllOthers(ui, t)
 		// After the source reaches EOF oto keeps the player stopped. Rewind
 		// explicitly so Play can start the FDA again without requiring Stop.
-		if t.fdaSrc != nil && t.fdaSrc.Remaining() <= 0 {
-			if _, err := t.fdaPlayer.Seek(0, io.SeekStart); err != nil {
-				ui.statusText = fmt.Sprintf("Replay seek failed: %v", err)
+		if t.FdaSrc != nil && t.FdaSrc.Remaining() <= 0 {
+			if _, err := t.FdaPlayer.Seek(0, io.SeekStart); err != nil {
+				ui.StatusText = fmt.Sprintf("Replay seek failed: %v", err)
 				return
 			}
 		}
-		t.fdaPlayer.Play()
-		t.fdaPaused = false
-		ui.statusText = fmt.Sprintf("▶ %s", ui.fdaPosFor(t).Truncate(time.Millisecond))
+		t.FdaPlayer.Play()
+		t.FdaPaused = false
+		ui.StatusText = fmt.Sprintf("▶ %s", FdaPosFor(ui, t).Truncate(time.Millisecond))
 	} else {
-		t.fdaPlayer.PauseAndStopReading()
-		t.fdaPaused = true
-		ui.statusText = fmt.Sprintf("⏸ %s", ui.fdaPosFor(t).Truncate(time.Millisecond))
+		t.FdaPlayer.PauseAndStopReading()
+		t.FdaPaused = true
+		ui.StatusText = fmt.Sprintf("⏸ %s", FdaPosFor(ui, t).Truncate(time.Millisecond))
 	}
 }
 
-func (ui *uiState) fdaSetVolumeFor(t *fileTab, pct int) {
+func FdaSetVolumeFor(ui *uiState, t *fileTab, pct int) {
 	if pct < 0 {
 		pct = 0
 	}
 	if pct > 200 {
 		pct = 200
 	}
-	t.fdaVolumePct = pct
-	if t.fdaPlayer != nil {
-		t.fdaPlayer.SetVolume(float64(pct) / 100)
+	t.FdaVolumePct = pct
+	if t.FdaPlayer != nil {
+		t.FdaPlayer.SetVolume(float64(pct) / 100)
 	}
 }
 
-func (ui *uiState) fdaSetVolume(pct int) {
-	t := ui.activeTab()
-	if t == nil || t.kind != "fda" {
+func FdaSetVolume(ui *uiState, pct int) {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "fda" {
 		return
 	}
-	ui.fdaSetVolumeFor(t, pct)
+	FdaSetVolumeFor(ui, t, pct)
 }
 
-func (ui *uiState) fdaPauseAllOthers(keep *fileTab) {
-	for _, tab := range ui.openTabs {
-		if tab != keep && tab.kind == "fda" && tab.fdaPlayer != nil {
-			if !tab.fdaPaused {
-				tab.fdaPlayer.PauseAndStopReading()
-				tab.fdaPaused = true
+func FdaPauseAllOthers(ui *uiState, keep *fileTab) {
+	for _, tab := range ui.OpenTabs {
+		if tab != keep && tab.Kind == "fda" && tab.FdaPlayer != nil {
+			if !tab.FdaPaused {
+				tab.FdaPlayer.PauseAndStopReading()
+				tab.FdaPaused = true
 			}
 		}
 	}
@@ -454,111 +454,111 @@ func fdaTargetWAV(virtualPath string) string {
 	return strings.TrimSuffix(virtualPath, filepath.Ext(virtualPath)) + ".wav"
 }
 
-func (ui *uiState) fdaExportWav() {
-	t := ui.activeTab()
-	if t == nil || t.kind != "fda" || t.fdaFile == nil || len(t.fdaPcmBytes) == 0 || t.fdaExporting {
+func FdaExportWav(ui *uiState) {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "fda" || t.FdaFile == nil || len(t.FdaPcmBytes) == 0 || t.FdaExporting {
 		return
 	}
-	t.fdaExporting = true
-	t.fdaExportDone = ""
-	target := fdaTargetWAV(t.path)
-	out, err := ui.modTree.OverlayPath(target)
+	t.FdaExporting = true
+	t.FdaExportDone = ""
+	target := fdaTargetWAV(t.Path)
+	out, err := ui.ModTree.OverlayPath(target)
 	if err != nil {
-		t.fdaExporting = false
-		ui.statusText = fmt.Sprintf("Export failed: %v", err)
+		t.FdaExporting = false
+		ui.StatusText = fmt.Sprintf("Export failed: %v", err)
 		return
 	}
-	data := make([]byte, len(t.fdaPcmBytes))
-	copy(data, t.fdaPcmBytes)
-	info := t.fdaFile.Info
+	data := make([]byte, len(t.FdaPcmBytes))
+	copy(data, t.FdaPcmBytes)
+	info := t.FdaFile.Info
 	// Playback PCM is converted to the process-wide oto context format, so
 	// exported WAV metadata must describe the converted stream as well.
-	info.SampleRate = uint32(t.fdaSampleRate)
-	info.Channels = uint32(t.fdaChannels)
+	info.SampleRate = uint32(t.FdaSampleRate)
+	info.Channels = uint32(t.FdaChannels)
 	go func(tab *fileTab, outPath string) {
 		err := fda.WriteWAV(outPath, &info, data)
 		if err != nil {
-			tab.fdaExporting = false
-			ui.statusText = fmt.Sprintf("Export failed: %v", err)
+			tab.FdaExporting = false
+			ui.StatusText = fmt.Sprintf("Export failed: %v", err)
 			log.Printf("fdaExportWav: %v", err)
 			return
 		}
-		tab.fdaExporting = false
-		tab.fdaExportDone = outPath
-		ui.statusText = fmt.Sprintf("Exported WAV: %s", outPath)
+		tab.FdaExporting = false
+		tab.FdaExportDone = outPath
+		ui.StatusText = fmt.Sprintf("Exported WAV: %s", outPath)
 		log.Printf("fdaExportWav: wrote %s", outPath)
 	}(t, out)
 }
 
-func (ui *uiState) openFda(virtualPath string) {
-	if idx := ui.findTabIndex(virtualPath); idx >= 0 {
-		ui.tabSel = idx + 1
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
+func OpenFda(ui *uiState, virtualPath string) {
+	if idx := FindTabIndex(ui, virtualPath); idx >= 0 {
+		ui.TabSel = idx + 1
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
 	// A virtual path comes from the open mod's tree; an absolute one is a
 	// file the OS handed the studio through a file association.
-	data, err := ui.readTabFile(virtualPath)
+	data, err := ReadTabFile(ui, virtualPath)
 	if err != nil {
-		tt := &fileTab{path: virtualPath, kind: "fda", fdaError: err.Error(), fdaVolumePct: 100}
-		tt.fdaVolFloat.Value = 0.5
-		ui.openTabs = append(ui.openTabs, tt)
-		ui.tabSel = len(ui.openTabs)
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(virtualPath), err)
+		tt := &fileTab{Path: virtualPath, Kind: "fda", FdaError: err.Error(), FdaVolumePct: 100}
+		tt.FdaVolFloat.Value = 0.5
+		ui.OpenTabs = append(ui.OpenTabs, tt)
+		ui.TabSel = len(ui.OpenTabs)
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(virtualPath), err)
 		return
 	}
 	parsed, err := fda.ParseFDAReader(bytes.NewReader(data))
 	if err != nil {
-		tt := &fileTab{path: virtualPath, kind: "fda", fdaError: err.Error(), fdaVolumePct: 100}
-		tt.fdaVolFloat.Value = 0.5
-		ui.openTabs = append(ui.openTabs, tt)
-		ui.tabSel = len(ui.openTabs)
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Failed to parse %s: %v", filepath.Base(virtualPath), err)
+		tt := &fileTab{Path: virtualPath, Kind: "fda", FdaError: err.Error(), FdaVolumePct: 100}
+		tt.FdaVolFloat.Value = 0.5
+		ui.OpenTabs = append(ui.OpenTabs, tt)
+		ui.TabSel = len(ui.OpenTabs)
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Failed to parse %s: %v", filepath.Base(virtualPath), err)
 		return
 	}
 	pcm, err := fda.DecodeFDAToPCM(parsed)
 	if err != nil {
-		tt := &fileTab{path: virtualPath, kind: "fda", fdaError: err.Error(), fdaVolumePct: 100}
-		tt.fdaVolFloat.Value = 0.5
-		ui.openTabs = append(ui.openTabs, tt)
-		ui.tabSel = len(ui.openTabs)
-		ui.ensureTabClicks()
-		ui.statusText = fmt.Sprintf("Decode failed %s: %v", filepath.Base(virtualPath), err)
+		tt := &fileTab{Path: virtualPath, Kind: "fda", FdaError: err.Error(), FdaVolumePct: 100}
+		tt.FdaVolFloat.Value = 0.5
+		ui.OpenTabs = append(ui.OpenTabs, tt)
+		ui.TabSel = len(ui.OpenTabs)
+		EnsureTabClicks(ui)
+		ui.StatusText = fmt.Sprintf("Decode failed %s: %v", filepath.Base(virtualPath), err)
 		return
 	}
 	sr := int(parsed.Info.SampleRate)
 	ch := int(parsed.Info.Channels)
 	if sr == 0 || ch == 0 {
-		tt := &fileTab{path: virtualPath, kind: "fda", fdaError: "invalid INFO (zero sample rate or channels)", fdaVolumePct: 100}
-		tt.fdaVolFloat.Value = 0.5
-		ui.openTabs = append(ui.openTabs, tt)
-		ui.tabSel = len(ui.openTabs)
-		ui.ensureTabClicks()
-		ui.statusText = tt.fdaError
+		tt := &fileTab{Path: virtualPath, Kind: "fda", FdaError: "invalid INFO (zero sample rate or channels)", FdaVolumePct: 100}
+		tt.FdaVolFloat.Value = 0.5
+		ui.OpenTabs = append(ui.OpenTabs, tt)
+		ui.TabSel = len(ui.OpenTabs)
+		EnsureTabClicks(ui)
+		ui.StatusText = tt.FdaError
 		return
 	}
 	ctx, err := audioplayer.Context()
 	if err != nil {
-		tt := &fileTab{path: virtualPath, kind: "fda", fdaError: fmt.Sprintf("audio init: %v", err), fdaVolumePct: 100}
-		tt.fdaVolFloat.Value = 0.5
-		ui.openTabs = append(ui.openTabs, tt)
-		ui.tabSel = len(ui.openTabs)
-		ui.ensureTabClicks()
-		ui.statusText = tt.fdaError
+		tt := &fileTab{Path: virtualPath, Kind: "fda", FdaError: fmt.Sprintf("audio init: %v", err), FdaVolumePct: 100}
+		tt.FdaVolFloat.Value = 0.5
+		ui.OpenTabs = append(ui.OpenTabs, tt)
+		ui.TabSel = len(ui.OpenTabs)
+		EnsureTabClicks(ui)
+		ui.StatusText = tt.FdaError
 		return
 	}
 	if sr != audioplayer.SampleRate || ch != audioplayer.Channels {
 		pcm, err = fda.ResamplePCM16(pcm, sr, ch, audioplayer.SampleRate, audioplayer.Channels)
 		if err != nil {
-			tt := &fileTab{path: virtualPath, kind: "fda", fdaError: fmt.Sprintf("audio conversion: %v", err), fdaVolumePct: 100}
-			tt.fdaVolFloat.Value = 0.5
-			ui.openTabs = append(ui.openTabs, tt)
-			ui.tabSel = len(ui.openTabs)
-			ui.ensureTabClicks()
-			ui.statusText = tt.fdaError
+			tt := &fileTab{Path: virtualPath, Kind: "fda", FdaError: fmt.Sprintf("audio conversion: %v", err), FdaVolumePct: 100}
+			tt.FdaVolFloat.Value = 0.5
+			ui.OpenTabs = append(ui.OpenTabs, tt)
+			ui.TabSel = len(ui.OpenTabs)
+			EnsureTabClicks(ui)
+			ui.StatusText = tt.FdaError
 			return
 		}
 		sr, ch = audioplayer.SampleRate, audioplayer.Channels
@@ -572,61 +572,61 @@ func (ui *uiState) openFda(virtualPath string) {
 	player.SetVolume(1.0)
 	// enforce single playback: pause any other playing FDA before starting this one
 	// new tab not yet in openTabs, so pause all existing
-	ui.fdaPauseAllOthers(nil)
-	ui.pauseOtherWavPlayers(nil)
+	FdaPauseAllOthers(ui, nil)
+	PauseOtherWavPlayers(ui, nil)
 	player.Play()
 	tt := &fileTab{
-		path: virtualPath, kind: "fda",
-		fdaFile: parsed, fdaError: "",
-		fdaPcmBytes:   pcmBytes,
-		fdaSampleRate: sr, fdaChannels: ch,
-		fdaBytesPerSec: bps, fdaTotal: total,
-		fdaChunkBuf: cb, fdaSrc: src, fdaPlayer: player,
-		fdaPaused: false, fdaRepeat: false, fdaVolumePct: 100,
+		Path: virtualPath, Kind: "fda",
+		FdaFile: parsed, FdaError: "",
+		FdaPcmBytes:   pcmBytes,
+		FdaSampleRate: sr, FdaChannels: ch,
+		FdaBytesPerSec: bps, FdaTotal: total,
+		FdaChunkBuf: cb, FdaSrc: src, FdaPlayer: player,
+		FdaPaused: false, FdaRepeat: false, FdaVolumePct: 100,
 	}
-	tt.fdaSeekFloat.Value = 0
-	tt.fdaVolFloat.Value = 0.5
-	ui.openTabs = append(ui.openTabs, tt)
-	ui.tabSel = len(ui.openTabs)
-	ui.ensureTabClicks()
-	ui.statusText = fmt.Sprintf("Playing %s — %d Hz %d ch %s", filepath.Base(virtualPath), sr, ch, total.Truncate(time.Millisecond))
+	tt.FdaSeekFloat.Value = 0
+	tt.FdaVolFloat.Value = 0.5
+	ui.OpenTabs = append(ui.OpenTabs, tt)
+	ui.TabSel = len(ui.OpenTabs)
+	EnsureTabClicks(ui)
+	ui.StatusText = fmt.Sprintf("Playing %s — %d Hz %d ch %s", filepath.Base(virtualPath), sr, ch, total.Truncate(time.Millisecond))
 	if audioplayer.SampleRate != sr || audioplayer.Channels != ch {
-		ui.statusText += fmt.Sprintf(" ⚠ context %d Hz/%d ch", audioplayer.SampleRate, audioplayer.Channels)
+		ui.StatusText += fmt.Sprintf(" ⚠ context %d Hz/%d ch", audioplayer.SampleRate, audioplayer.Channels)
 	}
 	log.Printf("openFda %q: %d Hz %d ch %d bytes total %s chunks %d", virtualPath, sr, ch, len(pcmBytes), total, cb.NumChunks())
 }
 
-func (ui *uiState) checkFdaAutoRepeat() {
-	t := ui.activeTab()
-	if t == nil || t.kind != "fda" || t.fdaPlayer == nil || t.fdaSrc == nil {
+func CheckFdaAutoRepeat(ui *uiState) {
+	t := ActiveTab(ui)
+	if t == nil || t.Kind != "fda" || t.FdaPlayer == nil || t.FdaSrc == nil {
 		return
 	}
-	if t.fdaPaused {
+	if t.FdaPaused {
 		return
 	}
-	if !t.fdaPlayer.IsPlaying() {
-		if err := t.fdaPlayer.Err(); err != nil {
-			ui.statusText = fmt.Sprintf("Audio error: %v", err)
-			t.fdaPlayer.PauseAndStopReading()
-			t.fdaPaused = true
+	if !t.FdaPlayer.IsPlaying() {
+		if err := t.FdaPlayer.Err(); err != nil {
+			ui.StatusText = fmt.Sprintf("Audio error: %v", err)
+			t.FdaPlayer.PauseAndStopReading()
+			t.FdaPaused = true
 			return
 		}
-		if t.fdaSrc.Remaining() <= 0 {
-			if t.fdaRepeat {
-				if _, err := t.fdaPlayer.Seek(0, io.SeekStart); err != nil {
-					ui.statusText = fmt.Sprintf("Repeat seek failed: %v", err)
-					t.fdaPaused = true
+		if t.FdaSrc.Remaining() <= 0 {
+			if t.FdaRepeat {
+				if _, err := t.FdaPlayer.Seek(0, io.SeekStart); err != nil {
+					ui.StatusText = fmt.Sprintf("Repeat seek failed: %v", err)
+					t.FdaPaused = true
 					return
 				}
-				t.fdaPlayer.Play()
-				ui.statusText = "Repeat: restart"
+				t.FdaPlayer.Play()
+				ui.StatusText = "Repeat: restart"
 				return
 			}
-			t.fdaPlayer.PauseAndStopReading()
-			t.fdaPaused = true
-			ui.statusText = "Track ended"
+			t.FdaPlayer.PauseAndStopReading()
+			t.FdaPaused = true
+			ui.StatusText = "Track ended"
 			return
 		}
-		t.fdaPlayer.Play()
+		t.FdaPlayer.Play()
 	}
 }

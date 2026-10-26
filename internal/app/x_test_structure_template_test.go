@@ -124,8 +124,8 @@ func TestTheValuesTheStructuresAgreeOnAreTheValuesWritten(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
 	var structures []unitEntry
-	for _, r := range cat.races {
-		structures = append(structures, r.structures...)
+	for _, r := range cat.Races {
+		structures = append(structures, r.Structures...)
 	}
 	stats, _ := rgdCommonStats(tree, structures)
 	rf := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"})
@@ -180,8 +180,8 @@ func TestANewBuildingInventsNothingTheGameDoesNotAskFor(t *testing.T) {
 	tree := openTestDXP3(t)
 	cat := buildUnitCatalog(tree)
 	var structures []unitEntry
-	for _, r := range cat.races {
-		structures = append(structures, r.structures...)
+	for _, r := range cat.Races {
+		structures = append(structures, r.Structures...)
 	}
 	stats, _ := rgdCommonStats(tree, structures)
 	rf := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"})
@@ -212,7 +212,7 @@ func TestANewBuildingInventsNothingTheGameDoesNotAskFor(t *testing.T) {
 // goes in, the model it points at, the icon, the hotkey.
 func TestTheBuildingIsNamedAfterItself(t *testing.T) {
 	n := structureTemplateName{Race: "necrons", Name: "necron_relay"}
-	if got, want := n.structureTemplateVirtualPath(), `Data\attrib\ebps\races\necrons\structures\necron_relay.rgd`; got != want {
+	if got, want := n.StructureTemplateVirtualPath(), `Data\attrib\ebps\races\necrons\structures\necron_relay.rgd`; got != want {
 		t.Errorf("a necron building would be written to %q, want %q", got, want)
 	}
 	rf := newStructureRgd(n)

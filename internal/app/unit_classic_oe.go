@@ -91,13 +91,13 @@ var classicOEAnimsHeader = func() int {
 // ensureClassicOEClicks sizes the panels' click targets and open flags to the
 // panel list. The anims panel starts expanded, since it is the reason the
 // column is there.
-func (ui *uiState) ensureClassicOEClicks() {
-	if len(ui.classicOEClicks) != len(classicOEHeaders) {
-		ui.classicOEClicks = make([]widget.Clickable, len(classicOEHeaders))
+func EnsureClassicOEClicks(ui *uiState) {
+	if len(ui.ClassicOEClicks) != len(classicOEHeaders) {
+		ui.ClassicOEClicks = make([]widget.Clickable, len(classicOEHeaders))
 	}
-	if len(ui.classicOEOpen) != len(classicOEHeaders) {
-		ui.classicOEOpen = make([]bool, len(classicOEHeaders))
-		ui.classicOEOpen[classicOEAnimsHeader] = true
+	if len(ui.ClassicOEOpen) != len(classicOEHeaders) {
+		ui.ClassicOEOpen = make([]bool, len(classicOEHeaders))
+		ui.ClassicOEOpen[classicOEAnimsHeader] = true
 	}
 }
 
@@ -109,15 +109,15 @@ func (ui *uiState) ensureClassicOEClicks() {
 // covered by controls that do not drive it. The model load is kicked off
 // here the same way the Viewport section kicks it off, so opening the section
 // on a unit that has not been previewed yet still ends with a model on screen.
-func (ui *uiState) layoutClassicOEArea(gtx layout.Context) layout.Dimensions {
-	ui.ensureUnitModel(gtx)
+func LayoutClassicOEArea(ui *uiState, gtx layout.Context) layout.Dimensions {
+	EnsureUnitModel(ui, gtx)
 	// The .whe behind the condition, event and modifier panels: the Events
 	// section's loader, which reads the file once per unit and remembers why
 	// there is nothing to read. Calling it here means the panels are filled on
 	// a first visit to Classic OE rather than only after the Events section
 	// has been opened once.
-	ui.ensureUnitEvents()
-	ui.ensureClassicOEClicks()
+	EnsureUnitEvents(ui)
+	EnsureClassicOEClicks(ui)
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			panelW := gtx.Dp(unit.Dp(classicOEPanelDp))
@@ -125,20 +125,20 @@ func (ui *uiState) layoutClassicOEArea(gtx layout.Context) layout.Dimensions {
 			gap := gtx.Dp(unit.Dp(unitColGapDp))
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-					layout.Rigid(ui.fixedPanel(panelW, ui.layoutClassicOELeftPanel)),
+					layout.Rigid(FixedPanel(ui, panelW, func(gtx layout.Context) layout.Dimensions { return LayoutClassicOELeftPanel(ui, gtx) })),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-					layout.Flexed(1, ui.layoutClassicOEPreview),
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutClassicOEPreview(ui, gtx) }),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-					layout.Rigid(ui.fixedPanel(sideW, ui.layoutUnitModelSide)),
+					layout.Rigid(FixedPanel(ui, sideW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitModelSide(ui, gtx) })),
 				)
 			}),
 			)
 		}),
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			if ui.classicOEDialog == classicOEDialogNone {
+			if ui.ClassicOEDialog == classicOEDialogNone {
 				return layout.Dimensions{}
 			}
-			return ui.layoutClassicOEEventDialog(gtx)
+			return LayoutClassicOEEventDialog(ui, gtx)
 		}),
 	)
 }
@@ -146,15 +146,15 @@ func (ui *uiState) layoutClassicOEArea(gtx layout.Context) layout.Dimensions {
 // layoutClassicOELeftPanel is the column of collapsible headers, framed and
 // scrollable: the anims tree alone is taller than a small window, and the
 // panels below it must stay reachable when it is.
-func (ui *uiState) layoutClassicOELeftPanel(gtx layout.Context) layout.Dimensions {
+func LayoutClassicOELeftPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, "Object Editor")
+				return LayoutUnitColumnHeader(ui, gtx, "Object Editor")
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return ui.panelWithScroll(gtx, &ui.classicOEScroll, ui.layoutClassicOEHeaderList)
+				return PanelWithScroll(ui, gtx, &ui.ClassicOEScroll, func(gtx layout.Context) layout.Dimensions { return LayoutClassicOEHeaderList(ui, gtx) })
 			}),
 		)
 	})
@@ -162,17 +162,17 @@ func (ui *uiState) layoutClassicOELeftPanel(gtx layout.Context) layout.Dimension
 
 // layoutClassicOEHeaderList stacks every panel: its header row, and the body
 // underneath when the panel is open.
-func (ui *uiState) layoutClassicOEHeaderList(gtx layout.Context) layout.Dimensions {
-	ui.ensureClassicOEClicks()
+func LayoutClassicOEHeaderList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	EnsureClassicOEClicks(ui)
 	var children []layout.FlexChild
 	for i := range classicOEHeaders {
 		i := i
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutClassicOEHeaderRow(gtx, i)
+			return LayoutClassicOEHeaderRow(ui, gtx, i)
 		}))
-		if ui.classicOEOpen[i] {
+		if ui.ClassicOEOpen[i] {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutClassicOEHeaderBody(gtx, i)
+				return LayoutClassicOEHeaderBody(ui, gtx, i)
 			}))
 		}
 	}
@@ -184,16 +184,16 @@ func (ui *uiState) layoutClassicOEHeaderList(gtx layout.Context) layout.Dimensio
 // layoutClassicOEHeaderRow is one panel header: a bordered bar with the label
 // centred, the way the classic editor drew its collapse bars. The whole bar is
 // the click target, open or closed.
-func (ui *uiState) layoutClassicOEHeaderRow(gtx layout.Context, index int) layout.Dimensions {
-	ui.ensureClassicOEClicks()
+func LayoutClassicOEHeaderRow(ui *uiState, gtx layout.Context, index int) layout.Dimensions {
+	EnsureClassicOEClicks(ui)
 	if index < 0 || index >= len(classicOEHeaders) {
 		return layout.Dimensions{}
 	}
-	c := &ui.classicOEClicks[index]
+	c := &ui.ClassicOEClicks[index]
 	if c.Clicked(gtx) {
-		ui.classicOEOpen[index] = !ui.classicOEOpen[index]
+		ui.ClassicOEOpen[index] = !ui.ClassicOEOpen[index]
 	}
-	open := ui.classicOEOpen[index]
+	open := ui.ClassicOEOpen[index]
 	bg := cPanelBg
 	if open {
 		bg = cHeaderBg
@@ -218,7 +218,7 @@ func (ui *uiState) layoutClassicOEHeaderRow(gtx layout.Context, index int) layou
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(10), classicOEHeaders[index].label)
+						l := material.Label(ui.Th, unit.Sp(10), classicOEHeaders[index].label)
 						l.Color = cText
 						l.MaxLines = 1
 						return l.Layout(gtx)
@@ -231,24 +231,24 @@ func (ui *uiState) layoutClassicOEHeaderRow(gtx layout.Context, index int) layou
 
 // layoutClassicOEHeaderBody is what an open panel shows: the list its kind
 // names, or the panel's hint for the ones whose content is not built yet.
-func (ui *uiState) layoutClassicOEHeaderBody(gtx layout.Context, index int) layout.Dimensions {
+func LayoutClassicOEHeaderBody(ui *uiState, gtx layout.Context, index int) layout.Dimensions {
 	switch classicOEHeaders[index].kind {
 	case classicOEKindAnims:
-		return ui.layoutClassicOEAnimTree(gtx)
+		return LayoutClassicOEAnimTree(ui, gtx)
 	case classicOEKindEvents:
-		return ui.layoutClassicOEEventList(gtx)
+		return LayoutClassicOEEventList(ui, gtx)
 	case classicOEKindConditions:
-		return ui.layoutClassicOEConditionEditorList(gtx)
+		return LayoutClassicOEConditionEditorList(ui, gtx)
 	case classicOEKindClauses:
-		return ui.layoutClassicOEClauseList(gtx)
+		return LayoutClassicOEClauseList(ui, gtx)
 	case classicOEKindModifiers:
-		return ui.layoutClassicOEModifierList(gtx)
+		return LayoutClassicOEModifierList(ui, gtx)
 	case classicOEKindMeshes:
-		return ui.unitMeshRows(gtx)
+		return UnitMeshRows(ui, gtx)
 	case classicOEKindSelectedUI:
-		return ui.layoutClassicOESelectedUI(gtx)
+		return LayoutClassicOESelectedUI(ui, gtx)
 	}
-	return classicOEHint(gtx, ui.th, classicOEHeaders[index].hint)
+	return classicOEHint(gtx, ui.Th, classicOEHeaders[index].hint)
 }
 
 // classicOEHint is the dim one-paragraph body of a panel with no content yet.
@@ -263,26 +263,26 @@ func classicOEHint(gtx layout.Context, th *material.Theme, msg string) layout.Di
 // classicOEListDoc is the .whe document behind the three list panels, and
 // what to say when there is none. The second result is empty when the first
 // is a document.
-func (ui *uiState) classicOEListDoc() (*whe.Document, string) {
-	if ui.unitEvtDoc == nil {
-		msg := ui.unitEvtErr
+func ClassicOEListDoc(ui *uiState) (*whe.Document, string) {
+	if ui.UnitEvtDoc == nil {
+		msg := ui.UnitEvtErr
 		if msg == "" {
 			msg = "This unit has no .whe file to read."
 		}
 		return nil, msg
 	}
-	return ui.unitEvtDoc, ""
+	return ui.UnitEvtDoc, ""
 }
 
 // classicOEStaticRow is one line of a list panel: the name in the ordinary
 // colour and a dim note beside it, without the hover treatment of a list whose
 // rows are pressed — nothing here is clickable yet, and a row that lights up
 // under the pointer would promise otherwise.
-func (ui *uiState) classicOEStaticRow(gtx layout.Context, name, note string) layout.Dimensions {
+func ClassicOEStaticRow(ui *uiState, gtx layout.Context, name, note string) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), unitViewportRowText(name))
+				l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(name))
 				l.Color = cText
 				l.MaxLines = 1
 				return l.Layout(gtx)
@@ -292,7 +292,7 @@ func (ui *uiState) classicOEStaticRow(gtx layout.Context, name, note string) lay
 				if note == "" {
 					return layout.Dimensions{}
 				}
-				l := material.Label(ui.th, unit.Sp(9), note)
+				l := material.Label(ui.Th, unit.Sp(9), note)
 				l.Color = cTextDim
 				l.MaxLines = 1
 				return l.Layout(gtx)
@@ -332,14 +332,14 @@ func classicOEUseNote(n int, one, many string) string {
 // one being played marked, each press playing it in the preview beside the
 // panel. It is the Viewport section's own list with its own click targets, so
 // the two views cannot fight over which clip a press meant.
-func (ui *uiState) layoutClassicOEAnimList(gtx layout.Context) layout.Dimensions {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
-		l := material.Label(ui.th, unit.Sp(9), "Loading the model…")
+func LayoutClassicOEAnimList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
+		l := material.Label(ui.Th, unit.Sp(9), "Loading the model…")
 		l.Color = cTextDim
 		return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
 	}
-	return ui.unitAnimListWithClicks(gtx, v, &ui.classicOEAnimClicks)
+	return UnitAnimListWithClicks(ui, gtx, v, &ui.ClassicOEAnimClicks)
 }
 
 const (
@@ -363,21 +363,21 @@ const classicOETreeMaxDepth = 6
 // open, as the editor opened them, and leaves the other two closed because
 // the counts alone already answer what they hold. A missing expansion record
 // means "the default", so the maps only need to exist.
-func (ui *uiState) ensureClassicOEFolders() {
-	if !ui.classicOEFolderInit {
-		ui.classicOEFolderInit = true
-		ui.classicOEFolderOpen = [classicOEFolderCount]bool{}
-		ui.classicOEFolderOpen[classicOEFolderAnims] = true
-		ui.classicOEFolderOpen[classicOEFolderTree] = true
+func EnsureClassicOEFolders(ui *uiState) {
+	if !ui.ClassicOEFolderInit {
+		ui.ClassicOEFolderInit = true
+		ui.ClassicOEFolderOpen = [classicOEFolderCount]bool{}
+		ui.ClassicOEFolderOpen[classicOEFolderAnims] = true
+		ui.ClassicOEFolderOpen[classicOEFolderTree] = true
 	}
-	if ui.classicOEExpandClicks == nil {
-		ui.classicOEExpandClicks = make(map[string]*widget.Clickable)
+	if ui.ClassicOEExpandClicks == nil {
+		ui.ClassicOEExpandClicks = make(map[string]*widget.Clickable)
 	}
-	if ui.classicOEJumpClicks == nil {
-		ui.classicOEJumpClicks = make(map[string]*widget.Clickable)
+	if ui.ClassicOEJumpClicks == nil {
+		ui.ClassicOEJumpClicks = make(map[string]*widget.Clickable)
 	}
-	if ui.classicOEExpandOpen == nil {
-		ui.classicOEExpandOpen = make(map[string]bool)
+	if ui.ClassicOEExpandOpen == nil {
+		ui.ClassicOEExpandOpen = make(map[string]bool)
 	}
 }
 
@@ -385,10 +385,10 @@ func (ui *uiState) ensureClassicOEFolders() {
 // header: the four folders with their counts, each toggling its contents
 // inline, so the whole panel reads as the editor's tree rather than a plain
 // animation list.
-func (ui *uiState) layoutClassicOEAnimTree(gtx layout.Context) layout.Dimensions {
-	ui.ensureClassicOEFolders()
-	v := ui.unitModelViewer()
-	doc, docMsg := ui.classicOEListDoc()
+func LayoutClassicOEAnimTree(ui *uiState, gtx layout.Context) layout.Dimensions {
+	EnsureClassicOEFolders(ui)
+	v := UnitModelViewer(ui)
+	doc, docMsg := ClassicOEListDoc(ui)
 	var timelines []whe.FxTimeline
 	var actions []whe.FxAction
 	if doc != nil {
@@ -397,8 +397,8 @@ func (ui *uiState) layoutClassicOEAnimTree(gtx layout.Context) layout.Dimensions
 	}
 	roots := classicOETreeRoots(actions)
 	counts := [classicOEFolderCount]int{}
-	if v != nil && v.model != nil {
-		counts[classicOEFolderAnims] = len(v.model.Animations)
+	if v != nil && v.Model != nil {
+		counts[classicOEFolderAnims] = len(v.Model.Animations)
 	}
 	counts[classicOEFolderMotions] = len(timelines)
 	counts[classicOEFolderActions] = len(actions)
@@ -409,13 +409,13 @@ func (ui *uiState) layoutClassicOEAnimTree(gtx layout.Context) layout.Dimensions
 	for folder := 0; folder < classicOEFolderCount; folder++ {
 		folder := folder
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutClassicOEFolderRow(gtx, folder, labels[folder], counts[folder])
+			return LayoutClassicOEFolderRow(ui, gtx, folder, labels[folder], counts[folder])
 		}))
-		if !ui.classicOEFolderOpen[folder] {
+		if !ui.ClassicOEFolderOpen[folder] {
 			continue
 		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.layoutClassicOEFolderBody(gtx, folder, v, timelines, actions, docMsg)
+			return LayoutClassicOEFolderBody(ui, gtx, folder, v, timelines, actions, docMsg)
 		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -424,13 +424,13 @@ func (ui *uiState) layoutClassicOEAnimTree(gtx layout.Context) layout.Dimensions
 // layoutClassicOEFolderRow is one folder header: marker, name, count, and
 // the whole row is the toggle. The count stays visible while closed so that
 // a folder still says what it holds.
-func (ui *uiState) layoutClassicOEFolderRow(gtx layout.Context, folder int, label string, count int) layout.Dimensions {
-	ui.ensureClassicOEFolders()
-	c := &ui.classicOEFolderClicks[folder]
+func LayoutClassicOEFolderRow(ui *uiState, gtx layout.Context, folder int, label string, count int) layout.Dimensions {
+	EnsureClassicOEFolders(ui)
+	c := &ui.ClassicOEFolderClicks[folder]
 	if c.Clicked(gtx) {
-		ui.classicOEFolderOpen[folder] = !ui.classicOEFolderOpen[folder]
+		ui.ClassicOEFolderOpen[folder] = !ui.ClassicOEFolderOpen[folder]
 	}
-	open := ui.classicOEFolderOpen[folder]
+	open := ui.ClassicOEFolderOpen[folder]
 	bg := cPanelBg
 	if open {
 		bg = cHeaderBg
@@ -458,20 +458,20 @@ func (ui *uiState) layoutClassicOEFolderRow(gtx layout.Context, folder int, labe
 					return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								l := material.Label(ui.th, unit.Sp(9), marker)
+								l := material.Label(ui.Th, unit.Sp(9), marker)
 								l.Color = cTextDim
 								return l.Layout(gtx)
 							}),
 							layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								l := material.Label(ui.th, unit.Sp(11), label)
+								l := material.Label(ui.Th, unit.Sp(11), label)
 								l.Color = cText
 								l.MaxLines = 1
 								return l.Layout(gtx)
 							}),
 							layout.Flexed(1, rowGap()),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								l := material.Label(ui.th, unit.Sp(9), fmt.Sprintf("(%d)", count))
+								l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("(%d)", count))
 								l.Color = cTextDim
 								return l.Layout(gtx)
 							}),
@@ -485,59 +485,59 @@ func (ui *uiState) layoutClassicOEFolderRow(gtx layout.Context, folder int, labe
 
 // layoutClassicOEFolderBody renders what one open folder holds: the clip
 // list, the motion rows, the action rows, or the derived action tree.
-func (ui *uiState) layoutClassicOEFolderBody(gtx layout.Context, folder int, v *modelViewer, timelines []whe.FxTimeline, actions []whe.FxAction, docMsg string) layout.Dimensions {
+func LayoutClassicOEFolderBody(ui *uiState, gtx layout.Context, folder int, v *modelViewer, timelines []whe.FxTimeline, actions []whe.FxAction, docMsg string) layout.Dimensions {
 	switch folder {
 	case classicOEFolderAnims:
-		return ui.layoutClassicOEAnimList(gtx)
+		return LayoutClassicOEAnimList(ui, gtx)
 	case classicOEFolderMotions:
 		if len(timelines) == 0 {
-			return ui.layoutClassicOEHint(gtx, docMsg, "This .whe defines no motions.")
+			return LayoutClassicOEHint(ui, gtx, docMsg, "This .whe defines no motions.")
 		}
-		if len(ui.classicOEMotionClicks) != len(timelines) {
-			ui.classicOEMotionClicks = make([]widget.Clickable, len(timelines))
+		if len(ui.ClassicOEMotionClicks) != len(timelines) {
+			ui.ClassicOEMotionClicks = make([]widget.Clickable, len(timelines))
 		}
 		children := make([]layout.FlexChild, 0, len(timelines))
 		for i := range timelines {
 			t := timelines[i]
-			c := &ui.classicOEMotionClicks[i]
+			c := &ui.ClassicOEMotionClicks[i]
 			if c.Clicked(gtx) {
 				// A motion is named for the animation it drives, so
 				// one press jumps exactly as the tree's leaf does —
 				// and a double press opens the timeline's editor in
 				// the dialog instead.
-				if ui.classicOEDoubleClick("motion:" + strings.ToLower(t.Name)) {
-					ui.openClassicOEEventDialog(classicOEDialogTimeline, t.Name, 0)
+				if ClassicOEDoubleClick(ui, "motion:"+strings.ToLower(t.Name)) {
+					OpenClassicOEEventDialog(ui, classicOEDialogTimeline, t.Name, 0)
 				} else {
-					ui.classicOETreeActivate(classicOETreeRow{Name: t.Name})
+					ClassicOETreeActivate(ui, classicOETreeRow{Name: t.Name})
 				}
 			}
 			note := classicOEUseNote(len(t.Events), "event", "events")
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.unitViewportRow(gtx, c, false, t.Name, note)
+				return UnitViewportRow(ui, gtx, c, false, t.Name, note)
 			}))
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	case classicOEFolderActions:
 		if len(actions) == 0 {
-			return ui.layoutClassicOEHint(gtx, docMsg, "This .whe defines no actions.")
+			return LayoutClassicOEHint(ui, gtx, docMsg, "This .whe defines no actions.")
 		}
-		if len(ui.classicOEActionClicks) != len(actions) {
-			ui.classicOEActionClicks = make([]widget.Clickable, len(actions))
+		if len(ui.ClassicOEActionClicks) != len(actions) {
+			ui.ClassicOEActionClicks = make([]widget.Clickable, len(actions))
 		}
 		children := make([]layout.FlexChild, 0, len(actions))
 		for i := range actions {
 			a := actions[i]
-			c := &ui.classicOEActionClicks[i]
+			c := &ui.ClassicOEActionClicks[i]
 			if c.Clicked(gtx) {
 				// One press jumps to the action's clip — the same
 				// resolution the Action Tree's branch rows use —
 				// and a double press opens its condition editor in
 				// the dialog instead.
-				if ui.classicOEDoubleClick("action:" + strings.ToLower(a.Name)) {
-					ui.openClassicOEEventDialog(classicOEDialogAction, a.Name, i)
+				if ClassicOEDoubleClick(ui, "action:"+strings.ToLower(a.Name)) {
+					OpenClassicOEEventDialog(ui, classicOEDialogAction, a.Name, i)
 				} else {
 					key := "/" + strings.ToLower(strings.TrimSpace(a.Name))
-					ui.classicOETreeActivate(classicOETreeRow{Name: a.Name, Key: key})
+					ClassicOETreeActivate(ui, classicOETreeRow{Name: a.Name, Key: key})
 				}
 			}
 			note := classicOEUseNote(len(a.Motions)+len(a.Subactions), "choice", "choices")
@@ -546,20 +546,20 @@ func (ui *uiState) layoutClassicOEFolderBody(gtx layout.Context, folder int, v *
 				// own command picture where the name says what the action
 				// is, blank space where it does not — so the names stay
 				// in one line either way, as the unit list does.
-				return ui.unitViewportRowIcon(gtx, c, false, a.Name, note, ui.actionIcon(a.Name), true)
+				return UnitViewportRowIcon(ui, gtx, c, false, a.Name, note, ActionIcon(ui, a.Name), true)
 			}))
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	case classicOEFolderTree:
 		if len(classicOETreeRoots(actions)) == 0 {
-			return ui.layoutClassicOEHint(gtx, docMsg, "This .whe defines no actions to build a tree from.")
+			return LayoutClassicOEHint(ui, gtx, docMsg, "This .whe defines no actions to build a tree from.")
 		}
-		rows := classicOETreeRows(actions, ui.classicOEExpandOpen)
+		rows := classicOETreeRows(actions, ui.ClassicOEExpandOpen)
 		children := make([]layout.FlexChild, 0, len(rows))
 		for i := range rows {
 			row := rows[i]
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutClassicOETreeRow(gtx, row)
+				return LayoutClassicOETreeRow(ui, gtx, row)
 			}))
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -569,12 +569,12 @@ func (ui *uiState) layoutClassicOEFolderBody(gtx layout.Context, folder int, v *
 
 // layoutClassicOEHint is an empty folder's one line: the reason the .whe is
 // missing when there is one, otherwise the folder's own emptiness.
-func (ui *uiState) layoutClassicOEHint(gtx layout.Context, docMsg, fallback string) layout.Dimensions {
+func LayoutClassicOEHint(ui *uiState, gtx layout.Context, docMsg, fallback string) layout.Dimensions {
 	msg := fallback
 	if docMsg != "" {
 		msg = docMsg
 	}
-	l := material.Label(ui.th, unit.Sp(9), msg)
+	l := material.Label(ui.Th, unit.Sp(9), msg)
 	l.Color = cTextDim
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(4), Left: unit.Dp(10), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
 }
@@ -586,23 +586,23 @@ func (ui *uiState) layoutClassicOEHint(gtx layout.Context, docMsg, fallback stri
 // animation the node points at — so navigation and expansion never fight
 // over one press. A leaf's blank marker column belongs to the jump target,
 // which keeps the whole line live.
-func (ui *uiState) layoutClassicOETreeRow(gtx layout.Context, row classicOETreeRow) layout.Dimensions {
-	ui.ensureClassicOEFolders()
+func LayoutClassicOETreeRow(ui *uiState, gtx layout.Context, row classicOETreeRow) layout.Dimensions {
+	EnsureClassicOEFolders(ui)
 	indent := unit.Dp(8 + row.Depth*10)
 
 	// A map index cannot be addressed, so each node's press targets are
 	// allocated once and kept beside the expansion state.
 	var expand *widget.Clickable
 	if row.Key != "" {
-		expand = ui.classicOEExpandClicks[row.Key]
+		expand = ui.ClassicOEExpandClicks[row.Key]
 		if expand == nil {
 			expand = &widget.Clickable{}
-			ui.classicOEExpandClicks[row.Key] = expand
+			ui.ClassicOEExpandClicks[row.Key] = expand
 		}
 		if expand.Clicked(gtx) {
 			// Toggle from the same default the derivation used, so a
 			// key the map has never seen flips to its opposite once.
-			ui.classicOEExpandOpen[row.Key] = !row.Expanded
+			ui.ClassicOEExpandOpen[row.Key] = !row.Expanded
 		}
 	}
 	// The jump target is keyed by node path for a branch — its subtree
@@ -612,17 +612,17 @@ func (ui *uiState) layoutClassicOETreeRow(gtx layout.Context, row classicOETreeR
 	if row.Key != "" {
 		jumpKey = row.Key
 	}
-	jump := ui.classicOEJumpClicks[jumpKey]
+	jump := ui.ClassicOEJumpClicks[jumpKey]
 	if jump == nil {
 		jump = &widget.Clickable{}
-		ui.classicOEJumpClicks[jumpKey] = jump
+		ui.ClassicOEJumpClicks[jumpKey] = jump
 	}
 	if jump.Clicked(gtx) {
 		// A second press opens the row's editor — an action's condition
 		// editor, a motion leaf's timeline editor — the way the Actions
 		// and Motions folders do; the first press has already played it.
-		if !ui.classicOETreeRowOpensDialog(row) {
-			ui.classicOETreeActivate(row)
+		if !ClassicOETreeRowOpensDialog(ui, row) {
+			ClassicOETreeActivate(ui, row)
 		}
 	}
 
@@ -656,7 +656,7 @@ func (ui *uiState) layoutClassicOETreeRow(gtx layout.Context, row classicOETreeR
 							gtx.Constraints.Min.Y = gtx.Constraints.Max.Y
 							draw := func(gtx layout.Context) layout.Dimensions {
 								return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-									l := material.Label(ui.th, unit.Sp(9), marker)
+									l := material.Label(ui.Th, unit.Sp(9), marker)
 									l.Color = cTextDim
 									return l.Layout(gtx)
 								})
@@ -690,13 +690,13 @@ func (ui *uiState) layoutClassicOETreeRow(gtx layout.Context, row classicOETreeR
 											}),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												return layout.Inset{Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-													return unitIconLayout(gtx, ui.actionIcon(row.Name), 20, 15)
+													return unitIconLayout(gtx, ActionIcon(ui, row.Name), 20, 15)
 												})
 											}),
 										)
 									}),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.th, unit.Sp(10), row.Name)
+										l := material.Label(ui.Th, unit.Sp(10), row.Name)
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
@@ -705,7 +705,7 @@ func (ui *uiState) layoutClassicOETreeRow(gtx layout.Context, row classicOETreeR
 										if row.Note == "" {
 											return layout.Dimensions{}
 										}
-										l := material.Label(ui.th, unit.Sp(9), classicOENote(row.Note))
+										l := material.Label(ui.Th, unit.Sp(9), classicOENote(row.Note))
 										l.Color = cTextDim
 										l.MaxLines = 1
 										return l.Layout(gtx)
@@ -726,34 +726,34 @@ func (ui *uiState) layoutClassicOETreeRow(gtx layout.Context, row classicOETreeR
 // Animations folder's rows perform — and says so in the status bar when the
 // model carries no such clip. A row named for an action plays that whole
 // action: every clip its graph resolves to, combined in one pose.
-func (ui *uiState) classicOETreeActivate(row classicOETreeRow) {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
-		ui.statusText = "Action Tree — the model is still loading"
+func ClassicOETreeActivate(ui *uiState, row classicOETreeRow) {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
+		ui.StatusText = "Action Tree — the model is still loading"
 		return
 	}
 	// The action graph comes first: an action or motion is often named for
 	// none of the model's clips — only for the timelines that lead to them —
 	// and the exact-name jump below then found nothing to play.
-	if ui.activateUnitAction(row.Name) {
+	if ActivateUnitAction(ui, row.Name) {
 		return
 	}
-	clips := make([]string, len(v.model.Animations))
-	for i := range v.model.Animations {
-		clips[i] = v.model.Animations[i].Name
+	clips := make([]string, len(v.Model.Animations))
+	for i := range v.Model.Animations {
+		clips[i] = v.Model.Animations[i].Name
 	}
 	var actions []whe.FxAction
-	if doc, _ := ui.classicOEListDoc(); doc != nil {
+	if doc, _ := ClassicOEListDoc(ui); doc != nil {
 		actions = doc.Actions()
 	}
 	idx := classicOETreeJumpIndex(row, actions, clips)
 	if idx < 0 {
-		ui.statusText = fmt.Sprintf("Action Tree — no animation named %q in this model", row.Name)
+		ui.StatusText = fmt.Sprintf("Action Tree — no animation named %q in this model", row.Name)
 		return
 	}
-	v.selectAnim(idx)
-	v.playing = true
-	v.lastFrame = time.Time{}
+	v.SelectAnim(idx)
+	v.Playing = true
+	v.LastFrame = time.Time{}
 }
 
 // classicOETreeJumpIndex picks the clip a pressed Action Tree row plays.
@@ -853,21 +853,21 @@ const classicOEDoubleClickDelay = 350 * time.Millisecond
 // classicOEDialogOpen reports whether the dialog is on screen; while it is,
 // the Events editors it embeds are live even though Classic OE is the
 // section showing.
-func (ui *uiState) classicOEDialogOpen() bool {
-	return ui.classicOEDialog != classicOEDialogNone
+func ClassicOEDialogOpen(ui *uiState) bool {
+	return ui.ClassicOEDialog != classicOEDialogNone
 }
 
 // classicOEDoubleClick records a press on key and reports whether it repeats
 // the previous one inside the window. A double consumes the record, so a
 // third press counts as a fresh first one.
-func (ui *uiState) classicOEDoubleClick(key string) bool {
+func ClassicOEDoubleClick(ui *uiState, key string) bool {
 	now := time.Now()
-	if ui.classicOELastClickKey == key && now.Sub(ui.classicOELastClickAt) < classicOEDoubleClickDelay {
-		ui.classicOELastClickKey = ""
+	if ui.ClassicOELastClickKey == key && now.Sub(ui.ClassicOELastClickAt) < classicOEDoubleClickDelay {
+		ui.ClassicOELastClickKey = ""
 		return true
 	}
-	ui.classicOELastClickKey = key
-	ui.classicOELastClickAt = now
+	ui.ClassicOELastClickKey = key
+	ui.ClassicOELastClickAt = now
 	return false
 }
 
@@ -878,24 +878,24 @@ func (ui *uiState) classicOEDoubleClick(key string) bool {
 // of the Events tab. It answers false for a first press, so the caller plays
 // the row instead, and true when the press was a double — whether or not the
 // row turned out to have an editor.
-func (ui *uiState) classicOETreeRowOpensDialog(row classicOETreeRow) bool {
+func ClassicOETreeRowOpensDialog(ui *uiState, row classicOETreeRow) bool {
 	name := strings.ToLower(strings.TrimSpace(row.Name))
 	key := "motion:" + name
 	if row.Key != "" {
 		// Branches are actions; a leaf's Key is empty.
 		key = "action:" + name
 	}
-	if !ui.classicOEDoubleClick(key) {
+	if !ClassicOEDoubleClick(ui, key) {
 		return false
 	}
 	// The double belongs to this row: open its editor when it has one.
-	doc, _ := ui.classicOEListDoc()
+	doc, _ := ClassicOEListDoc(ui)
 	if doc == nil {
 		return true
 	}
 	kind, itemName, actionIndex, ok := classicOETreeRowDialog(doc, row)
 	if ok {
-		ui.openClassicOEEventDialog(kind, itemName, actionIndex)
+		OpenClassicOEEventDialog(ui, kind, itemName, actionIndex)
 	}
 	return true
 }
@@ -928,26 +928,26 @@ func classicOETreeRowDialog(doc *whe.Document, row classicOETreeRow) (kind int, 
 // openClassicOEEventDialog raises the dialog on the clicked item by pointing
 // the shared Events editor at it: the picked timeline for a motion, the
 // picked action for an action.
-func (ui *uiState) openClassicOEEventDialog(kind int, name string, actionIndex int) {
-	ui.ensureUnitEvents()
-	ui.classicOEDialog = kind
-	ui.classicOEDialogName = name
+func OpenClassicOEEventDialog(ui *uiState, kind int, name string, actionIndex int) {
+	EnsureUnitEvents(ui)
+	ui.ClassicOEDialog = kind
+	ui.ClassicOEDialogName = name
 	if kind == classicOEDialogAction {
 		// The same switch the Events section's action rows make: the panel
 		// shows the action's conditions and none of the timeline's events.
-		if !ui.unitEvtFocusAction {
-			ui.evtPlayer.stopAll()
+		if !ui.UnitEvtFocusAction {
+			ui.EvtPlayer.stopAll()
 		}
-		ui.unitEvtFocusAction = true
-		if ui.unitEvtDoc != nil {
-			if acts := ui.unitEvtDoc.Actions(); actionIndex >= 0 && actionIndex < len(acts) {
-				ui.unitEvtActionSel = actionIndex
+		ui.UnitEvtFocusAction = true
+		if ui.UnitEvtDoc != nil {
+			if acts := ui.UnitEvtDoc.Actions(); actionIndex >= 0 && actionIndex < len(acts) {
+				ui.UnitEvtActionSel = actionIndex
 			}
 		}
 		return
 	}
-	ui.unitEvtFocusAction = false
-	ui.selectUnitEventTimeline(name)
+	ui.UnitEvtFocusAction = false
+	SelectUnitEventTimeline(ui, name)
 }
 
 // layoutClassicOEEventDialog is the dialog itself: a dimmed card over the
@@ -956,39 +956,39 @@ func (ui *uiState) openClassicOEEventDialog(kind int, name string, actionIndex i
 // Revert act on the same document the Events section would act on. A press on
 // the card's own empty space is neither: the card takes it, so clicking the
 // whitespace of the editor no longer closes it.
-func (ui *uiState) layoutClassicOEEventDialog(gtx layout.Context) layout.Dimensions {
-	if ui.classicOEevtClose.Clicked(gtx) || ui.classicOEevtDim.Clicked(gtx) {
-		ui.classicOEDialog = classicOEDialogNone
+func LayoutClassicOEEventDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if ui.ClassicOEevtClose.Clicked(gtx) || ui.ClassicOEevtDim.Clicked(gtx) {
+		ui.ClassicOEDialog = classicOEDialogNone
 		return layout.Dimensions{}
 	}
 	title := "Timeline editor"
-	if ui.classicOEDialog == classicOEDialogAction {
+	if ui.ClassicOEDialog == classicOEDialogAction {
 		title = "Action editor"
 	}
-	sub := ui.classicOEDialogName
-	if ui.unitEvtDirty {
+	sub := ui.ClassicOEDialogName
+	if ui.UnitEvtDirty {
 		sub += "  \u2022 unsaved"
 	}
 	body := func(gtx layout.Context) layout.Dimensions {
 		// The action body reads straight from the document, so a file that
 		// never loaded stays on the guarded timeline body, which carries
 		// the reason instead of a nil dereference.
-		if ui.classicOEDialog == classicOEDialogAction && ui.unitEvtDoc != nil {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, ui.unitEvtActionPanelBody(gtx)...)
+		if ui.ClassicOEDialog == classicOEDialogAction && ui.UnitEvtDoc != nil {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, UnitEvtActionPanelBody(ui, gtx)...)
 		}
-		return ui.unitEventPanelBody(gtx)
+		return UnitEventPanelBody(ui, gtx)
 	}
 	footer := func(gtx layout.Context) layout.Dimensions {
-		if ui.classicOEDialog == classicOEDialogAction {
-			return ui.unitActPanelFooter(gtx)
+		if ui.ClassicOEDialog == classicOEDialogAction {
+			return UnitActPanelFooter(ui, gtx)
 		}
-		return ui.unitEventPanelForm(gtx)
+		return UnitEventPanelForm(ui, gtx)
 	}
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			// The dim is the dialog's own click target: a press on it
 			// closes the card and never reaches the panel underneath.
-			return ui.classicOEevtDim.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return ui.ClassicOEevtDim.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				sz := gtx.Constraints.Max
 				st := clip.Rect{Max: sz}.Push(gtx.Ops)
 				paint.ColorOp{Color: rgba(0, 0, 0, 70)}.Add(gtx.Ops)
@@ -1013,32 +1013,32 @@ func (ui *uiState) layoutClassicOEEventDialog(gtx layout.Context) layout.Dimensi
 							// The card takes the press before the dim beneath can
 							// have it: the editor rarely fills the card, and a
 							// click on what is left used to shut the dialog.
-							absorbDialogCardPress(gtx, &ui.classicOEevtCardTag)
+							absorbDialogCardPress(gtx, &ui.ClassicOEevtCardTag)
 							inset := layout.Inset{Top: unit.Dp(12), Bottom: unit.Dp(10), Left: unit.Dp(12), Right: unit.Dp(12)}
 							return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(12), title)
+												l := material.Label(ui.Th, unit.Sp(12), title)
 												l.Color = cText
 												return l.Layout(gtx)
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(9), sub)
+												l := material.Label(ui.Th, unit.Sp(9), sub)
 												l.Color = cTextDim
 												return l.Layout(gtx)
 											}),
 											layout.Flexed(1, rowGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return ui.smallButton(gtx, &ui.classicOEevtClose, "Close")
+												return SmallButton(ui, gtx, &ui.ClassicOEevtClose, "Close")
 											}),
 										)
 									}),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-										return ui.panelScrollView(gtx, &ui.classicOEevtScroll, body)
+										return PanelScrollView(ui, gtx, &ui.ClassicOEevtScroll, body)
 									}),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 									layout.Rigid(footer),
@@ -1162,14 +1162,14 @@ func classicOETreeRows(actions []whe.FxAction, open map[string]bool) []classicOE
 // layoutClassicOEEventList is the Event List panel: every event definition of
 // the unit's .whe, sorted, with the effect file it plays beside it — the same
 // document the Events section edits, read the same way.
-func (ui *uiState) layoutClassicOEEventList(gtx layout.Context) layout.Dimensions {
-	doc, msg := ui.classicOEListDoc()
+func LayoutClassicOEEventList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	doc, msg := ClassicOEListDoc(ui)
 	if doc == nil {
-		return classicOEHint(gtx, ui.th, msg)
+		return classicOEHint(gtx, ui.Th, msg)
 	}
 	events := doc.Events()
 	if len(events) == 0 {
-		return classicOEHint(gtx, ui.th, "This .whe defines no events.")
+		return classicOEHint(gtx, ui.Th, "This .whe defines no events.")
 	}
 	names := make([]string, 0, len(events))
 	for name := range events {
@@ -1184,7 +1184,7 @@ func (ui *uiState) layoutClassicOEEventList(gtx layout.Context) layout.Dimension
 			note = classicOENote(fx)
 		}
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.classicOEStaticRow(gtx, name, note)
+			return ClassicOEStaticRow(ui, gtx, name, note)
 		}))
 	}
 	return classicOERows(gtx, rows)
@@ -1193,10 +1193,10 @@ func (ui *uiState) layoutClassicOEEventList(gtx layout.Context) layout.Dimension
 // layoutClassicOEConditionList is the Condition List panel: every distinct
 // condition the .whe's actions guard their choices with, sorted, with how
 // many choices test it.
-func (ui *uiState) layoutClassicOEConditionList(gtx layout.Context) layout.Dimensions {
-	doc, msg := ui.classicOEListDoc()
+func LayoutClassicOEConditionList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	doc, msg := ClassicOEListDoc(ui)
 	if doc == nil {
-		return classicOEHint(gtx, ui.th, msg)
+		return classicOEHint(gtx, ui.Th, msg)
 	}
 	counts := make(map[string]int)
 	for _, act := range doc.Actions() {
@@ -1210,53 +1210,53 @@ func (ui *uiState) layoutClassicOEConditionList(gtx layout.Context) layout.Dimen
 		}
 	}
 	if len(counts) == 0 {
-		return classicOEHint(gtx, ui.th, "This .whe's actions carry no conditions.")
+		return classicOEHint(gtx, ui.Th, "This .whe's actions carry no conditions.")
 	}
-	return ui.classicOENamedCountRows(gtx, counts, "use", "uses")
+	return ClassicOENamedCountRows(ui, gtx, counts, "use", "uses")
 }
 
 // layoutClassicOEModifierList is the Modifier List panel: every distinct
 // modifier the .whe's motions drive, sorted, with how many motions drive it.
 // The modifier name lives in a timeline's motion tail, which is the only
 // place the .whe records one.
-func (ui *uiState) layoutClassicOEModifierList(gtx layout.Context) layout.Dimensions {
-	doc, msg := ui.classicOEListDoc()
+func LayoutClassicOEModifierList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	doc, msg := ClassicOEListDoc(ui)
 	if doc == nil {
-		return classicOEHint(gtx, ui.th, msg)
+		return classicOEHint(gtx, ui.Th, msg)
 	}
 	mods := doc.Modifiers()
 	if len(mods) == 0 {
-		return classicOEHint(gtx, ui.th, "This .whe defines no modifiers.")
+		return classicOEHint(gtx, ui.Th, "This .whe defines no modifiers.")
 	}
-	if len(ui.classicOEModifierClicks) != len(mods) {
-		ui.classicOEModifierClicks = make([]widget.Clickable, len(mods))
+	if len(ui.ClassicOEModifierClicks) != len(mods) {
+		ui.ClassicOEModifierClicks = make([]widget.Clickable, len(mods))
 	}
 	var rows []layout.FlexChild
 	for i := range mods {
 		i := i
 		m := mods[i]
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.classicOEModifierRow(gtx, i, m)
+			return ClassicOEModifierRow(ui, gtx, i, m)
 		}))
 	}
 	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutClassicOEModifierEditor(gtx)
+		return LayoutClassicOEModifierEditor(ui, gtx)
 	}))
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
 
-func (ui *uiState) classicOEModifierRow(gtx layout.Context, i int, m whe.FxModifier) layout.Dimensions {
-	if i < 0 || i >= len(ui.classicOEModifierClicks) {
+func ClassicOEModifierRow(ui *uiState, gtx layout.Context, i int, m whe.FxModifier) layout.Dimensions {
+	if i < 0 || i >= len(ui.ClassicOEModifierClicks) {
 		return layout.Dimensions{}
 	}
-	c := &ui.classicOEModifierClicks[i]
+	c := &ui.ClassicOEModifierClicks[i]
 	if c.Clicked(gtx) {
-		ui.classicOEModifierName = m.Name
-		ui.classicOEModifierBound = ""
-		ui.classicOEModifierError = ""
+		ui.ClassicOEModifierName = m.Name
+		ui.ClassicOEModifierBound = ""
+		ui.ClassicOEModifierError = ""
 	}
 	bg := cPanelBg
-	if ui.classicOEModifierName == m.Name {
+	if ui.ClassicOEModifierName == m.Name {
 		bg = cSelectBg
 	} else if c.Hovered() {
 		bg = cMenuHover
@@ -1274,14 +1274,14 @@ func (ui *uiState) classicOEModifierRow(gtx layout.Context, i int, m whe.FxModif
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), m.Name)
+							l := material.Label(ui.Th, unit.Sp(10), m.Name)
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, rowGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), whe.ModifierTypeName(m.Type))
+							l := material.Label(ui.Th, unit.Sp(9), whe.ModifierTypeName(m.Type))
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -1295,7 +1295,7 @@ func (ui *uiState) classicOEModifierRow(gtx layout.Context, i int, m whe.FxModif
 
 // classicOENamedCountRows is the shared body of the condition and modifier
 // panels: one row per name, alphabetically, with a count beside it.
-func (ui *uiState) classicOENamedCountRows(gtx layout.Context, counts map[string]int, one, many string) layout.Dimensions {
+func ClassicOENamedCountRows(ui *uiState, gtx layout.Context, counts map[string]int, one, many string) layout.Dimensions {
 	names := make([]string, 0, len(counts))
 	for name := range counts {
 		names = append(names, name)
@@ -1306,7 +1306,7 @@ func (ui *uiState) classicOENamedCountRows(gtx layout.Context, counts map[string
 		name := name
 		note := classicOEUseNote(counts[name], one, many)
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.classicOEStaticRow(gtx, name, note)
+			return ClassicOEStaticRow(ui, gtx, name, note)
 		}))
 	}
 	return classicOERows(gtx, rows)
@@ -1319,15 +1319,15 @@ func (ui *uiState) classicOENamedCountRows(gtx layout.Context, counts map[string
 // row under it — the same row the Viewport section draws under its own canvas,
 // and only as wide as the preview above it, so neither the panel column nor
 // the list panel is covered by controls that do not belong to them.
-func (ui *uiState) layoutClassicOEPreview(gtx layout.Context) layout.Dimensions {
+func LayoutClassicOEPreview(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.layoutUnitColumnHeader(gtx, "Preview")
+				return LayoutUnitColumnHeader(ui, gtx, "Preview")
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, ui.layoutUnitCanvasColumn)
+				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return LayoutUnitCanvasColumn(ui, gtx) })
 			}),
 		)
 	})
@@ -1335,20 +1335,20 @@ func (ui *uiState) layoutClassicOEPreview(gtx layout.Context) layout.Dimensions 
 
 // ─── merged from unit_classic_oe_clauses_ui.go ───────────────────────────────────────────────
 
-func (ui *uiState) ensureClassicOEClause() (whe.FxClause, bool) {
-	if ui.unitEvtDoc == nil {
+func EnsureClassicOEClause(ui *uiState) (whe.FxClause, bool) {
+	if ui.UnitEvtDoc == nil {
 		return whe.FxClause{}, false
 	}
-	for _, clause := range ui.unitEvtDoc.Clauses() {
-		if strings.EqualFold(clause.Name, ui.classicOEClauseName) {
+	for _, clause := range ui.UnitEvtDoc.Clauses() {
+		if strings.EqualFold(clause.Name, ui.ClassicOEClauseName) {
 			texts := clauseEditorValues(clause)
-			bound := ui.unitEvtPath + "|" + clause.Name + "|" + strings.Join(texts[:], "|")
-			if bound != ui.classicOEClauseBound {
-				ui.classicOEClauseBound = bound
-				ui.classicOEClauseError = ""
+			bound := ui.UnitEvtPath + "|" + clause.Name + "|" + strings.Join(texts[:], "|")
+			if bound != ui.ClassicOEClauseBound {
+				ui.ClassicOEClauseBound = bound
+				ui.ClassicOEClauseError = ""
 				for i, text := range texts {
-					ui.classicOEClauseEditors[i].SetText(text)
-					ui.classicOEClauseFill[i] = text
+					ui.ClassicOEClauseEditors[i].SetText(text)
+					ui.ClassicOEClauseFill[i] = text
 				}
 			}
 			return clause, true
@@ -1382,14 +1382,14 @@ func clauseEditorValues(c whe.FxClause) [5]string {
 	return values
 }
 
-func (ui *uiState) layoutClassicOEClauseEditor(gtx layout.Context) layout.Dimensions {
-	clause, ok := ui.ensureClassicOEClause()
+func LayoutClassicOEClauseEditor(ui *uiState, gtx layout.Context) layout.Dimensions {
+	clause, ok := EnsureClassicOEClause(ui)
 	if !ok {
-		return classicOEHint(gtx, ui.th, "Select a clause above to inspect and edit its definition.")
+		return classicOEHint(gtx, ui.Th, "Select a clause above to inspect and edit its definition.")
 	}
 	labels := [5]string{"Type (0 float / 1 boolean / 2 string)", "Variable", "Comparison (0..5)", "Value", "Default"}
 	rows := make([]layout.FlexChild, 0, 7)
-	for i := range ui.classicOEClauseEditors {
+	for i := range ui.ClassicOEClauseEditors {
 		i := i
 		label := labels[i]
 		if i == 3 || i == 4 {
@@ -1407,54 +1407,54 @@ func (ui *uiState) layoutClassicOEClauseEditor(gtx layout.Context) layout.Dimens
 			}
 		}
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.classicOEWheEditorRow(gtx, label, &ui.classicOEClauseEditors[i])
+			return ClassicOEWheEditorRow(ui, gtx, label, &ui.ClassicOEClauseEditors[i])
 		}))
 	}
-	if ui.classicOEClauseError != "" {
-		msg := ui.classicOEClauseError
-		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return classicOEHint(gtx, ui.th, msg) }))
+	if ui.ClassicOEClauseError != "" {
+		msg := ui.ClassicOEClauseError
+		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return classicOEHint(gtx, ui.Th, msg) }))
 	}
 	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.classicOEWheButtons(gtx, &ui.classicOEClauseApply)
+		return ClassicOEWheButtons(ui, gtx, &ui.ClassicOEClauseApply)
 	}))
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
 
-func (ui *uiState) layoutClassicOEClauseList(gtx layout.Context) layout.Dimensions {
-	doc, msg := ui.classicOEListDoc()
+func LayoutClassicOEClauseList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	doc, msg := ClassicOEListDoc(ui)
 	if doc == nil {
-		return classicOEHint(gtx, ui.th, msg)
+		return classicOEHint(gtx, ui.Th, msg)
 	}
 	clauses := doc.Clauses()
 	if len(clauses) == 0 {
-		return classicOEHint(gtx, ui.th, "This .whe defines no clauses.")
+		return classicOEHint(gtx, ui.Th, "This .whe defines no clauses.")
 	}
-	if len(ui.classicOEClauseClicks) != len(clauses) {
-		ui.classicOEClauseClicks = make([]widget.Clickable, len(clauses))
+	if len(ui.ClassicOEClauseClicks) != len(clauses) {
+		ui.ClassicOEClauseClicks = make([]widget.Clickable, len(clauses))
 	}
 	rows := make([]layout.FlexChild, 0, len(clauses)+1)
 	for i := range clauses {
 		i, clause := i, clauses[i]
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.classicOEClauseRow(gtx, i, clause)
+			return ClassicOEClauseRow(ui, gtx, i, clause)
 		}))
 	}
-	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.layoutClassicOEClauseEditor(gtx) }))
+	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutClassicOEClauseEditor(ui, gtx) }))
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
 
-func (ui *uiState) classicOEClauseRow(gtx layout.Context, index int, clause whe.FxClause) layout.Dimensions {
-	if index < 0 || index >= len(ui.classicOEClauseClicks) {
+func ClassicOEClauseRow(ui *uiState, gtx layout.Context, index int, clause whe.FxClause) layout.Dimensions {
+	if index < 0 || index >= len(ui.ClassicOEClauseClicks) {
 		return layout.Dimensions{}
 	}
-	click := &ui.classicOEClauseClicks[index]
+	click := &ui.ClassicOEClauseClicks[index]
 	if click.Clicked(gtx) {
-		ui.classicOEClauseName = clause.Name
-		ui.classicOEClauseBound = ""
-		ui.classicOEClauseError = ""
+		ui.ClassicOEClauseName = clause.Name
+		ui.ClassicOEClauseBound = ""
+		ui.ClassicOEClauseError = ""
 	}
 	bg := cPanelBg
-	if ui.classicOEClauseName == clause.Name {
+	if ui.ClassicOEClauseName == clause.Name {
 		bg = cSelectBg
 	} else if click.Hovered() {
 		bg = cMenuHover
@@ -1472,14 +1472,14 @@ func (ui *uiState) classicOEClauseRow(gtx layout.Context, index int, clause whe.
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), clause.Name)
+							l := material.Label(ui.Th, unit.Sp(10), clause.Name)
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, rowGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), whe.ClauseTypeName(clause.Type))
+							l := material.Label(ui.Th, unit.Sp(9), whe.ClauseTypeName(clause.Type))
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -1491,41 +1491,41 @@ func (ui *uiState) classicOEClauseRow(gtx layout.Context, index int, clause whe.
 	})
 }
 
-func (ui *uiState) layoutClassicOEConditionEditorList(gtx layout.Context) layout.Dimensions {
-	doc, msg := ui.classicOEListDoc()
+func LayoutClassicOEConditionEditorList(ui *uiState, gtx layout.Context) layout.Dimensions {
+	doc, msg := ClassicOEListDoc(ui)
 	if doc == nil {
-		return classicOEHint(gtx, ui.th, msg)
+		return classicOEHint(gtx, ui.Th, msg)
 	}
 	conditions := doc.Conditions()
 	if len(conditions) == 0 {
-		return classicOEHint(gtx, ui.th, "This .whe defines no conditions.")
+		return classicOEHint(gtx, ui.Th, "This .whe defines no conditions.")
 	}
-	if len(ui.classicOEConditionClicks) != len(conditions) {
-		ui.classicOEConditionClicks = make([]widget.Clickable, len(conditions))
+	if len(ui.ClassicOEConditionClicks) != len(conditions) {
+		ui.ClassicOEConditionClicks = make([]widget.Clickable, len(conditions))
 	}
 	rows := make([]layout.FlexChild, 0, len(conditions)+1)
 	for i := range conditions {
 		i, condition := i, conditions[i]
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.classicOEConditionRow(gtx, i, condition)
+			return ClassicOEConditionRow(ui, gtx, i, condition)
 		}))
 	}
-	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.layoutClassicOEConditionEditor(gtx) }))
+	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutClassicOEConditionEditor(ui, gtx) }))
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
 
-func (ui *uiState) classicOEConditionRow(gtx layout.Context, index int, condition whe.FxCondition) layout.Dimensions {
-	if index < 0 || index >= len(ui.classicOEConditionClicks) {
+func ClassicOEConditionRow(ui *uiState, gtx layout.Context, index int, condition whe.FxCondition) layout.Dimensions {
+	if index < 0 || index >= len(ui.ClassicOEConditionClicks) {
 		return layout.Dimensions{}
 	}
-	click := &ui.classicOEConditionClicks[index]
+	click := &ui.ClassicOEConditionClicks[index]
 	if click.Clicked(gtx) {
-		ui.classicOEConditionName = condition.Name
-		ui.classicOEConditionBound = ""
-		ui.classicOEConditionError = ""
+		ui.ClassicOEConditionName = condition.Name
+		ui.ClassicOEConditionBound = ""
+		ui.ClassicOEConditionError = ""
 	}
 	bg := cPanelBg
-	if ui.classicOEConditionName == condition.Name {
+	if ui.ClassicOEConditionName == condition.Name {
 		bg = cSelectBg
 	} else if click.Hovered() {
 		bg = cMenuHover
@@ -1544,14 +1544,14 @@ func (ui *uiState) classicOEConditionRow(gtx layout.Context, index int, conditio
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(10), condition.Name)
+							l := material.Label(ui.Th, unit.Sp(10), condition.Name)
 							l.Color = cText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, rowGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.th, unit.Sp(9), note)
+							l := material.Label(ui.Th, unit.Sp(9), note)
 							l.Color = cTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
@@ -1563,20 +1563,20 @@ func (ui *uiState) classicOEConditionRow(gtx layout.Context, index int, conditio
 	})
 }
 
-func (ui *uiState) ensureClassicOECondition() (whe.FxCondition, bool) {
-	if ui.unitEvtDoc == nil {
+func EnsureClassicOECondition(ui *uiState) (whe.FxCondition, bool) {
+	if ui.UnitEvtDoc == nil {
 		return whe.FxCondition{}, false
 	}
-	for _, condition := range ui.unitEvtDoc.Conditions() {
-		if strings.EqualFold(condition.Name, ui.classicOEConditionName) {
-			bound := ui.unitEvtPath + "|" + condition.Name + "|" + strings.Join(condition.ClauseNames, "\x00")
-			if bound != ui.classicOEConditionBound {
-				ui.classicOEConditionBound = bound
-				ui.classicOEConditionError = ""
-				ui.classicOEConditionEditors = make([]widget.Editor, len(condition.ClauseNames))
-				ui.classicOEConditionFill = append([]string(nil), condition.ClauseNames...)
+	for _, condition := range ui.UnitEvtDoc.Conditions() {
+		if strings.EqualFold(condition.Name, ui.ClassicOEConditionName) {
+			bound := ui.UnitEvtPath + "|" + condition.Name + "|" + strings.Join(condition.ClauseNames, "\x00")
+			if bound != ui.ClassicOEConditionBound {
+				ui.ClassicOEConditionBound = bound
+				ui.ClassicOEConditionError = ""
+				ui.ClassicOEConditionEditors = make([]widget.Editor, len(condition.ClauseNames))
+				ui.ClassicOEConditionFill = append([]string(nil), condition.ClauseNames...)
 				for i, name := range condition.ClauseNames {
-					ui.classicOEConditionEditors[i].SetText(name)
+					ui.ClassicOEConditionEditors[i].SetText(name)
 				}
 			}
 			return condition, true
@@ -1585,77 +1585,77 @@ func (ui *uiState) ensureClassicOECondition() (whe.FxCondition, bool) {
 	return whe.FxCondition{}, false
 }
 
-func (ui *uiState) layoutClassicOEConditionEditor(gtx layout.Context) layout.Dimensions {
-	condition, ok := ui.ensureClassicOECondition()
+func LayoutClassicOEConditionEditor(ui *uiState, gtx layout.Context) layout.Dimensions {
+	condition, ok := EnsureClassicOECondition(ui)
 	if !ok {
-		return classicOEHint(gtx, ui.th, "Select a condition to inspect and edit its clause references.")
+		return classicOEHint(gtx, ui.Th, "Select a condition to inspect and edit its clause references.")
 	}
 	rows := make([]layout.FlexChild, 0, len(condition.ClauseNames)+2)
-	for i := range ui.classicOEConditionEditors {
+	for i := range ui.ClassicOEConditionEditors {
 		i := i
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.classicOEWheEditorRow(gtx, fmt.Sprintf("Clause reference %d", i+1), &ui.classicOEConditionEditors[i])
+			return ClassicOEWheEditorRow(ui, gtx, fmt.Sprintf("Clause reference %d", i+1), &ui.ClassicOEConditionEditors[i])
 		}))
 	}
-	if ui.classicOEConditionError != "" {
-		msg := ui.classicOEConditionError
-		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return classicOEHint(gtx, ui.th, msg) }))
+	if ui.ClassicOEConditionError != "" {
+		msg := ui.ClassicOEConditionError
+		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return classicOEHint(gtx, ui.Th, msg) }))
 	}
 	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButton(gtx, &ui.classicOEConditionAdd, "Add clause")
+				return SmallButton(ui, gtx, &ui.ClassicOEConditionAdd, "Add clause")
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButtonDisabled(gtx, &ui.classicOEConditionRemove, "Remove last", len(ui.classicOEConditionEditors) == 0)
+				return SmallButtonDisabled(ui, gtx, &ui.ClassicOEConditionRemove, "Remove last", len(ui.ClassicOEConditionEditors) == 0)
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButton(gtx, &ui.classicOEConditionApply, "Apply")
+				return SmallButton(ui, gtx, &ui.ClassicOEConditionApply, "Apply")
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButton(gtx, &ui.classicOEWheSave, "Save .whe")
+				return SmallButton(ui, gtx, &ui.ClassicOEWheSave, "Save .whe")
 			}),
 		)
 	}))
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
 
-func (ui *uiState) applyClassicOEClause() {
-	if ui.unitEvtDoc == nil {
-		ui.classicOEClauseError = "No .whe is loaded."
+func ApplyClassicOEClause(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.ClassicOEClauseError = "No .whe is loaded."
 		return
 	}
 	var clause whe.FxClause
 	found := false
-	for _, item := range ui.unitEvtDoc.Clauses() {
-		if strings.EqualFold(item.Name, ui.classicOEClauseName) {
+	for _, item := range ui.UnitEvtDoc.Clauses() {
+		if strings.EqualFold(item.Name, ui.ClassicOEClauseName) {
 			clause, found = item, true
 			break
 		}
 	}
 	if !found {
-		ui.classicOEClauseError = "Select a clause first."
+		ui.ClassicOEClauseError = "Select a clause first."
 		return
 	}
-	kind, err := strconv.ParseInt(strings.TrimSpace(ui.classicOEClauseEditors[0].Text()), 10, 32)
+	kind, err := strconv.ParseInt(strings.TrimSpace(ui.ClassicOEClauseEditors[0].Text()), 10, 32)
 	if err != nil || kind < 0 || kind > 2 {
-		ui.classicOEClauseError = "Type must be 0 (float), 1 (boolean), or 2 (string)."
+		ui.ClassicOEClauseError = "Type must be 0 (float), 1 (boolean), or 2 (string)."
 		return
 	}
 	previousType := clause.Type
 	clause.Type = int32(kind)
 	clause.RawType = uint32(kind)
-	clause.Variable = strings.TrimSpace(ui.classicOEClauseEditors[1].Text())
-	comparison, err := strconv.ParseInt(strings.TrimSpace(ui.classicOEClauseEditors[2].Text()), 10, 32)
+	clause.Variable = strings.TrimSpace(ui.ClassicOEClauseEditors[1].Text())
+	comparison, err := strconv.ParseInt(strings.TrimSpace(ui.ClassicOEClauseEditors[2].Text()), 10, 32)
 	if err != nil || comparison < 0 || comparison > 5 {
-		ui.classicOEClauseError = "Comparison must be an integer from 0 to 5."
+		ui.ClassicOEClauseError = "Comparison must be an integer from 0 to 5."
 		return
 	}
 	clause.Comparison = int32(comparison)
-	a, b := ui.classicOEClauseEditors[3].Text(), ui.classicOEClauseEditors[4].Text()
+	a, b := ui.ClassicOEClauseEditors[3].Text(), ui.ClassicOEClauseEditors[4].Text()
 	if clause.Type == whe.ClauseFloat || clause.Type == whe.ClauseBoolean {
 		a, b = strings.TrimSpace(a), strings.TrimSpace(b)
 	}
@@ -1667,7 +1667,7 @@ func (ui *uiState) applyClassicOEClause() {
 		value, err1 := strconv.ParseFloat(a, 32)
 		def, err2 := strconv.ParseFloat(b, 32)
 		if err1 != nil || err2 != nil || math.IsInf(value, 0) || math.IsNaN(value) || math.IsInf(def, 0) || math.IsNaN(def) {
-			ui.classicOEClauseError = "Value and default must be finite numbers."
+			ui.ClassicOEClauseError = "Value and default must be finite numbers."
 			return
 		}
 		clause.FloatValue, clause.FloatDefault = float32(value), float32(def)
@@ -1680,7 +1680,7 @@ func (ui *uiState) applyClassicOEClause() {
 		value, err1 := strconv.ParseBool(a)
 		def, err2 := strconv.ParseBool(b)
 		if err1 != nil || err2 != nil {
-			ui.classicOEClauseError = "Boolean values must be true or false."
+			ui.ClassicOEClauseError = "Boolean values must be true or false."
 			return
 		}
 		clause.BoolValue, clause.BoolDefault = value, def
@@ -1694,70 +1694,70 @@ func (ui *uiState) applyClassicOEClause() {
 		clause.FloatValue, clause.FloatDefault = 0, 0
 		clause.BoolValue, clause.BoolDefault = false, false
 	}
-	if err := ui.unitEvtDoc.SetClause(clause.Name, clause); err != nil {
-		ui.classicOEClauseError = err.Error()
+	if err := ui.UnitEvtDoc.SetClause(clause.Name, clause); err != nil {
+		ui.ClassicOEClauseError = err.Error()
 		return
 	}
-	ui.unitEvtDirty = true
-	ui.classicOEClauseBound = ""
-	ui.classicOEClauseError = ""
-	ui.statusText = "Applied clause " + clause.Name + " — Save .whe to write it into the mod"
+	ui.UnitEvtDirty = true
+	ui.ClassicOEClauseBound = ""
+	ui.ClassicOEClauseError = ""
+	ui.StatusText = "Applied clause " + clause.Name + " — Save .whe to write it into the mod"
 }
 
-func (ui *uiState) applyClassicOECondition() {
-	if ui.unitEvtDoc == nil {
-		ui.classicOEConditionError = "No .whe is loaded."
+func ApplyClassicOECondition(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.ClassicOEConditionError = "No .whe is loaded."
 		return
 	}
-	condition, ok := ui.ensureClassicOECondition()
+	condition, ok := EnsureClassicOECondition(ui)
 	if !ok {
-		ui.classicOEConditionError = "Select a condition first."
+		ui.ClassicOEConditionError = "Select a condition first."
 		return
 	}
-	refs := make([]string, len(ui.classicOEConditionEditors))
+	refs := make([]string, len(ui.ClassicOEConditionEditors))
 	for i := range refs {
-		refs[i] = strings.TrimSpace(ui.classicOEConditionEditors[i].Text())
+		refs[i] = strings.TrimSpace(ui.ClassicOEConditionEditors[i].Text())
 		if refs[i] == "" {
-			ui.classicOEConditionError = fmt.Sprintf("Clause reference %d cannot be empty.", i+1)
+			ui.ClassicOEConditionError = fmt.Sprintf("Clause reference %d cannot be empty.", i+1)
 			return
 		}
 	}
 	condition.ClauseNames = refs
-	if err := ui.unitEvtDoc.SetCondition(condition.Name, condition); err != nil {
-		ui.classicOEConditionError = err.Error()
+	if err := ui.UnitEvtDoc.SetCondition(condition.Name, condition); err != nil {
+		ui.ClassicOEConditionError = err.Error()
 		return
 	}
-	ui.unitEvtDirty = true
-	ui.classicOEConditionBound = ""
-	ui.classicOEConditionError = ""
-	ui.statusText = "Applied condition " + condition.Name + " — Save .whe to write it into the mod"
+	ui.UnitEvtDirty = true
+	ui.ClassicOEConditionBound = ""
+	ui.ClassicOEConditionError = ""
+	ui.StatusText = "Applied condition " + condition.Name + " — Save .whe to write it into the mod"
 }
 
-func (ui *uiState) handleClassicOEClauseConditionInput(gtx layout.Context) {
-	if ui.currentUnitSection().label != unitSectionClassicOE || ui.unitEvtDoc == nil {
+func HandleClassicOEClauseConditionInput(ui *uiState, gtx layout.Context) {
+	if CurrentUnitSection(ui).label != unitSectionClassicOE || ui.UnitEvtDoc == nil {
 		return
 	}
-	for i := range ui.classicOEClauseEditors {
-		ui.updateClassicOEWheEditor(gtx, &ui.classicOEClauseEditors[i], ui.applyClassicOEClause)
+	for i := range ui.ClassicOEClauseEditors {
+		UpdateClassicOEWheEditor(ui, gtx, &ui.ClassicOEClauseEditors[i], func() { ApplyClassicOEClause(ui) })
 	}
-	for i := range ui.classicOEConditionEditors {
-		ui.updateClassicOEWheEditor(gtx, &ui.classicOEConditionEditors[i], ui.applyClassicOECondition)
+	for i := range ui.ClassicOEConditionEditors {
+		UpdateClassicOEWheEditor(ui, gtx, &ui.ClassicOEConditionEditors[i], func() { ApplyClassicOECondition(ui) })
 	}
-	if ui.classicOEClauseApply.Clicked(gtx) {
-		ui.applyClassicOEClause()
+	if ui.ClassicOEClauseApply.Clicked(gtx) {
+		ApplyClassicOEClause(ui)
 	}
-	if ui.classicOEConditionApply.Clicked(gtx) {
-		ui.applyClassicOECondition()
+	if ui.ClassicOEConditionApply.Clicked(gtx) {
+		ApplyClassicOECondition(ui)
 	}
-	if ui.classicOEConditionAdd.Clicked(gtx) {
-		if _, ok := ui.ensureClassicOECondition(); ok {
-			ui.classicOEConditionEditors = append(ui.classicOEConditionEditors, widget.Editor{SingleLine: true, Submit: true})
-			ui.classicOEConditionFill = append(ui.classicOEConditionFill, "")
+	if ui.ClassicOEConditionAdd.Clicked(gtx) {
+		if _, ok := EnsureClassicOECondition(ui); ok {
+			ui.ClassicOEConditionEditors = append(ui.ClassicOEConditionEditors, widget.Editor{SingleLine: true, Submit: true})
+			ui.ClassicOEConditionFill = append(ui.ClassicOEConditionFill, "")
 		}
 	}
-	if ui.classicOEConditionRemove.Clicked(gtx) && len(ui.classicOEConditionEditors) > 0 {
-		ui.classicOEConditionEditors = ui.classicOEConditionEditors[:len(ui.classicOEConditionEditors)-1]
-		ui.classicOEConditionFill = ui.classicOEConditionFill[:len(ui.classicOEConditionFill)-1]
+	if ui.ClassicOEConditionRemove.Clicked(gtx) && len(ui.ClassicOEConditionEditors) > 0 {
+		ui.ClassicOEConditionEditors = ui.ClassicOEConditionEditors[:len(ui.ClassicOEConditionEditors)-1]
+		ui.ClassicOEConditionFill = ui.ClassicOEConditionFill[:len(ui.ClassicOEConditionFill)-1]
 	}
 }
 
@@ -1875,12 +1875,12 @@ func selectedUIFromValues(v whe.FxSelectedUI, values [20]string) (whe.FxSelected
 	return v, nil
 }
 
-func (ui *uiState) ensureClassicOESelectedUI() (whe.FxSelectedUI, bool, error) {
-	ui.syncUnitSelectionIndicator(ui.unitModelViewer())
-	if ui.unitEvtDoc == nil {
-		return whe.FxSelectedUI{}, false, fmt.Errorf("%s", ui.unitEvtErr)
+func EnsureClassicOESelectedUI(ui *uiState) (whe.FxSelectedUI, bool, error) {
+	SyncUnitSelectionIndicator(ui, UnitModelViewer(ui))
+	if ui.UnitEvtDoc == nil {
+		return whe.FxSelectedUI{}, false, fmt.Errorf("%s", ui.UnitEvtErr)
 	}
-	v, present, err := ui.unitEvtDoc.SelectedUI()
+	v, present, err := ui.UnitEvtDoc.SelectedUI()
 	if err != nil {
 		return v, present, err
 	}
@@ -1888,79 +1888,79 @@ func (ui *uiState) ensureClassicOESelectedUI() (whe.FxSelectedUI, bool, error) {
 		return v, false, nil
 	}
 	values := selectedUIValues(v)
-	if ui.classicOESelectedUIType == nil {
-		ui.classicOESelectedUIType = &widget.Enum{}
+	if ui.ClassicOESelectedUIType == nil {
+		ui.ClassicOESelectedUIType = &widget.Enum{}
 	}
-	bound := ui.unitEvtPath
+	bound := ui.UnitEvtPath
 	for i := range values {
 		bound += "|" + values[i]
 	}
-	if bound != ui.classicOESelectedUIBound {
-		ui.classicOESelectedUIBound = bound
-		ui.classicOESelectedUIError = ""
+	if bound != ui.ClassicOESelectedUIBound {
+		ui.ClassicOESelectedUIBound = bound
+		ui.ClassicOESelectedUIError = ""
 		for i := range values {
-			ui.classicOESelectedUIEditors[i].SetText(values[i])
-			ui.classicOESelectedUIFill[i] = values[i]
+			ui.ClassicOESelectedUIEditors[i].SetText(values[i])
+			ui.ClassicOESelectedUIFill[i] = values[i]
 		}
 		if displayType, err := selectedUIDisplayTypeCodeFromValue(v.DisplayType); err == nil {
-			ui.classicOESelectedUIType.Value = displayType
+			ui.ClassicOESelectedUIType.Value = displayType
 		} else {
-			ui.classicOESelectedUIType.Value = "circle"
+			ui.ClassicOESelectedUIType.Value = "circle"
 		}
 	}
-	if model := ui.unitModelViewer(); model != nil {
+	if model := UnitModelViewer(ui); model != nil {
 		indicator := &engine.SelectionIndicator{DisplayType: v.DisplayType, Scale: v.Scale, Offset: v.Offset}
-		if model.selectionIndicator == nil || *model.selectionIndicator != *indicator {
-			model.selectionIndicator = indicator
-			model.invalidate()
+		if model.SelectionIndicator == nil || *model.SelectionIndicator != *indicator {
+			model.SelectionIndicator = indicator
+			model.Invalidate()
 		}
 	}
 	return v, true, nil
 }
 
-func (ui *uiState) layoutClassicOESelectedUI(gtx layout.Context) layout.Dimensions {
-	_, present, err := ui.ensureClassicOESelectedUI()
+func LayoutClassicOESelectedUI(ui *uiState, gtx layout.Context) layout.Dimensions {
+	_, present, err := EnsureClassicOESelectedUI(ui)
 	if err != nil {
-		return classicOEHint(gtx, ui.th, "Could not read DATASEUI: "+err.Error())
+		return classicOEHint(gtx, ui.Th, "Could not read DATASEUI: "+err.Error())
 	}
 	if !present {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return classicOEHint(gtx, ui.th, "This .whe has no DATASEUI chunk.")
+				return classicOEHint(gtx, ui.Th, "This .whe has no DATASEUI chunk.")
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButton(gtx, &ui.classicOESelectedUICreate, "Create Selected UI")
+				return SmallButton(ui, gtx, &ui.ClassicOESelectedUICreate, "Create Selected UI")
 			}),
 		)
 	}
 	var children []layout.FlexChild
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutClassicOESelectedUIVisibility(gtx)
+		return LayoutClassicOESelectedUIVisibility(ui, gtx)
 	}))
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutClassicOESelectedUIDisplayType(gtx)
+		return LayoutClassicOESelectedUIDisplayType(ui, gtx)
 	}))
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutClassicOESelectedUIPair(gtx, "Indicator scale", "X", "Z", 1)
+		return LayoutClassicOESelectedUIPair(ui, gtx, "Indicator scale", "X", "Z", 1)
 	}))
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutClassicOESelectedUIPair(gtx, "Indicator offset", "X", "Z", 3)
+		return LayoutClassicOESelectedUIPair(ui, gtx, "Indicator offset", "X", "Z", 3)
 	}))
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutClassicOESelectedUITriple(gtx, "Volume offset", "X", "Y", "Z", 5)
+		return LayoutClassicOESelectedUITriple(ui, gtx, "Volume offset", "X", "Y", "Z", 5)
 	}))
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutClassicOESelectedUITriple(gtx, "Volume scale", "X", "Y", "Z", 8)
+		return LayoutClassicOESelectedUITriple(ui, gtx, "Volume scale", "X", "Y", "Z", 8)
 	}))
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.layoutClassicOESelectedUIMatrix(gtx)
+		return LayoutClassicOESelectedUIMatrix(ui, gtx)
 	}))
-	if ui.classicOESelectedUIError != "" {
-		msg := ui.classicOESelectedUIError
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return classicOEHint(gtx, ui.th, msg) }))
+	if ui.ClassicOESelectedUIError != "" {
+		msg := ui.ClassicOESelectedUIError
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return classicOEHint(gtx, ui.Th, msg) }))
 	}
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.classicOEWheButtons(gtx, &ui.classicOESelectedUIApply)
+		return ClassicOEWheButtons(ui, gtx, &ui.ClassicOESelectedUIApply)
 	}))
 	return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -1978,44 +1978,44 @@ func selectedUIDisplayTypeCodeFromValue(displayType int32) (string, error) {
 	}
 }
 
-func (ui *uiState) layoutClassicOESelectedUIVisibility(gtx layout.Context) layout.Dimensions {
-	v := ui.unitModelViewer()
+func LayoutClassicOESelectedUIVisibility(ui *uiState, gtx layout.Context) layout.Dimensions {
+	v := UnitModelViewer(ui)
 	if v == nil {
 		return layout.Dimensions{}
 	}
-	if ui.classicOESelectedUIVisible == nil {
-		ui.classicOESelectedUIVisible = &widget.Bool{Value: v.showSelection}
-	} else if ui.classicOESelectedUIVisible.Value != v.showSelection {
-		ui.classicOESelectedUIVisible.Value = v.showSelection
+	if ui.ClassicOESelectedUIVisible == nil {
+		ui.ClassicOESelectedUIVisible = &widget.Bool{Value: v.ShowSelection}
+	} else if ui.ClassicOESelectedUIVisible.Value != v.ShowSelection {
+		ui.ClassicOESelectedUIVisible.Value = v.ShowSelection
 	}
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		check := material.CheckBox(ui.th, ui.classicOESelectedUIVisible, "Show selection outline")
+		check := material.CheckBox(ui.Th, ui.ClassicOESelectedUIVisible, "Show selection outline")
 		check.TextSize = unit.Sp(9)
 		return check.Layout(gtx)
 	})
 }
 
-func (ui *uiState) layoutClassicOESelectedUIDisplayType(gtx layout.Context) layout.Dimensions {
-	if ui.classicOESelectedUIType == nil {
-		ui.classicOESelectedUIType = &widget.Enum{}
+func LayoutClassicOESelectedUIDisplayType(ui *uiState, gtx layout.Context) layout.Dimensions {
+	if ui.ClassicOESelectedUIType == nil {
+		ui.ClassicOESelectedUIType = &widget.Enum{}
 	}
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Label(ui.th, unit.Sp(9), "Display type")
+				label := material.Label(ui.Th, unit.Sp(9), "Display type")
 				label.Color = cTextDim
 				return label.Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						radio := material.RadioButton(ui.th, ui.classicOESelectedUIType, "circle", "Circle")
+						radio := material.RadioButton(ui.Th, ui.ClassicOESelectedUIType, "circle", "Circle")
 						radio.TextSize = unit.Sp(9)
 						return radio.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						radio := material.RadioButton(ui.th, ui.classicOESelectedUIType, "square", "Square")
+						radio := material.RadioButton(ui.Th, ui.ClassicOESelectedUIType, "square", "Square")
 						radio.TextSize = unit.Sp(9)
 						return radio.Layout(gtx)
 					}),
@@ -2025,19 +2025,19 @@ func (ui *uiState) layoutClassicOESelectedUIDisplayType(gtx layout.Context) layo
 	})
 }
 
-func (ui *uiState) layoutClassicOESelectedUIPair(gtx layout.Context, title, axis1, axis2 string, first int) layout.Dimensions {
-	return ui.layoutClassicOESelectedUIAxes(gtx, title, []string{axis1, axis2}, first)
+func LayoutClassicOESelectedUIPair(ui *uiState, gtx layout.Context, title, axis1, axis2 string, first int) layout.Dimensions {
+	return LayoutClassicOESelectedUIAxes(ui, gtx, title, []string{axis1, axis2}, first)
 }
 
-func (ui *uiState) layoutClassicOESelectedUITriple(gtx layout.Context, title, axis1, axis2, axis3 string, first int) layout.Dimensions {
-	return ui.layoutClassicOESelectedUIAxes(gtx, title, []string{axis1, axis2, axis3}, first)
+func LayoutClassicOESelectedUITriple(ui *uiState, gtx layout.Context, title, axis1, axis2, axis3 string, first int) layout.Dimensions {
+	return LayoutClassicOESelectedUIAxes(ui, gtx, title, []string{axis1, axis2, axis3}, first)
 }
 
-func (ui *uiState) layoutClassicOESelectedUIAxes(gtx layout.Context, title string, axes []string, first int) layout.Dimensions {
+func LayoutClassicOESelectedUIAxes(ui *uiState, gtx layout.Context, title string, axes []string, first int) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Label(ui.th, unit.Sp(9), title)
+				label := material.Label(ui.Th, unit.Sp(9), title)
 				label.Color = cTextDim
 				return label.Layout(gtx)
 			}),
@@ -2051,14 +2051,14 @@ func (ui *uiState) layoutClassicOESelectedUIAxes(gtx layout.Context, title strin
 						}
 						children = append(children,
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								label := material.Label(ui.th, unit.Sp(8), axis)
+								label := material.Label(ui.Th, unit.Sp(8), axis)
 								label.Color = cTextDim
 								gtx.Constraints.Min.X = gtx.Dp(12)
 								gtx.Constraints.Max.X = gtx.Dp(12)
 								return layout.Center.Layout(gtx, label.Layout)
 							}),
 							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-								return ui.classicOEWheEditorField(gtx, &ui.classicOESelectedUIEditors[first+i])
+								return ClassicOEWheEditorField(ui, gtx, &ui.ClassicOESelectedUIEditors[first+i])
 							}),
 						)
 					}
@@ -2069,11 +2069,11 @@ func (ui *uiState) layoutClassicOESelectedUIAxes(gtx layout.Context, title strin
 	})
 }
 
-func (ui *uiState) layoutClassicOESelectedUIMatrix(gtx layout.Context) layout.Dimensions {
+func LayoutClassicOESelectedUIMatrix(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				label := material.Label(ui.th, unit.Sp(9), "Matrix")
+				label := material.Label(ui.Th, unit.Sp(9), "Matrix")
 				label.Color = cTextDim
 				return label.Layout(gtx)
 			}),
@@ -2081,27 +2081,27 @@ func (ui *uiState) layoutClassicOESelectedUIMatrix(gtx layout.Context) layout.Di
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(layout.Spacer{Width: unit.Dp(22)}.Layout),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						return ui.layoutClassicOESelectedUIAxisHeadings(gtx, "X", "Y", "Z")
+						return LayoutClassicOESelectedUIAxisHeadings(ui, gtx, "X", "Y", "Z")
 					}),
 				)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-					ui.layoutClassicOESelectedUIMatrixRow(gtx, 0, "X"),
-					ui.layoutClassicOESelectedUIMatrixRow(gtx, 1, "Y"),
-					ui.layoutClassicOESelectedUIMatrixRow(gtx, 2, "Z"),
+					LayoutClassicOESelectedUIMatrixRow(ui, gtx, 0, "X"),
+					LayoutClassicOESelectedUIMatrixRow(ui, gtx, 1, "Y"),
+					LayoutClassicOESelectedUIMatrixRow(ui, gtx, 2, "Z"),
 				)
 			}),
 		)
 	})
 }
 
-func (ui *uiState) layoutClassicOESelectedUIAxisHeadings(gtx layout.Context, axes ...string) layout.Dimensions {
+func LayoutClassicOESelectedUIAxisHeadings(ui *uiState, gtx layout.Context, axes ...string) layout.Dimensions {
 	children := make([]layout.FlexChild, 0, len(axes)*2-1)
 	for i, axis := range axes {
 		axis := axis
 		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			label := material.Label(ui.th, unit.Sp(8), axis)
+			label := material.Label(ui.Th, unit.Sp(8), axis)
 			label.Color = cTextDim
 			return layout.Center.Layout(gtx, label.Layout)
 		}))
@@ -2112,14 +2112,14 @@ func (ui *uiState) layoutClassicOESelectedUIAxisHeadings(gtx layout.Context, axe
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
 }
 
-func (ui *uiState) layoutClassicOESelectedUIMatrixRow(gtx layout.Context, row int, axis string) layout.FlexChild {
+func LayoutClassicOESelectedUIMatrixRow(ui *uiState, gtx layout.Context, row int, axis string) layout.FlexChild {
 	return layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Min.Y, gtx.Constraints.Max.Y = gtx.Dp(22), gtx.Dp(22)
 					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						label := material.Label(ui.th, unit.Sp(8), axis)
+						label := material.Label(ui.Th, unit.Sp(8), axis)
 						label.Color = cTextDim
 						return label.Layout(gtx)
 					})
@@ -2131,7 +2131,7 @@ func (ui *uiState) layoutClassicOESelectedUIMatrixRow(gtx layout.Context, row in
 						for col := 0; col < 3; col++ {
 							index := 11 + row*3 + col
 							children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-								return ui.classicOEWheEditorField(gtx, &ui.classicOESelectedUIEditors[index])
+								return ClassicOEWheEditorField(ui, gtx, &ui.ClassicOESelectedUIEditors[index])
 							}))
 							if col != 2 {
 								children = append(children, layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout))
@@ -2145,33 +2145,33 @@ func (ui *uiState) layoutClassicOESelectedUIMatrixRow(gtx layout.Context, row in
 	})
 }
 
-func (ui *uiState) classicOEWheEditorField(gtx layout.Context, ed *widget.Editor) layout.Dimensions {
+func ClassicOEWheEditorField(ui *uiState, gtx layout.Context, ed *widget.Editor) layout.Dimensions {
 	ed.SingleLine, ed.Submit = true, true
 	gtx.Constraints.Min.Y, gtx.Constraints.Max.Y = gtx.Dp(22), gtx.Dp(22)
 	return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			w := material.Editor(ui.th, ed, "")
+			w := material.Editor(ui.Th, ed, "")
 			w.TextSize = unit.Sp(10)
 			return w.Layout(gtx)
 		})
 	})
 }
 
-func (ui *uiState) ensureClassicOEModifier() (whe.FxModifier, bool) {
-	if ui.unitEvtDoc == nil {
+func EnsureClassicOEModifier(ui *uiState) (whe.FxModifier, bool) {
+	if ui.UnitEvtDoc == nil {
 		return whe.FxModifier{}, false
 	}
-	mods := ui.unitEvtDoc.Modifiers()
+	mods := ui.UnitEvtDoc.Modifiers()
 	for _, m := range mods {
-		if strings.EqualFold(m.Name, ui.classicOEModifierName) {
-			bound := ui.unitEvtPath + "|" + m.Name + "|" + m.Variable + "|" + strconv.Itoa(int(m.Type)) + "|" + strconv.FormatFloat(float64(m.Reference), 'g', -1, 32) + "|" + strconv.FormatFloat(float64(m.Default), 'g', -1, 32)
-			if bound != ui.classicOEModifierBound {
-				ui.classicOEModifierBound = bound
-				ui.classicOEModifierError = ""
+		if strings.EqualFold(m.Name, ui.ClassicOEModifierName) {
+			bound := ui.UnitEvtPath + "|" + m.Name + "|" + m.Variable + "|" + strconv.Itoa(int(m.Type)) + "|" + strconv.FormatFloat(float64(m.Reference), 'g', -1, 32) + "|" + strconv.FormatFloat(float64(m.Default), 'g', -1, 32)
+			if bound != ui.ClassicOEModifierBound {
+				ui.ClassicOEModifierBound = bound
+				ui.ClassicOEModifierError = ""
 				texts := [4]string{m.Variable, strconv.FormatInt(int64(m.Type), 10), strconv.FormatFloat(float64(m.Reference), 'g', -1, 32), strconv.FormatFloat(float64(m.Default), 'g', -1, 32)}
 				for i := range texts {
-					ui.classicOEModifierEditors[i].SetText(texts[i])
-					ui.classicOEModifierFill[i] = texts[i]
+					ui.ClassicOEModifierEditors[i].SetText(texts[i])
+					ui.ClassicOEModifierFill[i] = texts[i]
 				}
 			}
 			return m, true
@@ -2180,104 +2180,104 @@ func (ui *uiState) ensureClassicOEModifier() (whe.FxModifier, bool) {
 	return whe.FxModifier{}, false
 }
 
-func (ui *uiState) layoutClassicOEModifierEditor(gtx layout.Context) layout.Dimensions {
-	m, ok := ui.ensureClassicOEModifier()
+func LayoutClassicOEModifierEditor(ui *uiState, gtx layout.Context) layout.Dimensions {
+	m, ok := EnsureClassicOEModifier(ui)
 	if !ok {
-		return classicOEHint(gtx, ui.th, "Select a modifier above to inspect and edit its definition.")
+		return classicOEHint(gtx, ui.Th, "Select a modifier above to inspect and edit its definition.")
 	}
 	children := []layout.FlexChild{}
 	labels := [4]string{"Variable", "Type (0 absolute time / 1 speed scale)", "Reference value", "Default value"}
-	for i := range ui.classicOEModifierEditors {
+	for i := range ui.ClassicOEModifierEditors {
 		i := i
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.classicOEWheEditorRow(gtx, labels[i], &ui.classicOEModifierEditors[i])
+			return ClassicOEWheEditorRow(ui, gtx, labels[i], &ui.ClassicOEModifierEditors[i])
 		}))
 	}
 	_ = m
-	if ui.classicOEModifierError != "" {
-		msg := ui.classicOEModifierError
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return classicOEHint(gtx, ui.th, msg) }))
+	if ui.ClassicOEModifierError != "" {
+		msg := ui.ClassicOEModifierError
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return classicOEHint(gtx, ui.Th, msg) }))
 	}
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return ui.classicOEWheButtons(gtx, &ui.classicOEModifierApply)
+		return ClassicOEWheButtons(ui, gtx, &ui.ClassicOEModifierApply)
 	}))
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
-func (ui *uiState) classicOEWheEditorRow(gtx layout.Context, label string, ed *widget.Editor) layout.Dimensions {
+func ClassicOEWheEditorRow(ui *uiState, gtx layout.Context, label string, ed *widget.Editor) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(9), label)
+				l := material.Label(ui.Th, unit.Sp(9), label)
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.classicOEWheEditorField(gtx, ed)
+				return ClassicOEWheEditorField(ui, gtx, ed)
 			}),
 		)
 	})
 }
 
-func (ui *uiState) classicOEWheButtons(gtx layout.Context, apply *widget.Clickable) layout.Dimensions {
+func ClassicOEWheButtons(ui *uiState, gtx layout.Context, apply *widget.Clickable) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, apply, "Apply") }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, apply, "Apply") }),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(5)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButton(gtx, &ui.classicOEWheSave, "Save .whe")
+				return SmallButton(ui, gtx, &ui.ClassicOEWheSave, "Save .whe")
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(5)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return ui.smallButtonDisabled(gtx, &ui.classicOEWheRevert, "Revert", !ui.unitEvtDirty)
+				return SmallButtonDisabled(ui, gtx, &ui.ClassicOEWheRevert, "Revert", !ui.UnitEvtDirty)
 			}),
 		)
 	})
 }
 
-func (ui *uiState) handleClassicOEWheInput(gtx layout.Context) {
-	if ui.currentUnitSection().label != unitSectionClassicOE {
+func HandleClassicOEWheInput(ui *uiState, gtx layout.Context) {
+	if CurrentUnitSection(ui).label != unitSectionClassicOE {
 		return
 	}
-	if ui.unitEvtDoc == nil {
+	if ui.UnitEvtDoc == nil {
 		return
 	}
-	for i := range ui.classicOESelectedUIEditors {
+	for i := range ui.ClassicOESelectedUIEditors {
 		if i == 0 {
 			continue // Display type is selected with the Circle/Square radio buttons.
 		}
-		ui.updateClassicOEWheEditor(gtx, &ui.classicOESelectedUIEditors[i], func() { ui.applyClassicOESelectedUI() })
+		UpdateClassicOEWheEditor(ui, gtx, &ui.ClassicOESelectedUIEditors[i], func() { ApplyClassicOESelectedUI(ui) })
 	}
-	for i := range ui.classicOEModifierEditors {
-		ui.updateClassicOEWheEditor(gtx, &ui.classicOEModifierEditors[i], func() { ui.applyClassicOEModifier() })
+	for i := range ui.ClassicOEModifierEditors {
+		UpdateClassicOEWheEditor(ui, gtx, &ui.ClassicOEModifierEditors[i], func() { ApplyClassicOEModifier(ui) })
 	}
-	if ui.classicOESelectedUICreate.Clicked(gtx) {
-		ui.createClassicOESelectedUI()
+	if ui.ClassicOESelectedUICreate.Clicked(gtx) {
+		CreateClassicOESelectedUI(ui)
 	}
-	if ui.classicOESelectedUIVisible != nil && ui.classicOESelectedUIVisible.Update(gtx) {
-		if v := ui.unitModelViewer(); v != nil {
-			v.showSelection = ui.classicOESelectedUIVisible.Value
-			v.invalidate()
+	if ui.ClassicOESelectedUIVisible != nil && ui.ClassicOESelectedUIVisible.Update(gtx) {
+		if v := UnitModelViewer(ui); v != nil {
+			v.ShowSelection = ui.ClassicOESelectedUIVisible.Value
+			v.Invalidate()
 		}
 	}
-	if ui.classicOESelectedUIApply.Clicked(gtx) {
-		ui.applyClassicOESelectedUI()
+	if ui.ClassicOESelectedUIApply.Clicked(gtx) {
+		ApplyClassicOESelectedUI(ui)
 	}
-	if ui.classicOEModifierApply.Clicked(gtx) {
-		ui.applyClassicOEModifier()
+	if ui.ClassicOEModifierApply.Clicked(gtx) {
+		ApplyClassicOEModifier(ui)
 	}
-	if ui.classicOEWheSave.Clicked(gtx) {
-		ui.saveClassicOEWhe()
+	if ui.ClassicOEWheSave.Clicked(gtx) {
+		SaveClassicOEWhe(ui)
 	}
-	if ui.classicOEWheRevert.Clicked(gtx) {
-		ui.revertUnitEvents()
-		ui.classicOESelectedUIBound = ""
-		ui.classicOEModifierBound = ""
+	if ui.ClassicOEWheRevert.Clicked(gtx) {
+		RevertUnitEvents(ui)
+		ui.ClassicOESelectedUIBound = ""
+		ui.ClassicOEModifierBound = ""
 	}
 }
 
-func (ui *uiState) updateClassicOEWheEditor(gtx layout.Context, ed *widget.Editor, submit func()) {
-	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
+func UpdateClassicOEWheEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, submit func()) {
+	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	for {
@@ -2292,9 +2292,9 @@ func (ui *uiState) updateClassicOEWheEditor(gtx layout.Context, ed *widget.Edito
 	}
 }
 
-func (ui *uiState) createClassicOESelectedUI() {
-	if ui.unitEvtDoc == nil {
-		ui.classicOESelectedUIError = "No .whe is loaded."
+func CreateClassicOESelectedUI(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.ClassicOESelectedUIError = "No .whe is loaded."
 		return
 	}
 	value := whe.FxSelectedUI{DisplayType: 0}
@@ -2303,140 +2303,140 @@ func (ui *uiState) createClassicOESelectedUI() {
 	for i := range value.Matrix {
 		value.Matrix[i][i] = 1
 	}
-	if err := ui.unitEvtDoc.SetSelectedUI(value); err != nil {
-		ui.classicOESelectedUIError = err.Error()
+	if err := ui.UnitEvtDoc.SetSelectedUI(value); err != nil {
+		ui.ClassicOESelectedUIError = err.Error()
 		return
 	}
-	ui.unitEvtDirty = true
-	ui.classicOESelectedUIBound = ""
-	ui.classicOESelectedUIError = ""
-	ui.updateUnitSelectionIndicator(value)
-	ui.statusText = "Created DATASEUI — Save .whe to write it into the mod"
+	ui.UnitEvtDirty = true
+	ui.ClassicOESelectedUIBound = ""
+	ui.ClassicOESelectedUIError = ""
+	UpdateUnitSelectionIndicator(ui, value)
+	ui.StatusText = "Created DATASEUI — Save .whe to write it into the mod"
 }
 
-func (ui *uiState) updateUnitSelectionIndicator(value whe.FxSelectedUI) {
-	if v := ui.unitModelViewer(); v != nil {
+func UpdateUnitSelectionIndicator(ui *uiState, value whe.FxSelectedUI) {
+	if v := UnitModelViewer(ui); v != nil {
 		indicator := &engine.SelectionIndicator{DisplayType: value.DisplayType, Scale: value.Scale, Offset: value.Offset}
-		if v.selectionIndicator == nil || *v.selectionIndicator != *indicator {
-			v.selectionIndicator = indicator
-			v.invalidate()
+		if v.SelectionIndicator == nil || *v.SelectionIndicator != *indicator {
+			v.SelectionIndicator = indicator
+			v.Invalidate()
 		}
 	}
 }
 
 // syncUnitSelectionIndicator loads the selected unit's DATASEUI values for
 // either model panel and clears the previous unit's indicator when none exists.
-func (ui *uiState) syncUnitSelectionIndicator(v *modelViewer) {
+func SyncUnitSelectionIndicator(ui *uiState, v *modelViewer) {
 	if v == nil {
 		return
 	}
-	ui.ensureUnitEvents()
+	EnsureUnitEvents(ui)
 	var indicator *engine.SelectionIndicator
-	if ui.unitEvtDoc != nil {
-		value, present, err := ui.unitEvtDoc.SelectedUI()
+	if ui.UnitEvtDoc != nil {
+		value, present, err := ui.UnitEvtDoc.SelectedUI()
 		if err == nil && present {
 			indicator = &engine.SelectionIndicator{DisplayType: value.DisplayType, Scale: value.Scale, Offset: value.Offset}
 		}
 	}
-	if v.selectionIndicator == nil && indicator == nil {
+	if v.SelectionIndicator == nil && indicator == nil {
 		return
 	}
-	if v.selectionIndicator != nil && indicator != nil && *v.selectionIndicator == *indicator {
+	if v.SelectionIndicator != nil && indicator != nil && *v.SelectionIndicator == *indicator {
 		return
 	}
-	v.selectionIndicator = indicator
-	v.invalidate()
+	v.SelectionIndicator = indicator
+	v.Invalidate()
 }
 
-func (ui *uiState) applyClassicOESelectedUI() {
-	if ui.unitEvtDoc == nil {
-		ui.classicOESelectedUIError = "No .whe is loaded."
+func ApplyClassicOESelectedUI(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.ClassicOESelectedUIError = "No .whe is loaded."
 		return
 	}
-	value, present, err := ui.unitEvtDoc.SelectedUI()
+	value, present, err := ui.UnitEvtDoc.SelectedUI()
 	if err != nil {
-		ui.classicOESelectedUIError = err.Error()
+		ui.ClassicOESelectedUIError = err.Error()
 		return
 	}
 	if !present {
-		ui.classicOESelectedUIError = "This .whe has no DATASEUI chunk."
+		ui.ClassicOESelectedUIError = "This .whe has no DATASEUI chunk."
 		return
 	}
 	var values [20]string
 	for i := range values {
-		values[i] = ui.classicOESelectedUIEditors[i].Text()
+		values[i] = ui.ClassicOESelectedUIEditors[i].Text()
 	}
-	if ui.classicOESelectedUIType != nil {
-		displayType, err := selectedUIDisplayTypeCode(ui.classicOESelectedUIType.Value)
+	if ui.ClassicOESelectedUIType != nil {
+		displayType, err := selectedUIDisplayTypeCode(ui.ClassicOESelectedUIType.Value)
 		if err != nil {
-			ui.classicOESelectedUIError = err.Error()
+			ui.ClassicOESelectedUIError = err.Error()
 			return
 		}
 		values[0] = strconv.FormatInt(int64(displayType), 10)
 	}
 	value, err = selectedUIFromValues(value, values)
 	if err != nil {
-		ui.classicOESelectedUIError = err.Error()
+		ui.ClassicOESelectedUIError = err.Error()
 		return
 	}
-	if err = ui.unitEvtDoc.SetSelectedUI(value); err != nil {
-		ui.classicOESelectedUIError = err.Error()
+	if err = ui.UnitEvtDoc.SetSelectedUI(value); err != nil {
+		ui.ClassicOESelectedUIError = err.Error()
 		return
 	}
-	ui.unitEvtDirty = true
-	ui.classicOESelectedUIBound = ""
-	ui.classicOESelectedUIError = ""
-	ui.updateUnitSelectionIndicator(value)
-	ui.statusText = "Applied selection volume settings — Save .whe to write them into the mod"
+	ui.UnitEvtDirty = true
+	ui.ClassicOESelectedUIBound = ""
+	ui.ClassicOESelectedUIError = ""
+	UpdateUnitSelectionIndicator(ui, value)
+	ui.StatusText = "Applied selection volume settings — Save .whe to write them into the mod"
 }
 
-func (ui *uiState) applyClassicOEModifier() {
-	if ui.unitEvtDoc == nil {
-		ui.classicOEModifierError = "No .whe is loaded."
+func ApplyClassicOEModifier(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.ClassicOEModifierError = "No .whe is loaded."
 		return
 	}
 	var value whe.FxModifier
-	for _, m := range ui.unitEvtDoc.Modifiers() {
-		if strings.EqualFold(m.Name, ui.classicOEModifierName) {
+	for _, m := range ui.UnitEvtDoc.Modifiers() {
+		if strings.EqualFold(m.Name, ui.ClassicOEModifierName) {
 			value = m
 			break
 		}
 	}
 	if value.Name == "" {
-		ui.classicOEModifierError = "Select a modifier first."
+		ui.ClassicOEModifierError = "Select a modifier first."
 		return
 	}
-	value.Variable = strings.TrimSpace(ui.classicOEModifierEditors[0].Text())
-	kind, err := strconv.ParseInt(strings.TrimSpace(ui.classicOEModifierEditors[1].Text()), 10, 32)
+	value.Variable = strings.TrimSpace(ui.ClassicOEModifierEditors[0].Text())
+	kind, err := strconv.ParseInt(strings.TrimSpace(ui.ClassicOEModifierEditors[1].Text()), 10, 32)
 	if err != nil || kind < 0 || kind > 1 {
-		ui.classicOEModifierError = "Type must be 0 (absolute time) or 1 (speed scale)."
+		ui.ClassicOEModifierError = "Type must be 0 (absolute time) or 1 (speed scale)."
 		return
 	}
 	value.Type = int32(kind)
 	for i, dst := range []*float32{&value.Reference, &value.Default} {
-		n, parseErr := strconv.ParseFloat(strings.TrimSpace(ui.classicOEModifierEditors[i+2].Text()), 32)
+		n, parseErr := strconv.ParseFloat(strings.TrimSpace(ui.ClassicOEModifierEditors[i+2].Text()), 32)
 		if parseErr != nil {
-			ui.classicOEModifierError = "Reference and default values must be finite numbers."
+			ui.ClassicOEModifierError = "Reference and default values must be finite numbers."
 			return
 		}
 		*dst = float32(n)
 	}
-	if err = ui.unitEvtDoc.SetModifier(value.Name, value); err != nil {
-		ui.classicOEModifierError = err.Error()
+	if err = ui.UnitEvtDoc.SetModifier(value.Name, value); err != nil {
+		ui.ClassicOEModifierError = err.Error()
 		return
 	}
-	ui.unitEvtDirty = true
-	ui.classicOEModifierBound = ""
-	ui.classicOEModifierError = ""
-	ui.statusText = "Applied modifier " + value.Name + " — Save .whe to write it into the mod"
+	ui.UnitEvtDirty = true
+	ui.ClassicOEModifierBound = ""
+	ui.ClassicOEModifierError = ""
+	ui.StatusText = "Applied modifier " + value.Name + " — Save .whe to write it into the mod"
 }
 
-func (ui *uiState) saveClassicOEWhe() {
-	line, err := ui.saveUnitEvents()
+func SaveClassicOEWhe(ui *uiState) {
+	line, err := SaveUnitEvents(ui)
 	if err != nil {
-		ui.statusText = "Save failed: " + err.Error()
+		ui.StatusText = "Save failed: " + err.Error()
 		return
 	}
-	ui.statusText = line
-	ui.markStateDirty()
+	ui.StatusText = line
+	MarkStateDirty(ui)
 }
