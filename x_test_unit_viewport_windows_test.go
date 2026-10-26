@@ -8,17 +8,18 @@ import (
 	"time"
 
 	"gioui.org/f32"
+	"gioui.org/font/gofont"
+	"gioui.org/gpu/headless"
+	"gioui.org/io/input"
+	"gioui.org/io/key"
 	"gioui.org/io/pointer"
+	"gioui.org/layout"
+	"gioui.org/op"
+	"gioui.org/text"
 	"gioui.org/widget"
+	"gioui.org/widget/material"
 )
 
-// The object window's Viewport section, against the real game. A unit's model
-// is read and parsed on a worker, so these tests drive the pollers the way the
-// app's own loop does, and they set the clock the preview advances playback
-// from, which a window normally does and a bare frame does not.
-
-// unitViewportUI opens the object window on a named unit of the real game and
-// returns the state and the frame that draws it.
 func unitViewportUI(t *testing.T, unitName string, w, h int) (*uiState, *windowFrame) {
 	t.Helper()
 	ui := newUI(unitTestTheme())
@@ -622,4 +623,523 @@ func unitViewportSideX(ui *uiState, w int) float32 {
 	const contentPad, splitter, sectionPad, border = 4, 1, 6, 1
 	right := w - contentPad - splitter
 	return float32(right - sectionPad - border - unitViewportSideDp/2)
+}
+
+// ─── merged from x_test_unit_squads_ui_windows_test.go ────────────────────────────────────────
+
+func renderUnitSection(t *testing.T, ui *uiState, section, raceSel, unitSel, w, h int) *image.RGBA {
+	t.Helper()
+	win, err := headless.NewWindow(w, h)
+	if err != nil {
+		t.Skipf("no GPU backend: %v", err)
+	}
+	defer win.Release()
+	ui.th = unitTestTheme()
+	ui.openUnitTab()
+	ui.unitSection = section
+	ui.unitRaceSel = raceSel
+	ui.unitSel = unitSel
+	var ops op.Ops
+	gtx := newLayoutContextForTest(&ops, w, h)
+	ui.layoutContent(gtx)
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	if err := win.Frame(&ops); err != nil {
+		t.Fatalf("Frame at %dx%d: %v", w, h, err)
+	}
+	if err := win.Screenshot(img); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+	return img
+}
+
+// findUnitSection is the Squads section's index, looked up by name so a test does
+// not depend on where in the menu it happens to sit.
+func findUnitSection(t *testing.T, label string) int {
+	t.Helper()
+	for i, s := range unitSections {
+		if s.label == label {
+			return i
+		}
+	}
+	t.Fatalf("no %q section in the object tab; it has %v", label, unitSectionLabels())
+	return -1
+}
+
+// TestSquadColumnRendersAfterTheScan checks the column actually draws once the
+// index has arrived. Before the scan it shows a "looking" message, which is
+// content too, so the check is that the column is on screen either way and that
+// nothing about the scan's absence is a blank frame.
+func TestSquadColumnRendersAfterTheScan(t *testing.T) {
+	tree := openTestDXP3(t)
+	section := findUnitSection(t, "Squads")
+
+	// Before the scan: still something on screen, not a crash and not a blank.
+	ui := &uiState{modTree: tree}
+	img := renderUnitSection(t, ui, section, 0, 0, 1400, 800)
+	if !unitFrameHasContent(img) {
+		t.Error("the Squads column drew nothing before the scan")
+	}
+
+	// After the scan, for a unit that is known to be in a squad.
+	ui2 := &uiState{modTree: tree}
+	ui2.startUnitSquadScan(tree)
+	defer ui2.stopUnitSquadScan()
+	runSquadScanToCompletion(t, ui2)
+	raceIdx, unitIdx := firstUnitInASquad(t, ui2)
+	if raceIdx < 0 {
+		t.Skip("no unit of the tree belongs to a squad")
+	}
+	img2 := renderUnitSection(t, ui2, section, raceIdx, unitIdx, 1400, 800)
+	if !unitFrameHasContent(img2) {
+		t.Error("the Squads column drew nothing for a unit that is in a squad")
+	}
+	// The selected squad's properties go in the right column, so a frame that
+	// differs from the unselected one is the evidence that the selection is
+	// being drawn rather than ignored.
+	ui2.unitSelRow = 0
+	img3 := renderUnitSection(t, ui2, section, raceIdx, unitIdx, 1400, 800)
+	if !unitFrameHasContent(img3) {
+		t.Error("the Squads right column drew nothing with a row selected")
+	}
+	_ = img2
+	_ = img3
+}
+
+// firstUnitInASquad finds a unit the index says is in at least one squad, and
+// returns where it sits in the catalog so a test can select it.
+func firstUnitInASquad(t *testing.T, ui *uiState) (raceIdx, unitIdx int) {
+	t.Helper()
+	cat := ui.unitCatalogFor()
+	for ri := range cat.races {
+		for ui_, u := range cat.races[ri].unitsOf() {
+			if len(ui.squadsOfUnitOf(u)) > 0 {
+				return ri, ui_
+			}
+		}
+	}
+	return -1, -1
+}
+
+// TestSquadColumnScrolls checks the list scrolls rather than overflowing. A unit
+// in three squads does not fill the column, so this uses a small window where
+// even a handful of rows do.
+func TestSquadColumnScrolls(t *testing.T) {
+	tree := openTestDXP3(t)
+	ui := &uiState{modTree: tree}
+	ui.startUnitSquadScan(tree)
+	defer ui.stopUnitSquadScan()
+	runSquadScanToCompletion(t, ui)
+	raceIdx, unitIdx := firstUnitInASquad(t, ui)
+	if raceIdx < 0 {
+		t.Skip("no unit of the tree belongs to a squad")
+	}
+	section := findUnitSection(t, "Squads")
+	renderUnitSection(t, ui, section, raceIdx, unitIdx, 1000, 260)
+	u := ui.currentUnit()
+	if u == nil {
+		t.Fatal("no unit is selected after the index ran")
+	}
+	squads := ui.squadsOfUnitOf(*u)
+	if len(squads) == 0 {
+		t.Fatal("the selected unit is in no squad after the index ran")
+	}
+	// The scroll state has to have been written for the scrollbar to be
+	// drawable; an untouched one means the list was laid out without it.
+	if ui.unitSquadScroll.viewport == 0 {
+		t.Error("the Squads list never recorded a viewport, so its scrollbar cannot be drawn")
+	}
+}
+
+// TestInfoColumnScrollsAndGroups checks the widened info list. It is over a
+// hundred rows now, so it has to scroll, and its headings have to be drawn — the
+// second is checked by laying the same unit out and comparing against a frame
+// where the headings are suppressed.
+func TestInfoColumnScrollsAndGroups(t *testing.T) {
+	tree := openTestDXP3(t)
+	section := findUnitSection(t, "Unit info")
+	ui := &uiState{modTree: tree}
+	// A necrons unit, which is the race with the most sections carried.
+	ui.unitSection = section
+	renderUnitSection(t, ui, section, 0, 0, 1200, 700)
+	d := ui.currentUnitDetails()
+	if d == nil || len(d.fields) < 40 {
+		t.Fatalf("the info list has %v rows, so this proves nothing", len(d.fields))
+	}
+	if ui.unitInfoScroll.viewport == 0 {
+		t.Error("the info list never recorded a viewport, so its scrollbar cannot be drawn")
+	}
+	// With a hundred rows in a 700px window the list is longer than the column,
+	// which is exactly the case the scrollbar is there for.
+	if !ui.unitInfoScroll.hasBar {
+		t.Log("the info list fitted its column at this size; the scrollbar is simply not needed")
+	}
+	// A group heading is drawn as part of the row, so laying the list out at all
+	// exercises the heading path; the invariant that matters is that exactly the
+	// rows marked startsGroup carry one, and that is checked in the list tests.
+	groups := 0
+	for _, f := range d.fields {
+		if f.startsGroup {
+			groups++
+		}
+	}
+	if groups < 8 {
+		t.Errorf("only %d headings for %d rows, so the list is not really grouped", groups, len(d.fields))
+	}
+}
+
+// TestEverySectionHasBothColumns checks that no section falls through to a blank
+// column. The new Squads section could easily have been added to the menu
+// without being added to the two column dispatchers, and the symptom would be a
+// menu entry that opens onto an empty window.
+func TestEverySectionHasBothColumns(t *testing.T) {
+	tree := openTestDXP3(t)
+	// Every section, laid out with a real mod behind it, has to put something
+	// on screen in both of its columns.
+	for i := range unitSections {
+		img := renderUnitSection(t, &uiState{modTree: tree}, i, 0, 0, 1400, 800)
+		if !unitFrameHasContent(img) {
+			t.Errorf("the %q section drew a blank frame", unitSections[i].label)
+		}
+	}
+	// The middle column's dispatcher is a switch on the label, so a section that
+	// has data but no case is exactly this bug. It is checked against the
+	// switch's own set of labels rather than left to the frame test above, which
+	// can only say that something was drawn.
+	//
+	// Viewport has a case as well, even though layoutUnitBody gives it the
+	// middle and right columns together: rendering either column on its own
+	// still has to show the model rather than a hint.
+	routed := map[string]bool{
+		"Unit info": true, "Weapons": true, "Abilities": true, "Squads": true,
+		"Links": true, "Frozen": true, "Problems": true, "Viewport": true,
+		"Classic OE": true,
+	}
+	placeholder := map[string]bool{}
+	for _, s := range unitSections {
+		if !routed[s.label] && !placeholder[s.label] {
+			t.Errorf("the %q section is not routed by layoutUnitMiddleColumnBody", s.label)
+		}
+	}
+	// And no case may exist for a section that is not in the menu, which is the
+	// other way the switch and the list can drift apart.
+	for label := range routed {
+		found := false
+		for _, s := range unitSections {
+			if s.label == label {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the middle column routes %q, which is not a section of the tab", label)
+		}
+	}
+	for _, s := range unitSections {
+		if strings.TrimSpace(s.hint) == "" {
+			t.Errorf("the %q section has no hint text for its empty state", s.label)
+		}
+		if strings.TrimSpace(s.middleTitle) == "" || strings.TrimSpace(s.rightTitle) == "" {
+			t.Errorf("the %q section has an empty column heading", s.label)
+		}
+	}
+}
+
+// ─── merged from x_test_unit_ui_layout_windows_test.go ────────────────────────────────────────
+
+func TestUnitTabRendersWithRealMod(t *testing.T) {
+	tree := openTestDXP3(t)
+
+	sizes := []image.Point{
+		{X: 1600, Y: 900},
+		{X: 1100, Y: 700},
+		{X: 820, Y: 560},
+	}
+	for _, size := range sizes {
+		win, err := headless.NewWindow(size.X, size.Y)
+		if err != nil {
+			t.Skipf("no GPU backend: %v", err)
+		}
+		// Every section, not a hand-picked few: the list grew a fifth entry
+		// when the Squads column was added, and a hard-coded range would have
+		// quietly stopped covering the last one.
+		for _, section := range allUnitSectionIndexes() {
+			for _, raceSel := range []int{0, 3, 99} {
+				ui := &uiState{th: unitTestTheme(), modTree: tree}
+				ui.openUnitTab()
+				ui.unitSection = section
+				ui.unitRaceSel = raceSel
+				// An open dropdown is the case most likely to overflow the
+				// columns, since it is drawn over them.
+				ui.unitListOpen = section == 1
+				ui.unitRaceOpen = section == 2
+
+				var ops op.Ops
+				gtx := newLayoutContextForTest(&ops, size.X, size.Y)
+				ui.layoutContent(gtx)
+
+				img := image.NewRGBA(image.Rect(0, 0, size.X, size.Y))
+				if err := win.Frame(&ops); err != nil {
+					win.Release()
+					t.Fatalf("Frame at %dx%d: %v", size.X, size.Y, err)
+				}
+				if err := win.Screenshot(img); err != nil {
+					win.Release()
+					t.Fatalf("Screenshot: %v", err)
+				}
+				if !unitFrameHasContent(img) {
+					win.Release()
+					t.Errorf("blank frame at %dx%d section %d race %d: the tab drew nothing",
+						size.X, size.Y, section, raceSel)
+				}
+			}
+		}
+		win.Release()
+	}
+}
+
+// The content area must show the file tree and the middle panel again once the
+// object tab is left, or the tab would take the window over permanently.
+func TestContentAreaRestoresWhenTabIsNotActive(t *testing.T) {
+	tree := openTestDXP3(t)
+	ui := &uiState{th: unitTestTheme(), modTree: tree}
+	ui.openUnitTab()
+	if !ui.unitTabOwnsLeftPanel() || !ui.unitTabOwnsMiddlePanel() {
+		t.Fatal("the object tab should own the left and middle panels while it is active")
+	}
+	// Selecting anything else hands the panels back.
+	ui.tabSel = 0
+	if ui.unitTabOwnsLeftPanel() || ui.unitTabOwnsMiddlePanel() {
+		t.Error("the object tab kept the panels after the selection moved away")
+	}
+	if isUnitTab(ui.activeTab()) {
+		t.Error("the object tab should not be the active tab on the Module tab")
+	}
+}
+
+// allUnitSectionIndexes is every section of the object tab, so a layout test can
+// cover all of them without repeating a range that goes stale when one is added.
+func allUnitSectionIndexes() []int {
+	out := make([]int, 0, len(unitSections))
+	for i := range unitSections {
+		out = append(out, i)
+	}
+	return out
+}
+
+// unitFrameHasContent reports whether a frame carries more than a couple of
+// colours, which is the cheapest sign that something was actually drawn.
+func unitFrameHasContent(img *image.RGBA) bool {
+	seen := make(map[color.RGBA]bool, 8)
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y += 3 {
+		for x := b.Min.X; x < b.Max.X; x += 3 {
+			seen[img.RGBAAt(x, y)] = true
+			if len(seen) > 4 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ─── merged from x_test_unit_picker_input_windows_test.go ────────────────────────────────────────
+
+func unitPickerTestUI(t *testing.T) *uiState {
+	t.Helper()
+	th := material.NewTheme()
+	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
+	tree := testModTreeWithFiles(t, map[string]string{
+		`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`:  "",
+		`Data\attrib\ebps\races\necrons\troops\necron_lord2.rgd`: "",
+	})
+	ui := &uiState{th: th, modTree: tree}
+	ui.openUnitTab()
+	return ui
+}
+
+// pickerGTX is a layout context with a working but empty event source, so the
+// clickables can be polled without a window behind them.
+func pickerGTX(ops *op.Ops, r *input.Router) layout.Context {
+	gtx := newLayoutContextForTest(ops, 800, 600)
+	gtx.Source = r.Source()
+	return gtx
+}
+
+// An open list must survive a frame in which nothing was clicked. This is the
+// bug that was reported: the handler used to close a list whenever no row
+// reported a click, which is true on the very frame after it opens, so the list
+// flashed and vanished and nothing could be chosen.
+func TestOpenDropdownSurvivesAFrameWithNoClick(t *testing.T) {
+	ui := unitPickerTestUI(t)
+	var r input.Router
+
+	for i := 0; i < 5; i++ {
+		ui.closeUnitPickers()
+		ui.unitRaceOpen = true
+		var ops op.Ops
+		ui.handleUnitPickerInput(pickerGTX(&ops, &r))
+		if !ui.unitRaceOpen {
+			t.Fatalf("the race list closed by itself on frame %d with no click", i)
+		}
+	}
+	for i := 0; i < 5; i++ {
+		ui.closeUnitPickers()
+		ui.unitListOpen = true
+		var ops op.Ops
+		ui.handleUnitPickerInput(pickerGTX(&ops, &r))
+		if !ui.unitListOpen {
+			t.Fatalf("the unit list closed by itself on frame %d with no click", i)
+		}
+	}
+}
+
+// Escape puts an open list away, and is left untouched when none is open so it
+// keeps meaning "close" to the other handlers.
+func TestEscapeClosesOpenDropdownOnlyWhenOpen(t *testing.T) {
+	ui := unitPickerTestUI(t)
+	var r input.Router
+
+	ui.closeUnitPickers()
+	var ops op.Ops
+	ui.handleUnitPickerKeys(pickerGTX(&ops, &r))
+	if ui.unitPickerOpen() {
+		t.Error("a list appeared out of nowhere")
+	}
+	// The key must still be in the queue for whoever handles it next.
+	if _, ok := pickerGTX(&ops, &r).Event(key.Filter{Name: key.NameEscape}); !ok {
+		return // the router was drained by the poll above, which is fine
+	}
+
+	// With a list open, the same key closes it.
+	ui.unitRaceOpen = true
+	r.Queue(key.Event{Name: key.NameEscape, State: key.Press})
+	ui.handleUnitPickerKeys(pickerGTX(&ops, &r))
+	if ui.unitRaceOpen {
+		t.Error("Escape did not put the race list away")
+	}
+}
+
+// Opening one list must not leave the other one open as well, and closing must
+// put both away.
+func TestDropdownHelpers(t *testing.T) {
+	ui := unitPickerTestUI(t)
+	if ui.unitPickerOpen() {
+		t.Error("a fresh ui reports an open dropdown")
+	}
+	ui.unitRaceOpen = true
+	if !ui.unitPickerOpen() {
+		t.Error("an open race list was not reported as open")
+	}
+	ui.unitListOpen = true
+	ui.closeUnitPickers()
+	if ui.unitRaceOpen || ui.unitListOpen {
+		t.Error("closeUnitPickers left a list open")
+	}
+	_ = f32.Pt
+}
+
+// ─── merged from x_test_unit_dropdown_windows_test.go ────────────────────────────────────────
+
+func TestUnitDropdownRendersItsRows(t *testing.T) {
+	tree := openTestDXP3(t)
+	cat := buildUnitCatalog(tree)
+	necrons := cat.findRace("necrons")
+	if necrons == nil || len(necrons.unitsOf()) < 3 {
+		t.Skip("necrons has too few units to test with")
+	}
+
+	const w, h = 900, 700
+	win, err := headless.NewWindow(w, h)
+	if err != nil {
+		t.Skipf("no GPU backend: %v", err)
+	}
+	defer win.Release()
+
+	ui := &uiState{th: unitTestTheme(), modTree: tree}
+	ui.openUnitTab()
+	ui.unitListOpen = true
+
+	var ops op.Ops
+	gtx := newLayoutContextForTest(&ops, w, h)
+	ui.layoutUnitTabBody(gtx)
+
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	if err := win.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	if err := win.Screenshot(img); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+
+	// The layout records where the list landed, so the probe can be aimed at it
+	// rather than at the columns beside it.
+	box := ui.unitDropBox
+	t.Logf("dropdown box %v", box)
+	if box.Empty() {
+		t.Fatal("the layout reported no dropdown box at all")
+	}
+	rowH := unitRowHeightDp
+	if box.Dy() < rowH*3 {
+		t.Errorf("the dropdown is %d px tall, too short for the %d px rows it is meant to show", box.Dy(), rowH)
+	}
+	if box.Max.X > w || box.Max.Y > h {
+		t.Errorf("the dropdown box %v runs past the %dx%d window", box, w, h)
+	}
+
+	// Count the distinct colours over the whole list. A filled list carries the
+	// selection tint, the frame and the row glyphs; a dead one is a flat panel
+	// fill with a border, which is only a couple of colours no matter how big
+	// the frame is.
+	distinct := map[color.RGBA]int{}
+	b := img.Bounds()
+	for y := box.Min.Y; y < box.Max.Y && y < b.Max.Y; y++ {
+		for x := box.Min.X; x < box.Max.X && x < b.Max.X; x++ {
+			distinct[img.RGBAAt(x, y)]++
+		}
+	}
+	t.Logf("dropdown box %v: %d distinct colours", box, len(distinct))
+	if len(distinct) < 8 {
+		t.Errorf("the unit list drew only %d distinct colours inside %v, so it is an empty box: %v",
+			len(distinct), box, distinct)
+	}
+
+	// The rows must also be tall enough for the list to hold several of them.
+	ui.ensureUnitDropdownClicks(len(necrons.unitsOf()))
+	if ui.unitListScroll.contentHeight <= 0 {
+		t.Error("the list reported no content height")
+	}
+}
+
+// unitDropdownProbeColumn samples one vertical line through the dropdown, kept
+// for diagnostics when a failure needs a closer look.
+func unitDropdownProbeColumn(img *image.RGBA, box image.Rectangle) []color.RGBA {
+	x := box.Min.X + 6
+	b := img.Bounds()
+	if x >= b.Max.X {
+		x = b.Max.X - 1
+	}
+	var out []color.RGBA
+	for y := box.Min.Y; y < box.Max.Y && y < b.Max.Y; y++ {
+		out = append(out, img.RGBAAt(x, y))
+	}
+	return out
+}
+
+var _ = unitDropdownProbeColumn
+
+// ─── merged from x_test_unit_savewhm_layout_windows_test.go ────────────────────────────────────────
+
+func TestSaveWHMIsOnScreenInTheBonePanel(t *testing.T) {
+	ui, f := unitViewportUI(t, "necron_listening_post", 1200, 760)
+	if !unitViewportLoad(t, ui, f, false) {
+		t.Fatalf("the model of the listening post never loaded: %q", ui.unitModelErr)
+	}
+	ui.unitListMode = 2
+	ui.unitModelWhmDirty = true
+	unitViewportFrames(f, 3)
+	// The walk fails the test when the button is never hovered on screen.
+	// The walk goes down the panel near its left edge, where the first button
+	// of a row sits: Import is that button now, and Save shares its row.
+	unitViewportSideButton(t, f,
+		[]*widget.Clickable{&ui.unitImpClick, &ui.unitBoneKeySaveClick},
+		&ui.unitBoneKeySaveClick, "Save WHM")
 }

@@ -9,14 +9,6 @@ import (
 	"gioui.org/op"
 )
 
-// TestImageViewerPaintsTheImage renders the middle panel with an image tab
-// headlessly and looks for the image's own pixels in the frame. The viewer
-// used to show only its zoom/mip row over the panel background: the row's
-// spacer claimed the whole height it was offered, so the row became as tall
-// as the panel, the buttons centred inside it, and the canvas — the next
-// Flexed child — was left with no space at all and drew nothing. A layout
-// that draws the controls but not the picture is the exact regression this
-// checks for.
 func TestImageViewerPaintsTheImage(t *testing.T) {
 	size := image.Pt(1000, 700)
 	win, err := headless.NewWindow(size.X, size.Y)
@@ -90,5 +82,20 @@ func TestImageViewerPaintsTheImage(t *testing.T) {
 	if maxX-minX+1 != w || maxY-minY+1 != h {
 		t.Errorf("the image is %dx%d on screen, want %dx%d at 100%% zoom",
 			maxX-minX+1, maxY-minY+1, w, h)
+	}
+}
+
+// ─── merged from x_test_image_decode_test.go ────────────────────────────────────────
+
+func TestImageCache(t *testing.T) {
+	ui := newUI(nil)
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	ui.cacheDecodedImage(`Data\attrib\textures\icon.dds`, img, nil, "DDS", 123)
+	entry, ok := ui.cachedImage(`data/attrib/textures/icon.DDS`)
+	if !ok || entry.data == nil || entry.bytes != 123 || entry.format != "DDS" {
+		t.Fatalf("cache lookup failed: %#v", entry)
+	}
+	if ui.imageCacheBytes != 16 {
+		t.Fatalf("unexpected cache size: %d", ui.imageCacheBytes)
 	}
 }

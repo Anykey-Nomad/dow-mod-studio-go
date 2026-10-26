@@ -53,21 +53,21 @@ const LocaleDirName = "Locale"
 // reservation the second one would hand out the first's id, and the second
 // string would quietly overwrite the first.
 func AllocateLocaleID() string {
-	LocaleState.mu.Lock()
+	LocaleState.Mu.Lock()
 	start := int64(LocaleEditBase)
-	if LocaleState.reservedID >= start {
-		start = LocaleState.reservedID + 1
+	if LocaleState.ReservedID >= start {
+		start = LocaleState.ReservedID + 1
 	}
-	LocaleState.mu.Unlock()
+	LocaleState.Mu.Unlock()
 
 	for id := start; id < int64(LocaleEditBase)+1000000; id++ {
 		s := strconv.FormatInt(id, 10)
 		if _, taken := LocaleLookup(s); taken {
 			continue
 		}
-		LocaleState.mu.Lock()
-		LocaleState.reservedID = id
-		LocaleState.mu.Unlock()
+		LocaleState.Mu.Lock()
+		LocaleState.ReservedID = id
+		LocaleState.Mu.Unlock()
 		return s
 	}
 	return ""

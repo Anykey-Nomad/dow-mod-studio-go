@@ -1,8 +1,6 @@
 package main
 
 import (
-	"dow-mod-studio/internal/modtree"
-	"dow-mod-studio/internal/rgd"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,27 +8,11 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/rgd"
 )
 
-// What every unit and every building of the real game data has in common.
-//
-// Creating a unit or a building means writing an RGD the game will load, and
-// the only reliable answer to "what has to be in it" is the data itself: this
-// reads every unit and every structure of the installed game and reports the
-// sections and the attributes they all carry, the ones nearly all of them
-// carry, and the values that are the same everywhere — the boilerplate a new
-// object starts from, and the handful of values it has to be given.
-//
-// It is a report rather than an assertion on purpose: the game data is not the
-// project's to fix, and a test that failed because a patch changed a building
-// would say nothing about the code. It skips when the game is not installed.
-//
-//	go test -run TestRealCommonRgdAttributes -v .
-//
-// The full report goes to the temp directory and its path is logged; the test
-// output is the condensed skeleton of it.
-
-// rgdAttrStat is one attribute path, seen across every file of a set.
 type rgdAttrStat struct {
 	files  int            // how many files carry the path at all
 	types  map[uint32]int // type -> how many files carry it that way
@@ -441,4 +423,220 @@ func (a *rgdAttrStat) typeListTypes() map[string]int {
 		out[rgdTypeName(typ)] = a.types[typ]
 	}
 	return out
+}
+
+// ─── merged from x_test_rgd_test.go ────────────────────────────────────────
+
+func TestRgdParseMonolith(t *testing.T) {
+	tree, err := modtree.BuildModTree(`C:/Program Files/Steam/steamapps/common/Dawn of War Definitive Edition/DXP3.module`, "English")
+	if err != nil {
+		t.Fatalf("modtree.BuildModTree: %v", err)
+	}
+	defer tree.Close()
+	// find any .rgd
+	var rgdPath string
+	var search func(folder *modtree.TreeFolder)
+	search = func(folder *modtree.TreeFolder) {
+		if rgdPath != "" {
+			return
+		}
+		for _, f := range folder.Files {
+			if filepath.Ext(f.Name) == ".rgd" && f.Name == "monolith.rgd" {
+				rgdPath = f.FullPath
+				return
+			}
+		}
+		for _, c := range folder.Children {
+			search(c)
+			if rgdPath != "" {
+				return
+			}
+		}
+	}
+	search(tree.Root)
+	if rgdPath == "" {
+		// try any rgd
+		search = func(folder *modtree.TreeFolder) {
+			if rgdPath != "" {
+				return
+			}
+			for _, f := range folder.Files {
+				if filepath.Ext(f.Name) == ".rgd" {
+					rgdPath = f.FullPath
+					return
+				}
+			}
+			for _, c := range folder.Children {
+				search(c)
+			}
+		}
+		search(tree.Root)
+	}
+	if rgdPath == "" {
+		t.Fatalf("no rgd found")
+	}
+	t.Logf("found rgd at %q", rgdPath)
+	// read bytes
+	data, err := tree.ReadFile(rgdPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	t.Logf("size %d", len(data))
+	// hex dump first 64
+	for i := 0; i < 64 && i < len(data); i++ {
+		if i%16 == 0 {
+			t.Logf("\n%04x:", i)
+		}
+		t.Logf(" %02x", data[i])
+	}
+	t.Logf(" header %q", string(data[0:16]))
+	rf, err := rgd.ParseRgd(data)
+	if err != nil {
+		t.Fatalf("rgd.ParseRgd: %v", err)
+	}
+	t.Logf("Parsed %q descriptor %q chunkVer %d root children %d", rf.Root.Name, rf.Descriptor, rf.ChunkVersion, len(rf.Root.Children))
+	for i, ch := range rf.Root.Children {
+		if i < 30 {
+			ref := ""
+			if ch.Ref != nil {
+				ref = ch.Ref.DisplayValue()
+			}
+			t.Logf(" child[%d] %q type=%s hash=%08x ref=%q children=%d val=%q", i, ch.Name, ch.TypeLabel(), ch.Hash, ref, len(ch.Children), ch.DisplayValue())
+		}
+	}
+	// check expected children as in screenshot
+	wantNames := []string{"ability_ext", "health_ext", "ui_ext"}
+	found := map[string]bool{}
+	for _, ch := range rf.Root.Children {
+		found[ch.Name] = true
+	}
+	for _, n := range wantNames {
+		if !found[n] {
+			t.Logf("WARNING expected child %q missing", n)
+		}
+	}
+	// also test nested: health_ext children?
+	for _, ch := range rf.Root.Children {
+		if ch.Name == "health_ext" {
+			t.Logf(" health_ext children %d", len(ch.Children))
+			for _, sub := range ch.Children {
+				t.Logf("  health sub %q type %s val %q children %d", sub.Name, sub.TypeLabel(), sub.DisplayValue(), len(sub.Children))
+			}
+			break
+		}
+	}
+	// try to verify Reference parsing: health_ext ref?
+	for _, ch := range rf.Root.Children {
+		if ch.Name == "health_ext" {
+			if ch.Ref != nil {
+				t.Logf(" health_ext ref type %s val %q", ch.Ref.TypeLabel(), ch.Ref.DisplayValue())
+			} else {
+				t.Logf(" health_ext no ref")
+			}
+		}
+	}
+}
+
+// ─── merged from x_test_rgd_edit_test.go ────────────────────────────────────────
+
+func TestRgdScalarEditingAndRoundTrip(t *testing.T) {
+	root := &rgd.RgdEntry{Hash: 0, Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
+		{Hash: 1, Name: "float_value", Type: rgd.RgdTypeFloat, FloatVal: 1},
+		{Hash: 2, Name: "int_value", Type: rgd.RgdTypeInt, IntVal: 2},
+		{Hash: 3, Name: "bool_value", Type: rgd.RgdTypeBool, BoolVal: false},
+		{Hash: 4, Name: "string_value", Type: rgd.RgdTypeString, StrVal: "old"},
+		{Hash: 5, Name: "wstring_value", Type: rgd.RgdTypeWString, WStrVal: "old"},
+	}}
+	changes := map[uint32]string{
+		1: "3.25",
+		2: "0x2a",
+		3: "true",
+		4: "new string",
+		5: "Новая строка",
+	}
+	for _, entry := range root.Children {
+		if _, err := rgdApplyScalarText(entry, changes[entry.Hash]); err != nil {
+			t.Fatalf("apply %s: %v", entry.Name, err)
+		}
+	}
+
+	data, err := (&rgd.RgdFile{Root: root, HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1}).MarshalBinary()
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	parsed, err := rgd.ParseRgd(data)
+	if err != nil {
+		t.Fatalf("parse round-trip: %v", err)
+	}
+	got := make(map[uint32]*rgd.RgdEntry)
+	for _, entry := range parsed.Root.Children {
+		got[entry.Hash] = entry
+	}
+	if got[1].FloatVal != 3.25 || got[2].IntVal != 42 || !got[3].BoolVal || got[4].StrVal != "new string" || got[5].WStrVal != "Новая строка" {
+		t.Fatalf("round-trip values = %#v", got)
+	}
+}
+
+func TestRgdAliasDisplayName(t *testing.T) {
+	dict := map[uint32]string{rgd.Hash("70506"): "hit_entity_event_name"}
+	if got := rgd.AliasDisplayName("$70506", dict); got != "hit_entity_event_name" {
+		t.Fatalf("alias display = %q, want %q", got, "hit_entity_event_name")
+	}
+	if got := rgd.AliasDisplayName("$missing", dict); got != "" {
+		t.Fatalf("unknown alias display = %q, want empty", got)
+	}
+}
+
+func TestRgdDisplayFieldValue(t *testing.T) {
+	alias := &rgd.RgdEntry{Name: "hit_entity_event_name", Type: rgd.RgdTypeString, StrVal: "$70506"}
+	if got := alias.DisplayFieldValue(); got != alias.Name {
+		t.Fatalf("alias display = %q, want field name %q", got, alias.Name)
+	}
+	if alias.StrVal != "$70506" {
+		t.Fatalf("display changed stored alias to %q", alias.StrVal)
+	}
+	plain := &rgd.RgdEntry{Name: "description", Type: rgd.RgdTypeString, StrVal: "hello"}
+	if got := plain.DisplayFieldValue(); got != "hello" {
+		t.Fatalf("plain display = %q, want %q", got, "hello")
+	}
+}
+
+func TestRgdScalarEditingRejectsInvalidValues(t *testing.T) {
+	entry := &rgd.RgdEntry{Type: rgd.RgdTypeInt, IntVal: 7}
+	if _, err := rgdApplyScalarText(entry, "not-a-number"); err == nil {
+		t.Fatal("invalid integer was accepted")
+	}
+	if entry.IntVal != 7 {
+		t.Fatalf("invalid edit changed value to %d", entry.IntVal)
+	}
+}
+
+// ─── merged from x_test_rgd_reference_test.go ────────────────────────────────────────
+
+func TestFindRgdReferenceFile(t *testing.T) {
+	tree := &modtree.ModTree{Root: modtree.NewFolder("Data", "Data", nil)}
+	folder := tree.GetOrCreateFolder(tree.Root, "ebpextensions", nil)
+	file := &modtree.TreeFile{
+		Name:     "health_ext.lua",
+		FullPath: `Data\ebpextensions\health_ext.lua`,
+		Source:   &modtree.FileSource{ModName: "TestMod", Kind: modtree.KindThisMod},
+	}
+	folder.Files = append(folder.Files, file)
+	folder.FileByLower[file.Name] = file
+	ui := &uiState{modTree: tree}
+
+	for _, ref := range []string{
+		`ebpextensions\health_ext.lua`,
+		`ebpextensions/health_ext.lua`,
+		`Data\ebpextensions\health_ext.lua`,
+	} {
+		if got := ui.findRgdReferenceFile(ref); got != file.FullPath {
+			t.Errorf("reference %q resolved to %q, want %q", ref, got, file.FullPath)
+		}
+	}
+	for _, ref := range []string{"object://something", "missing.lua", ""} {
+		if got := ui.findRgdReferenceFile(ref); got != "" {
+			t.Errorf("reference %q unexpectedly resolved to %q", ref, got)
+		}
+	}
 }

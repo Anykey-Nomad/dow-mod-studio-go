@@ -63,19 +63,19 @@ type LocaleTable struct {
 // setLocale, never from inside a lookup, so laying out a frame cannot stall on
 // reading 3.4 MB of UCS.
 var LocaleState struct {
-	mu    sync.RWMutex
-	cur   *LocaleTable
-	cache map[string]*LocaleTable
+	Mu    sync.RWMutex
+	Cur   *LocaleTable
+	Cache map[string]*LocaleTable
 	// overrideDir is the open mod's own project folder, which is searched
 	// before anything installed. It is here rather than in the arguments
 	// because a string this tool writes has to be readable the moment after it
 	// is written, and threading a third path through every reader would put
 	// that burden on each caller instead.
-	overrideDir string
+	OverrideDir string
 	// reservedID is the last id handed out by allocateLocaleID. It is kept apart
 	// from the table because an id is reserved before it is written, and the
 	// table only learns of it once the write has been read back in.
-	reservedID int64
+	ReservedID int64
 }
 
 // setLocaleOverrideDir says which project folder the mod's own strings live in.
@@ -85,11 +85,11 @@ var LocaleState struct {
 // It drops the built tables, because a table is a function of the folders it was
 // read from and the folder has just changed.
 func SetLocaleOverrideDir(dir string) {
-	LocaleState.mu.Lock()
-	LocaleState.overrideDir = strings.TrimSpace(dir)
-	LocaleState.cache = nil
-	LocaleState.cur = nil
-	LocaleState.mu.Unlock()
+	LocaleState.Mu.Lock()
+	LocaleState.OverrideDir = strings.TrimSpace(dir)
+	LocaleState.Cache = nil
+	LocaleState.Cur = nil
+	LocaleState.Mu.Unlock()
 }
 
 // invalidateLocaleCache drops every built table so the next setLocale reads the
@@ -97,17 +97,17 @@ func SetLocaleOverrideDir(dir string) {
 // language, so without it the string that was just written is missing from the
 // copy the views are reading and the edit looks like it did nothing.
 func InvalidateLocaleCache() {
-	LocaleState.mu.Lock()
-	LocaleState.cache = nil
-	LocaleState.cur = nil
-	LocaleState.mu.Unlock()
+	LocaleState.Mu.Lock()
+	LocaleState.Cache = nil
+	LocaleState.Cur = nil
+	LocaleState.Mu.Unlock()
 }
 
 // localeOverrideRoot is that folder, or "" when there is none.
 func LocaleOverrideRoot() string {
-	LocaleState.mu.RLock()
-	defer LocaleState.mu.RUnlock()
-	return LocaleState.overrideDir
+	LocaleState.Mu.RLock()
+	defer LocaleState.Mu.RUnlock()
+	return LocaleState.OverrideDir
 }
 
 // ── decoding ───────────────────────────────────────────────────────────────
@@ -352,34 +352,34 @@ func SetLocale(gamePath, modulePath, lang string) *LocaleTable {
 	}
 	moduleDir := LocaleModuleDir(modulePath)
 
-	LocaleState.mu.RLock()
-	cached := LocaleState.cache[lang]
-	LocaleState.mu.RUnlock()
+	LocaleState.Mu.RLock()
+	cached := LocaleState.Cache[lang]
+	LocaleState.Mu.RUnlock()
 
 	var table *LocaleTable
 	if cached != nil {
 		table = cached
 	} else {
 		table = BuildLocaleTable(gamePath, moduleDir, lang)
-		LocaleState.mu.Lock()
-		if LocaleState.cache == nil {
-			LocaleState.cache = make(map[string]*LocaleTable)
+		LocaleState.Mu.Lock()
+		if LocaleState.Cache == nil {
+			LocaleState.Cache = make(map[string]*LocaleTable)
 		}
-		LocaleState.cache[lang] = table
-		LocaleState.mu.Unlock()
+		LocaleState.Cache[lang] = table
+		LocaleState.Mu.Unlock()
 	}
 
-	LocaleState.mu.Lock()
-	LocaleState.cur = table
-	LocaleState.mu.Unlock()
+	LocaleState.Mu.Lock()
+	LocaleState.Cur = table
+	LocaleState.Mu.Unlock()
 	return table
 }
 
 // currentLocaleTable is the table the value views read.
 func CurrentLocaleTable() *LocaleTable {
-	LocaleState.mu.RLock()
-	defer LocaleState.mu.RUnlock()
-	return LocaleState.cur
+	LocaleState.Mu.RLock()
+	defer LocaleState.Mu.RUnlock()
+	return LocaleState.Cur
 }
 
 // localeLookup resolves one id against the active table.
@@ -422,9 +422,9 @@ func LocaleLineNumber(id string) int {
 // resetLocaleTables drops the cache. Tests use it so one fixture does not
 // decide what the next one sees.
 func ResetLocaleTables() {
-	LocaleState.mu.Lock()
-	LocaleState.cur = nil
-	LocaleState.cache = nil
-	LocaleState.reservedID = 0
-	LocaleState.mu.Unlock()
+	LocaleState.Mu.Lock()
+	LocaleState.Cur = nil
+	LocaleState.Cache = nil
+	LocaleState.ReservedID = 0
+	LocaleState.Mu.Unlock()
 }

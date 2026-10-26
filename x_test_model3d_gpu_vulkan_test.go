@@ -3,31 +3,27 @@
 package main
 
 import (
-	"dow-mod-studio/internal/whm"
 	"image"
 	"image/color"
+	"io/fs"
 	"math"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/fx"
+	"dow-mod-studio/internal/whm"
 	"gioui.org/gpu/headless"
+	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/unit"
 	"github.com/fogleman/fauxgl"
 )
 
-// Passing the software renderer's tests proves nothing about the Vulkan
-// renderer: it is a separate port with its own shaders, its own uniform block
-// layout, a projection mirrored into Vulkan's downward Y, and a winding
-// decision that has to be re-derived for that mirror. These tests put it
-// through the same checks the software renderer is held to — the shape of what it draws,
-// which side of a model faces the camera, which way up it comes out — and
-// one of them paints the frame through Gio, which is the only way to see
-// that an adopted texture reaches the screen at all.
-
-// requireVulkanRenderer opens a headless window on the Vulkan backend and a
-// model renderer on it. Everything skips rather than fails when the machine
-// has no Vulkan: the software tests carry the rest of the coverage.
 func requireVulkanRenderer(t *testing.T) (*headless.Window, *modelGpuVkRenderer, func() []byte, func()) {
 	t.Helper()
 	const size = 256
@@ -764,5 +760,596 @@ func TestVulkanPutsTheNearerOfTwoFadingMeshesOnTop(t *testing.T) {
 	}
 	if got[0] <= int(bgR)+5 {
 		t.Errorf("the overlap is %v, which is no redder than the background: nothing was drawn there", got)
+	}
+}
+
+// ─── merged from x_test_model3d_gpu_vulkan_overlay_test.go ────────────────────────────────────────
+
+func gpuOverlayModel(t *testing.T) *WhmModel {
+	t.Helper()
+	m := overlayTestModel()
+	// The box grows to twice its size and the chain stays where it was, so
+	// every bone and the marker sit deep inside the mesh rather than near its
+	// surface. Near the surface a depth tested overlay would still show
+	// through, which is what makes the check below able to pass by accident.
+	for i := range m.Vertices {
+		for k := 0; k < 3; k++ {
+			m.Vertices[i].Pos[k] *= 4
+		}
+	}
+	// Every face of the box, not the half of them the shared test model
+	// carries. A cube with faces missing has holes in it, and a hole is a
+	// place where the skeleton behind it shows through whatever the depth
+	// test says — which would let this file pass on a renderer that buries
+	// the overlay inside the mesh, the one thing it exists to rule out.
+	m.Meshes = []WhmMesh{{Name: "box", Indices: []uint32{
+		0, 2, 1, 0, 3, 2, // bottom
+		4, 5, 6, 4, 6, 7, // top
+		0, 1, 5, 0, 5, 4, // -y
+		1, 2, 6, 1, 6, 5, // +x
+		2, 3, 7, 2, 7, 6, // +y
+		3, 0, 4, 3, 4, 7, // -x
+	}}}
+	// Three links off the root, each a fifth of the box, so the whole chain
+	// stays within the cube's middle.
+	m.Bones = []WhmBone{
+		{Name: "root", Parent: -1},
+		{Name: "child", Parent: 0, Pos: [3]float32{0.4, 0, 0}},
+		{Name: "tip", Parent: 1, Pos: [3]float32{0.4, 0.4, 0}},
+		{Name: "end", Parent: 2, Pos: [3]float32{0, 0.4, 0.4}},
+	}
+	m.Markers = []WhmMarker{{
+		Name:   "marker_tip",
+		Parent: "end",
+		Matrix: [9]float32{1, 0, 0, 0, 1, 0, 0, 0, 1},
+		Pos:    [3]float32{0.2, 0, 0},
+	}}
+	return m
+}
+
+// gpuOverlayOptions frames the model from a real camera: an overlay width is
+// derived from the field of view and the distance, so an unset one gives every
+// segment the same width whatever the camera is doing.
+func gpuOverlayOptions(m *WhmModel, w, h int) RenderOptions {
+	center, _ := m.ModelCenter()
+	// The distance is set rather than taken from ModelCenter: the box here is
+	// scaled up to swallow the skeleton, and the framing distance that fits the
+	// original box puts the camera inside this one — with the marker behind the
+	// eye and its overlay off the frame entirely.
+	return RenderOptions{
+		Width: w, Height: h,
+		Yaw: 0.6, Pitch: 0.3,
+		Distance:  9,
+		Target:    center,
+		Fov:       modelDefaultFov,
+		Quality:   modelQualityFinal,
+		BaseColor: rgbaWhite,
+	}
+}
+
+// overlayChangedPixels counts the pixels two frames disagree on, which is what
+// says whether a pass drew anything at all. Every pixel counts, background
+// included: the overlay is drawn over the model and the background alike, and
+// a count that skipped the background would miss lines that run off the mesh.
+func overlayChangedPixels(a, b []byte) int {
+	if len(a) != len(b) {
+		return -1
+	}
+	n := 0
+	for i := 0; i+3 < len(a); i += 4 {
+		if a[i] != b[i] || a[i+1] != b[i+1] || a[i+2] != b[i+2] {
+			n++
+		}
+	}
+	return n
+}
+
+// The skeleton must be drawn by the GPU renderer, in the same pass as the
+// model. Turning it on is compared frame against frame: a renderer that
+// ignores it produces two identical frames, which is exactly the failure this
+// is here to catch.
+func TestVulkanDrawsTheSkeletonOnTheGpu(t *testing.T) {
+	model := gpuOverlayModel(t)
+	const w, h = 240, 200
+	_, r, readback, release := requireVulkanRenderer(t)
+	defer release()
+	opts := gpuOverlayOptions(model, w, h)
+	pose := model.RestPose()
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render without the skeleton: %v", err)
+	}
+	without := readback()
+
+	opts.Skeleton = true
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render with the skeleton: %v", err)
+	}
+	with := readback()
+	changed := overlayChangedPixels(without, with)
+	t.Logf("the skeleton changed %d pixels of a %dx%d frame", changed, w, h)
+	if changed == 0 {
+		t.Fatal("turning the skeleton on changed nothing: the Vulkan renderer drew no bone lines")
+	}
+	// The bones are inside the mesh, so if the overlay were depth tested
+	// against the model almost all of it would be hidden. A handful of
+	// pixels would mean it is being drawn but buried.
+	if changed < 50 {
+		t.Errorf("only %d pixels changed; the bones are mostly inside the mesh, which suggests the overlay is being depth tested against it", changed)
+	}
+}
+
+// DATASEUI's selection rectangle is part of the Vulkan overlay pass, not a
+// CPU-rendered decoration. This compares GPU readbacks with the indicator
+// disabled and enabled while the rectangle lies inside the cube's footprint.
+func TestVulkanDrawsSelectionIndicatorOnTheGpu(t *testing.T) {
+	model := gpuOverlayModel(t)
+	const w, h = 240, 200
+	_, r, readback, release := requireVulkanRenderer(t)
+	defer release()
+	opts := gpuOverlayOptions(model, w, h)
+	pose := model.RestPose()
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render without selection indicator: %v", err)
+	}
+	without := readback()
+
+	opts.SelectionIndicator = &engine.SelectionIndicator{
+		DisplayType: 1,
+		Scale:       [2]float32{1.4, 1.1},
+		Offset:      [2]float32{0.25, -0.2},
+	}
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render with selection indicator: %v", err)
+	}
+	with := readback()
+	if changed := overlayChangedPixels(without, with); changed == 0 {
+		t.Fatal("enabling the selection indicator changed no pixels: the Vulkan renderer did not draw it")
+	}
+}
+
+// The picked marker is drawn on the GPU path too. Without it a reader who
+// picked a marker on the Vulkan renderer saw the 3D frame and nothing at all
+// to say which attachment point they had picked.
+func TestVulkanDrawsThePickedMarkerOnTheGpu(t *testing.T) {
+	model := gpuOverlayModel(t)
+	const w, h = 240, 200
+	_, r, readback, release := requireVulkanRenderer(t)
+	defer release()
+	opts := gpuOverlayOptions(model, w, h)
+	pose := model.RestPose()
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render without a marker: %v", err)
+	}
+	without := readback()
+
+	opts.Marker = pickedMarker(0)
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render with a marker: %v", err)
+	}
+	with := readback()
+	changed := overlayChangedPixels(without, with)
+	t.Logf("the picked marker changed %d pixels of a %dx%d frame", changed, w, h)
+	if changed == 0 {
+		t.Fatal("picking a marker changed nothing: the Vulkan renderer drew neither the frame nor the arrow")
+	}
+}
+
+// The overlay and the particles share one vertex buffer and one pass, so
+// drawing both at once is the case neither of the tests above covers: a
+// bounds check that stops at the particles would silently drop the bones, and
+// a group count that assumed one draw would drop whichever came second.
+func TestVulkanDrawsParticlesAndTheOverlayTogether(t *testing.T) {
+	model := gpuOverlayModel(t)
+	const w, h = 240, 200
+	_, r, readback, release := requireVulkanRenderer(t)
+	defer release()
+	base := gpuOverlayOptions(model, w, h)
+	pose := model.RestPose()
+
+	sim := &fx.FxSim{}
+	sim.Anchored = []fx.Visual{{
+		Lifetime: 1,
+		Radius:   []fx.FxKey{{V: 0.6}},
+		Colour:   []fx.FxColourStop{{R: 1, G: 1, B: 1, A: 1}},
+	}}
+	withFx := base
+	front := 2.6 // the cube has half-extent 2; put the puff in front of its surface.
+	withFx.FX = &fxGpuScene{
+		Groups: []fxGpuGroup{{
+			Origin: [3]float64{
+				base.Target.X + math.Cos(base.Yaw)*math.Cos(base.Pitch)*front,
+				base.Target.Y + math.Sin(base.Yaw)*math.Cos(base.Pitch)*front,
+				base.Target.Z + math.Sin(base.Pitch)*front,
+			},
+			Sprites:  repeatedSprite(sim.Sprites(), 12),
+			Additive: true,
+		}},
+	}
+	if _, err := r.Render(model, pose, withFx, nil, nil); err != nil {
+		t.Fatalf("Render with particles: %v", err)
+	}
+	particlesFrame := readback()
+	particlesOnly := fxMeanLuma(particlesFrame, w, h)
+
+	withFx.Skeleton = true
+	if _, err := r.Render(model, pose, withFx, nil, nil); err != nil {
+		t.Fatalf("Render with particles and the skeleton: %v", err)
+	}
+	both := readback()
+
+	// The skeleton may darken pixels it crosses, so mean luminance is not a
+	// reliable coexistence check. The combined frame must differ from the
+	// particles-only frame, while the comparison below verifies the particle
+	// pass was not displaced by the overlay.
+	t.Logf("mean luma: particles %.1f, particles and skeleton %.1f", particlesOnly, fxMeanLuma(both, w, h))
+	if changed := overlayChangedPixels(particlesFrame, both); changed == 0 {
+		t.Error("adding the skeleton changed no pixels in the particle frame")
+	}
+
+	// And the skeleton on its own against the same particles, which is what
+	// says the bones survived being written after them.
+	opts := base
+	opts.Skeleton = true
+	if _, err := r.Render(model, pose, opts, nil, nil); err != nil {
+		t.Fatalf("Render with the skeleton: %v", err)
+	}
+	if changed := overlayChangedPixels(both, readback()); changed == 0 {
+		t.Error("the frame with particles and the frame with the skeleton alone are identical: one of the two passes drew nothing")
+	}
+}
+
+// The overlay's segments are turned into camera facing quads by the same
+// tessellator the beams use. A bone that came out as a quad on its side, or
+// with no width at all, would still be "drawn" and still be useless, so the
+// quads are measured rather than counted.
+func TestOverlayQuadsFaceTheEyeAndHaveWidth(t *testing.T) {
+	m := overlayTestModel()
+	pose := m.RestPose()
+	opts := overlayTestOptions()
+	opts.Skeleton = true
+	opts.Target = vec3From(m.BoundMin).Add(vec3From(m.BoundMax)).MulScalar(0.5)
+	eye := fxEyePosition(opts)
+	segments := modelOverlayLines(m, pose, opts)
+	if len(segments) == 0 {
+		t.Fatal("no segments to tessellate")
+	}
+	for i, s := range segments {
+		verts := fx.BeamQuads(fx.BeamRibbon{
+			From: s.From, To: s.To, Width: s.HalfWidth, Segments: 1,
+		}, eye)
+		if len(verts) < 4 {
+			t.Errorf("segment %d (%v -> %v) tessellated to %d corners, which is no quad at all",
+				i, s.From, s.To, len(verts))
+			continue
+		}
+		// The four corners of one quad: two at each end, HalfWidth apart
+		// across the segment. A quad that came out flat would have the two
+		// ends of one edge on top of each other.
+		a := verts[0].Pos.Sub(verts[1].Pos)
+		b := verts[2].Pos.Sub(verts[3].Pos)
+		want := s.HalfWidth * 2
+		for _, edge := range []fauxgl.Vector{a, b} {
+			if got := edge.Length(); got < want*0.5 || got > want*1.5 {
+				t.Errorf("segment %d tessellated to a quad %v wide, want about %v", i, got, want)
+			}
+			// And the cross-section has to lie across the segment rather
+			// than along it, or the quad is edge on to the eye.
+			dir := s.To.Sub(s.From)
+			if n := dir.Normalize(); n != (fauxgl.Vector{}) {
+				if dot := math.Abs(edge.Normalize().Dot(n)); dot > 0.1 {
+					t.Errorf("segment %d tessellated along itself (dot=%.3f), so the line would be seen edge on", i, dot)
+				}
+			}
+		}
+	}
+}
+
+// ─── merged from x_test_model3d_gpu_test.go ────────────────────────────────────────
+
+func newLayoutContextForTest(ops *op.Ops, w, h int) layout.Context {
+	return layout.Context{
+		Ops:         ops,
+		Constraints: layout.Exact(image.Pt(w, h)),
+		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+	}
+}
+
+// The clear colour of a pass is the panel background.
+const (
+	bgR, bgG, bgB = 0x1c, 0x1e, 0x24
+)
+
+// findDowFile looks a file up by base name anywhere under the installed race
+// folders, because the game scatters the same kind of file across troops,
+// structures and shared texture folders.
+func findDowFile(name string) []byte {
+	want := strings.ToLower(name)
+	var found []byte
+	filepath.WalkDir(dowRacesDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || found != nil {
+			return nil //nolint:nilerr // an unreadable folder just means no match
+		}
+		if d.IsDir() || !strings.EqualFold(d.Name(), want) {
+			return nil
+		}
+		if data, err := os.ReadFile(path); err == nil {
+			found = data
+		}
+		return nil
+	})
+	return found
+}
+
+// requireGpuTestModel reads a model from the game install, skipping the test
+// when there is none.
+func requireGpuTestModel(t *testing.T, name string) *WhmModel {
+	t.Helper()
+	raw := findDowFile(name)
+	if raw == nil {
+		t.Skipf("no %s under %s", name, dowRacesDir)
+	}
+	model, err := ParseWhmModel(raw)
+	if err != nil {
+		t.Fatalf("ParseWhmModel(%s): %v", name, err)
+	}
+	return model
+}
+
+// gpuTestOptions frames a model the way a freshly opened viewer does.
+func gpuTestOptions(model *WhmModel, w, h int) RenderOptions {
+	center, dist := model.ModelCenter()
+	return RenderOptions{
+		Width:     w,
+		Height:    h,
+		Yaw:       0.7,
+		Pitch:     0.2,
+		Distance:  dist,
+		Target:    center,
+		Fov:       45,
+		Ambient:   0.32,
+		Diffuse:   0.68,
+		BaseColor: rgbaWhite,
+	}
+}
+
+// coveredFraction counts the pixels that are not the clear colour, which is
+// how much of the frame the model actually reached.
+func coveredFraction(px []byte, w, h int) float64 {
+	hits := 0
+	for i := 0; i+3 < len(px); i += 4 {
+		if px[i] != bgR || px[i+1] != bgG || px[i+2] != bgB {
+			hits++
+		}
+	}
+	return float64(hits) / float64(w*h)
+}
+
+// distinctColours counts the unique opaque colours in a frame, which is how a
+// textured model tells itself apart from one painted in a flat colour.
+func distinctColours(px []byte) int {
+	seen := map[uint32]bool{}
+	for i := 0; i+3 < len(px); i += 4 {
+		if px[i] == bgR && px[i+1] == bgG && px[i+2] == bgB {
+			continue
+		}
+		seen[uint32(px[i])<<16|uint32(px[i+1])<<8|uint32(px[i+2])] = true
+	}
+	return len(seen)
+}
+
+// findRsh locates a material's .rsh by base name: a .whm stores a full virtual
+// path, but the file itself may sit in a different mod than the model.
+func findRsh(material string) []byte {
+	if material == "" {
+		return nil
+	}
+	return findDowFile(filepath.Base(filepath.FromSlash(material)) + ".rsh")
+}
+
+// findMaterialWithTexture returns the first material of a model whose .rsh is
+// actually installed, since a model can reference a texture the install does
+// not ship.
+func findMaterialWithTexture(model *WhmModel) (string, []byte) {
+	for _, m := range model.Meshes {
+		if data := findRsh(m.Material); data != nil {
+			return m.Material, data
+		}
+	}
+	return "", nil
+}
+
+// rgbaPixels copies an image into the tightly packed layout the readback
+// helpers expect.
+func rgbaPixels(img *image.RGBA) []byte {
+	b := img.Bounds()
+	out := make([]byte, 0, b.Dx()*b.Dy()*4)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		out = append(out, img.Pix[y*img.Stride:y*img.Stride+b.Dx()*4]...)
+	}
+	return out
+}
+
+// singleQuad is one flat quad across the YZ plane with its normal along the X
+// axis, which is where the orbit camera sits with no yaw and no pitch.
+func singleQuad(t *testing.T, outwards bool) *WhmModel {
+	t.Helper()
+	m := &WhmModel{Model: whm.Model{Name: "quad"}}
+	for _, p := range [4][3]float32{
+		{0, -0.8, -0.8}, {0, 0.8, -0.8}, {0, 0.8, 0.8}, {0, -0.8, 0.8},
+	} {
+		m.Vertices = append(m.Vertices, WhmVertex{
+			Pos:    p,
+			Normal: [3]float32{1, 0, 0},
+			Bones:  [4]int32{-1, -1, -1, -1},
+		})
+	}
+	// Counter clockwise seen from the front, which puts the outside of the
+	// quad on the side the camera is on.
+	idx := []uint32{0, 1, 2, 0, 2, 3}
+	if !outwards {
+		idx = []uint32{0, 2, 1, 0, 3, 2}
+	}
+	m.Meshes = append(m.Meshes, WhmMesh{Name: "quad", Indices: idx, SingleBone: -1})
+	m.Bones = []WhmBone{{Name: "root", Parent: -1}}
+	return m
+}
+
+// covered is whether a pixel is clear of the background a frame is cleared to.
+// The arithmetic is done on ints: the background is darker than the threshold
+// in the blue channel, and unsigned bytes would count that as a large number.
+func covered(c color.RGBA) bool {
+	return int(c.R)-0x1c > 12 || int(c.G)-0x1e > 12 || int(c.B)-0x24 > 12
+}
+
+// openBoxModel is a box with its top and bottom left off.
+func openBoxModel(t *testing.T) *WhmModel {
+	t.Helper()
+	m := &WhmModel{Model: whm.Model{Name: "open_box"}}
+	min, max := [3]float32{-1, -1, -1}, [3]float32{1, 1, 1}
+	corners := [8][3]float32{
+		{min[0], min[1], min[2]}, {max[0], min[1], min[2]}, {max[0], max[1], min[2]}, {min[0], max[1], min[2]},
+		{min[0], min[1], max[2]}, {max[0], min[1], max[2]}, {max[0], max[1], max[2]}, {min[0], max[1], max[2]},
+	}
+	centre := [3]float32{0, 0, 0}
+	for _, c := range corners {
+		n := [3]float32{c[0] - centre[0], c[1] - centre[1], c[2] - centre[2]}
+		l := float32(sqrt(n[0]*n[0] + n[1]*n[1] + n[2]*n[2]))
+		m.Vertices = append(m.Vertices, WhmVertex{
+			Pos:    c,
+			Normal: [3]float32{n[0] / l, n[1] / l, n[2] / l},
+			Bones:  [4]int32{-1, -1, -1, -1},
+		})
+	}
+	// The four sides only. The opening is what the frame looks through.
+	faces := [][3]int{
+		{0, 1, 5}, {0, 5, 4}, // front
+		{1, 2, 6}, {1, 6, 5}, // right
+		{2, 3, 7}, {2, 7, 6}, // back
+		{3, 0, 4}, {3, 4, 7}, // left
+	}
+	var idx []uint32
+	for _, f := range faces {
+		if facePointsOutwards(m.Vertices[f[0]], m.Vertices[f[1]], m.Vertices[f[2]]) {
+			idx = append(idx, uint32(f[0]), uint32(f[1]), uint32(f[2]))
+		} else {
+			idx = append(idx, uint32(f[0]), uint32(f[2]), uint32(f[1]))
+		}
+	}
+	m.Meshes = append(m.Meshes, WhmMesh{Name: "walls", Indices: idx, SingleBone: -1})
+	m.Bones = []WhmBone{{Name: "root", Parent: -1}}
+	return m
+}
+
+// twoBoxModel is two cubes far apart, as two sub meshes. Which piece is drawn
+// is therefore obvious at a glance, and so is which side of each is.
+func twoBoxModel(t *testing.T) *WhmModel {
+	t.Helper()
+	m := &WhmModel{Model: whm.Model{Name: "two_boxes"}}
+	add := func(name string, min, max [3]float32) {
+		base := uint32(len(m.Vertices))
+		// Every face of a cube as two triangles, wound so that the normal
+		// each one carries points away from the middle of it.
+		corners := [8][3]float32{
+			{min[0], min[1], min[2]}, {max[0], min[1], min[2]}, {max[0], max[1], min[2]}, {min[0], max[1], min[2]},
+			{min[0], min[1], max[2]}, {max[0], min[1], max[2]}, {max[0], max[1], max[2]}, {min[0], max[1], max[2]},
+		}
+		centre := [3]float32{(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2}
+		for i, c := range corners {
+			n := [3]float32{c[0] - centre[0], c[1] - centre[1], c[2] - centre[2]}
+			length := float32(1)
+			if l := n[0]*n[0] + n[1]*n[1] + n[2]*n[2]; l > 0 {
+				length = float32(sqrt(l))
+			}
+			m.Vertices = append(m.Vertices, WhmVertex{
+				Pos:    c,
+				Normal: [3]float32{n[0] / length, n[1] / length, n[2] / length},
+				UV:     [2]float32{0, 0},
+				Bones:  [4]int32{-1, -1, -1, -1},
+			})
+			_ = i
+		}
+		faces := [][3]int{
+			{0, 2, 1}, {0, 3, 2}, // bottom
+			{4, 5, 6}, {4, 6, 7}, // top
+			{0, 1, 5}, {0, 5, 4}, // front
+			{1, 2, 6}, {1, 6, 5}, // right
+			{2, 3, 7}, {2, 7, 6}, // back
+			{3, 0, 4}, {3, 4, 7}, // left
+		}
+		var idx []uint32
+		for _, f := range faces {
+			// Wound so that cross(b-a, c-a) points along the face normal.
+			if facePointsOutwards(m.Vertices[base+uint32(f[0])], m.Vertices[base+uint32(f[1])], m.Vertices[base+uint32(f[2])]) {
+				idx = append(idx, base+uint32(f[0]), base+uint32(f[1]), base+uint32(f[2]))
+			} else {
+				idx = append(idx, base+uint32(f[0]), base+uint32(f[2]), base+uint32(f[1]))
+			}
+		}
+		m.Meshes = append(m.Meshes, WhmMesh{Name: name, Indices: idx, SingleBone: -1})
+	}
+	add("left", [3]float32{-1.4, -0.5, -0.5}, [3]float32{-0.4, 0.5, 0.5})
+	add("right", [3]float32{0.4, -0.5, -0.5}, [3]float32{1.4, 0.5, 0.5})
+	m.Bones = []WhmBone{{Name: "root", Parent: -1}}
+	return m
+}
+
+// facePointsOutwards reports whether the winding of a triangle agrees with the
+// normal its vertices carry.
+func facePointsOutwards(a, b, c WhmVertex) bool {
+	u1 := [3]float64{float64(b.Pos[0] - a.Pos[0]), float64(b.Pos[1] - a.Pos[1]), float64(b.Pos[2] - a.Pos[2])}
+	u2 := [3]float64{float64(c.Pos[0] - a.Pos[0]), float64(c.Pos[1] - a.Pos[1]), float64(c.Pos[2] - a.Pos[2])}
+	g := [3]float64{
+		u1[1]*u2[2] - u1[2]*u2[1],
+		u1[2]*u2[0] - u1[0]*u2[2],
+		u1[0]*u2[1] - u1[1]*u2[0],
+	}
+	n := [3]float64{
+		float64(a.Normal[0]) + float64(b.Normal[0]) + float64(c.Normal[0]),
+		float64(a.Normal[1]) + float64(b.Normal[1]) + float64(c.Normal[1]),
+		float64(a.Normal[2]) + float64(b.Normal[2]) + float64(c.Normal[2]),
+	}
+	return g[0]*n[0]+g[1]*n[1]+g[2]*n[2] > 0
+}
+
+// coveredPixels counts the pixels of a frame that are not the background the
+// renderer clears to.
+func coveredPixels(img *image.RGBA, area image.Rectangle) int {
+	n := 0
+	for y := area.Min.Y; y < area.Max.Y; y++ {
+		for x := area.Min.X; x < area.Max.X; x++ {
+			if covered(img.RGBAAt(x, y)) {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+func sqrt(v float32) float64 { return math.Sqrt(float64(v)) }
+
+// ─── merged from x_test_model3d_gpu_vulkan_cache_test.go ────────────────────────────────────────
+
+func TestModelGpuVkGeometryChangesAreDeferredUntilRender(t *testing.T) {
+	model := &WhmModel{}
+	mesh := &modelGpuVkMesh{draws: []modelGpuVkDraw{{count: 3}}}
+	r := &modelGpuVkRenderer{
+		meshes:      map[*WhmModel]*modelGpuVkMesh{model: mesh},
+		dirtyMeshes: make(map[*WhmModel]bool),
+	}
+
+	r.geometryChanged(model)
+	if r.meshes[model] != mesh || !r.dirtyMeshes[model] {
+		t.Fatal("geometryChanged must retain the in-use mesh and mark it dirty for the next render")
+	}
+}
+
+func TestModelGpuVkForgetRetiresTheCachedMesh(t *testing.T) {
+	model := &WhmModel{}
+	mesh := &modelGpuVkMesh{}
+	r := &modelGpuVkRenderer{meshes: map[*WhmModel]*modelGpuVkMesh{model: mesh}}
+
+	r.forget(model)
+	if _, ok := r.meshes[model]; ok {
+		t.Fatal("forgotten model remains in the GPU mesh cache")
 	}
 }

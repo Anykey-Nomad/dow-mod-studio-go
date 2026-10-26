@@ -12,7 +12,7 @@ import (
 func TestLinkRowsSayBothDirectionsAndWhichIsWhich(t *testing.T) {
 	tree := newGraphTestMod(t)
 	g := newModGraph(tree)
-	g.ensureLinks()
+	g.EnsureLinks()
 
 	// The gauntlet refers out once, to the armoury, and is referred to twice:
 	// by the ability and by the add-on, both of which upgrade it. The two
@@ -71,7 +71,7 @@ func TestLinkRowsSayBothDirectionsAndWhichIsWhich(t *testing.T) {
 
 func TestLinkRowsSplitIntoTheTwoDirections(t *testing.T) {
 	g := newModGraph(newGraphTestMod(t))
-	g.ensureLinks()
+	g.EnsureLinks()
 	// The gauntlet refers out once and is referred to twice, so both sides of
 	// the split are populated for it — which is the normal case, and the one
 	// that a list showing only outgoing links would get wrong.
@@ -103,7 +103,7 @@ func TestLinkRowsSplitIntoTheTwoDirections(t *testing.T) {
 
 func TestAUnitThatRefersToNothingHasNoRows(t *testing.T) {
 	g := newModGraph(newGraphTestMod(t))
-	g.ensureLinks()
+	g.EnsureLinks()
 	if rows := linkRows(g, graphTestLoose); len(rows) != 0 {
 		t.Errorf("a unit nothing refers to and which refers to nothing has %d rows: %v", len(rows), rows)
 	}
@@ -114,7 +114,7 @@ func TestAUnitDoesNotListItselfTwice(t *testing.T) {
 	// saying so once is enough.
 	tree := newGraphTestMod(t)
 	g := newModGraph(tree)
-	g.ensureLinks()
+	g.EnsureLinks()
 	for _, r := range linkRows(g, graphTestArmoury) {
 		if !r.outgoing && strings.EqualFold(r.target, "necron_armoury") {
 			t.Error("the armoury lists itself as something that refers to it")
@@ -140,7 +140,7 @@ func TestBrokenLinkGroupsCollectOneRowPerMissingFile(t *testing.T) {
 	appendBrokenUnit(t, tree, broken, `weapon\necron_missing_gun.lua`)
 
 	g := newModGraph(tree)
-	g.ensureLinks()
+	g.EnsureLinks()
 	if g.BrokenLinksOf(broken) == nil {
 		t.Fatal("the broken unit has no broken links, so the fixture did not take")
 	}
@@ -153,7 +153,7 @@ func TestBrokenLinkGroupsCollectOneRowPerMissingFile(t *testing.T) {
 		t.Errorf("the row names %q", grp.ref)
 	}
 	if grp.role != roleWeapon {
-		t.Errorf("the row says the reference was a %q, want weapon", grp.role.label())
+		t.Errorf("the row says the reference was a %q, want weapon", grp.role.Label())
 	}
 	if len(grp.holders) != 1 || !strings.EqualFold(grp.holders[0], broken) {
 		t.Errorf("the row says the files that still point at it are %v", grp.holders)
@@ -171,7 +171,7 @@ func TestBrokenLinkGroupsPutTheMostUsedMissingFileFirst(t *testing.T) {
 	appendBrokenUnit(t, tree, `Data\attrib\ebps\races\necrons\troops\necron_three.rgd`, `weapon\common.lua`)
 
 	g := newModGraph(tree)
-	g.ensureLinks()
+	g.EnsureLinks()
 	groups := brokenLinkGroups(g)
 	if len(groups) != 2 {
 		t.Fatalf("the report has %d rows, want two", len(groups))
@@ -188,7 +188,7 @@ func TestTheBackgroundScanFindsWhatTheBlockingReadFinds(t *testing.T) {
 	// agree: a list that filled in differently from the report would be worse
 	// than either.
 	blocking := newModGraph(openTestDXP3(t))
-	blocking.ensureLinks()
+	blocking.EnsureLinks()
 
 	ui := newUI(unitTestTheme())
 	ui.modTree = openTestDXP3(t)
@@ -202,8 +202,8 @@ func TestTheBackgroundScanFindsWhatTheBlockingReadFinds(t *testing.T) {
 	}
 	scanned := ui.graphFor()
 
-	if len(scanned.links) != len(blocking.links) {
-		t.Errorf("the scan read %d references, the blocking read found %d", len(scanned.links), len(blocking.links))
+	if len(scanned.Links) != len(blocking.Links) {
+		t.Errorf("the scan read %d references, the blocking read found %d", len(scanned.Links), len(blocking.Links))
 	}
 	if len(scanned.BrokenLinks()) != len(blocking.BrokenLinks()) {
 		t.Errorf("the scan found %d broken references, the blocking read found %d",
@@ -228,7 +228,7 @@ func TestStartingAScanTwiceDoesNotReadTheModTwice(t *testing.T) {
 		t.Error("a second scan replaced the graph the first one is writing into")
 	}
 	waitForLinkScan(t, ui)
-	if len(g.links) == 0 {
+	if len(g.Links) == 0 {
 		t.Error("the scan of the fixture found nothing")
 	}
 }

@@ -1,17 +1,16 @@
 package main
 
 import (
-	"dow-mod-studio/internal/modtree"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/rgd"
 )
 
-// The graph is measured against the game's own data, the same way the
-// templates are: the installed units and buildings are the only description of
-// what a reference is, so a claim about them is checked against all of them.
-
-// graphOf builds the graph of the installed game.
 func graphOf(t *testing.T) *modGraph {
 	t.Helper()
 	return newModGraph(openTestDXP3(t))
@@ -20,7 +19,7 @@ func graphOf(t *testing.T) *modGraph {
 func TestTheGraphKnowsEveryKindOfThingTheGameShips(t *testing.T) {
 	tree := openTestDXP3(t)
 	g := newModGraph(tree)
-	g.ensureLinks()
+	g.EnsureLinks()
 
 	// The expectation is read off the tree rather than written down, because
 	// a number written down is only as good as the day it was written: this
@@ -42,17 +41,17 @@ func TestTheGraphKnowsEveryKindOfThingTheGameShips(t *testing.T) {
 		if n == 0 {
 			continue
 		}
-		got := len(g.entitiesOfKind(kind))
+		got := len(g.EntitiesOfKind(kind))
 		if got != n {
-			t.Errorf("%s: indexed %d, the tree holds %d", kind.label(), got, n)
+			t.Errorf("%s: indexed %d, the tree holds %d", kind.Label(), got, n)
 		}
 	}
 	// The kinds that carry the mod's content have to be there at all, or the
 	// counts above would be comparing zeroes.
 	for _, kind := range []graphKind{graphKindUnit, graphKindStructure, graphKindSquad,
 		graphKindWeapon, graphKindAbility, graphKindAddon, graphKindResearch, graphKindModifier} {
-		if len(g.entitiesOfKind(kind)) == 0 {
-			t.Errorf("%s: nothing indexed", kind.label())
+		if len(g.EntitiesOfKind(kind)) == 0 {
+			t.Errorf("%s: nothing indexed", kind.Label())
 		}
 	}
 }
@@ -62,27 +61,27 @@ func TestEveryUnitAndBuildingIsFoundAndKnowsItsRace(t *testing.T) {
 	g := newModGraph(tree)
 	cat := buildUnitCatalog(tree)
 
-	for _, u := range cat.allUnits() {
-		e := g.entity(u.path)
+	for _, u := range cat.AllUnits() {
+		e := g.Entity(u.Path)
 		if e == nil {
-			t.Fatalf("%s is in the catalogue but not in the graph", u.path)
+			t.Fatalf("%s is in the catalogue but not in the graph", u.Path)
 		}
 		want := graphKindUnit
-		if u.kind == unitKindStructure {
+		if u.Kind == unitKindStructure {
 			want = graphKindStructure
 		}
-		if e.kind != want {
-			t.Errorf("%s: graph says %s, the folder says %s", u.path, e.kind.label(), u.kind.label)
+		if e.Kind != want {
+			t.Errorf("%s: graph says %s, the folder says %s", u.Path, e.Kind.Label(), u.Kind.Label)
 		}
-		if !strings.EqualFold(e.race, u.race) {
-			t.Errorf("%s: graph race %q, folder race %q", u.path, e.race, u.race)
+		if !strings.EqualFold(e.Race, u.Race) {
+			t.Errorf("%s: graph race %q, folder race %q", u.Path, e.Race, u.Race)
 		}
 	}
 }
 
 func TestEveryReferenceRoleIsFoundInTheGamesOwnFiles(t *testing.T) {
 	g := graphOf(t)
-	g.ensureLinks()
+	g.EnsureLinks()
 	// Each role is pinned to the number of references the installed game
 	// actually holds, counted by the extractor rather than written down from
 	// memory. A rule that silently stopped matching would leave a freeze with
@@ -113,12 +112,12 @@ func TestEveryReferenceRoleIsFoundInTheGamesOwnFiles(t *testing.T) {
 		roleSpawns:         14,
 	}
 	got := map[graphRole]int{}
-	for _, l := range g.links {
-		got[l.role]++
+	for _, l := range g.Links {
+		got[l.Role]++
 	}
 	for role, n := range want {
 		if got[role] != n {
-			t.Errorf("role %q: found %d references, the files hold %d", role.label(), got[role], n)
+			t.Errorf("role %q: found %d references, the files hold %d", role.Label(), got[role], n)
 		}
 	}
 	for role, n := range got {
@@ -126,14 +125,14 @@ func TestEveryReferenceRoleIsFoundInTheGamesOwnFiles(t *testing.T) {
 			t.Errorf("role %d: %d references matched a rule that is not in the table", role, n)
 		}
 	}
-	if total := len(g.links); total != 7933 {
+	if total := len(g.Links); total != 7933 {
 		t.Errorf("read %d references in total, the files hold 7933", total)
 	}
 }
 
 func TestEveryReferenceInTheGamesOwnDataResolves(t *testing.T) {
 	g := graphOf(t)
-	g.ensureLinks()
+	g.EnsureLinks()
 
 	// Not "almost every": all of them. 7933 references across the 2733 files
 	// that hold any, and every one names a file that is there. The harder half
@@ -142,10 +141,10 @@ func TestEveryReferenceInTheGamesOwnDataResolves(t *testing.T) {
 	// resolve; they are found by name within the referring entity's race.
 	broken := g.BrokenLinks()
 	for _, l := range broken {
-		t.Errorf("unresolved reference %q (%s) in %s at %s", l.ref, l.role.label(), l.from, l.field)
+		t.Errorf("unresolved reference %q (%s) in %s at %s", l.Ref, l.Role.Label(), l.From, l.Field)
 	}
-	if len(g.links) < 7000 {
-		t.Errorf("only %d references were read out of the game's data", len(g.links))
+	if len(g.Links) < 7000 {
+		t.Errorf("only %d references were read out of the game's data", len(g.Links))
 	}
 }
 
@@ -162,10 +161,10 @@ func TestABareNameReferenceIsResolvedWithinTheReferringRace(t *testing.T) {
 	if len(links) != 1 {
 		t.Fatalf("eldar_hq has %d relocation references, want 1", len(links))
 	}
-	if !strings.EqualFold(links[0].ref, "relocate_hq") {
-		t.Errorf("eldar_hq relocates as %q, want relocate_hq", links[0].ref)
+	if !strings.EqualFold(links[0].Ref, "relocate_hq") {
+		t.Errorf("eldar_hq relocates as %q, want relocate_hq", links[0].Ref)
 	}
-	if !links[0].resolved() {
+	if !links[0].Resolved() {
 		t.Error("the bare name relocate_hq did not resolve")
 	}
 }
@@ -182,13 +181,13 @@ func TestTheWeaponsOfAUnitResolveToTheWeaponLibrary(t *testing.T) {
 		t.Fatal("necron_lord has no weapons in the graph")
 	}
 	for _, w := range weapons {
-		if !w.resolved() {
-			t.Errorf("weapon %q does not resolve", w.ref)
+		if !w.Resolved() {
+			t.Errorf("weapon %q does not resolve", w.Ref)
 			continue
 		}
-		e := g.entity(w.to)
-		if e == nil || e.kind != graphKindWeapon {
-			t.Errorf("weapon %q resolves to %s, which is not a weapon", w.ref, w.to)
+		e := g.Entity(w.To)
+		if e == nil || e.Kind != graphKindWeapon {
+			t.Errorf("weapon %q resolves to %s, which is not a weapon", w.Ref, w.To)
 		}
 	}
 }
@@ -207,12 +206,12 @@ func TestABuildingIsWhatBuildsTheUnitsThatRequireIt(t *testing.T) {
 	}
 	var units int
 	for _, p := range built {
-		e := g.entity(p)
+		e := g.Entity(p)
 		if e == nil {
 			t.Errorf("%s is listed as built by the armoury but is not in the graph", p)
 			continue
 		}
-		switch e.kind {
+		switch e.Kind {
 		case graphKindUnit:
 			units++
 		case graphKindStructure:
@@ -220,13 +219,13 @@ func TestABuildingIsWhatBuildsTheUnitsThatRequireIt(t *testing.T) {
 			// name the armoury, and that is a real dependency the freeze
 			// has to clear.
 		default:
-			t.Errorf("%s is listed as built by the armoury but is a %s", p, e.kind.label())
+			t.Errorf("%s is listed as built by the armoury but is a %s", p, e.Kind.Label())
 		}
 		// The link has to be a real one in that file, not something the
 		// graph invented.
 		found := false
 		for _, l := range g.Outgoing(p) {
-			if l.role == roleBuiltBy && strings.EqualFold(l.to, armoury) {
+			if l.Role == roleBuiltBy && strings.EqualFold(l.To, armoury) {
 				found = true
 			}
 		}
@@ -240,10 +239,10 @@ func TestABuildingIsWhatBuildsTheUnitsThatRequireIt(t *testing.T) {
 
 	// And the two directions have to agree everywhere: every unit produced by
 	// a building is one whose file names that building.
-	for _, e := range g.entitiesOfKind(graphKindStructure) {
-		for _, p := range g.Produces(e.path) {
-			if e2 := g.entity(p); e2 != nil && !strings.EqualFold(e2.race, e.race) {
-				t.Errorf("%s builds %s, which is a %s unit", e.name, e2.name, e2.race)
+	for _, e := range g.EntitiesOfKind(graphKindStructure) {
+		for _, p := range g.Produces(e.Path) {
+			if e2 := g.Entity(p); e2 != nil && !strings.EqualFold(e2.Race, e.Race) {
+				t.Errorf("%s builds %s, which is a %s unit", e.Name, e2.Name, e2.Race)
 			}
 		}
 	}
@@ -251,21 +250,21 @@ func TestABuildingIsWhatBuildsTheUnitsThatRequireIt(t *testing.T) {
 
 func TestTheTwoDirectionsOfTheGraphAreInverses(t *testing.T) {
 	g := graphOf(t)
-	g.ensureLinks()
+	g.EnsureLinks()
 
-	for _, e := range g.entitiesOfKind(graphKindUnit, graphKindStructure) {
-		for _, l := range g.Outgoing(e.path) {
-			if !l.resolved() {
+	for _, e := range g.EntitiesOfKind(graphKindUnit, graphKindStructure) {
+		for _, l := range g.Outgoing(e.Path) {
+			if !l.Resolved() {
 				continue
 			}
 			var back bool
-			for _, r := range g.Incoming(l.to) {
-				if strings.EqualFold(r.from, l.from) && r.field == l.field && r.role == l.role {
+			for _, r := range g.Incoming(l.To) {
+				if strings.EqualFold(r.From, l.From) && r.Field == l.Field && r.Role == l.Role {
 					back = true
 				}
 			}
 			if !back {
-				t.Errorf("%s -> %s at %s is in the forward index but not the reverse one", e.name, l.to, l.field)
+				t.Errorf("%s -> %s at %s is in the forward index but not the reverse one", e.Name, l.To, l.Field)
 			}
 		}
 	}
@@ -311,7 +310,7 @@ func TestClassifyGraphEntityReadsTheGamesOwnFolders(t *testing.T) {
 	for _, c := range cases {
 		kind, race := classifyGraphEntity(c.path)
 		if kind != c.kind || race != c.race {
-			t.Errorf("classify(%q) = %s/%q, want %s/%q", c.path, kind.label(), race, c.kind.label(), c.race)
+			t.Errorf("classify(%q) = %s/%q, want %s/%q", c.path, kind.Label(), race, c.kind.Label(), c.race)
 		}
 	}
 }
@@ -429,4 +428,177 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// ─── merged from x_test_modgraph_fixture_test.go ────────────────────────────────────────
+
+var (
+	graphTestArmoury  = `Data\attrib\ebps\races\necrons\structures\necron_armoury.rgd`
+	graphTestGauntlet = `Data\attrib\ebps\races\necrons\troops\necron_gauntlet.rgd`
+	graphTestLoose    = `Data\attrib\ebps\races\necrons\troops\necron_loose.rgd`
+	graphTestGauss    = `Data\attrib\weapon\necron_gauss.rgd`
+	// An ability and an add-on that both name the gauntlet, in the shapes the
+	// game writes them: the ability through a modifier table nested under its
+	// area effect, the add-on through a modifier table of its own. They are
+	// here because a freeze that only ever reads units misses these, and
+	// moving the gauntlet out of the mod would leave both files pointing at a
+	// file that is no longer there.
+	graphTestWarp   = `Data\attrib\abilities\necron_warp_ability.rgd`
+	graphTestHubris = `Data\attrib\addons\necron_hubris.rgd`
+)
+
+// graphTestRgdFiles is the content of the fixture, built once.
+func graphTestRgdFiles(t *testing.T) map[string][]byte {
+	t.Helper()
+	return map[string][]byte{
+		graphTestArmoury: mustMarshalGraph(t, &rgd.RgdFile{
+			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
+			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable},
+		}),
+		// The gauntlet says which structure builds it, in the shape the game
+		// writes it, and carries a weapon.
+		graphTestGauntlet: mustMarshalGraph(t, &rgd.RgdFile{
+			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
+			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
+				rgdTemplateTable("requirement_ext", refRequirementExt,
+					rgdTemplateTable("requirements", refRequirementsList,
+						rgdTemplateTable("required_1", refRequirementSlot,
+							rgdTemplateString("structure_name", `ebps\races\necrons\structures\necron_armoury.lua`),
+						),
+					),
+				),
+			}},
+		}),
+		graphTestLoose: mustMarshalGraph(t, &rgd.RgdFile{
+			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
+			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable},
+		}),
+		graphTestGauss: mustMarshalGraph(t, &rgd.RgdFile{
+			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
+			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable},
+		}),
+		// The ability's modifier table is written three tables deep, under
+		// area_effect.weapon_damage, and its leaf is target_type_name. A rule
+		// that matched only the add-on's shape would miss this one.
+		graphTestWarp: mustMarshalGraph(t, &rgd.RgdFile{
+			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
+			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
+				rgdTemplateTable("area_effect", "",
+					rgdTemplateTable("weapon_damage", "",
+						rgdTemplateTable("modifiers", "",
+							rgdTemplateTable("modifier_01", "",
+								rgdTemplateTable("modifier", "",
+									rgdTemplateString("target_type_name", `necron_gauntlet`),
+								),
+							),
+						),
+					),
+				),
+				rgdTemplateString("ui_hotkey_name", "necron_warp_ability"),
+			}},
+		}),
+		// The add-on names the same unit, one table shallower, and unlocks
+		// itself from a building. Both halves are references, and they mean
+		// different things, which is why the referrer's kind is part of the
+		// rule.
+		graphTestHubris: mustMarshalGraph(t, &rgd.RgdFile{
+			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
+			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
+				rgdTemplateTable("modifiers", "",
+					rgdTemplateTable("modifier_01", "",
+						rgdTemplateString("target_type_name", `necron_gauntlet`),
+					),
+				),
+				rgdTemplateTable("requirements", "",
+					rgdTemplateTable("required_1", "",
+						rgdTemplateString("structure_name", `necron_armoury`),
+					),
+				),
+			}},
+		}),
+	}
+}
+
+func mustMarshalGraph(t *testing.T, f *rgd.RgdFile) []byte {
+	t.Helper()
+	data, err := f.MarshalBinary()
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	return data
+}
+
+// appendBrokenUnit adds a unit that names a weapon with the given reference,
+// in the shape the game writes a weapon in: a hardpoint, its weapon table, and
+// the weapon slot inside it. It is how a fixture gets a reference that points
+// at nothing.
+func appendBrokenUnit(t *testing.T, tree *modtree.ModTree, virtualPath, weaponRef string) {
+	t.Helper()
+	body := mustMarshalGraph(t, &rgd.RgdFile{
+		HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
+		Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
+			rgdTemplateTable("combat_ext", refCombatExt,
+				rgdTemplateTable("hardpoints", refHardpointTable,
+					rgdTemplateTable("hardpoint_01", refHardpointDetails,
+						rgdTemplateTable("weapon_table", refWeaponTable,
+							rgdTemplateTable("weapon_01", refWeaponDetails,
+								rgdTemplatePosition("muzzle"),
+								rgdTemplateString("name_for_this_weapon_choice", ""),
+								rgdTemplatePosition("origin"),
+								rgdTemplateString("weapon", weaponRef),
+							),
+						),
+					),
+				),
+			),
+		}},
+	})
+	writeTreeFile(t, tree, virtualPath, body)
+}
+
+// sleepMillis is the pause a background scan is given between checks.
+func sleepMillis() { time.Sleep(5 * time.Millisecond) }
+
+// newGraphTestMod builds a mod holding the fixture, with every file a real file
+// on disk so that a freeze has something it can move.
+func newGraphTestMod(t *testing.T) *modtree.ModTree {
+	t.Helper()
+	appPath := t.TempDir()
+	tree := &modtree.ModTree{Root: modtree.NewFolder("Data", "Data", nil), AppPath: appPath, FileMapName: "GraphTestMod"}
+	t.Cleanup(tree.Close)
+	for virtual, data := range graphTestRgdFiles(t) {
+		writeTreeFile(t, tree, virtual, data)
+	}
+	tree.SortAll(tree.Root)
+	return tree
+}
+
+// writeTreeFile puts one file into the fixture mod, on disk and in the tree at
+// once, so that the two never disagree about what the mod holds.
+func writeTreeFile(t *testing.T, tree *modtree.ModTree, virtualPath string, data []byte) {
+	t.Helper()
+	rel := strings.TrimPrefix(virtualPath, `Data\`)
+	// The tree path is virtual and uses backslashes on every OS; on Linux a
+	// backslash is an ordinary file name character, so both the disk path and
+	// the segment walk have to split on it explicitly.
+	slashRel := strings.ReplaceAll(rel, `\`, "/")
+	disk := filepath.Join(tree.AppPath, "GraphTestMod", "Data", filepath.FromSlash(slashRel))
+	if err := os.MkdirAll(filepath.Dir(disk), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(disk, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	// The tree looks a file up by walking path segments, so the folders are
+	// created one segment at a time.
+	src := &modtree.FileSource{Kind: modtree.KindThisMod, DiskRoot: filepath.Join(tree.AppPath, "GraphTestMod", "Data")}
+	folder := tree.Root
+	segs := strings.Split(slashRel, "/")
+	for _, seg := range segs[:len(segs)-1] {
+		folder = tree.GetOrCreateFolder(folder, seg, src)
+	}
+	name := segs[len(segs)-1]
+	f := &modtree.TreeFile{Name: name, FullPath: virtualPath, Source: src, DiskPath: disk, SGAFileID: -1}
+	folder.Files = append(folder.Files, f)
+	folder.FileByLower[name] = f
 }

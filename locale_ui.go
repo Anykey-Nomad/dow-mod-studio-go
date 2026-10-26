@@ -1025,3 +1025,39 @@ func (ui *uiState) localeRowAffordances(gtx layout.Context, id, key string) {
 	ui.localeEditHover(gtx, tag, ui.localeRowTooltip(id))
 	ui.pollLocaleEditPress(gtx, tag, id)
 }
+
+// decodeUCSDocument splits a .ucs file's bytes into its lines.
+func decodeUCSDocument(data []byte) []string { return locstrings.DecodeUCSDocument(data) }
+
+// ── more locstrings entry points used by the tests ──────────────────────
+
+func localeOverrideRoot() string                  { return locstrings.LocaleOverrideRoot() }
+func decodeUTF16(b []byte, bigEndian bool) string { return locstrings.DecodeUTF16(b, bigEndian) }
+func parseUCS(data []byte, file string, index map[string]localeEntry) int {
+	return locstrings.ParseUCS(data, file, index)
+}
+func isLocaleID(id string) bool { return locstrings.IsLocaleID(id) }
+func localeSourceFiles(gamePath, moduleDir, lang string) []string {
+	return locstrings.LocaleSourceFiles(gamePath, moduleDir, lang)
+}
+func buildLocaleTable(gamePath, moduleDir, lang string) *localeTable {
+	return locstrings.BuildLocaleTable(gamePath, moduleDir, lang)
+}
+func currentLocaleTable() *localeTable { return locstrings.CurrentLocaleTable() }
+func localeLineNumber(id string) int   { return locstrings.LocaleLineNumber(id) }
+func resetLocaleTables()               { locstrings.ResetLocaleTables() }
+func localeEditPath(projectDir, lang string) (string, error) {
+	return locstrings.LocaleEditPath(projectDir, lang)
+}
+func writeUCSDocument(lines []string) []byte { return locstrings.WriteUCSDocument(lines) }
+func ucsSanitiseText(text string) string     { return locstrings.UcsSanitiseText(text) }
+func ucsSetEntry(lines []string, id, text string) ([]string, int) {
+	return locstrings.UcsSetEntry(lines, id, text)
+}
+func ucsDeleteEntry(lines []string, id string) ([]string, bool) {
+	return locstrings.UcsDeleteEntry(lines, id)
+}
+func readUCSDocument(path string) ([]string, error) { return locstrings.ReadUCSDocument(path) }
+
+// localeState is the live table the tests reset before each case.
+var localeState = &locstrings.LocaleState

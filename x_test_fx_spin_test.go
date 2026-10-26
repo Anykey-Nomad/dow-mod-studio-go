@@ -3,24 +3,19 @@
 package main
 
 import (
-	"dow-mod-studio/internal/fx"
+	"bytes"
 	"math"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"dow-mod-studio/internal/audioplayer"
+	"dow-mod-studio/internal/fda"
+	"dow-mod-studio/internal/fx"
+	"dow-mod-studio/internal/modtree"
 	"github.com/fogleman/fauxgl"
 )
 
-// The necron monolith's crystal is a set of STYLE_RING panels, and each panel's
-// face direction is its SpinZ: crystal_interior.lua carries SpinZ = 1.06667,
-// which is a turn of about 383 degrees. Nothing animates it — it is a fixed
-// orientation of one panel, and it is what tells the six faces of a crystal
-// apart from one another.
-//
-// So the angle in an FX file is a Spin curve, in turns over the effect's life,
-// and it is read per style. This checks that the shipped crystal's own value
-// survives the parse and comes out as the turn it names.
 func TestCrystalRingSpinIsReadFromTheFile(t *testing.T) {
 	const path = `C:/Program Files/Steam/steamapps/common/Dawn of War Definitive Edition/DoWDE/Data/art/fx/necron/monolith/crystal_interior.lua`
 	data, err := os.ReadFile(path)
@@ -198,4 +193,357 @@ func TestRingRibbonGeometryRespondsToTheSpread(t *testing.T) {
 	if full, back := at(1), none; math.Abs(full.Dot(back)-1) > 0.01 {
 		t.Errorf("a whole turn did not return the panel to where it started: dot=%.4f", full.Dot(back))
 	}
+}
+
+// ─── merged from x_test_fx_marker_arrow_test.go ────────────────────────────────────────
+
+func TestMarkerArrowPointsAlongTheMarkerAxis(t *testing.T) {
+	m := arrowTestModel(t)
+	pose := m.RestPose()
+	// The real constructor, so the camera is the one a reader would be looking
+	// through: a viewer built by hand has no field of view and no distance, and
+	// every projection through it divides by zero.
+
+	// Find a marker whose forward is usable, since a marker on no bone has no
+	// direction to show and must report none rather than a made-up one.
+	idx := -1
+	for i := range m.Markers {
+		if _, ok := m.MarkerAxis(i, pose, true); ok {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		t.Skipf("none of the %d markers has a usable forward axis", len(m.Markers))
+	}
+	// The real constructor, so the camera is the one a reader would be looking
+	// through: a viewer built by hand has no field of view and no distance, and
+	// every projection through it divides by zero.
+	v := newModelViewer(m, "arrow_test.whm")
+	v.markerIndex = idx
+	world, ok := m.MarkerWorld(idx, pose, true)
+	if !ok {
+		t.Fatalf("marker %s has an axis but no position", m.Markers[idx].Name)
+	}
+	axis, _ := m.MarkerAxis(idx, pose, true)
+	t.Logf("marker %s at %v with forward %v", m.Markers[idx].Name, world, axis)
+
+	const w, h = 800, 600
+	tip, has := v.markerArrow(w, h)
+	if !has {
+		t.Skipf("marker %s produced no arrow at %dx%d; it may be off screen", m.Markers[idx].Name, w, h)
+	}
+	at, ok := v.markerHighlight(w, h)
+	if !ok {
+		t.Fatalf("the ring has nowhere to draw but the arrow reports %v", tip)
+	}
+
+	// The screen direction from the marker to the tip has to agree with the
+	// marker's own forward axis once that axis is projected, which is what
+	// makes the arrow an arrow and not just a line.
+	view := buildViewMatrix(v.options(w, h))
+	projected := fxProject(view, world.Add(axis.MulScalar(markerArrowWorldLength)), w, h)
+	if projected == nil {
+		t.Skip("the axis end is off screen, so there is nothing to compare against")
+	}
+	gotScreen := fauxgl.Vector{X: tip.X - at.X, Y: tip.Y - at.Y}.Normalize()
+	wantScreen := fauxgl.Vector{X: projected.X - at.X, Y: projected.Y - at.Y}.Normalize()
+	dot := gotScreen.Dot(wantScreen)
+	t.Logf("arrow points %v on screen, the marker's forward projects to %v, dot=%.4f", gotScreen, wantScreen, dot)
+	// A NaN here compares false against everything, so a projection that never
+	// worked would sail through the check below and the test would pass while
+	// proving nothing. It is refused explicitly.
+	if math.IsNaN(dot) || math.IsNaN(gotScreen.X) || math.IsNaN(wantScreen.X) {
+		t.Fatalf("the projection produced %v and %v; the comparison cannot be made", gotScreen, wantScreen)
+	}
+	if dot < 0.99 {
+		t.Errorf("the arrow points %v but the marker's forward projects to %v (dot=%.4f)", gotScreen, wantScreen, dot)
+	}
+}
+
+// A marker with no forward has no arrow to draw. Reporting a direction for one
+// would point at something the effects never use, which is worse than showing
+// nothing: the marker list is what a reader trusts about where a thing aims.
+func TestMarkerArrowIsAbsentWhenThereIsNoAxis(t *testing.T) {
+	m := arrowTestModel(t)
+	// No marker picked at all.
+	v := newModelViewer(m, "arrow_test.whm")
+	v.markerIndex = -1
+	if _, ok := v.markerArrow(100, 100); ok {
+		t.Errorf("an arrow was drawn with no marker picked")
+	}
+	// A marker index outside the model, which is what a stale index from a
+	// model that has since been replaced looks like.
+	v = newModelViewer(m, "arrow_test.whm")
+	v.markerIndex = len(m.Markers) + 5
+	if _, ok := v.markerArrow(100, 100); ok {
+		t.Errorf("an arrow was drawn for marker %d of %d", v.markerIndex, len(m.Markers))
+	}
+}
+
+// A very short arrow must not be drawn as a blob: at less than a pixel the two
+// ends land on top of each other and the head has nowhere to sit, so the arrow
+// would read as a smudge on the model rather than a direction.
+func TestMarkerArrowRefusesAnUnusableLength(t *testing.T) {
+	// The rule the drawing uses, stated on its own: below one pixel of travel
+	// there is no direction to show.
+	const minLength = 1.0
+	for _, length := range []float64{0, 0.001, 0.4, 0.999} {
+		if length >= minLength {
+			t.Errorf("test setup: %.3f should have been refused", length)
+		}
+	}
+	if math.Hypot(1, 0) < minLength {
+		t.Errorf("a one pixel arrow would be refused, but it is the shortest worth drawing")
+	}
+}
+
+// arrowTestModel is the shared box with one marker on its only bone, placed
+// off to one side so that the marker's forward is the direction away from the
+// mesh — which is what modelMarkerForwards scores for, and what a marker at the
+// end of a barrel looks like.
+func arrowTestModel(t *testing.T) *WhmModel {
+	t.Helper()
+	m := fxOverlayTestModel(t)
+	// The marker's own 3x3 is the identity, so its forward is column 1, +y.
+	// Standing it at -y on the bone means the column pointing away from the
+	// mesh is -y rather than +y, which is the case the scoring has to get right.
+	m.Markers = []WhmMarker{{
+		Name:   "marker_muzzle",
+		Parent: "root",
+		Matrix: [9]float32{1, 0, 0, 0, 1, 0, 0, 0, 1},
+		Pos:    [3]float32{0, -1.2, 0},
+	}}
+	return m
+}
+
+// ─── merged from x_test_fx_sound_rate_test.go ────────────────────────────────────────
+
+func TestFxSoundBogusRateIsCorrected(t *testing.T) {
+	cases := []struct {
+		declared int
+		want     int
+		why      string
+	}{
+		{22050, 44100, "declares 22050 but is really 44100"},
+		{44100, 44100, "a correct header is left alone"},
+		{48000, 48000, "48 kHz is left alone"},
+		{11025, 11025, "a rate that was never wrong stays as it is"},
+		{0, 0, "an unreadable header is not guessed at"},
+	}
+	for _, c := range cases {
+		if got := fxSoundDeclaredRate(c.declared); got != c.want {
+			t.Errorf("fxSoundDeclaredRate(%d) = %d, want %d: %s",
+				c.declared, got, c.want, c.why)
+		}
+	}
+}
+
+// The correction has to be exactly a change of rate and nothing else. The
+// decoder was measured to return the same samples at every rate, so a file read
+// at 44100 and the same file read at 22050 differ only in how long they last —
+// and reading it at the corrected rate is what halves that.
+func TestFxSoundRateCorrectionOnlyChangesDuration(t *testing.T) {
+	path := `cmd/audiotest/land (1).fda`
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("no reference file: %v", err)
+	}
+	file, err := fda.ParseFDAReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	pcm, _, err := fda.DecodeFDAToPCMAtRate(file, fxSoundRealRate)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	bad := float64(len(pcm)) / float64(fxSoundBogusRate)
+	good := float64(len(pcm)) / float64(fxSoundRealRate)
+	t.Logf("%s: %d frames -> %.2f s at the declared %d Hz, %.2f s at the real %d Hz",
+		filepath.Base(path), len(pcm), bad, fxSoundBogusRate, good, fxSoundRealRate)
+	if ratio := bad / good; ratio < 1.99 || ratio > 2.01 {
+		t.Errorf("declared rate plays %.3fx slower, not the ~2x that was heard", ratio)
+	}
+	// The decoder must not be doing anything rate-dependent behind this,
+	// because the whole correction assumes the samples do not change.
+	again, _, err := fda.DecodeFDAToPCMAtRate(file, fxSoundBogusRate)
+	if err != nil {
+		t.Fatalf("decode at declared rate: %v", err)
+	}
+	if len(again) != len(pcm) {
+		t.Errorf("decoding at %d Hz gave %d frames and at %d Hz gave %d; the samples are supposed to be the same",
+			fxSoundBogusRate, len(again), fxSoundRealRate, len(pcm))
+	}
+}
+
+// ─── merged from x_test_fx_markers_test.go ────────────────────────────────────────
+
+func TestMarkerSpaceSettledByBounds(t *testing.T) {
+	checked := 0
+	for _, name := range []string{"Necron_Summoning_Core.whm", "necron_monolith.whm", "necron_tomb_sviva.whm"} {
+		raw := findDowFile(name)
+		if raw == nil {
+			continue
+		}
+		model, err := ParseWhmModel(raw)
+		if err != nil {
+			t.Fatalf("ParseWhmModel(%s): %v", name, err)
+		}
+		if len(model.Markers) == 0 {
+			t.Logf("%s: no markers", name)
+			continue
+		}
+		checked++
+		pose := model.RestPose()
+		min := vec3From(model.BoundMin)
+		max := vec3From(model.BoundMax)
+		// Markers such as muzzles legitimately stick out a little.
+		grow := max.Sub(min).MulScalar(0.2)
+		min = min.Sub(grow)
+		max = max.Add(grow)
+		inside := func(p fauxgl.Vector) bool {
+			return p.X >= min.X && p.X <= max.X &&
+				p.Y >= min.Y && p.Y <= max.Y &&
+				p.Z >= min.Z && p.Z <= max.Z
+		}
+		var inBoneLocal, inBindSpace int
+		t.Logf("%s: %d markers, bounds (%.1f %.1f %.1f)..(%.1f %.1f %.1f)",
+			name, len(model.Markers), min.X, min.Y, min.Z, max.X, max.Y, max.Z)
+		for i, mk := range model.Markers {
+			pBone, _ := model.MarkerWorld(i, pose, true)
+			pBind, _ := model.MarkerWorld(i, pose, false)
+			if inside(pBone) {
+				inBoneLocal++
+			}
+			if inside(pBind) {
+				inBindSpace++
+			}
+			if i < 8 {
+				t.Logf("  %-24s parent=%-16s pos=(%.2f %.2f %.2f) boneLocal=(%.2f %.2f %.2f)%v bind=(%.2f %.2f %.2f)%v",
+					mk.Name, mk.Parent, mk.Pos[0], mk.Pos[1], mk.Pos[2],
+					pBone.X, pBone.Y, pBone.Z, inside(pBone),
+					pBind.X, pBind.Y, pBind.Z, inside(pBind))
+			}
+		}
+		t.Logf("%s: inside bounds: bone-local %d/%d, bind-space %d/%d",
+			name, inBoneLocal, len(model.Markers), inBindSpace, len(model.Markers))
+		// The game reads a marker in its parent bone's frame; a bind space
+		// reading lands almost every marker outside the model it belongs to.
+		if inBindSpace > inBoneLocal {
+			t.Errorf("%s: bind-space reading fits better (%d vs %d) — marker space needs rethinking",
+				name, inBindSpace, inBoneLocal)
+		}
+	}
+	if checked == 0 {
+		t.Skip("no installed model with markers found")
+	}
+}
+
+// ─── merged from x_test_fx_sound_e2e_test.go ────────────────────────────────────────
+
+func TestFxSoundDecodeForPlaybackProducesRightDuration(t *testing.T) {
+	name := "land (1).fda"
+	src := filepath.Join("cmd", "audiotest", name)
+	if _, err := os.Stat(src); err != nil {
+		t.Skipf("no reference file: %v", err)
+	}
+	// The conversion takes the mod tree, so the file is read the way the
+	// preview reads it. nil tree means only the on-disk roots are searched, a
+	// root is joined with the sound path, and a sound path is always rooted at
+	// the game's sound folder because whe.SoundPathCleans prefixes it. So the
+	// reference file is copied into a sound folder under a temporary root,
+	// which is the shape the preview looks for.
+	root := t.TempDir()
+	soundDir := filepath.Join(root, "sound")
+	if err := os.MkdirAll(soundDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("read reference: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(soundDir, name), data, 0o644); err != nil {
+		t.Fatalf("stage reference: %v", err)
+	}
+	s, err := fxSoundDecodeForPlayback(nil, []string{root}, name)
+	if err != nil {
+		t.Fatalf("decode for playback: %v", err)
+	}
+	if s.Info.SampleRate != audioplayer.SampleRate || s.Info.Channels != audioplayer.Channels {
+		t.Errorf("sample came out %d Hz/%d ch, want the context's %d Hz/%d ch",
+			s.Info.SampleRate, s.Info.Channels, audioplayer.SampleRate, audioplayer.Channels)
+	}
+	frames := len(s.PCM) / audioplayer.Channels
+	got := float64(frames) / float64(audioplayer.SampleRate)
+	// At the declared 22050 this file would last 35.2 s. At its real 44100,
+	// converted up to the 48 kHz context, it is 17.6 s.
+	t.Logf("%s: %d frames at %d Hz = %.2f s", name, frames, s.Info.SampleRate, got)
+	if got > 20 {
+		t.Errorf("sample lasts %.2f s, which is the half-speed reading at the declared 22050 Hz", got)
+	}
+	if got < 16 {
+		t.Errorf("sample lasts %.2f s, too short for the 17.6 s the real rate implies", got)
+	}
+}
+
+// ─── merged from x_test_fx_sound_model_load_test.go ────────────────────────────────────────
+
+func TestLoadModelSoundsNeedsNoEffects(t *testing.T) {
+	if testDXP3Module == "" {
+		t.Skip("no module path")
+	}
+	tree, err := modtree.BuildModTree(testDXP3Module, "English")
+	if err != nil {
+		t.Skipf("BuildModTree: %v", err)
+	}
+	defer tree.Close()
+	// Find a model that declares sounds at all, so the test is about loading
+	// them rather than about a model that happens to be silent.
+	var files []string
+	modtree.SearchWalk(tree.Root, func(f *modtree.TreeFile) {
+		if len(files) < 40 && hasWheExtension(f.Name) {
+			files = append(files, f.FullPath)
+		}
+	})
+	if len(files) == 0 {
+		t.Skip("no models with a .whe")
+	}
+	loaded := 0
+	for _, f := range files {
+		res := loadModelSounds(tree, f)
+		if res.err != nil {
+			continue
+		}
+		if len(res.soundBundles) > 0 {
+			loaded++
+			t.Logf("%s: %d sound events, %d samples decoded, %d timelines",
+				f, len(res.soundBundles), res.sounds.Len(), len(res.timelines))
+		}
+		// The point of the split: loading sounds must not have resolved a
+		// single effect, or the frame would be doing the button's work early.
+		if len(res.effects) != 0 || len(res.textures) != 0 {
+			t.Errorf("%s: loading sounds also resolved %d effects and %d textures",
+				f, len(res.effects), len(res.textures))
+		}
+	}
+	if loaded == 0 {
+		t.Logf("no sounds declared by any of the %d models checked", len(files))
+	} else {
+		t.Logf("%d of %d models declared sounds", loaded, len(files))
+	}
+}
+
+func hasWheExtension(name string) bool {
+	lower := toLowerASCII(name)
+	return len(lower) > 4 && lower[len(lower)-4:] == ".whe"
+}
+
+func toLowerASCII(s string) string {
+	b := []byte(s)
+	for i := range b {
+		if b[i] >= 'A' && b[i] <= 'Z' {
+			b[i] += 'a' - 'A'
+		}
+	}
+	return string(b)
 }

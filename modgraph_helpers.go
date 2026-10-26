@@ -65,3 +65,24 @@ func resolveCandidates(rel, stem string) []string { return modgraph.ResolveCandi
 func refStem(ref string) string { return modgraph.RefStem(ref) }
 
 func dedupeStrings(in []string) []string { return modgraph.DedupeStrings(in) }
+
+// ── roles ───────────────────────────────────────────────────────────────────
+
+const (
+	roleWeapon         = modgraph.RoleWeapon
+	roleAbility        = modgraph.RoleAbility
+	roleAddon          = modgraph.RoleAddon
+	roleResearch       = modgraph.RoleResearch
+	roleSquad          = modgraph.RoleSquad
+	roleBuiltBy        = modgraph.RoleBuiltBy
+	roleNeedsAddon     = modgraph.RoleNeedsAddon
+	roleNeedsResearch  = modgraph.RoleNeedsResearch
+	roleBlueprint      = modgraph.RoleBlueprint
+	roleRelocation     = modgraph.RoleRelocation
+	roleEffect         = modgraph.RoleEffect
+	roleModifies       = modgraph.RoleModifies
+	roleSpawns         = modgraph.RoleSpawns
+	roleProjectile     = modgraph.RoleProjectile
+	roleNeedsStructure = modgraph.RoleNeedsStructure
+	roleExcludesAddon  = modgraph.RoleExcludesAddon
+)
