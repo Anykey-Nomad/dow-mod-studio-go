@@ -2,6 +2,7 @@ package main
 
 import (
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/projects"
 	"dow-mod-studio/internal/rgd"
 	"encoding/json"
 	"fmt"
@@ -498,4 +499,26 @@ func setRgdString(e *rgd.RgdEntry, value string) error {
 		return fmt.Errorf("%s is not a text field, so it cannot hold a reference", e.Name)
 	}
 	return nil
+}
+
+// ── project folders (internal/projects) ──────────────────────────────────────
+//
+// Where a module's project tree lives under the program's data folder is
+// internal/projects' business; the freezer writes into it and keeps the names
+// it always called them by.
+
+const (
+	projectsDirName = projects.ProjectsDirName
+	unitsDirName    = projects.UnitsDirName
+)
+
+func programDataDir() (string, error)           { return projects.ProgramDataDir() }
+func projectsDir() (string, error)              { return projects.ProjectsDir() }
+func sanitizeFolderName(name string) string     { return projects.SanitizeFolderName(name) }
+func projectDir(modName string) (string, error) { return projects.ProjectDir(modName) }
+func modProjectName(tree *modtree.ModTree, modulePath string) string {
+	return projects.ModProjectName(tree, modulePath)
+}
+func ensureProjectDirs(tree *modtree.ModTree, modulePath string) (string, error) {
+	return projects.EnsureProjectDirs(tree, modulePath)
 }

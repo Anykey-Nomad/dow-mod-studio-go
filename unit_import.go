@@ -337,7 +337,7 @@ func (ui *uiState) unitImportApply(v *modelViewer, replace bool) (added, replace
 			if frameAt(float64(st.PosKey[i].Time), sa.NumFrames) != frame {
 				continue
 			}
-			keys.pos = append(keys.pos, st.PosKey[i])
+			keys.Pos = append(keys.Pos, st.PosKey[i])
 			a, r := writeImportPos(t, v, frame, st.PosKey[i].V, replace)
 			added += a
 			replaced += r
@@ -347,7 +347,7 @@ func (ui *uiState) unitImportApply(v *modelViewer, replace bool) (added, replace
 			if frameAt(float64(st.RotKey[i].Time), sa.NumFrames) != frame {
 				continue
 			}
-			keys.rot = append(keys.rot, st.RotKey[i])
+			keys.Rot = append(keys.Rot, st.RotKey[i])
 			a, r := writeImportRot(t, v, frame, st.RotKey[i].V, replace)
 			added += a
 			replaced += r
@@ -358,11 +358,11 @@ func (ui *uiState) unitImportApply(v *modelViewer, replace bool) (added, replace
 	if added+replaced > 0 {
 		ui.unitModelWhmDirty = true
 		ui.unitBoneKeyErr = ""
-		ui.unitClips.push(clipEntry{
-			kind:  clipImportKeys,
-			label: fmt.Sprintf("%d key(s) from %s", len(keys.pos)+len(keys.rot), filepath.Base(ui.unitImpPath)),
-			at:    time.Now(),
-			keys:  &keys,
+		ui.unitClips.Push(clipEntry{
+			Kind:  clipImportKeys,
+			Label: fmt.Sprintf("%d key(s) from %s", len(keys.Pos)+len(keys.Rot), filepath.Base(ui.unitImpPath)),
+			At:    time.Now(),
+			Keys:  &keys,
 		})
 		ui.fillBoneKeyFields(v, 0)
 		ui.fillBoneKeyFields(v, 1)

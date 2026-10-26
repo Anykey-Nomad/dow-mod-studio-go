@@ -1,6 +1,7 @@
 package main
 
 import (
+	"dow-mod-studio/internal/cliphist"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -296,3 +297,26 @@ func (ui *uiState) restoreSavedTab(saved persistedTab) {
 		ui.openTextFile(saved.Path)
 	}
 }
+
+// ── clipboard history (internal/cliphist) ────────────────────────────────────
+//
+// What the copy buffers of the timeline, the keyframe tracks and the action
+// list remember lives in internal/cliphist; the editors keep the names they
+// paste and pick with.
+
+type (
+	clipKind      = cliphist.ClipKind
+	clipEntry     = cliphist.ClipEntry
+	clipHistory   = cliphist.ClipHistory
+	boneKeyClip   = cliphist.BoneKeyClip
+	wheEventClip  = cliphist.WheEventClip
+	wheActionClip = cliphist.WheActionClip
+)
+
+const (
+	clipEvents       = cliphist.ClipEvents
+	clipBoneKeys     = cliphist.ClipBoneKeys
+	clipImportKeys   = cliphist.ClipImportKeys
+	clipActions      = cliphist.ClipActions
+	clipHistoryLimit = cliphist.ClipHistoryLimit
+)

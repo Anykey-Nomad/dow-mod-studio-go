@@ -1,6 +1,7 @@
 package main
 
 import (
+	"dow-mod-studio/internal/modifiers"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"fmt"
@@ -1100,3 +1101,8 @@ func kindLabel(k modtree.SourceKind) string {
 		return "required"
 	}
 }
+
+// heldModifiers reads the live state of the modifier keys straight from the
+// OS, for platforms where the window backend does not report it in events.
+// The implementation lives in internal/modifiers.
+func heldModifiers() key.Modifiers { return modifiers.HeldModifiers() }

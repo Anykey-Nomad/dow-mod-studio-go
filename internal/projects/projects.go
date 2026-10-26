@@ -1,4 +1,4 @@
-package main
+package projects
 
 import (
 	"dow-mod-studio/internal/modtree"
@@ -23,14 +23,14 @@ import (
 // out up front rather than on first use.
 
 const (
-	projectsDirName = "Projects"
+	ProjectsDirName = "Projects"
 	// unitsDirName is the subfolder every project's unit data goes into.
-	unitsDirName = "Units"
+	UnitsDirName = "Units"
 )
 
 // programDataDir is the program's own folder, the parent of both the recycle
 // bin and the projects tree.
-func programDataDir() (string, error) {
+func ProgramDataDir() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -39,12 +39,12 @@ func programDataDir() (string, error) {
 }
 
 // projectsDir is the root of the per-mod project tree.
-func projectsDir() (string, error) {
-	data, err := programDataDir()
+func ProjectsDir() (string, error) {
+	data, err := ProgramDataDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(data, projectsDirName), nil
+	return filepath.Join(data, ProjectsDirName), nil
 }
 
 // sanitizeFolderName turns a mod name into something safe to use as a
@@ -52,7 +52,7 @@ func projectsDir() (string, error) {
 // guaranteed to be a valid path component: it can hold a slash, a colon or a
 // reserved character, and two different names must not collapse onto the same
 // folder.
-func sanitizeFolderName(name string) string {
+func SanitizeFolderName(name string) string {
 	name = strings.TrimSpace(name)
 	// Drop any directory part: only the last component is the mod's name.
 	if i := strings.LastIndexAny(name, `\/`); i >= 0 {
@@ -89,7 +89,7 @@ func sanitizeFolderName(name string) string {
 // modProjectName is the folder name a module gets. The tree's own name is used
 // because it is what the rest of the app already treats as the mod's identity;
 // the module file's path is the fallback for a tree that never got one.
-func modProjectName(tree *modtree.ModTree, modulePath string) string {
+func ModProjectName(tree *modtree.ModTree, modulePath string) string {
 	if tree != nil && tree.FileMapName != "" {
 		return tree.FileMapName
 	}
@@ -100,12 +100,12 @@ func modProjectName(tree *modtree.ModTree, modulePath string) string {
 }
 
 // projectDir is one mod's folder, without creating anything.
-func projectDir(modName string) (string, error) {
-	root, err := projectsDir()
+func ProjectDir(modName string) (string, error) {
+	root, err := ProjectsDir()
 	if err != nil {
 		return "", err
 	}
-	name := sanitizeFolderName(modName)
+	name := SanitizeFolderName(modName)
 	if name == "" {
 		return "", fmt.Errorf("empty project name")
 	}
@@ -114,13 +114,13 @@ func projectDir(modName string) (string, error) {
 
 // ensureProjectDirs creates Projects\<mod>\Units and returns the mod's folder.
 // It is safe to call on every module open: an existing tree is left alone.
-func ensureProjectDirs(tree *modtree.ModTree, modulePath string) (string, error) {
-	modName := modProjectName(tree, modulePath)
-	dir, err := projectDir(modName)
+func EnsureProjectDirs(tree *modtree.ModTree, modulePath string) (string, error) {
+	modName := ModProjectName(tree, modulePath)
+	dir, err := ProjectDir(modName)
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(dir, unitsDirName), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, UnitsDirName), 0755); err != nil {
 		return "", err
 	}
 	return dir, nil

@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package modifiers
 
 import (
 	"gioui.org/io/key"
@@ -15,30 +15,30 @@ import (
 // holding Ctrl while the mouse goes down, this says so, which is all a
 // Ctrl+click needs. x/sys/windows exposes no GetKeyState, hence the proc.
 var (
-	user32          = windows.NewLazySystemDLL("user32.dll")
-	procGetKeyState = user32.NewProc("GetKeyState")
+	User32          = windows.NewLazySystemDLL("User32.dll")
+	ProcGetKeyState = User32.NewProc("GetKeyState")
 )
 
 // winKeyState reports whether the virtual key is down right now.
-func winKeyState(vk uintptr) bool {
-	c, _, _ := procGetKeyState.Call(vk)
+func WinKeyState(vk uintptr) bool {
+	c, _, _ := ProcGetKeyState.Call(vk)
 	// GetKeyState returns a SHORT: the high bit of the low 16 bits means down.
 	return int16(c&0xffff) < 0
 }
 
 // heldModifiers reads the live state of the modifier keys straight from the OS.
-func heldModifiers() key.Modifiers {
+func HeldModifiers() key.Modifiers {
 	var m key.Modifiers
-	if winKeyState(windows.VK_CONTROL) {
+	if WinKeyState(windows.VK_CONTROL) {
 		m |= key.ModCtrl
 	}
-	if winKeyState(windows.VK_SHIFT) {
+	if WinKeyState(windows.VK_SHIFT) {
 		m |= key.ModShift
 	}
-	if winKeyState(windows.VK_MENU) {
+	if WinKeyState(windows.VK_MENU) {
 		m |= key.ModAlt
 	}
-	if winKeyState(windows.VK_LWIN) || winKeyState(windows.VK_RWIN) {
+	if WinKeyState(windows.VK_LWIN) || WinKeyState(windows.VK_RWIN) {
 		m |= key.ModSuper
 	}
 	return m
