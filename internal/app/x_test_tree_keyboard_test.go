@@ -37,7 +37,7 @@ func TestAClickLeavesTheTreeOnTheKeyboard(t *testing.T) {
 	f, row := treeWindow(t)
 	f.ui.KeyboardArea = "rgd"
 	clickTreeRow(t, f, row)
-	if !f.TreeHasKeyboard(ui) {
+	if !TreeHasKeyboard(f.ui) {
 		t.Fatalf("a click on row %d did not give the file tree the keyboard", row)
 	}
 	if got, want := f.ui.SelectedTreePath, f.ui.VisibleNodes[row].FullPath; got != want {
@@ -59,7 +59,7 @@ func TestARightPressGivesTheTreeTheKeyboardToo(t *testing.T) {
 	if !f.ui.ContextMenuVisible {
 		t.Skip("the right press opened no file menu, so the tree was not under the pointer")
 	}
-	if !f.TreeHasKeyboard(ui) {
+	if !TreeHasKeyboard(f.ui) {
 		t.Error("a right press in the file tree left the keyboard to the middle tree")
 	}
 }
@@ -96,7 +96,7 @@ func TestEnterAfterAClickOpensTheSelectedRow(t *testing.T) {
 		t.Skipf("the row below the one under test is %q, which is not a file", want.Name)
 	}
 	keyFrame(f, key.NameReturn)
-	tab := f.ActiveTab(ui)
+	tab := ActiveTab(f.ui)
 	if tab == nil {
 		t.Fatalf("Enter after a click opened no tab; the status line reads %q", f.ui.StatusText)
 	}
@@ -161,7 +161,7 @@ func managedModWindow(t *testing.T) (*windowFrame, int, int, string) {
 func TestDeleteAfterAClickAsksBeforeTakingAnything(t *testing.T) {
 	f, row, _, diskPath := managedModWindow(t)
 	clickTreeRow(t, f, row)
-	if !f.CanDeleteCurrentModFile(ui, f.ui.SelectedPath) {
+	if !CanDeleteCurrentModFile(f.ui, f.ui.SelectedPath) {
 		t.Fatalf("%q is not a file of the mod, so the key has nothing it may delete", f.ui.SelectedPath)
 	}
 	keyFrame(f, key.NameDeleteForward)

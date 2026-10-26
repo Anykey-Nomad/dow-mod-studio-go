@@ -3,7 +3,6 @@
 package app
 
 import (
-	"encoding/binary"
 	"image"
 	"image/color"
 	"math"

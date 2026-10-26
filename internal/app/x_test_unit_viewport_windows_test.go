@@ -86,8 +86,8 @@ func unitViewportLoad(t *testing.T, ui *uiState, f *windowFrame, quiet bool) boo
 func unitViewportFrames(f *windowFrame, n int) {
 	for i := 0; i < n; i++ {
 		f.gtx.Now = time.Now()
-		f.PollUnitModel(ui)
-		f.PollModelJobs(ui)
+		PollUnitModel(f.ui)
+		PollModelJobs(f.ui)
 		f.frame()
 	}
 }
@@ -683,8 +683,8 @@ func TestSquadColumnRendersAfterTheScan(t *testing.T) {
 
 	// After the scan, for a unit that is known to be in a squad.
 	ui2 := &uiState{ModTree: tree}
-	ui2.StartUnitSquadScan(tree)
-	defer ui2.StopUnitSquadScan()
+	StartUnitSquadScan(ui2, tree)
+	defer StopUnitSquadScan(ui2)
 	runSquadScanToCompletion(t, ui2)
 	raceIdx, unitIdx := firstUnitInASquad(t, ui2)
 	if raceIdx < 0 {

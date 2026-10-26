@@ -205,7 +205,7 @@ func TestClassicOETreeJumpIndex(t *testing.T) {
 }
 
 func TestClassicOEDoubleClick(t *testing.T) {
-	var ui uiState
+	ui := &uiState{}
 	if ClassicOEDoubleClick(ui, "motion:phase_in") {
 		t.Fatal("the first press reported a double")
 	}

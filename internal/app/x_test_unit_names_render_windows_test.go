@@ -89,7 +89,7 @@ func newUnitRowFixture(t *testing.T) unitRowFixture {
 func (f unitRowFixture) nameUnit(t *testing.T, id, text string) {
 	t.Helper()
 	f.ui.UnitNames = map[string]string{strings.ToLower(f.unit.Path): id}
-	f.TestLocaleTable(ui, t, id, text)
+	installLocaleTableForTest(f.ui, t, id, text)
 }
 
 // unitRowTextPixels is how many pixels a change of words on these rows is worth.
@@ -140,7 +140,7 @@ func TestUnitRowsFallBackToTheFileName(t *testing.T) {
 	const w, h = 900, 700
 
 	f.ui.UnitNames = nil
-	f.TestLocaleTable(ui, t, "900001", "Qqzz First Localised Name")
+	installLocaleTableForTest(f.ui, t, "900001", "Qqzz First Localised Name")
 	byFileName, box := renderUnitDropdown(t, f.ui, w, h)
 
 	f.nameUnit(t, "900001", "Qqzz First Localised Name")

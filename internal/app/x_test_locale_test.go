@@ -469,7 +469,7 @@ func TestLocaleSurvivesASaveAndLoad(t *testing.T) {
 	}
 
 	restored := newLocaleTestUI()
-	restored.ApplyPersistedSettings(loaded)
+	ApplyPersistedSettings(restored, loaded)
 	if restored.Locale != "Russian" {
 		t.Errorf("restored locale = %q, want Russian", restored.Locale)
 	}

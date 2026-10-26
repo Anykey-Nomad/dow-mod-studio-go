@@ -231,7 +231,7 @@ func tabBarPointerUI(t *testing.T) (*uiState, *pointerFrame) {
 	)
 	EnsureTabClicks(ui)
 	ui.TabSel = 1
-	f := newPointerFrame(ui, 900, 600, func(gtx layout.Context) { LayoutTabBar(ui, gtx) }, ui.HandleTabBarInput)
+	f := newPointerFrame(ui, 900, 600, func(gtx layout.Context) { LayoutTabBar(ui, gtx) }, func(gtx layout.Context) { HandleTabBarInput(ui, gtx) })
 	f.frame()
 	f.frame()
 	return ui, f

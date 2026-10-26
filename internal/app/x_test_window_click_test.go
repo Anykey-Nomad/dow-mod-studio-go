@@ -33,8 +33,8 @@ type windowFrame struct {
 }
 
 func (f *windowFrame) frame() {
-	f.HandleInput(ui, f.gtx)
-	f.Layout(ui, f.gtx)
+	HandleInput(f.ui, f.gtx)
+	Layout(f.ui, f.gtx)
 	f.r.Frame(&f.ops)
 }
 
@@ -152,7 +152,7 @@ func TestClickOnATreeRowOpensTheFileInAWholeWindow(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: at},
 	)
 	f.frame()
-	tab := f.ActiveTab(ui)
+	tab := ActiveTab(f.ui)
 	if tab == nil {
 		t.Fatalf("a click on row %d at %v opened no tab; the status line reads %q", row, f32.Point(at), f.ui.StatusText)
 	}

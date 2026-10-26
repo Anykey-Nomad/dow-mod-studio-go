@@ -243,7 +243,7 @@ func TestLocaleRowShowsTheTextNotTheId(t *testing.T) {
 	resetLocales(t)
 	ui := newUI(unitTestTheme())
 	ui.Locale = "English"
-	TestLocaleTable(ui, t, "705754", "Necron Lord")
+	installLocaleTableForTest(ui, t, "705754", "Necron Lord")
 
 	entry := &rgd.RgdEntry{Name: "screen_name_id", Type: rgd.RgdTypeWString, WStrVal: "$705754"}
 	const w, h = 420, 60
@@ -253,7 +253,7 @@ func TestLocaleRowShowsTheTextNotTheId(t *testing.T) {
 	})
 	// The same row with the string table knowing nothing: it falls back to
 	// naming what is missing, which is a different set of words.
-	TestLocaleTable(ui, t, "1", "One")
+	installLocaleTableForTest(ui, t, "1", "One")
 	withoutText := renderTo(t, w, h, func(gtx layout.Context) {
 		LocaleEditableRow(ui, gtx, "Screen name", "705754", entry, "k")
 	})
@@ -273,7 +273,7 @@ func TestLocaleRowTooltipCarriesTheId(t *testing.T) {
 	resetLocales(t)
 	ui := newUI(unitTestTheme())
 	ui.Locale = "English"
-	TestLocaleTable(ui, t, "705754", "Necron Lord")
+	installLocaleTableForTest(ui, t, "705754", "Necron Lord")
 
 	tip := LocaleRowTooltip(ui, "705754")
 	if !strings.Contains(tip, "$705754") {
@@ -302,7 +302,7 @@ func TestLocaleEditDialogDrawsItsText(t *testing.T) {
 	resetLocales(t)
 	ui := newUI(unitTestTheme())
 	ui.Locale = "English"
-	TestLocaleTable(ui, t, "705754", "Necron Lord")
+	installLocaleTableForTest(ui, t, "705754", "Necron Lord")
 	ui.ProjectDir = t.TempDir()
 
 	closed := renderTo(t, 900, 700, func(gtx layout.Context) {

@@ -2071,7 +2071,7 @@ func TestUnitLabelUsesTheLocalisedText(t *testing.T) {
 	lord := testUnitEntry("necron_lord")
 	ui := newUI(unitTestTheme())
 	ui.UnitNames = map[string]string{strings.ToLower(lord.Path): "705754"}
-	TestLocaleTable(ui, t, "705754", "Necron Lord")
+	installLocaleTableForTest(ui, t, "705754", "Necron Lord")
 
 	got := UnitLabel(ui, lord)
 	if got != "Necron Lord" {
@@ -2100,7 +2100,7 @@ func TestUnitLabelFallsBackToTheFileName(t *testing.T) {
 			ui.UnitNames = tc.ids
 			// A table that knows nothing, so the third case is a real miss
 			// rather than a missing table.
-			TestLocaleTable(ui, t, "1", "One")
+			installLocaleTableForTest(ui, t, "1", "One")
 
 			if got := UnitLabel(ui, lord); got != "necron_lord" {
 				t.Errorf("the list reads %q, want the file name", got)
@@ -2216,7 +2216,7 @@ func waitForUnitNames(t *testing.T, ui *uiState) {
 // testLocaleTable installs a string table holding exactly the ids given, so a
 // test can say what the language knows without reading a .ucs. The tables are
 // package level state, so they are reset afterwards.
-func TestLocaleTable(ui *uiState, t *testing.T, entries ...string) {
+func installLocaleTableForTest(ui *uiState, t *testing.T, entries ...string) {
 	t.Helper()
 	resetLocales(t)
 	if len(entries)%2 != 0 {

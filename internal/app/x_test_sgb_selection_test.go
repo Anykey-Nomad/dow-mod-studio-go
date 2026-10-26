@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"dow-mod-studio/internal/3d_engine"
-	"dow-mod-studio/internal/3d_viewer"
 	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
