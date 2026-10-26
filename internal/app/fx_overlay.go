@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/fxscene"
 	"dow-mod-studio/internal/audioplayer"
 	"dow-mod-studio/internal/fda"
 	"dow-mod-studio/internal/fx"
@@ -71,61 +72,33 @@ func paintFxOverlay(gtx layout.Context, overlay *image.RGBA, area image.Point) {
 // so a particle keeps its world size as the camera moves rather than being
 // given a fixed size in pixels.
 
-// fxGpuScene is one frame's particles, grouped by the map they read: a draw
-// covers every particle sharing one texture. It is built on the CPU, where
-// the simulation runs, and drawn by whichever renderer has the frame.
-type fxGpuScene struct {
-	Groups []fxGpuGroup
-	// Textures is the decoded map of each group, keyed as the groups are:
-	// a renderer that draws the scene uploads what it finds here.
-	Textures map[string]*image.RGBA
-}
-
-type fxGpuGroup struct {
-	Texture  string
-	Additive bool
-	// Origin is where the effect plays: every sprite of the group is
-	// placed at its own offset from it.
-	Origin  [3]float64
-	Sprites []fx.Sprite
-	// Beams are the ribbons this group draws. Their corners are already in
-	// model space, so Origin does not apply to them: a beam is stretched
-	// between two markers rather than placed at one.
-	Beams []fxGpuBeam
-}
-
-// fxGpuBeam is one ribbon and the eye it is turned towards. The tessellation
-// depends on the camera, so the eye travels with the ribbon.
-type fxGpuBeam struct {
-	Ribbon fx.BeamRibbon
-	Eye    fauxgl.Vector
-}
-
-// fxSceneLight is the frame-wide light sent to the FX vertex shader, so
-// sprites and ribbons share one lighting setup rather than CPU shading every
-// particle separately.
-type fxSceneLight struct {
-	dir     fauxgl.Vector // towards the light, in model space
-	ambient float64
-	diffuse float64
-}
+// The frame's particle scene and its light live in internal/app/fxscene, a
+// leaf the overlay builds for and both renderers read from. The names below
+// are aliases, so the builder, the GPU path and the tests keep the names they
+// were written with.
+type (
+	fxGpuScene   = fxscene.Scene
+	fxGpuGroup   = fxscene.Group
+	fxGpuBeam    = fxscene.Beam
+	fxSceneLight = fxscene.Light
+)
 
 // fxSceneLightOf is the light a render request asks for, with the same
 // defaults the model shader falls back on.
 func fxSceneLightOf(opts RenderOptions) fxSceneLight {
 	l := fxSceneLight{
-		dir:     opts.Light,
-		ambient: opts.Ambient,
-		diffuse: opts.Diffuse,
+		Dir:     opts.Light,
+		Ambient: opts.Ambient,
+		Diffuse: opts.Diffuse,
 	}
-	if l.dir == (fauxgl.Vector{}) {
-		l.dir = fauxgl.Vector{X: 0.35, Y: -0.5, Z: 0.78}
+	if l.Dir == (fauxgl.Vector{}) {
+		l.Dir = fauxgl.Vector{X: 0.35, Y: -0.5, Z: 0.78}
 	}
-	if n := l.dir.Length(); n > 0 {
-		l.dir = l.dir.Normalize()
+	if n := l.Dir.Length(); n > 0 {
+		l.Dir = l.Dir.Normalize()
 	}
-	if l.ambient == 0 && l.diffuse == 0 {
-		l.ambient, l.diffuse = 0.28, 0.72
+	if l.Ambient == 0 && l.Diffuse == 0 {
+		l.Ambient, l.Diffuse = 0.28, 0.72
 	}
 	return l
 }

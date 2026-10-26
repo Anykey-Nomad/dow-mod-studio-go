@@ -667,8 +667,8 @@ func (r *fxVkRenderer) prepare(pass *gpu.VulkanPass, scene *fxGpuScene, overlay 
 	}
 	r.frameFloats[16], r.frameFloats[17], r.frameFloats[18], r.frameFloats[19] = float32(right.X), float32(right.Y), float32(right.Z), 1
 	r.frameFloats[20], r.frameFloats[21], r.frameFloats[22], r.frameFloats[23] = float32(up.X), float32(up.Y), float32(up.Z), 0
-	r.frameFloats[24], r.frameFloats[25], r.frameFloats[26], r.frameFloats[27] = float32(light.dir.X), float32(light.dir.Y), float32(light.dir.Z), float32(light.ambient)
-	r.frameFloats[28] = float32(light.diffuse)
+	r.frameFloats[24], r.frameFloats[25], r.frameFloats[26], r.frameFloats[27] = float32(light.Dir.X), float32(light.Dir.Y), float32(light.Dir.Z), float32(light.Ambient)
+	r.frameFloats[28] = float32(light.Diffuse)
 	for i, v := range r.frameFloats {
 		binary.LittleEndian.PutUint32(r.frameBytes[i*4:], math.Float32bits(v))
 	}
