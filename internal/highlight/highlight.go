@@ -1,4 +1,4 @@
-package main
+package highlight
 
 import (
 	"image"
@@ -13,43 +13,48 @@ import (
 	"gioui.org/widget/material"
 )
 
-const syntaxGutterDp = 42
+const SyntaxGutterDp = 42
 
-type syntaxKind uint8
-
-const (
-	syntaxPlain syntaxKind = iota
-	syntaxComment
-	syntaxString
-	syntaxNumber
-	syntaxKeyword
-	syntaxDirective
-	syntaxOperator
-)
-
-type syntaxToken struct {
-	start int
-	end   int
-	text  string
-	kind  syntaxKind
+// rgb packs a 0xRRGGBB palette entry into the NRGBA the painter wants.
+func rgb(hex uint32) color.NRGBA {
+	return color.NRGBA{R: uint8(hex >> 16), G: uint8(hex >> 8), B: uint8(hex), A: 0xFF}
 }
 
-type syntaxLine struct {
-	start int
-	end   int
+type SyntaxKind uint8
+
+const (
+	SyntaxPlain SyntaxKind = iota
+	SyntaxComment
+	SyntaxString
+	SyntaxNumber
+	SyntaxKeyword
+	SyntaxDirective
+	SyntaxOperator
+)
+
+type SyntaxToken struct {
+	Start int
+	End   int
+	Text  string
+	Kind  SyntaxKind
+}
+
+type SyntaxLine struct {
+	Start int
+	End   int
 }
 
 // highlightSyntaxTokens deliberately stays a small lexer rather than a full
 // language parser. It is shared by RAT, CON, Lua and the modified Lua-based
 // AI scripts: quoted strings, comments, numbers, common directives and words
 // are enough to make the file structure readable in the editor.
-func highlightSyntaxTokens(source, ext string) ([]syntaxToken, []syntaxLine) {
+func HighlightSyntaxTokens(source, ext string) ([]SyntaxToken, []SyntaxLine) {
 	runes := []rune(source)
-	lines := make([]syntaxLine, 0, strings.Count(source, "\n")+1)
+	lines := make([]SyntaxLine, 0, strings.Count(source, "\n")+1)
 	lineStart := 0
 	for i := 0; i <= len(runes); i++ {
 		if i == len(runes) || runes[i] == '\n' {
-			lines = append(lines, syntaxLine{start: lineStart, end: i})
+			lines = append(lines, SyntaxLine{Start: lineStart, End: i})
 			lineStart = i + 1
 		}
 	}
@@ -74,10 +79,10 @@ func highlightSyntaxTokens(source, ext string) ([]syntaxToken, []syntaxLine) {
 		}
 	}
 
-	tokens := make([]syntaxToken, 0, len(runes)/3)
-	add := func(start, end int, kind syntaxKind) {
-		if end > start {
-			tokens = append(tokens, syntaxToken{start: start, end: end, text: string(runes[start:end]), kind: kind})
+	tokens := make([]SyntaxToken, 0, len(runes)/3)
+	add := func(Start, End int, Kind SyntaxKind) {
+		if End > Start {
+			tokens = append(tokens, SyntaxToken{Start: Start, End: End, Text: string(runes[Start:End]), Kind: Kind})
 		}
 	}
 
@@ -95,22 +100,22 @@ func highlightSyntaxTokens(source, ext string) ([]syntaxToken, []syntaxLine) {
 			for i < len(runes) && runes[i] != '\n' {
 				i++
 			}
-			add(commentStart, i, syntaxComment)
+			add(commentStart, i, SyntaxComment)
 			continue
 		}
 
 		if !luaLike && r == '#' {
-			start := i
+			Start := i
 			i++
 			for i < len(runes) && (unicode.IsLetter(runes[i]) || unicode.IsDigit(runes[i]) || runes[i] == '_') {
 				i++
 			}
-			add(start, i, syntaxDirective)
+			add(Start, i, SyntaxDirective)
 			continue
 		}
 
 		if r == '\'' || r == '"' {
-			start := i
+			Start := i
 			quote := r
 			i++
 			escaped := false
@@ -131,40 +136,40 @@ func highlightSyntaxTokens(source, ext string) ([]syntaxToken, []syntaxLine) {
 					break
 				}
 			}
-			add(start, i, syntaxString)
+			add(Start, i, SyntaxString)
 			continue
 		}
 
 		if unicode.IsDigit(r) {
-			start := i
+			Start := i
 			i++
 			for i < len(runes) && (unicode.IsDigit(runes[i]) || runes[i] == '.' || runes[i] == '_' || runes[i] == 'x' || runes[i] == 'X' ||
 				(runes[i] >= 'a' && runes[i] <= 'f') || (runes[i] >= 'A' && runes[i] <= 'F')) {
 				i++
 			}
-			add(start, i, syntaxNumber)
+			add(Start, i, SyntaxNumber)
 			continue
 		}
 
 		if unicode.IsLetter(r) || r == '_' {
-			start := i
+			Start := i
 			i++
 			for i < len(runes) && (unicode.IsLetter(runes[i]) || unicode.IsDigit(runes[i]) || runes[i] == '_') {
 				i++
 			}
-			word := string(runes[start:i])
-			kind := syntaxPlain
+			word := string(runes[Start:i])
+			Kind := SyntaxPlain
 			if keywords[strings.ToLower(word)] {
-				kind = syntaxKeyword
+				Kind = SyntaxKeyword
 			}
-			add(start, i, kind)
+			add(Start, i, Kind)
 			continue
 		}
 
-		start := i
+		Start := i
 		switch r {
 		case '#', '=', '<', '>', '!', '+', '-', '*', '/', '%', '&', '|', '^', '~', '?', ':', ';', ',', '.', '(', ')', '[', ']', '{', '}':
-			add(start, i+1, syntaxOperator)
+			add(Start, i+1, SyntaxOperator)
 			i++
 		default:
 			i++
@@ -173,17 +178,17 @@ func highlightSyntaxTokens(source, ext string) ([]syntaxToken, []syntaxLine) {
 	return tokens, lines
 }
 
-func syntaxTokenColor(kind syntaxKind) color.NRGBA {
-	switch kind {
-	case syntaxComment:
+func SyntaxTokenColor(Kind SyntaxKind) color.NRGBA {
+	switch Kind {
+	case SyntaxComment:
 		return rgb(0x6A9955)
-	case syntaxString:
+	case SyntaxString:
 		return rgb(0xCE9178)
-	case syntaxNumber:
+	case SyntaxNumber:
 		return rgb(0xB5CEA8)
-	case syntaxKeyword:
+	case SyntaxKeyword:
 		return rgb(0x569CD6)
-	case syntaxDirective:
+	case SyntaxDirective:
 		return rgb(0xC586C0)
 	default:
 		return rgb(0xD4D4D4)
@@ -194,14 +199,14 @@ func syntaxTokenColor(kind syntaxKind) color.NRGBA {
 // transparent. Regions are generated by widget.Editor itself, so this follows
 // its wrapping, horizontal scrolling and viewport instead of maintaining a
 // second, approximate text layout.
-func paintSyntaxHighlight(gtx layout.Context, th *material.Theme, editor *widget.Editor, source, ext string) {
+func PaintSyntaxHighlight(gtx layout.Context, th *material.Theme, editor *widget.Editor, source, ext string, dim color.NRGBA) {
 	if editor == nil {
 		return
 	}
-	tokens, lines := highlightSyntaxTokens(source, ext)
+	tokens, lines := HighlightSyntaxTokens(source, ext)
 	for lineNo, line := range lines {
-		lineStart := line.start
-		lineEnd := line.end
+		lineStart := line.Start
+		lineEnd := line.End
 		if lineStart == lineEnd {
 			continue
 		}
@@ -211,19 +216,19 @@ func paintSyntaxHighlight(gtx layout.Context, th *material.Theme, editor *widget
 		}
 		// A small gutter gives the original editor enough room for line numbers.
 		stack := op.Offset(image.Point{X: gtx.Dp(unit.Dp(4)), Y: regions[0].Bounds.Min.Y}).Push(gtx.Ops)
-		label := material.Label(th, unit.Sp(10), lineNumberText(lineNo+1, source))
-		label.Color = cTextDim
+		label := material.Label(th, unit.Sp(10), LineNumberText(lineNo+1, source))
+		label.Color = dim
 		label.MaxLines = 1
 		label.Layout(gtx)
 		stack.Pop()
 	}
 
 	for _, token := range tokens {
-		kindColor := syntaxTokenColor(token.kind)
-		regions := editor.Regions(token.start, token.end, nil)
+		kindColor := SyntaxTokenColor(token.Kind)
+		regions := editor.Regions(token.Start, token.End, nil)
 		for _, region := range regions {
-			stack := op.Offset(image.Point{X: region.Bounds.Min.X + gtx.Dp(unit.Dp(syntaxGutterDp)), Y: region.Bounds.Min.Y}).Push(gtx.Ops)
-			label := material.Label(th, unit.Sp(12), token.text)
+			stack := op.Offset(image.Point{X: region.Bounds.Min.X + gtx.Dp(unit.Dp(SyntaxGutterDp)), Y: region.Bounds.Min.Y}).Push(gtx.Ops)
+			label := material.Label(th, unit.Sp(12), token.Text)
 			label.Color = kindColor
 			label.MaxLines = 1
 			label.Layout(gtx)
@@ -232,14 +237,14 @@ func paintSyntaxHighlight(gtx layout.Context, th *material.Theme, editor *widget
 	}
 }
 
-func lineNumberText(line int, source string) string {
+func LineNumberText(line int, source string) string {
 	// Keep this helper small and deterministic; the source argument is useful
 	// for callers that later want to show file-local numbering information.
 	_ = source
-	return itoa(line)
+	return Itoa(line)
 }
 
-func itoa(v int) string {
+func Itoa(v int) string {
 	if v == 0 {
 		return "0"
 	}

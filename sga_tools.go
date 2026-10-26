@@ -3,6 +3,7 @@ package main
 import (
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/sga"
+	"dow-mod-studio/internal/sgapack"
 	"fmt"
 	"image"
 	"image/color"
@@ -369,3 +370,9 @@ func (ui *uiState) layoutArchiveDialog(gtx layout.Context) layout.Dimensions {
 }
 
 func colorWhite() color.NRGBA { return color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF} }
+
+// writeSGA2 packs a folder of files into an SGA v2 archive; the format work
+// lives in internal/sgapack, this is the name the packer UI calls.
+func writeSGA2(output string, files map[string]string, tocName string) error {
+	return sgapack.WriteSGA2(output, files, tocName)
+}

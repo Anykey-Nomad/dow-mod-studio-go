@@ -1,4 +1,4 @@
-package main
+package locstrings
 
 import (
 	"dow-mod-studio/internal/rgd"
@@ -36,21 +36,21 @@ import (
 // came from with the caret on the line. See localisedString and
 // localeSourceFiles.
 
-const localeDefault = "English"
+const LocaleDefault = "English"
 
 // localeEntry is one localisation id resolved against a language's .ucs files.
 // File and Line say where the text came from, which is what makes the jump
 // possible; Line is 1-based, as an editor counts.
-type localeEntry struct {
+type LocaleEntry struct {
 	Text string
 	File string
 	Line int
 }
 
 // localeTable is the id index of a single language.
-type localeTable struct {
+type LocaleTable struct {
 	Lang  string
-	Index map[string]localeEntry
+	Index map[string]LocaleEntry
 	Files int // .ucs files that were read
 	Lines int // entries indexed
 	Err   error
@@ -62,10 +62,10 @@ type localeTable struct {
 // views only ever read a finished table: a build is started explicitly from
 // setLocale, never from inside a lookup, so laying out a frame cannot stall on
 // reading 3.4 MB of UCS.
-var localeState struct {
+var LocaleState struct {
 	mu    sync.RWMutex
-	cur   *localeTable
-	cache map[string]*localeTable
+	cur   *LocaleTable
+	cache map[string]*LocaleTable
 	// overrideDir is the open mod's own project folder, which is searched
 	// before anything installed. It is here rather than in the arguments
 	// because a string this tool writes has to be readable the moment after it
@@ -84,30 +84,30 @@ var localeState struct {
 //
 // It drops the built tables, because a table is a function of the folders it was
 // read from and the folder has just changed.
-func setLocaleOverrideDir(dir string) {
-	localeState.mu.Lock()
-	localeState.overrideDir = strings.TrimSpace(dir)
-	localeState.cache = nil
-	localeState.cur = nil
-	localeState.mu.Unlock()
+func SetLocaleOverrideDir(dir string) {
+	LocaleState.mu.Lock()
+	LocaleState.overrideDir = strings.TrimSpace(dir)
+	LocaleState.cache = nil
+	LocaleState.cur = nil
+	LocaleState.mu.Unlock()
 }
 
 // invalidateLocaleCache drops every built table so the next setLocale reads the
 // files again. Writing a string has to call this: tables are cached per
 // language, so without it the string that was just written is missing from the
 // copy the views are reading and the edit looks like it did nothing.
-func invalidateLocaleCache() {
-	localeState.mu.Lock()
-	localeState.cache = nil
-	localeState.cur = nil
-	localeState.mu.Unlock()
+func InvalidateLocaleCache() {
+	LocaleState.mu.Lock()
+	LocaleState.cache = nil
+	LocaleState.cur = nil
+	LocaleState.mu.Unlock()
 }
 
 // localeOverrideRoot is that folder, or "" when there is none.
-func localeOverrideRoot() string {
-	localeState.mu.RLock()
-	defer localeState.mu.RUnlock()
-	return localeState.overrideDir
+func LocaleOverrideRoot() string {
+	LocaleState.mu.RLock()
+	defer LocaleState.mu.RUnlock()
+	return LocaleState.overrideDir
 }
 
 // ── decoding ───────────────────────────────────────────────────────────────
@@ -116,17 +116,17 @@ func localeOverrideRoot() string {
 // order mark, little endian in every installation measured; big endian is
 // accepted too, and a file with no mark is taken as already being UTF-8, which
 // is what a .ucs saved by an editor on a modding tool comes out as.
-func decodeUCS(data []byte) string {
+func DecodeUCS(data []byte) string {
 	switch {
 	case len(data) >= 2 && data[0] == 0xFF && data[1] == 0xFE:
-		return decodeUTF16(data[2:], false)
+		return DecodeUTF16(data[2:], false)
 	case len(data) >= 2 && data[0] == 0xFE && data[1] == 0xFF:
-		return decodeUTF16(data[2:], true)
+		return DecodeUTF16(data[2:], true)
 	}
 	return string(data)
 }
 
-func decodeUTF16(b []byte, bigEndian bool) string {
+func DecodeUTF16(b []byte, bigEndian bool) string {
 	units := make([]uint16, 0, len(b)/2)
 	for i := 0; i+1 < len(b); i += 2 {
 		if bigEndian {
@@ -141,12 +141,12 @@ func decodeUTF16(b []byte, bigEndian bool) string {
 // ucsBOM is the byte order mark character U+FEFF. It is written as a rune
 // rather than as an escape so that no literal byte order mark ends up in the
 // source, which the compiler rejects.
-const ucsBOM = string(rune(0xFEFF))
+const UcsBOM = string(rune(0xFEFF))
 
 // trimBOM drops a leading U+FEFF. A UCS decoded without its mark consumed
 // still starts with the character, and it would end up glued to the first id.
-func trimBOM(s string) string {
-	return strings.TrimPrefix(s, ucsBOM)
+func TrimBOM(s string) string {
+	return strings.TrimPrefix(s, UcsBOM)
 }
 
 // parseUCS indexes one .ucs file. A line is an entry when it starts with an
@@ -154,8 +154,8 @@ func trimBOM(s string) string {
 // comment) is skipped rather than treated as an error, because the tables are
 // hand edited. Entries already in index are kept, so the first file to define
 // an id is the one that wins.
-func parseUCS(data []byte, file string, index map[string]localeEntry) int {
-	text := trimBOM(decodeUCS(data))
+func ParseUCS(data []byte, file string, index map[string]LocaleEntry) int {
+	text := TrimBOM(DecodeUCS(data))
 	added := 0
 	for i, line := range strings.Split(text, "\n") {
 		line = strings.TrimSuffix(line, "\r")
@@ -164,13 +164,13 @@ func parseUCS(data []byte, file string, index map[string]localeEntry) int {
 			continue
 		}
 		id := line[:tab]
-		if !isLocaleID(id) {
+		if !IsLocaleID(id) {
 			continue
 		}
 		if _, seen := index[id]; seen {
 			continue
 		}
-		index[id] = localeEntry{
+		index[id] = LocaleEntry{
 			Text: line[tab+1:],
 			File: file,
 			Line: i + 1,
@@ -180,7 +180,7 @@ func parseUCS(data []byte, file string, index map[string]localeEntry) int {
 	return added
 }
 
-func isLocaleID(id string) bool {
+func IsLocaleID(id string) bool {
 	if id == "" {
 		return false
 	}
@@ -199,7 +199,7 @@ func isLocaleID(id string) bool {
 // beside the data either way. The extension is checked as well as the file
 // itself, because a path that cannot be stat'ed would otherwise be taken for a
 // folder and quietly find no tables.
-func localeModuleDir(modulePath string) string {
+func LocaleModuleDir(modulePath string) string {
 	modulePath = strings.TrimSpace(modulePath)
 	if modulePath == "" {
 		return ""
@@ -219,7 +219,7 @@ func localeModuleDir(modulePath string) string {
 // then every other installed module. Everything installed is one level under
 // the game folder, which is the layout the engine uses: Engine, plus one folder
 // per installed module.
-func localeRoots(gamePath, moduleDir string) []string {
+func LocaleRoots(gamePath, moduleDir string) []string {
 	var roots []string
 	seen := map[string]bool{}
 	add := func(dir string) {
@@ -230,7 +230,7 @@ func localeRoots(gamePath, moduleDir string) []string {
 		seen[strings.ToLower(dir)] = true
 		roots = append(roots, dir)
 	}
-	add(localeOverrideRoot())
+	add(LocaleOverrideRoot())
 	add(moduleDir)
 	gamePath = strings.TrimSpace(gamePath)
 	if gamePath == "" {
@@ -260,13 +260,13 @@ func localeRoots(gamePath, moduleDir string) []string {
 // other installed module's, Engine included. Reading in that order and keeping
 // the first definition of an id is what lets a mod override an engine string
 // by shipping its own table.
-func localeSourceFiles(gamePath, moduleDir, lang string) []string {
+func LocaleSourceFiles(gamePath, moduleDir, lang string) []string {
 	lang = strings.TrimSpace(lang)
 	if lang == "" {
 		return nil
 	}
 	var files []string
-	for _, root := range localeRoots(gamePath, moduleDir) {
+	for _, root := range LocaleRoots(gamePath, moduleDir) {
 		matches, err := filepath.Glob(filepath.Join(root, "Locale", lang, "*.ucs"))
 		if err != nil {
 			continue
@@ -284,7 +284,7 @@ func localeSourceFiles(gamePath, moduleDir, lang string) []string {
 // module, for instance, carries Slovak and English_Chinese on top of the
 // engine's thirteen). A game folder that cannot be read still offers English,
 // which is what the mod tree itself is built with.
-func availableLocales(gamePath, moduleDir string) []string {
+func AvailableLocales(gamePath, moduleDir string) []string {
 	seen := map[string]bool{}
 	var langs []string
 	add := func(name string) {
@@ -298,7 +298,7 @@ func availableLocales(gamePath, moduleDir string) []string {
 		seen[strings.ToLower(name)] = true
 		langs = append(langs, name)
 	}
-	for _, root := range localeRoots(gamePath, moduleDir) {
+	for _, root := range LocaleRoots(gamePath, moduleDir) {
 		entries, err := os.ReadDir(filepath.Join(root, "Locale"))
 		if err != nil {
 			continue
@@ -309,7 +309,7 @@ func availableLocales(gamePath, moduleDir string) []string {
 			}
 		}
 	}
-	add(localeDefault)
+	add(LocaleDefault)
 	sort.Slice(langs, func(i, j int) bool {
 		return strings.ToLower(langs[i]) < strings.ToLower(langs[j])
 	})
@@ -321,9 +321,9 @@ func availableLocales(gamePath, moduleDir string) []string {
 // buildLocaleTable reads every .ucs of one language and indexes it. This is
 // the expensive call — English is 3.4 MB in one file — so it runs from an
 // explicit language change rather than from the value views.
-func buildLocaleTable(gamePath, moduleDir, lang string) *localeTable {
-	table := &localeTable{Lang: lang, Index: make(map[string]localeEntry)}
-	files := localeSourceFiles(gamePath, moduleDir, lang)
+func BuildLocaleTable(gamePath, moduleDir, lang string) *LocaleTable {
+	table := &LocaleTable{Lang: lang, Index: make(map[string]LocaleEntry)}
+	files := LocaleSourceFiles(gamePath, moduleDir, lang)
 	var firstErr error
 	for _, file := range files {
 		data, err := os.ReadFile(file)
@@ -333,7 +333,7 @@ func buildLocaleTable(gamePath, moduleDir, lang string) *localeTable {
 			}
 			continue
 		}
-		table.Lines += parseUCS(data, file, table.Index)
+		table.Lines += ParseUCS(data, file, table.Index)
 	}
 	table.Files = len(files)
 	table.Err = firstErr
@@ -345,48 +345,48 @@ func buildLocaleTable(gamePath, moduleDir, lang string) *localeTable {
 // was already loaded costs nothing. The language is remembered even when the
 // table turns out to be empty: a language with no .ucs files yet is still the
 // one the user picked, and the ids stay visible as ids.
-func setLocale(gamePath, modulePath, lang string) *localeTable {
+func SetLocale(gamePath, modulePath, lang string) *LocaleTable {
 	lang = strings.TrimSpace(lang)
 	if lang == "" {
-		lang = localeDefault
+		lang = LocaleDefault
 	}
-	moduleDir := localeModuleDir(modulePath)
+	moduleDir := LocaleModuleDir(modulePath)
 
-	localeState.mu.RLock()
-	cached := localeState.cache[lang]
-	localeState.mu.RUnlock()
+	LocaleState.mu.RLock()
+	cached := LocaleState.cache[lang]
+	LocaleState.mu.RUnlock()
 
-	var table *localeTable
+	var table *LocaleTable
 	if cached != nil {
 		table = cached
 	} else {
-		table = buildLocaleTable(gamePath, moduleDir, lang)
-		localeState.mu.Lock()
-		if localeState.cache == nil {
-			localeState.cache = make(map[string]*localeTable)
+		table = BuildLocaleTable(gamePath, moduleDir, lang)
+		LocaleState.mu.Lock()
+		if LocaleState.cache == nil {
+			LocaleState.cache = make(map[string]*LocaleTable)
 		}
-		localeState.cache[lang] = table
-		localeState.mu.Unlock()
+		LocaleState.cache[lang] = table
+		LocaleState.mu.Unlock()
 	}
 
-	localeState.mu.Lock()
-	localeState.cur = table
-	localeState.mu.Unlock()
+	LocaleState.mu.Lock()
+	LocaleState.cur = table
+	LocaleState.mu.Unlock()
 	return table
 }
 
 // currentLocaleTable is the table the value views read.
-func currentLocaleTable() *localeTable {
-	localeState.mu.RLock()
-	defer localeState.mu.RUnlock()
-	return localeState.cur
+func CurrentLocaleTable() *LocaleTable {
+	LocaleState.mu.RLock()
+	defer LocaleState.mu.RUnlock()
+	return LocaleState.cur
 }
 
 // localeLookup resolves one id against the active table.
-func localeLookup(id string) (localeEntry, bool) {
-	table := currentLocaleTable()
+func LocaleLookup(id string) (LocaleEntry, bool) {
+	table := CurrentLocaleTable()
 	if table == nil || id == "" {
-		return localeEntry{}, false
+		return LocaleEntry{}, false
 	}
 	entry, ok := table.Index[id]
 	return entry, ok
@@ -395,24 +395,24 @@ func localeLookup(id string) (localeEntry, bool) {
 // localisedString is the text behind a localisation id in the chosen language,
 // or "" when the id is not in the table. rgd.LocIDDisplay already appends
 // whatever this returns, so a miss leaves the bare id on screen.
-func localisedString(id string) string {
-	entry, ok := localeLookup(id)
+func LocalisedString(id string) string {
+	entry, ok := LocaleLookup(id)
 	if !ok {
 		return ""
 	}
 	return entry.Text
 }
 
-func init() {
+func Init() {
 	// The rgd package renders localisation ids but owns no locale state; the
 	// application hands it the lookup.
-	rgd.Localize = localisedString
+	rgd.Localize = LocalisedString
 }
 
 // localeLineNumber is the line the id sits on in its .ucs, or 0 when the id is
 // not in the table. Alt+click on a value uses it to land on the line.
-func localeLineNumber(id string) int {
-	entry, ok := localeLookup(id)
+func LocaleLineNumber(id string) int {
+	entry, ok := LocaleLookup(id)
 	if !ok {
 		return 0
 	}
@@ -421,10 +421,10 @@ func localeLineNumber(id string) int {
 
 // resetLocaleTables drops the cache. Tests use it so one fixture does not
 // decide what the next one sees.
-func resetLocaleTables() {
-	localeState.mu.Lock()
-	localeState.cur = nil
-	localeState.cache = nil
-	localeState.reservedID = 0
-	localeState.mu.Unlock()
+func ResetLocaleTables() {
+	LocaleState.mu.Lock()
+	LocaleState.cur = nil
+	LocaleState.cache = nil
+	LocaleState.reservedID = 0
+	LocaleState.mu.Unlock()
 }

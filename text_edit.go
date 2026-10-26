@@ -1,6 +1,7 @@
 package main
 
 import (
+	"dow-mod-studio/internal/highlight"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -177,3 +178,16 @@ func widgetBorderTextEditor(gtx layout.Context, th *material.Theme, editor *widg
 		})
 	})
 }
+
+// ── syntax highlighting (internal/highlight) ─────────────────────────────────
+//
+// The tokenizer and the painter live in internal/highlight; the editors call
+// them through these names, and the dim gutter colour stays this program's.
+
+const syntaxGutterDp = highlight.SyntaxGutterDp
+
+func paintSyntaxHighlight(gtx layout.Context, th *material.Theme, editor *widget.Editor, source, ext string) {
+	highlight.PaintSyntaxHighlight(gtx, th, editor, source, ext, cTextDim)
+}
+
+func itoa(v int) string { return highlight.Itoa(v) }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"dow-mod-studio/internal/locstrings"
 	"fmt"
 	"image"
 	"os"
@@ -453,3 +454,42 @@ func localeLineRange(text string, line int, id string) (int, int) {
 	}
 	return 0, 0
 }
+
+// ── localisation strings (internal/locstrings) ───────────────────────────────
+//
+// Reading a module's .ucs tables, allocating an id a mod's own strings can
+// use and writing them back is internal/locstrings' work; the language picker
+// and the editors keep the names they call it by.
+
+type (
+	localeEntry = locstrings.LocaleEntry
+	localeTable = locstrings.LocaleTable
+)
+
+const (
+	localeDefault      = locstrings.LocaleDefault
+	localeDirName      = locstrings.LocaleDirName
+	localeEditFileName = locstrings.LocaleEditFileName
+)
+
+func setLocaleOverrideDir(dir string)          { locstrings.SetLocaleOverrideDir(dir) }
+func invalidateLocaleCache()                   { locstrings.InvalidateLocaleCache() }
+func decodeUCS(data []byte) string             { return locstrings.DecodeUCS(data) }
+func trimBOM(s string) string                  { return locstrings.TrimBOM(s) }
+func localeModuleDir(modulePath string) string { return locstrings.LocaleModuleDir(modulePath) }
+func localeRoots(gamePath, moduleDir string) []string {
+	return locstrings.LocaleRoots(gamePath, moduleDir)
+}
+func availableLocales(gamePath, moduleDir string) []string {
+	return locstrings.AvailableLocales(gamePath, moduleDir)
+}
+func setLocale(gamePath, modulePath, lang string) *localeTable {
+	return locstrings.SetLocale(gamePath, modulePath, lang)
+}
+func localeLookup(id string) (localeEntry, bool) { return locstrings.LocaleLookup(id) }
+func localisedString(id string) string           { return locstrings.LocalisedString(id) }
+func allocateLocaleID() string                   { return locstrings.AllocateLocaleID() }
+func writeLocaleEntry(projectDir, lang, id, text string) (string, int, error) {
+	return locstrings.WriteLocaleEntry(projectDir, lang, id, text)
+}
+func localeOverrideIsOurs(entry localeEntry) bool { return locstrings.LocaleOverrideIsOurs(entry) }
