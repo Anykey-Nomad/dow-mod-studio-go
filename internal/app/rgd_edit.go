@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"fmt"
 	"image"
 	"log"
@@ -465,9 +466,9 @@ func TableRowBool(ui *uiState, gtx layout.Context, label string, t *fileTab, e *
 	h := gtx.Dp(unit.Dp(28))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if alt {
-		bg = cSaveBg
+		bg = uikit.CSaveBg
 	}
 	click := RgdEnsureBoolClick(ui, t, key)
 	value := "False"
@@ -488,14 +489,14 @@ func TableRowBool(ui *uiState, gtx layout.Context, label string, t *fileTab, e *
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(11), label)
-						l.Color = cText
+						l.Color = uikit.CText
 						return l.Layout(gtx)
 					})
 				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, cBorderLight) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, uikit.CBorderLight) }),
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4), Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return ToggleButton(ui, gtx, click, value, e.BoolVal, cSelectBg)
+						return ToggleButton(ui, gtx, click, value, e.BoolVal, uikit.CSelectBg)
 					})
 				}),
 			)
@@ -696,9 +697,9 @@ func TableRowEditor(ui *uiState, gtx layout.Context, label string, ed *widget.Ed
 	h := gtx.Dp(unit.Dp(28))
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if alt {
-		bg = cSaveBg
+		bg = uikit.CSaveBg
 	}
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
@@ -714,15 +715,15 @@ func TableRowEditor(ui *uiState, gtx layout.Context, label string, ed *widget.Ed
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(11), label)
-						l.Color = cText
+						l.Color = uikit.CText
 						return l.Layout(gtx)
 					})
 				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, cBorderLight) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, uikit.CBorderLight) }),
 				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4), Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						// inner white field with border
-						borderColor := cBorderLight
+						borderColor := uikit.CBorderLight
 						if validationErr != "" {
 							borderColor = rgb(0xB00020)
 						}
@@ -733,7 +734,7 @@ func TableRowEditor(ui *uiState, gtx layout.Context, label string, ed *widget.Ed
 								layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 									sz := gtx.Constraints.Max
 									st := clip.Rect{Max: sz}.Push(gtx.Ops)
-									paint.ColorOp{Color: cPanelBg}.Add(gtx.Ops)
+									paint.ColorOp{Color: uikit.CPanelBg}.Add(gtx.Ops)
 									paint.PaintOp{}.Add(gtx.Ops)
 									st.Pop()
 									return layout.Dimensions{Size: sz}
@@ -742,7 +743,7 @@ func TableRowEditor(ui *uiState, gtx layout.Context, label string, ed *widget.Ed
 									return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 										w := material.Editor(ui.Th, ed, "")
 										w.TextSize = unit.Sp(11)
-										w.HintColor = cTextDim
+										w.HintColor = uikit.CTextDim
 										return w.Layout(gtx)
 									})
 								}),
@@ -1030,7 +1031,7 @@ func ChildrenTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimension
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Bottom: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), "Select a .rgd file, then a node in the middle tree")
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return l.Layout(gtx)
 			})
 		})
@@ -1047,7 +1048,7 @@ func ChildrenTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimension
 			}
 			msg := fmt.Sprintf("%s (%s) = %s — no children", e.Name, e.TypeLabel(), val)
 			l := material.Label(ui.Th, unit.Sp(11), msg)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
@@ -1056,19 +1057,19 @@ func ChildrenTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimension
 		if ref := e.RefString(); ref != "" {
 			return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), fmt.Sprintf("Empty table — Reference: %s", ref))
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return l.Layout(gtx)
 			})
 		}
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(10), "No children")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return LayoutListWithScrollbar(ui, gtx, &t.RgdChildScroll, &t.RgdChildList, 28, len(children), func(gtx layout.Context, index int) layout.Dimensions {
 				ch := children[index]

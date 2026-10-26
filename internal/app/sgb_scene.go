@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -778,7 +779,7 @@ func LayoutSgbObjectPanel(ui *uiState, gtx layout.Context, tab *fileTab) layout.
 				return LayoutSgbPlayerSelector(ui, gtx, tab)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return hLine(gtx, cHeaderLine, 1)
+				return hLine(gtx, uikit.CHeaderLine, 1)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return sectionHeader(gtx, ui.Th, "Objects — EBPS Environment")
@@ -792,7 +793,7 @@ func LayoutSgbObjectPanel(ui *uiState, gtx layout.Context, tab *fileTab) layout.
 					}
 				}
 				l := material.Label(ui.Th, unit.Sp(9), msg)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				l.MaxLines = 2
 				return layout.Inset{Top: unit.Dp(5), Bottom: unit.Dp(5), Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}),
@@ -944,11 +945,11 @@ func LayoutSgbEnvironmentRow(ui *uiState, gtx layout.Context, tab *fileTab, entr
 		}
 	}
 	selected := !folder && strings.EqualFold(tab.SgbObjectSelected, entry.file.FullPath)
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if selected {
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	} else if click.Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	h := gtx.Dp(unit.Dp(22))
 	gtx.Constraints.Min = image.Pt(gtx.Constraints.Max.X, h)
@@ -964,7 +965,7 @@ func LayoutSgbEnvironmentRow(ui *uiState, gtx layout.Context, tab *fileTab, entr
 		}()
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(2))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -981,13 +982,13 @@ func LayoutSgbEnvironmentRow(ui *uiState, gtx layout.Context, tab *fileTab, entr
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), marker)
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), label)
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),

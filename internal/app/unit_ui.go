@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"image"
 	"image/color"
@@ -205,20 +206,20 @@ func LayoutUnitPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
 		})
 	}
-	return frameMeasured(gtx, buttons, cSaveBg, cSaveBd, unit.Dp(3))
+	return frameMeasured(gtx, buttons, uikit.CSaveBg, uikit.CSaveBd, unit.Dp(3))
 }
 
 // unitToolButton is one button of the tool panel: a label with its own frame,
 // measured the same way because it too sits in a flex row.
 func UnitToolButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, active bool) layout.Dimensions {
-	bg := cSaveBg
-	col := cSaveBd
+	bg := uikit.CSaveBg
+	col := uikit.CSaveBd
 	if active {
-		bg, col = cSelectBg, cSelectBd
+		bg, col = uikit.CSelectBg, uikit.CSelectBd
 	} else if btn.Hovered() {
-		bg, col = cSaveHover, cSelectBd
+		bg, col = uikit.CSaveHover, uikit.CSelectBd
 	}
-	textCol := cText
+	textCol := uikit.CText
 	if active {
 		textCol = rgb(0xFFFFFF)
 	}
@@ -234,25 +235,8 @@ func UnitToolButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, labe
 	})
 }
 
-// frameMeasured draws content inside a rounded, bordered frame that hugs it.
-// The content is laid out into a recorded op stream first to learn its size,
-// the frame is painted at that size, and the recording is replayed on top.
-func frameMeasured(gtx layout.Context, content layout.Widget, bg, border color.NRGBA, radius unit.Dp) layout.Dimensions {
-	macro := op.Record(gtx.Ops)
-	dims := content(gtx)
-	call := macro.Stop()
-	sz := dims.Size
-	rrect(gtx, bg, sz, gtx.Dp(radius))
-	frame := gtx
-	frame.Constraints.Min = sz
-	frame.Constraints.Max = sz
-	widget.Border{Color: border, Width: unit.Dp(1), CornerRadius: radius}.Layout(frame, func(gtx layout.Context) layout.Dimensions {
-		return layout.Dimensions{Size: gtx.Constraints.Min}
-	})
-	clip.Rect{Max: sz}.Push(gtx.Ops).Pop()
-	call.Add(gtx.Ops)
-	return layout.Dimensions{Size: sz}
-}
+// FrameMeasured lives in uikit; the alias keeps every call site as it was.
+var frameMeasured = uikit.FrameMeasured
 
 func EnsureUnitClicks(ui *uiState) {
 	if len(ui.UnitSectionClicks) != len(unitSections) {
@@ -405,11 +389,11 @@ func UnitColumn(ui *uiState, gtx layout.Context, title, hint string) layout.Dime
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, title)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(10), hint)
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				})
 			}),
@@ -423,7 +407,7 @@ func LayoutUnitLeftColumn(ui *uiState, gtx layout.Context) layout.Dimensions {
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, "Sections")
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutUnitSectionList(ui, gtx) }),
 		)
 	})
@@ -436,7 +420,7 @@ func LayoutUnitColumnHeader(ui *uiState, gtx layout.Context, title string) layou
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := image.Pt(gtx.Constraints.Max.X, h)
-			fillRect(gtx, cHeaderBg, sz)
+			fillRect(gtx, uikit.CHeaderBg, sz)
 			return layout.Dimensions{Size: sz}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -444,7 +428,7 @@ func LayoutUnitColumnHeader(ui *uiState, gtx layout.Context, title string) layou
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(11), title)
-						l.Color = cText
+						l.Color = uikit.CText
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
@@ -478,11 +462,11 @@ func LayoutUnitSectionRow(ui *uiState, gtx layout.Context, index int) layout.Dim
 		return layout.Dimensions{}
 	}
 	selected := index == ui.UnitSection
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if selected {
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	} else if ui.UnitSectionClicks[index].Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return ui.UnitSectionClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp))
@@ -494,7 +478,7 @@ func LayoutUnitSectionRow(ui *uiState, gtx layout.Context, index int) layout.Dim
 		gtx.Constraints.Max = sz
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -504,7 +488,7 @@ func LayoutUnitSectionRow(ui *uiState, gtx layout.Context, index int) layout.Dim
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(11), unitSections[index].label)
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),

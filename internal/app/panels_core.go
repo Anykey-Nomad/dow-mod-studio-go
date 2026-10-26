@@ -1,10 +1,10 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"image"
 	"image/color"
-	"math"
 	"path/filepath"
 	"strings"
 
@@ -26,7 +26,7 @@ func LayoutContent(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := gtx.Constraints.Max
-			fillRect(gtx, cContentBg, sz)
+			fillRect(gtx, uikit.CContentBg, sz)
 			return layout.Dimensions{Size: sz}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -64,29 +64,11 @@ func flexGap() layout.Widget {
 	}
 }
 
-// rowGap is the same spacer for a row of controls, with one difference: it
-// takes the width left over on the line and none of the height. A row that
-// uses flexGap is as tall as the space it was given, which for a row under a
-// canvas means taking the canvas's height and leaving it nothing.
-func rowGap() layout.Widget {
-	return func(gtx layout.Context) layout.Dimensions {
-		return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
-	}
-}
+// RowGap lives in uikit; the alias keeps every call site as it was.
+var rowGap = uikit.RowGap
 
-func panelFrame(gtx layout.Context, content layout.Widget) layout.Dimensions {
-	b := widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
-	return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Stack{}.Layout(gtx,
-			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				sz := gtx.Constraints.Max
-				rrect(gtx, cPanelBg, sz, gtx.Dp(2))
-				return layout.Dimensions{Size: sz}
-			}),
-			layout.Stacked(content),
-		)
-	})
-}
+// PanelFrame lives in uikit; the alias keeps every call site as it was.
+var panelFrame = uikit.PanelFrame
 
 func LayoutLeftPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -114,7 +96,7 @@ func LayoutLeftPanelContent(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return centeredPanelLabel(gtx, ui.Th, "No module loaded", unit.Sp(12), cTextDim)
+						return centeredPanelLabel(gtx, ui.Th, "No module loaded", unit.Sp(12), uikit.CTextDim)
 					}),
 					layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -134,7 +116,7 @@ func LayoutLeftPanelContent(ui *uiState, gtx layout.Context) layout.Dimensions {
 						if extra == "" {
 							extra = "Pick a .module from Dawn of War Definitive Edition"
 						}
-						return centeredPanelLabel(gtx, ui.Th, extra, unit.Sp(10), cTextDim)
+						return centeredPanelLabel(gtx, ui.Th, extra, unit.Sp(10), uikit.CTextDim)
 					}),
 				)
 			})
@@ -145,7 +127,7 @@ func LayoutLeftPanelContent(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return layout.Stack{}.Layout(gtx,
 				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 					sz := image.Pt(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(22)))
-					fillRect(gtx, cHeaderBg, sz)
+					fillRect(gtx, uikit.CHeaderBg, sz)
 					return layout.Dimensions{Size: sz}
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -157,13 +139,13 @@ func LayoutLeftPanelContent(ui *uiState, gtx layout.Context) layout.Dimensions {
 							modName = "Data"
 						}
 						l := material.Label(ui.Th, unit.Sp(10), modName)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					})
 				}),
 			)
 		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Stack{}.Layout(gtx,
@@ -215,10 +197,10 @@ func LayoutFileContextMenu(ui *uiState, gtx layout.Context) layout.Dimensions {
 	defer op.Offset(image.Pt(gtx.Dp(unit.Dp(18)), y)).Push(gtx2.Ops).Pop()
 	gtx2.Constraints.Min = image.Pt(menuW, menuH)
 	gtx2.Constraints.Max = image.Pt(menuW, menuH)
-	return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx2, func(gtx layout.Context) layout.Dimensions {
+	return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx2, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(3))
+				rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(3))
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -227,7 +209,7 @@ func LayoutFileContextMenu(ui *uiState, gtx layout.Context) layout.Dimensions {
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							_, base := modtree.VirtualDirAndBase(ui.ContextMenuPath)
 							l := material.Label(ui.Th, unit.Sp(11), base)
-							l.Color = cText
+							l.Color = uikit.CText
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Height: unit.Dp(5)}.Layout),
@@ -246,13 +228,6 @@ func LayoutFileContextMenu(ui *uiState, gtx layout.Context) layout.Dimensions {
 }
 
 // ─── merged from panel_layout.go ───────────────────────────────────────────────
-
-const (
-	panelSplitterWidthDp  = 6
-	panelScrollbarWidthDp = 10
-	panelSplitterMinDp    = 140
-	panelSplitterMinMidDp = 220
-)
 
 // absorbDialogCardPress covers a dialog card with an input area that takes
 // pointer events and gives nothing back.
@@ -282,18 +257,8 @@ type panelSplitterState = uistate.PanelSplitterState
 
 type panelScrollState = uistate.PanelScrollState
 
-func clampInt(v, lo, hi int) int {
-	if hi < lo {
-		return lo
-	}
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
+// ClampInt lives in uikit; the alias keeps every call site as it was.
+var clampInt = uikit.ClampInt
 
 func EnsurePanelWidths(ui *uiState, total int) {
 	if total <= 0 {
@@ -414,7 +379,7 @@ func LayoutPanelSplitter(ui *uiState, gtx layout.Context, index int, total int) 
 	// Record the origin of the operations emitted below. Pointer positions
 	// received before the next layout will be relative to this origin.
 	s.LayoutOrigin = panelSplitterLayoutOrigin(index, total, w, ui.LeftPanelWidth, ui.RightPanelWidth)
-	col := cBorder
+	col := uikit.CBorder
 	if s.Hover || s.Dragging {
 		col = rgb(0x0078D4)
 	}
@@ -423,13 +388,8 @@ func LayoutPanelSplitter(ui *uiState, gtx layout.Context, index int, total int) 
 	return layout.Dimensions{Size: image.Pt(w, gtx.Constraints.Max.Y)}
 }
 
-func FixedPanel(ui *uiState, width int, content layout.Widget) layout.Widget {
-	return func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Min.X = width
-		gtx.Constraints.Max.X = width
-		return content(gtx)
-	}
-}
+// FixedPanel lives in uikit; the alias keeps every call site as it was.
+var FixedPanel = uikit.FixedPanel
 
 func PanelWithScroll(ui *uiState, gtx layout.Context, state *panelScrollState, content layout.Widget) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -437,206 +397,20 @@ func PanelWithScroll(ui *uiState, gtx layout.Context, state *panelScrollState, c
 	})
 }
 
-// panelScrollMeasureHeight is how much room a panel's content is offered when
-// it is measured for scrolling. Large enough that no panel ever fills it, small
-// enough that a widget scaling a length by it stays inside a float32.
-const panelScrollMeasureHeight = 1 << 20
+// PanelScrollMeasureHeight lives in uikit; the alias keeps every call site as it was.
+const panelScrollMeasureHeight = uikit.PanelScrollMeasureHeight
 
-// panelScrollWheelStepPx is how many pixels of the panel one unit of the
-// wheel's delta moves it by. One notch is wheelNotchDelta, so a click moves
-// about three list rows, which is what a wheel is for. It used to be forty
-// eight, read as pixels per notch, which against a delta of 120 asked for five
-// thousand pixels a click: every notch slammed the list to one end or the
-// other, and the rows in between could not be reached at all.
-const panelScrollWheelStepPx = 0.55
+// PanelScrollWheelStepPx lives in uikit; the alias keeps every call site as it was.
+const panelScrollWheelStepPx = uikit.PanelScrollWheelStepPx
 
-func PanelScrollView(ui *uiState, gtx layout.Context, state *panelScrollState, content layout.Widget) layout.Dimensions {
-	if state == nil {
-		return content(gtx)
-	}
-	viewport := gtx.Constraints.Max
-	if viewport.X <= 0 || viewport.Y <= 0 {
-		return content(gtx)
-	}
+// PanelScrollView lives in uikit; the alias keeps every call site as it was.
+var PanelScrollView = uikit.PanelScrollView
 
-	// First lay out with input disabled to learn the natural height. The
-	// resulting operations are discarded; the real pass below is the only one
-	// visible to the user and therefore does not duplicate input handling.
-	//
-	// The height has to be released for the measure to mean anything. A
-	// widget that fills the space it is handed — a button, a list that is
-	// meant to take what is left — reports the viewport back as its own
-	// height, and then the content is never taller than the panel, no
-	// scrollbar appears, and whatever is at the bottom of it is quietly
-	// squeezed off screen instead. Giving the measure an unbounded height
-	// and reading the answer back is what the scrollbar is for.
-	macro := op.Record(gtx.Ops)
-	measureGTX := gtx.Disabled()
-	measureGTX.Constraints.Min.Y = 0
-	measureGTX.Constraints.Max.Y = panelScrollMeasureHeight
-	measured := content(measureGTX)
-	if measured.Size.Y >= panelScrollMeasureHeight {
-		// Something in there is elastic, and left to itself it swallows the
-		// room. Measure it the ordinary way instead of believing a height
-		// that is really just the number that was offered.
-		measureGTX.Constraints.Max.Y = viewport.Y
-		measured = content(measureGTX)
-	}
-	macro.Stop()
-	state.ContentHeight = measured.Size.Y
-	state.Viewport = viewport.Y
-	state.HasBar = state.ContentHeight > state.Viewport
-	barW := 0
-	if state.HasBar {
-		barW = gtx.Dp(unit.Dp(panelScrollbarWidthDp))
-	}
-	state.Offset = clampInt(state.Offset, 0, maxInt(0, state.ContentHeight-state.Viewport))
+// PanelScrollThumbSize lives in uikit; the alias keeps every call site as it was.
+var panelScrollThumbSize = uikit.PanelScrollThumbSize
 
-	area := clip.Rect{Max: viewport}.Push(gtx.Ops)
-	// Wheel events cover the whole panel, but are pass-through so buttons and
-	// editors inside the panel still receive their own pointer events.
-	pass := pointer.PassOp{}.Push(gtx.Ops)
-	event.Op(gtx.Ops, &state.ScrollTag)
-	pass.Pop()
-	for {
-		ev, ok := gtx.Event(pointer.Filter{
-			Target: &state.ScrollTag,
-			Kinds:  pointer.Scroll,
-			// A filter with no scroll range takes the whole of a wheel
-			// gesture and hands the panel none of it, so the range has to be
-			// opened up. This is what the wheel over a list does, and the
-			// lists of the object window are the longest thing in the app.
-			ScrollX: pointer.ScrollRange{Min: math.MinInt, Max: math.MaxInt},
-			ScrollY: pointer.ScrollRange{Min: math.MinInt, Max: math.MaxInt},
-		})
-		if !ok {
-			break
-		}
-		e, ok := ev.(pointer.Event)
-		if !ok {
-			continue
-		}
-		if e.Kind == pointer.Scroll && state.HasBar {
-			// Gio's wheel is positive downwards, which is the direction the
-			// offset grows in, and Windows negates the raw wheel delta on the
-			// way in, so this is the whole of the sign there is to it.
-			state.Offset += int(e.Scroll.Y * panelScrollWheelStepPx)
-		}
-	}
-	// Only the actual scrollbar strip accepts press/drag events. Registering a
-	// full-panel handler here would cover the tree rows and prevent selection.
-	if state.HasBar {
-		barRect := clip.Rect{Min: image.Pt(viewport.X-barW, 0), Max: viewport}.Push(gtx.Ops)
-		event.Op(gtx.Ops, &state.Tag)
-		for {
-			ev, ok := gtx.Event(pointer.Filter{Target: &state.Tag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Enter | pointer.Leave})
-			if !ok {
-				break
-			}
-			e, ok := ev.(pointer.Event)
-			if !ok {
-				continue
-			}
-			switch e.Kind {
-			case pointer.Enter:
-				state.HoverBar = true
-			case pointer.Leave:
-				if !state.Dragging {
-					state.HoverBar = false
-				}
-			case pointer.Press:
-				state.Dragging = true
-				state.StartY = e.Position.Y
-				state.StartOffset = state.Offset
-			case pointer.Drag:
-				if state.Dragging {
-					thumb := panelScrollThumbSize(state, viewport.Y)
-					track := viewport.Y - thumb
-					if track > 0 {
-						delta := e.Position.Y - state.StartY
-						state.Offset = state.StartOffset + int(delta/float32(track)*float32(maxInt(0, state.ContentHeight-state.Viewport)))
-					}
-				}
-			case pointer.Release, pointer.Cancel:
-				state.Dragging = false
-			}
-		}
-		barRect.Pop()
-	}
-	state.Offset = clampInt(state.Offset, 0, maxInt(0, state.ContentHeight-state.Viewport))
-
-	renderGTX := gtx
-	renderGTX.Constraints.Min.Y = 0
-	if barW > 0 {
-		renderGTX.Constraints.Min.X = 0
-		renderGTX.Constraints.Max.X -= barW
-	}
-	// The content is laid out against the measured height rather than the
-	// viewport. A Flex clamps the size it reports to the space it was handed
-	// while still drawing every child at its natural position, so rendering
-	// tall content against the viewport's height made each section report the
-	// viewport back and the next section start inside the previous one — the
-	// Object window's side panel drew the Import rows over the tail of the
-	// bone list, with no background on either to say which was on top. The
-	// measured height is what the layout pass above believed; rendering at
-	// the same numbers keeps the sections in their own rows, and the clip
-	// below is what cuts the overflow off at the viewport.
-	renderH := state.ContentHeight
-	if renderH < viewport.Y {
-		renderH = viewport.Y
-	}
-	renderGTX.Constraints.Max.Y = renderH
-	if state.Offset > 0 {
-		shift := op.Offset(image.Pt(0, -state.Offset)).Push(gtx.Ops)
-		content(renderGTX)
-		shift.Pop()
-	} else {
-		content(renderGTX)
-	}
-	area.Pop()
-	if state.HasBar {
-		drawPanelScrollbar(gtx, state, viewport, barW)
-	}
-	return layout.Dimensions{Size: viewport}
-}
-
-func panelScrollThumbSize(state *panelScrollState, viewport int) int {
-	if state == nil || state.ContentHeight <= viewport || viewport <= 0 {
-		return viewport
-	}
-	thumb := viewport * viewport / state.ContentHeight
-	if thumb < 24 {
-		thumb = 24
-	}
-	if thumb > viewport {
-		thumb = viewport
-	}
-	return thumb
-}
-
-func drawPanelScrollbar(gtx layout.Context, state *panelScrollState, viewport image.Point, width int) {
-	if width <= 0 || state == nil {
-		return
-	}
-	x := viewport.X - width
-	track := clip.Rect{Min: image.Pt(x, 0), Max: viewport}.Push(gtx.Ops)
-	fillRect(gtx, cContentBg, image.Pt(width, viewport.Y))
-	thumb := panelScrollThumbSize(state, viewport.Y)
-	maxOffset := maxInt(1, state.ContentHeight-state.Viewport)
-	y := state.Offset * (viewport.Y - thumb) / maxOffset
-	col := cBorder
-	if state.HoverBar || state.Dragging {
-		col = rgb(0x0078D4)
-	}
-	// Offset the thumb into the track.
-	// The tracking transform is kept separate so the rounded rectangle is
-	// positioned in panel coordinates.
-	track.Pop()
-	// Draw at the correct vertical position using a clipped transform.
-	shift := op.Offset(image.Pt(x+1, y)).Push(gtx.Ops)
-	rrect(gtx, col, image.Pt(width-2, thumb), gtx.Dp(unit.Dp(3)))
-	shift.Pop()
-}
+// DrawPanelScrollbar lives in uikit; the alias keeps every call site as it was.
+var drawPanelScrollbar = uikit.DrawPanelScrollbar
 
 func LayoutListWithScrollbar(ui *uiState, gtx layout.Context, state *panelScrollState, list *layout.List, rowHeight, count int, element layout.ListElement) layout.Dimensions {
 	if list == nil {
@@ -726,8 +500,8 @@ func LayoutTreeRow(ui *uiState, gtx layout.Context, idx int, n modtree.VisibleNo
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			if contextSelected {
 				sz := image.Pt(gtx.Constraints.Max.X, h)
-				fillRect(gtx, cMenuOpen, sz)
-				b := widget.Border{Color: cMenuHover, Width: unit.Dp(1)}
+				fillRect(gtx, uikit.CMenuOpen, sz)
+				b := widget.Border{Color: uikit.CMenuHover, Width: unit.Dp(1)}
 				gtx.Constraints.Min = sz
 				gtx.Constraints.Max = sz
 				_ = b.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: sz} })
@@ -735,13 +509,13 @@ func LayoutTreeRow(ui *uiState, gtx layout.Context, idx int, n modtree.VisibleNo
 			}
 			if selected {
 				sz := image.Pt(gtx.Constraints.Max.X, h)
-				fillRect(gtx, cSelectBg, sz)
-				bd := cSelectBd
+				fillRect(gtx, uikit.CSelectBg, sz)
+				bd := uikit.CSelectBd
 				if TreeHasKeyboard(ui) {
 					// The row the keys act on, which is worth telling apart
 					// from a row that is merely selected: the middle tree can
 					// hold the keyboard while this row stays selected.
-					bd = cFocusBd
+					bd = uikit.CFocusBd
 				}
 				b := widget.Border{Color: bd, Width: unit.Dp(1)}
 				gtx.Constraints.Min = sz
@@ -751,7 +525,7 @@ func LayoutTreeRow(ui *uiState, gtx layout.Context, idx int, n modtree.VisibleNo
 			}
 			if ui.RowHover[idx] && !selected {
 				sz := image.Pt(gtx.Constraints.Max.X, h)
-				fillRect(gtx, cMenuHover, sz)
+				fillRect(gtx, uikit.CMenuHover, sz)
 				return layout.Dimensions{Size: sz}
 			}
 			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, h)}
@@ -767,7 +541,7 @@ func LayoutTreeRow(ui *uiState, gtx layout.Context, idx int, n modtree.VisibleNo
 					sz := gtx.Dp(unit.Dp(9))
 					box := image.Pt(sz, sz)
 					st := clip.Rect{Max: box}.Push(gtx.Ops)
-					paint.ColorOp{Color: cPanelBg}.Add(gtx.Ops)
+					paint.ColorOp{Color: uikit.CPanelBg}.Add(gtx.Ops)
 					paint.PaintOp{}.Add(gtx.Ops)
 					st.Pop()
 					b := widget.Border{Color: rgb(0x808080), Width: unit.Dp(1)}
@@ -780,7 +554,7 @@ func LayoutTreeRow(ui *uiState, gtx layout.Context, idx int, n modtree.VisibleNo
 								s = "+"
 							}
 							l := material.Label(ui.Th, unit.Sp(9), s)
-							l.Color = cText
+							l.Color = uikit.CText
 							return l.Layout(gtx)
 						})
 					})
@@ -819,19 +593,19 @@ func LayoutTreeRow(ui *uiState, gtx layout.Context, idx int, n modtree.VisibleNo
 					}
 					l := material.Label(ui.Th, unit.Sp(11), lbl)
 					if selected {
-						l.Color = cText
+						l.Color = uikit.CText
 						l.Font.Weight = font.Medium
 					} else if n.IsFile {
 						switch n.Kind {
 						case modtree.KindThisMod:
-							l.Color = cTreeThis
+							l.Color = uikit.CTreeThis
 						case modtree.KindEngine:
-							l.Color = cTreeEngine
+							l.Color = uikit.CTreeEngine
 						default:
-							l.Color = cTreeOther
+							l.Color = uikit.CTreeOther
 						}
 					} else {
-						l.Color = cText
+						l.Color = uikit.CText
 					}
 					if n.IsDir {
 						l.Font.Weight = font.Medium
@@ -898,7 +672,7 @@ func MiddleTreeRow(ui *uiState, gtx layout.Context, indent int, txt string, expa
 					sz := gtx.Dp(unit.Dp(9))
 					box := image.Pt(sz, sz)
 					st := clip.Rect{Max: box}.Push(gtx.Ops)
-					paint.ColorOp{Color: cPanelBg}.Add(gtx.Ops)
+					paint.ColorOp{Color: uikit.CPanelBg}.Add(gtx.Ops)
 					paint.PaintOp{}.Add(gtx.Ops)
 					st.Pop()
 					b := widget.Border{Color: rgb(0x808080), Width: unit.Dp(1)}
@@ -911,7 +685,7 @@ func MiddleTreeRow(ui *uiState, gtx layout.Context, indent int, txt string, expa
 								s = "+"
 							}
 							l := material.Label(ui.Th, unit.Sp(9), s)
-							l.Color = cText
+							l.Color = uikit.CText
 							return l.Layout(gtx)
 						})
 					})
@@ -933,7 +707,7 @@ func MiddleTreeRow(ui *uiState, gtx layout.Context, indent int, txt string, expa
 				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(11), txt)
-					l.Color = cText
+					l.Color = uikit.CText
 					return l.Layout(gtx)
 				}),
 			)
@@ -953,8 +727,8 @@ func LayoutRgdMidRow(ui *uiState, gtx layout.Context, t *fileTab, idx int, v rgd
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				if selected {
 					sz := image.Pt(gtx.Constraints.Max.X, h)
-					fillRect(gtx, cSelectBg, sz)
-					b := widget.Border{Color: cSelectBd, Width: unit.Dp(1)}
+					fillRect(gtx, uikit.CSelectBg, sz)
+					b := widget.Border{Color: uikit.CSelectBd, Width: unit.Dp(1)}
 					gtx.Constraints.Min = sz
 					gtx.Constraints.Max = sz
 					_ = b.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: sz} })
@@ -962,7 +736,7 @@ func LayoutRgdMidRow(ui *uiState, gtx layout.Context, t *fileTab, idx int, v rgd
 				}
 				if t.RgdMidClicks[idx].Hovered() && !selected {
 					sz := image.Pt(gtx.Constraints.Max.X, h)
-					fillRect(gtx, cMenuHover, sz)
+					fillRect(gtx, uikit.CMenuHover, sz)
 					return layout.Dimensions{Size: sz}
 				}
 				return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, h)}
@@ -978,7 +752,7 @@ func LayoutRgdMidRow(ui *uiState, gtx layout.Context, t *fileTab, idx int, v rgd
 						sz := gtx.Dp(unit.Dp(9))
 						box := image.Pt(sz, sz)
 						st := clip.Rect{Max: box}.Push(gtx.Ops)
-						paint.ColorOp{Color: cPanelBg}.Add(gtx.Ops)
+						paint.ColorOp{Color: uikit.CPanelBg}.Add(gtx.Ops)
 						paint.PaintOp{}.Add(gtx.Ops)
 						st.Pop()
 						b := widget.Border{Color: rgb(0x808080), Width: unit.Dp(1)}
@@ -991,7 +765,7 @@ func LayoutRgdMidRow(ui *uiState, gtx layout.Context, t *fileTab, idx int, v rgd
 									s = "+"
 								}
 								l := material.Label(ui.Th, unit.Sp(9), s)
-								l.Color = cText
+								l.Color = uikit.CText
 								return l.Layout(gtx)
 							})
 						})
@@ -1029,10 +803,10 @@ func LayoutRgdMidRow(ui *uiState, gtx layout.Context, t *fileTab, idx int, v rgd
 						}
 						l := material.Label(ui.Th, unit.Sp(11), lbl)
 						if selected {
-							l.Color = cText
+							l.Color = uikit.CText
 							l.Font.Weight = font.Medium
 						} else {
-							l.Color = cText
+							l.Color = uikit.CText
 							if v.Depth == 0 {
 								l.Font.Weight = font.Medium
 							}
@@ -1052,7 +826,7 @@ func MiddleHeader(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := image.Pt(gtx.Constraints.Max.X, h)
-			fillRect(gtx, cHeaderBg, sz)
+			fillRect(gtx, uikit.CHeaderBg, sz)
 			return layout.Dimensions{Size: sz}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -1098,7 +872,7 @@ func MiddleHeader(ui *uiState, gtx layout.Context) layout.Dimensions {
 							}
 						}
 						l := material.Label(ui.Th, unit.Sp(11), title)
-						l.Color = cText
+						l.Color = uikit.CText
 						l.Font.Weight = font.Medium
 						return l.Layout(gtx)
 					}),

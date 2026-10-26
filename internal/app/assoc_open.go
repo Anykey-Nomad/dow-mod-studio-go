@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"log"
@@ -207,7 +208,7 @@ func LayoutSgaListing(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimens
 		})
 	}
 	if len(t.SgaRows) == 0 {
-		return centeredPanelLabel(gtx, ui.Th, "Empty archive", unit.Sp(10), cTextDim)
+		return centeredPanelLabel(gtx, ui.Th, "Empty archive", unit.Sp(10), uikit.CTextDim)
 	}
 	t.SgaList.Axis = layout.Vertical
 	return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -227,14 +228,14 @@ func LayoutSgaListing(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimens
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(10), name)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
 					layout.Flexed(1, flexGap()),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(10), size)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -276,7 +277,7 @@ func LayoutUnitPickerStrip(ui *uiState, gtx layout.Context) layout.Dimensions {
 					}
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(10), raceCountLabel(race))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					})
 				}),
@@ -321,7 +322,7 @@ func UnitPickerField(ui *uiState, gtx layout.Context, label, value string, enabl
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(10), label)
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
@@ -331,9 +332,9 @@ func UnitPickerField(ui *uiState, gtx layout.Context, label, value string, enabl
 						text = text[:39] + "…"
 					}
 					l := material.Label(ui.Th, unit.Sp(11), text)
-					l.Color = cText
+					l.Color = uikit.CText
 					if !enabled {
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 					}
 					l.MaxLines = 1
 					return l.Layout(gtx)
@@ -342,21 +343,21 @@ func UnitPickerField(ui *uiState, gtx layout.Context, label, value string, enabl
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					// A caret, drawn as text so it needs no icon font.
 					l := material.Label(ui.Th, unit.Sp(9), "▼")
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				}),
 			)
 		})
-	}, cSaveBg, unitPickerBorder(open), unit.Dp(3))
+	}, uikit.CSaveBg, unitPickerBorder(open), unit.Dp(3))
 }
 
 // unitPickerBorder is a picker field's frame colour: the accent colour while
 // its list is open, the normal one otherwise.
 func unitPickerBorder(open bool) color.NRGBA {
 	if open {
-		return cSelectBd
+		return uikit.CSelectBd
 	}
-	return cSaveBd
+	return uikit.CSaveBd
 }
 
 // layoutUnitRaceDropdown is the open race list. It hangs below the strip, over
@@ -386,11 +387,11 @@ func LayoutUnitRaceDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 	gtx.Constraints.Max = gtx.Constraints.Min
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
+			rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
 			return layout.Dimensions{Size: gtx.Constraints.Max}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				var children []layout.FlexChild
 				for i := range cat.Races {
 					i := i
@@ -404,9 +405,9 @@ func LayoutUnitRaceDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 							return layout.Stack{}.Layout(gtx,
 								layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 									if sel {
-										rrect(gtx, cSelectBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
+										rrect(gtx, uikit.CSelectBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 									} else if ui.UnitRaceClicks[i].Hovered() {
-										rrect(gtx, cMenuHover, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
+										rrect(gtx, uikit.CMenuHover, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 									}
 									return layout.Dimensions{Size: gtx.Constraints.Max}
 								}),
@@ -415,14 +416,14 @@ func LayoutUnitRaceDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(11), cat.Races[i].Name)
-												l.Color = cText
+												l.Color = uikit.CText
 												l.MaxLines = 1
 												return l.Layout(gtx)
 											}),
 											layout.Flexed(1, flexGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(10), itoaPlain(cat.Races[i].UnitCount()))
-												l.Color = cTextDim
+												l.Color = uikit.CTextDim
 												return l.Layout(gtx)
 											}),
 										)
@@ -482,10 +483,10 @@ func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 	defer off.Pop()
 	gtx.Constraints.Min = image.Pt(width, listH)
 	gtx.Constraints.Max = gtx.Constraints.Min
-	return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
+				rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -508,9 +509,9 @@ func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 						return layout.Stack{}.Layout(gtx,
 							layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 								if sel {
-									rrect(gtx, cSelectBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
+									rrect(gtx, uikit.CSelectBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 								} else if ui.UnitClicks[index].Hovered() {
-									rrect(gtx, cMenuHover, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
+									rrect(gtx, uikit.CMenuHover, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 								}
 								return layout.Dimensions{Size: gtx.Constraints.Max}
 							}), layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -535,21 +536,21 @@ func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 										// never be the part that disappears.
 										layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 											l := material.Label(ui.Th, unit.Sp(11), UnitLabel(ui, u))
-											l.Color = cText
+											l.Color = uikit.CText
 											l.MaxLines = 1
 											return l.Layout(gtx)
 										}),
 										layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 											l := material.Label(ui.Th, unit.Sp(9), unitFileLabel(u))
-											l.Color = cTextDim
+											l.Color = uikit.CTextDim
 											l.MaxLines = 1
 											return l.Layout(gtx)
 										}),
 										layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 											l := material.Label(ui.Th, unit.Sp(10), u.Kind.Label)
-											l.Color = cTextDim
+											l.Color = uikit.CTextDim
 											l.MaxLines = 1
 											return l.Layout(gtx)
 										}),
@@ -622,11 +623,11 @@ func UnitColumnBody(ui *uiState, gtx layout.Context, hint string) layout.Dimensi
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, CurrentUnitSection(ui).middleTitle)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(10), hint)
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				})
 			}),
@@ -644,7 +645,7 @@ func UnitEmptyState(ui *uiState, gtx layout.Context) layout.Dimensions {
 	}
 	return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(ui.Th, unit.Sp(10), msg)
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return l.Layout(gtx)
 	})
 }
@@ -656,7 +657,7 @@ func UnitSectionFrame(ui *uiState, gtx layout.Context, body layout.Widget) layou
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, CurrentUnitSection(ui).middleTitle)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, body),
 		)
 	})
@@ -681,7 +682,7 @@ func UnitKeyValueRowFor(ui *uiState, gtx layout.Context, label, value string, is
 	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(10), label)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
 		}),
@@ -695,9 +696,9 @@ func UnitKeyValueRowFor(ui *uiState, gtx layout.Context, label, value string, is
 			// A localisation id is a reference, not text, so it is shown in the
 			// dimmer colour that marks a reference elsewhere in the app.
 			if isLocID {
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 			} else {
-				l.Color = cText
+				l.Color = uikit.CText
 			}
 			l.MaxLines = 1
 			return l.Layout(gtx)
@@ -720,7 +721,7 @@ func LayoutUnitInfoList(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), "This unit declares no readable properties.")
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return l.Layout(gtx)
 			})
 		})
@@ -758,13 +759,13 @@ func LayoutUnitInfoIconHeader(ui *uiState, gtx layout.Context) layout.Dimensions
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(12), UnitLabel(ui, *u))
-						l.Color = cText
+						l.Color = uikit.CText
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), unitFileLabel(*u)+"  ·  "+u.Kind.Label)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
@@ -861,7 +862,7 @@ func LayoutUnitAbilityList(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), "This unit declares no abilities.")
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return l.Layout(gtx)
 			})
 		})
@@ -885,12 +886,12 @@ func LayoutUnitAbilityList(ui *uiState, gtx layout.Context) layout.Dimensions {
 // missingLabel says what to print for a row whose reference did not resolve.
 func LayoutUnitSelectableRow(ui *uiState, gtx layout.Context, index, count int, slot, name, missingLabel string, missing bool) layout.Dimensions {
 	sel := index == ui.UnitSelRow
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	switch {
 	case sel:
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	case ui.UnitRowClicks[index].Hovered():
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return ui.UnitRowClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp))
@@ -899,7 +900,7 @@ func LayoutUnitSelectableRow(ui *uiState, gtx layout.Context, index, count int, 
 		gtx.Constraints.Max = sz
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -909,7 +910,7 @@ func LayoutUnitSelectableRow(ui *uiState, gtx layout.Context, index, count int, 
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), slot)
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -923,7 +924,7 @@ func LayoutUnitSelectableRow(ui *uiState, gtx layout.Context, index, count int, 
 								text = text[:27] + "…"
 							}
 							l := material.Label(ui.Th, unit.Sp(11), text)
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -994,7 +995,7 @@ func LayoutUnitRightColumnBody(ui *uiState, gtx layout.Context) layout.Dimension
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, sec.rightTitle)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					children := []layout.FlexChild{
@@ -1048,7 +1049,7 @@ func LayoutUnitRightColumnBody(ui *uiState, gtx layout.Context) layout.Dimension
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(10), "No readable settings for this entry.")
-								l.Color = cTextDim
+								l.Color = uikit.CTextDim
 								return l.Layout(gtx)
 							})
 						}))
@@ -1066,7 +1067,7 @@ func LayoutUnitRightColumnBody(ui *uiState, gtx layout.Context) layout.Dimension
 func UnitGroupHeading(ui *uiState, gtx layout.Context, text string) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(ui.Th, unit.Sp(11), text)
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		l.Font.Weight = font.SemiBold
 		l.MaxLines = 1
 		return l.Layout(gtx)
@@ -1673,7 +1674,7 @@ func UnitImportSection(ui *uiState, gtx layout.Context, v *modelViewer) layout.D
 	}
 	src := UnitImportBoneIndex(ui, v)
 	children := []layout.FlexChild{
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return sectionHeader(gtx, ui.Th, "Imported · "+filepath.Base(ui.UnitImpPath))
 		}),
@@ -1701,7 +1702,7 @@ func UnitImportSection(ui *uiState, gtx layout.Context, v *modelViewer) layout.D
 							txt = "Ctrl+click picks more frames"
 						}
 						l := material.Label(ui.Th, unit.Sp(9), txt)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
@@ -1717,7 +1718,7 @@ func UnitImportSection(ui *uiState, gtx layout.Context, v *modelViewer) layout.D
 				msg = "No bone named " + v.Model.Bones[v.BoneIndex].Name + " in the imported file."
 			}
 			l := material.Label(ui.Th, unit.Sp(9), msg)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 		}))
 	} else {
@@ -1750,7 +1751,7 @@ func UnitImportSection(ui *uiState, gtx layout.Context, v *modelViewer) layout.D
 			if len(frames) == 0 {
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(9), "This clip gives "+v.Model.Bones[v.BoneIndex].Name+" no keys.")
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return layout.Inset{Left: unit.Dp(16), Bottom: unit.Dp(2)}.Layout(gtx, l.Layout)
 				}))
 				continue

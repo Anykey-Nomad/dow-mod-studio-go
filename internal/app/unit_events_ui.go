@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -317,9 +318,9 @@ func UnitMeshRows(ui *uiState, gtx layout.Context) layout.Dimensions {
 						return nameC.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), name)
 							if hidden {
-								l.Color = cTextDim
+								l.Color = uikit.CTextDim
 							} else {
-								l.Color = cText
+								l.Color = uikit.CText
 							}
 							if nameC.Hovered() {
 								l.Color = rgb(0x53B9FF)
@@ -339,7 +340,7 @@ func UnitMeshRows(ui *uiState, gtx layout.Context) layout.Dimensions {
 // nothing to list.
 func MeshRowsMessage(ui *uiState, gtx layout.Context, msg string) layout.Dimensions {
 	l := material.Label(ui.Th, unit.Sp(9), msg)
-	l.Color = cTextDim
+	l.Color = uikit.CTextDim
 	return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 }
 
@@ -388,9 +389,9 @@ func UnitMeshVisibilitySection(ui *uiState, gtx layout.Context) layout.Dimension
 // rather than a font character, so it renders the same everywhere.
 func EyeToggle(ui *uiState, gtx layout.Context, btn *widget.Clickable, visible bool) layout.Dimensions {
 	px := gtx.Dp(eyeToggleSizeDp)
-	col := cText
+	col := uikit.CText
 	if !visible {
-		col = cTextDim
+		col = uikit.CTextDim
 	}
 	if btn.Hovered() {
 		col = rgb(0x53B9FF)
@@ -1886,7 +1887,7 @@ func UnitEventsMessage(ui *uiState, gtx layout.Context, msg string) layout.Dimen
 	}
 	return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(ui.Th, unit.Sp(10), msg)
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		l.MaxLines = 6
 		return l.Layout(gtx)
 	})
@@ -1905,7 +1906,7 @@ func LayoutUnitEventTimelines(ui *uiState, gtx layout.Context) layout.Dimensions
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, sec.middleTitle)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutUnitEventTimelineList(ui, gtx) }),
 		}
 		if ui.UnitEvtDoc != nil {
@@ -1916,7 +1917,7 @@ func LayoutUnitEventTimelines(ui *uiState, gtx layout.Context) layout.Dimensions
 			_, _, hasClip := ui.UnitClips.Pick(clipActions, ui.UnitClipCur)
 			if len(acts) > 0 || hasClip {
 				children = append(children,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return LayoutUnitEvtActions(ui, gtx, acts)
 					}),
@@ -2025,12 +2026,12 @@ func LayoutUnitEvtActionRow(ui *uiState, gtx layout.Context, i int, a whe.FxActi
 	}
 	c := &ui.UnitEvtActionClicks[i]
 	selected := i == ui.UnitEvtActionSel
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	switch {
 	case selected:
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	case c.Hovered():
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp - 4))
@@ -2039,7 +2040,7 @@ func LayoutUnitEvtActionRow(ui *uiState, gtx layout.Context, i int, a whe.FxActi
 		gtx.Constraints.Max = sz
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -2049,7 +2050,7 @@ func LayoutUnitEvtActionRow(ui *uiState, gtx layout.Context, i int, a whe.FxActi
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(a.Name))
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -2057,7 +2058,7 @@ func LayoutUnitEvtActionRow(ui *uiState, gtx layout.Context, i int, a whe.FxActi
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							note := fmt.Sprintf("%d choices", len(a.Motions)+len(a.Subactions))
 							l := material.Label(ui.Th, unit.Sp(9), note)
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -2935,7 +2936,7 @@ func UnitActionConditions(ui *uiState, gtx layout.Context, a whe.FxAction) layou
 	EnsureUnitActConditions(ui)
 	if len(a.Motions)+len(a.Subactions) == 0 {
 		l := material.Label(ui.Th, unit.Sp(9), "This action carries no motion and calls no action.")
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 	}
 	var rows []layout.FlexChild
@@ -2990,7 +2991,7 @@ func LayoutUnitActConditionRow(ui *uiState, gtx layout.Context, i int, ln whe.Fx
 			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), "\u2192")
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				l.MaxLines = 1
 				return l.Layout(gtx)
 			}),
@@ -3030,9 +3031,9 @@ func LayoutUnitActConditionRow(ui *uiState, gtx layout.Context, i int, ln whe.Fx
 	rowGTX := gtx
 	rowGTX.Constraints.Min.Y = h + gtx.Dp(unit.Dp(12))
 	rowGTX.Constraints.Max.Y = h + gtx.Dp(unit.Dp(12))
-	bg := cTabOff
+	bg := uikit.CTabOff
 	if i == ui.UnitActSel {
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	}
 	return layout.Inset{Left: indent, Bottom: unit.Dp(4)}.Layout(rowGTX, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
@@ -3057,12 +3058,12 @@ func UnitActFieldEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, hint
 	ed.Submit = true
 	gtx.Constraints.Min.Y = gtx.Dp(36)
 	gtx.Constraints.Max.Y = gtx.Dp(40)
-	b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+	b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 	return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			w := material.Editor(ui.Th, ed, hint)
 			w.TextSize = unit.Sp(10)
-			w.HintColor = cTextDim
+			w.HintColor = uikit.CTextDim
 			return w.Layout(gtx)
 		})
 	})
@@ -3083,7 +3084,7 @@ func UnitActGuardChip(ui *uiState, gtx layout.Context, i int, label string) layo
 	lgtx := gtx.Disabled()
 	lgtx.Constraints.Min = image.Point{}
 	l := material.Label(ui.Th, unit.Sp(11), label)
-	l.Color = cText
+	l.Color = uikit.CText
 	ldims := l.Layout(lgtx)
 	macro.Stop()
 	padX, padY := unit.Dp(10), unit.Dp(5)
@@ -3091,14 +3092,14 @@ func UnitActGuardChip(ui *uiState, gtx layout.Context, i int, label string) layo
 	if inner.Y < gtx.Dp(unit.Dp(30)) {
 		inner.Y = gtx.Dp(unit.Dp(30))
 	}
-	bg := cSaveBg
+	bg := uikit.CSaveBg
 	switch {
 	case c.Pressed():
-		bg = cMenuOpen
+		bg = uikit.CMenuOpen
 	case c.Hovered():
-		bg = cSaveHover
+		bg = uikit.CSaveHover
 	}
-	return widget.Border{Color: cSaveBd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return widget.Border{Color: uikit.CSaveBd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		// Exact constraints inside: nothing the row hands down can leak
 		// into the chip's own size or into where its label is drawn.
 		gtx.Constraints.Min = inner
@@ -3119,7 +3120,7 @@ func UnitActGuardChip(ui *uiState, gtx layout.Context, i int, label string) layo
 				}
 				off := op.Offset(image.Pt(gtx.Dp(padX), padTop)).Push(gtx.Ops)
 				l := material.Label(ui.Th, unit.Sp(11), label)
-				l.Color = cText
+				l.Color = uikit.CText
 				dims := l.Layout(gtx)
 				off.Pop()
 				return layout.Dimensions{Size: image.Pt(dims.Size.X+2*gtx.Dp(padX), dims.Size.Y)}
@@ -3200,7 +3201,7 @@ func UnitActPanelFooter(ui *uiState, gtx layout.Context) layout.Dimensions {
 				layout.Flexed(1, rowGap()),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(9), selLabel)
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
@@ -3260,7 +3261,7 @@ func UnitEvtActionPanelBody(ui *uiState, gtx layout.Context) []layout.FlexChild 
 	return []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(9), text)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 2
 			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 		}),
@@ -3273,7 +3274,7 @@ func UnitEvtActionPanelBody(ui *uiState, gtx layout.Context) []layout.FlexChild 
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Max.X = gtx.Dp(112)
 					l := material.Label(ui.Th, unit.Sp(9), "Name")
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
@@ -3281,12 +3282,12 @@ func UnitEvtActionPanelBody(ui *uiState, gtx layout.Context) []layout.FlexChild 
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Min.Y = gtx.Dp(20)
 					gtx.Constraints.Max.Y = gtx.Dp(22)
-					b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+					b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 					return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							w := material.Editor(ui.Th, &ui.UnitActNameEd, act.Name)
 							w.TextSize = unit.Sp(10)
-							w.HintColor = cTextDim
+							w.HintColor = uikit.CTextDim
 							return w.Layout(gtx)
 						})
 					})
@@ -3304,7 +3305,7 @@ func UnitEvtActionPanelBody(ui *uiState, gtx layout.Context) []layout.FlexChild 
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(9), "One line per choice — press a guard to cycle it, type the condition inline. Apply or Enter writes the document; Save .whe writes the file.")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 3
 			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 		}),
@@ -3313,7 +3314,7 @@ func UnitEvtActionPanelBody(ui *uiState, gtx layout.Context) []layout.FlexChild 
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(9), "Pick a timeline above to edit its events instead.")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 2
 			return layout.Inset{Top: unit.Dp(8)}.Layout(gtx, l.Layout)
 		}),
@@ -3341,7 +3342,7 @@ func LayoutUnitEventTimelineList(ui *uiState, gtx layout.Context) layout.Dimensi
 				text += "  \u2022 unsaved"
 			}
 			l := material.Label(ui.Th, unit.Sp(9), text)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 2
 			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 		}),
@@ -3357,7 +3358,7 @@ func LayoutUnitEventTimelineList(ui *uiState, gtx layout.Context) layout.Dimensi
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), "copies it whole, for another unit")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						})
@@ -3386,14 +3387,14 @@ func LayoutUnitEventPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, sec.rightTitle)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 		}
 		if !ui.UnitEvtFocusAction {
 			children = append(children,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return LayoutUnitEvtTransport(ui, gtx)
 				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			)
 		}
 		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -3403,7 +3404,7 @@ func LayoutUnitEventPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		}))
 		if !ui.UnitEvtFocusAction {
 			children = append(children,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return UnitEventPanelForm(ui, gtx)
 				}),
@@ -3413,7 +3414,7 @@ func LayoutUnitEventPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 			// timeline form does, so an action's conditions are written the
 			// way a timeline's events are.
 			children = append(children,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return UnitActPanelFooter(ui, gtx)
 				}),
@@ -3422,7 +3423,7 @@ func LayoutUnitEventPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		// The mesh list is pinned below both editors, so it stays on screen
 		// whether a timeline or an action is being worked on.
 		children = append(children,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return UnitMeshVisibilitySection(ui, gtx)
 			}),
@@ -3474,7 +3475,7 @@ func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 				text += "  • unsaved"
 			}
 			l := material.Label(ui.Th, unit.Sp(9), text)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 2
 			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 		}))
@@ -3491,7 +3492,7 @@ func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 		if len(tl.Animations) == 0 {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), "This motion blends no animations — it chains to other motions instead.")
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				l.MaxLines = 2
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}))
@@ -3503,7 +3504,7 @@ func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(10), tl.Animations[i])
-								l.Color = cText
+								l.Color = uikit.CText
 								l.MaxLines = 1
 								return l.Layout(gtx)
 							}),
@@ -3538,7 +3539,7 @@ func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 		if len(tl.Events) == 0 {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), defText)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}))
 		} else {
@@ -3691,7 +3692,7 @@ func UnitEvtEntryRow(ui *uiState, gtx layout.Context, i int, key string) layout.
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Max.X = gtx.Dp(112)
 			l := material.Label(ui.Th, unit.Sp(9), key)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
 		}),
@@ -3699,12 +3700,12 @@ func UnitEvtEntryRow(ui *uiState, gtx layout.Context, i int, key string) layout.
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.Y = gtx.Dp(20)
 			gtx.Constraints.Max.Y = gtx.Dp(22)
-			b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+			b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 			return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					w := material.Editor(ui.Th, ed, "")
 					w.TextSize = unit.Sp(10)
-					w.HintColor = cTextDim
+					w.HintColor = uikit.CTextDim
 					return w.Layout(gtx)
 				})
 			})
@@ -3764,7 +3765,7 @@ func UnitEventPanelForm(ui *uiState, gtx layout.Context) layout.Dimensions {
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Max.X = gtx.Dp(112)
 					l := material.Label(ui.Th, unit.Sp(9), "Shift (s)")
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
@@ -3772,12 +3773,12 @@ func UnitEventPanelForm(ui *uiState, gtx layout.Context) layout.Dimensions {
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Min.Y = gtx.Dp(20)
 					gtx.Constraints.Max.Y = gtx.Dp(22)
-					b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+					b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 					return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							w := material.Editor(ui.Th, &ui.UnitEvtShiftEd, "e.g. 0.1 or -0.1")
 							w.TextSize = unit.Sp(10)
-							w.HintColor = cTextDim
+							w.HintColor = uikit.CTextDim
 							return w.Layout(gtx)
 						})
 					})
@@ -3877,7 +3878,7 @@ func UnitEventPanelForm(ui *uiState, gtx layout.Context) layout.Dimensions {
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), ui.UnitClips.Label(clipEvents, ui.UnitClipCur))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					})
@@ -3922,12 +3923,12 @@ func LayoutUnitEventRow(ui *uiState, gtx layout.Context, i int, ev whe.FxTimelin
 	}
 	c := &ui.UnitEvtClicks[i]
 	selected := UnitEvtRowSelected(ui, i)
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	switch {
 	case selected:
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	case c.Hovered():
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	kind := unitEventKindTag(ev.Name, defs)
 	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -3937,7 +3938,7 @@ func LayoutUnitEventRow(ui *uiState, gtx layout.Context, i int, ev whe.FxTimelin
 		gtx.Constraints.Max = sz
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -3947,21 +3948,21 @@ func LayoutUnitEventRow(ui *uiState, gtx layout.Context, i int, ev whe.FxTimelin
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), unitEventTimeLabel(ev.Time))
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(ev.Name))
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, flexGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), kind)
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -3999,12 +4000,12 @@ func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.F
 	}
 	c := &ui.UnitEvtTlClicks[i]
 	selected := strings.EqualFold(ui.UnitEvtTimeline, tl.Name)
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	switch {
 	case selected:
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	case c.Hovered():
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	clips := strings.Join(tl.Animations, ", ")
 	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -4014,7 +4015,7 @@ func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.F
 		gtx.Constraints.Max = sz
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -4024,7 +4025,7 @@ func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.F
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(tl.Name))
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -4035,7 +4036,7 @@ func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.F
 								note += "  \u00b7  " + clips
 							}
 							l := material.Label(ui.Th, unit.Sp(9), note)
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -4372,11 +4373,11 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 				gtx.Constraints.Min.X = cardW
 				gtx.Constraints.Max.Y = cardH
 				gtx.Constraints.Min.Y = cardH
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Stack{}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 							sz := gtx.Constraints.Max
-							rrect(gtx, cPanelBg, sz, gtx.Dp(4))
+							rrect(gtx, uikit.CPanelBg, sz, gtx.Dp(4))
 							return layout.Dimensions{Size: sz}
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -4384,7 +4385,7 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(14), evtPickerTitle(p.Target))
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
@@ -4392,11 +4393,11 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 										h := gtx.Dp(unit.Dp(28))
 										gtx.Constraints.Min.Y = h
 										gtx.Constraints.Max.Y = h
-										return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+										return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 											return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 												Ed := material.Editor(ui.Th, &p.Ed, "")
 												Ed.TextSize = unit.Sp(11)
-												Ed.HintColor = cTextDim
+												Ed.HintColor = uikit.CTextDim
 												Ed.Hint = "filter, or type a value"
 												return Ed.Layout(gtx)
 											})
@@ -4409,7 +4410,7 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 											note = strconv.Itoa(len(p.Hits)) + " of " + strconv.Itoa(len(p.All)) + " shown"
 										}
 										l := material.Label(ui.Th, unit.Sp(9), note)
-										l.Color = cTextDim
+										l.Color = uikit.CTextDim
 										l.MaxLines = 1
 										return l.Layout(gtx)
 									}),
@@ -4417,7 +4418,7 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 										return LayoutListWithScrollbar(ui, gtx, nil, &p.List, unitRowHeightDp, len(p.Hits), func(gtx layout.Context, i int) layout.Dimensions {
 											return p.Clicks[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(10), p.Hits[i])
-												l.Color = cText
+												l.Color = uikit.CText
 												l.MaxLines = 1
 												return layout.Inset{Top: unit.Dp(3), Bottom: unit.Dp(3), Left: unit.Dp(6)}.Layout(gtx, l.Layout)
 											})
@@ -4747,7 +4748,7 @@ func LayoutUnitEvtTransport(ui *uiState, gtx layout.Context) layout.Dimensions {
 					text = fmt.Sprintf("%.2f / %.2f s", p.Pos, p.Duration)
 				}
 				l := material.Label(ui.Th, unit.Sp(9), text)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				l.MaxLines = 1
 				return l.Layout(gtx)
 			}),
@@ -4803,9 +4804,9 @@ func LayoutUnitEvtScrub(ui *uiState, gtx layout.Context, hDp int) layout.Dimensi
 		}
 	}
 	stack.Pop()
-	unitEvtFillRect(gtx, image.Rect(0, 0, w, h), cContentBg)
+	unitEvtFillRect(gtx, image.Rect(0, 0, w, h), uikit.CContentBg)
 	if posX > 0 {
-		unitEvtFillRect(gtx, image.Rect(0, 0, posX, h), cSelectBg)
+		unitEvtFillRect(gtx, image.Rect(0, 0, posX, h), uikit.CSelectBg)
 	}
 	if p.Duration > 0 {
 		for _, f := range p.Order {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"fmt"
 	"image"
 	"image/color"
@@ -515,7 +516,7 @@ func ModelControls(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimension
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), modelClipLabel(v))
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, l.Layout)
 						}),
@@ -634,10 +635,10 @@ func ModelMaterialDiagnosticsTable(ui *uiState, gtx layout.Context, t *fileTab) 
 	}
 	v := t.Model
 	if !v.MaterialsLoaded && !v.Loading {
-		return centeredPanelLabel(gtx, ui.Th, "Material lookup has not run", unit.Sp(10), cTextDim)
+		return centeredPanelLabel(gtx, ui.Th, "Material lookup has not run", unit.Sp(10), uikit.CTextDim)
 	}
 	if v.Loading && len(v.MaterialDiagnostics) == 0 {
-		return centeredPanelLabel(gtx, ui.Th, "Resolving materials…", unit.Sp(10), cTextDim)
+		return centeredPanelLabel(gtx, ui.Th, "Resolving materials…", unit.Sp(10), uikit.CTextDim)
 	}
 	rows := make([]layout.FlexChild, 0, len(v.Model.Meshes)*3)
 	for meshIndex, mesh := range v.Model.Meshes {
@@ -669,7 +670,7 @@ func ModelMaterialDiagnosticsTable(ui *uiState, gtx layout.Context, t *fileTab) 
 		)
 	}
 	if len(rows) == 0 {
-		return centeredPanelLabel(gtx, ui.Th, "No meshes reference a material", unit.Sp(10), cTextDim)
+		return centeredPanelLabel(gtx, ui.Th, "No meshes reference a material", unit.Sp(10), uikit.CTextDim)
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
@@ -975,9 +976,9 @@ func uvTextureLabel(material string) string {
 // the selected rows use, so the choice reads as a choice without a word saying
 // so.
 func UvTextureButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, on bool) layout.Dimensions {
-	bg, bd, text := cSaveBg, cSaveBd, cText
+	bg, bd, text := uikit.CSaveBg, uikit.CSaveBd, uikit.CText
 	if on {
-		bg, bd, text = cSelectBg, cSelectBd, rgb(0xFFFFFF)
+		bg, bd, text = uikit.CSelectBg, uikit.CSelectBd, rgb(0xFFFFFF)
 	}
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return frameMeasured(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -1021,7 +1022,7 @@ func modelMaterialsNeedLoad(t *fileTab) bool {
 func LayoutModelViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	v := t.Model
 	if v == nil || v.Model == nil {
-		return centeredPanelLabel(gtx, ui.Th, "No model", unit.Sp(10), cTextDim)
+		return centeredPanelLabel(gtx, ui.Th, "No model", unit.Sp(10), uikit.CTextDim)
 	}
 	if modelMaterialsNeedLoad(t) {
 		t.ModelMaterialCh = make(chan modelMaterialResult, 1)

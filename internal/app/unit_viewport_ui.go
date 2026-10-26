@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"errors"
 	"fmt"
@@ -56,7 +57,7 @@ func LayoutUnitViewportArea(ui *uiState, gtx layout.Context) layout.Dimensions {
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, CurrentUnitSection(ui).middleTitle)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
 					func(gtx layout.Context) layout.Dimensions {
@@ -83,7 +84,7 @@ func LayoutUnitViewportArea(ui *uiState, gtx layout.Context) layout.Dimensions {
 func LayoutUnitCanvasColumn(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutUnitModelCanvas(ui, gtx) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return UnitModelTransport(ui, gtx, ui.UnitModel)
 		}),
@@ -110,7 +111,7 @@ func LayoutUnitModelCanvas(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(10), msg)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 4
 			return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, l.Layout)
 		})
@@ -194,7 +195,7 @@ func UnitModelSelectionToggle(ui *uiState, gtx layout.Context, v *modelViewer) l
 // unitModelSideEmpty is what the controls area shows when no model is loaded.
 func UnitModelSideEmpty(ui *uiState, gtx layout.Context) layout.Dimensions {
 	l := material.Label(ui.Th, unit.Sp(9), "No model is loaded.")
-	l.Color = cTextDim
+	l.Color = uikit.CTextDim
 	return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, l.Layout)
 }
 
@@ -223,7 +224,7 @@ func UnitModelSideBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 	v := UnitModelViewer(ui)
 	if t == nil || v == nil {
 		l := material.Label(ui.Th, unit.Sp(9), "No model is loaded.")
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, l.Layout)
 	}
 	// The model's own facts — the file, the state, the clip on show, the
@@ -282,7 +283,7 @@ func UnitModelTransport(ui *uiState, gtx layout.Context, t *fileTab) layout.Dime
 	if t == nil || t.Model == nil {
 		return unitPlaybackRow(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(9), "No model is loaded.")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
@@ -379,7 +380,7 @@ func UnitModelFrameLabel(ui *uiState, gtx layout.Context, v *modelViewer) layout
 		}
 	}
 	l := material.Label(ui.Th, unit.Sp(9), text)
-	l.Color = cTextDim
+	l.Color = uikit.CTextDim
 	l.MaxLines = 2
 	w := gtx.Dp(unit.Dp(unitFrameLabelDp))
 	gtx.Constraints.Max.X = w
@@ -490,7 +491,7 @@ func ModelListTabButtons(ui *uiState, gtx layout.Context, labels []string, click
 	for i, label := range labels {
 		i, label := i, label
 		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return ToggleButton(ui, gtx, &clicks[i], label, selected == i, cSelectBg)
+			return ToggleButton(ui, gtx, &clicks[i], label, selected == i, uikit.CSelectBg)
 		}))
 	}
 	return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -516,7 +517,7 @@ func UnitAnimListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, cli
 	}
 	if len(anims) == 0 {
 		l := material.Label(ui.Th, unit.Sp(9), "This model carries no animations.")
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 	}
 	var children []layout.FlexChild
@@ -628,7 +629,7 @@ func UnitMarkerListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, c
 	}
 	if len(markers) == 0 {
 		l := material.Label(ui.Th, unit.Sp(9), "This model carries no markers.")
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 	}
 	var children []layout.FlexChild
@@ -674,7 +675,7 @@ func UnitBoneListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, cli
 	}
 	if len(bones) == 0 {
 		l := material.Label(ui.Th, unit.Sp(9), "This model carries no skeleton.")
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 	}
 	var children []layout.FlexChild
@@ -735,7 +736,7 @@ func UnitBoneParams(ui *uiState, gtx layout.Context, v *modelViewer, i int) layo
 	children := make([]layout.FlexChild, 0, len(rows)+1)
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
-			func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) })
+			func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) })
 	}))
 	for idx, row := range rows {
 		row, idx := row, idx
@@ -749,7 +750,7 @@ func UnitBoneParams(ui *uiState, gtx layout.Context, v *modelViewer, i int) layo
 		if t != nil && v.BoneIndex == i && (len(t.PosKey) > 0 || len(t.RotKey) > 0) {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
-					func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) })
+					func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) })
 			}))
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return UnitBoneKeyListHeader(ui, gtx, v)
@@ -805,14 +806,14 @@ func UnitBoneKeyListHeader(ui *uiState, gtx layout.Context, v *modelViewer) layo
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(9), "Keyframes")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		}),
 		layout.Flexed(1, rowGap()),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if n := len(PickedBoneKeyRefs(ui, v)); n > 1 {
 				l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("%d picked", n))
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return l.Layout(gtx)
 			}
 			return layout.Dimensions{}
@@ -1156,7 +1157,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 	dims := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
-				func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) })
+				func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) })
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
@@ -1181,7 +1182,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 					children := []layout.FlexChild{
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), "Ang")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						}),
 					}
@@ -1191,7 +1192,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 							layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(9), boneFieldAxes[i])
-								l.Color = cTextDim
+								l.Color = uikit.CTextDim
 								return l.Layout(gtx)
 							}),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -1225,7 +1226,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), "Mirror")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
@@ -1252,7 +1253,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), "Shift")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
@@ -1269,7 +1270,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 						}),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(8), "frames each press moves")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -1297,7 +1298,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 						}),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(8), "drag a mark on the strip to move its key")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -1322,7 +1323,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 						}),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(8), "Ctrl+click picks more rows")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -1365,7 +1366,7 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 							return SmallButtonDisabled(ui, gtx, &ui.UnitBoneKeySaveClick, "Save WHM", !ui.UnitModelWhmDirty)
 						}),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							text, noteColor := ui.UnitImpPath, cTextDim
+							text, noteColor := ui.UnitImpPath, uikit.CTextDim
 							if ui.UnitBoneKeyErr != "" {
 								text, noteColor = ui.UnitBoneKeyErr, rgb(0xB00020)
 							}
@@ -1505,7 +1506,7 @@ func UnitBoneKeyFieldsRow(ui *uiState, gtx layout.Context, title string, eds *[3
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(10), title)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
@@ -1532,19 +1533,19 @@ func UnitBoneKeyField(ui *uiState, gtx layout.Context, axis string, ed *widget.E
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(9), axis)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(2)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min = image.Pt(gtx.Dp(56), gtx.Dp(20))
 			gtx.Constraints.Max = image.Pt(gtx.Dp(56), gtx.Dp(22))
-			b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+			b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
 			return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					w := material.Editor(ui.Th, ed, "")
 					w.TextSize = unit.Sp(10)
-					w.HintColor = cTextDim
+					w.HintColor = uikit.CTextDim
 					return w.Layout(gtx)
 				})
 			})
@@ -1922,7 +1923,7 @@ func UnitAnimFramesRow(ui *uiState, gtx layout.Context, v *modelViewer) layout.D
 	// A count the field would not take says why where the length is shown: it
 	// is the one place the frames row has to report in, and it is on screen in
 	// every list mode.
-	hintColor := cTextDim
+	hintColor := uikit.CTextDim
 	if ui.UnitAnimFramesErr != "" {
 		hint = ui.UnitAnimFramesErr
 		hintColor = rgb(0xB00020)
@@ -1930,7 +1931,7 @@ func UnitAnimFramesRow(ui *uiState, gtx layout.Context, v *modelViewer) layout.D
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(10), "Frames")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
@@ -2527,9 +2528,9 @@ func boneTrackKeys(anim *WhmAnimation, i int) int {
 // key's number, the frame it sits on, and its current value, and clicking it
 // picks that key for editing in the buttons below the list.
 func UnitBoneKeyRow(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, text string) layout.Dimensions {
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if selected {
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	}
 	h := gtx.Dp(unit.Dp(unitRowHeightDp - 4))
 	sz := image.Pt(gtx.Constraints.Max.X, h)
@@ -2538,7 +2539,7 @@ func UnitBoneKeyRow(ui *uiState, gtx layout.Context, c *widget.Clickable, select
 	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					Rrect(ui, gtx, bg, gtx.Constraints.Max, unit.Dp(2))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -2546,7 +2547,7 @@ func UnitBoneKeyRow(ui *uiState, gtx layout.Context, c *widget.Clickable, select
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(10), text)
-					l.Color = cText
+					l.Color = uikit.CText
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				})
@@ -2567,12 +2568,12 @@ func UnitViewportRow(ui *uiState, gtx layout.Context, c *widget.Clickable, selec
 // (iconCol), so its names stay in one line; a list whose icons come and go
 // passes iconCol false and shows them as they come.
 func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, name, note string, icon image.Image, iconCol bool) layout.Dimensions {
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	switch {
 	case selected:
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	case c.Hovered():
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp - 4))
@@ -2581,7 +2582,7 @@ func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, s
 		gtx.Constraints.Max = sz
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					Rrect(ui, gtx, bg, gtx.Constraints.Max, unit.Dp(2))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -2599,7 +2600,7 @@ func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, s
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(name))
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -2609,7 +2610,7 @@ func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, s
 								return layout.Dimensions{}
 							}
 							l := material.Label(ui.Th, unit.Sp(9), note)
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -3402,10 +3403,10 @@ func LayoutUnitMeshMatDialog(ui *uiState, gtx layout.Context) layout.Dimensions 
 				)
 				gtx.Constraints.Min = image.Pt(cardW, cardH)
 				gtx.Constraints.Max = image.Pt(cardW, cardH)
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Stack{}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
+							rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
 							return layout.Dimensions{Size: gtx.Constraints.Max}
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -3434,7 +3435,7 @@ func UnitMeshMatColumn(ui *uiState, gtx layout.Context, fields layout.Widget) la
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitMeshMatTitle(ui, gtx) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return hLine(gtx, cHeaderLine, 1)
+			return hLine(gtx, uikit.CHeaderLine, 1)
 		}),
 		layout.Flexed(1, fields),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return UnitMeshMatNote(ui, gtx) }),
@@ -3464,12 +3465,12 @@ func UnitMeshMatTitle(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(14), "Mesh materials")
-			l.Color = cText
+			l.Color = uikit.CText
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(10), ui.UnitMeshMatName)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
 		}),
@@ -3482,7 +3483,7 @@ func UnitMeshMatTitle(ui *uiState, gtx layout.Context) layout.Dimensions {
 func UnitMeshMatFields(ui *uiState, gtx layout.Context) layout.Dimensions {
 	if len(ui.UnitMeshMatEditors) == 0 {
 		l := material.Label(ui.Th, unit.Sp(9), "This mesh carries no materials.")
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return l.Layout(gtx)
 	}
 	var rc []layout.FlexChild
@@ -3495,7 +3496,7 @@ func UnitMeshMatFields(ui *uiState, gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), fmt.Sprintf("Material %d", i+1))
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, rowGap()),
@@ -3514,13 +3515,13 @@ func UnitMeshMatFields(ui *uiState, gtx layout.Context) layout.Dimensions {
 						return layout.Dimensions{}
 					}
 					l := material.Label(ui.Th, unit.Sp(9), "file: "+ui.UnitMeshMatOrig[i])
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					l.MaxLines = 1
 					return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return hLine(gtx, cBorder, 1)
+						return hLine(gtx, uikit.CBorder, 1)
 					})
 				}),
 			)
@@ -3533,10 +3534,10 @@ func UnitMeshMatFields(ui *uiState, gtx layout.Context) layout.Dimensions {
 // exists while there is no error, and the save's complaint when there is one.
 func UnitMeshMatNote(ui *uiState, gtx layout.Context) layout.Dimensions {
 	msg := "Preview draws the map behind this card; Save WHM writes the path into the file."
-	col := cTextDim
+	col := uikit.CTextDim
 	if ui.UnitMeshMatErr != "" {
 		msg = ui.UnitMeshMatErr
-		col = cProblem
+		col = uikit.CProblem
 	}
 	l := material.Label(ui.Th, unit.Sp(9), msg)
 	l.Color = col

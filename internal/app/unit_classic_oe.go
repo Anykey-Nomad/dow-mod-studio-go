@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -153,7 +154,7 @@ func LayoutClassicOELeftPanel(ui *uiState, gtx layout.Context) layout.Dimensions
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, "Object Editor")
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return PanelWithScroll(ui, gtx, &ui.ClassicOEScroll, func(gtx layout.Context) layout.Dimensions { return LayoutClassicOEHeaderList(ui, gtx) })
 			}),
@@ -195,11 +196,11 @@ func LayoutClassicOEHeaderRow(ui *uiState, gtx layout.Context, index int) layout
 		ui.ClassicOEOpen[index] = !ui.ClassicOEOpen[index]
 	}
 	open := ui.ClassicOEOpen[index]
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if open {
-		bg = cHeaderBg
+		bg = uikit.CHeaderBg
 	} else if c.Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -212,7 +213,7 @@ func LayoutClassicOEHeaderRow(ui *uiState, gtx layout.Context, index int) layout
 			return layout.Stack{}.Layout(gtx,
 				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(2))
-					widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Dimensions{Size: gtx.Constraints.Max}
 					})
 					return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -220,7 +221,7 @@ func LayoutClassicOEHeaderRow(ui *uiState, gtx layout.Context, index int) layout
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(10), classicOEHeaders[index].label)
-						l.Color = cText
+						l.Color = uikit.CText
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					})
@@ -256,7 +257,7 @@ func LayoutClassicOEHeaderBody(ui *uiState, gtx layout.Context, index int) layou
 func classicOEHint(gtx layout.Context, th *material.Theme, msg string) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(th, unit.Sp(9), msg)
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return l.Layout(gtx)
 	})
 }
@@ -284,7 +285,7 @@ func ClassicOEStaticRow(ui *uiState, gtx layout.Context, name, note string) layo
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(name))
-				l.Color = cText
+				l.Color = uikit.CText
 				l.MaxLines = 1
 				return l.Layout(gtx)
 			}),
@@ -294,7 +295,7 @@ func ClassicOEStaticRow(ui *uiState, gtx layout.Context, name, note string) layo
 					return layout.Dimensions{}
 				}
 				l := material.Label(ui.Th, unit.Sp(9), note)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				l.MaxLines = 1
 				return l.Layout(gtx)
 			}),
@@ -337,7 +338,7 @@ func LayoutClassicOEAnimList(ui *uiState, gtx layout.Context) layout.Dimensions 
 	v := UnitModelViewer(ui)
 	if v == nil || v.Model == nil {
 		l := material.Label(ui.Th, unit.Sp(9), "Loading the model…")
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
 	}
 	return UnitAnimListWithClicks(ui, gtx, v, &ui.ClassicOEAnimClicks)
@@ -432,11 +433,11 @@ func LayoutClassicOEFolderRow(ui *uiState, gtx layout.Context, folder int, label
 		ui.ClassicOEFolderOpen[folder] = !ui.ClassicOEFolderOpen[folder]
 	}
 	open := ui.ClassicOEFolderOpen[folder]
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if open {
-		bg = cHeaderBg
+		bg = uikit.CHeaderBg
 	} else if c.Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -460,20 +461,20 @@ func LayoutClassicOEFolderRow(ui *uiState, gtx layout.Context, folder int, label
 						return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(9), marker)
-								l.Color = cTextDim
+								l.Color = uikit.CTextDim
 								return l.Layout(gtx)
 							}),
 							layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(11), label)
-								l.Color = cText
+								l.Color = uikit.CText
 								l.MaxLines = 1
 								return l.Layout(gtx)
 							}),
 							layout.Flexed(1, rowGap()),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("(%d)", count))
-								l.Color = cTextDim
+								l.Color = uikit.CTextDim
 								return l.Layout(gtx)
 							}),
 						)
@@ -576,7 +577,7 @@ func LayoutClassicOEHint(ui *uiState, gtx layout.Context, docMsg, fallback strin
 		msg = docMsg
 	}
 	l := material.Label(ui.Th, unit.Sp(9), msg)
-	l.Color = cTextDim
+	l.Color = uikit.CTextDim
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(4), Left: unit.Dp(10), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
 }
 
@@ -637,7 +638,7 @@ func LayoutClassicOETreeRow(ui *uiState, gtx layout.Context, row classicOETreeRo
 		return layout.Stack{Alignment: layout.Center}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 				if hover {
-					rrect(gtx, cMenuHover, gtx.Constraints.Max, gtx.Dp(2))
+					rrect(gtx, uikit.CMenuHover, gtx.Constraints.Max, gtx.Dp(2))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
@@ -658,7 +659,7 @@ func LayoutClassicOETreeRow(ui *uiState, gtx layout.Context, row classicOETreeRo
 							draw := func(gtx layout.Context) layout.Dimensions {
 								return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 									l := material.Label(ui.Th, unit.Sp(9), marker)
-									l.Color = cTextDim
+									l.Color = uikit.CTextDim
 									return l.Layout(gtx)
 								})
 							}
@@ -698,7 +699,7 @@ func LayoutClassicOETreeRow(ui *uiState, gtx layout.Context, row classicOETreeRo
 									}),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(10), row.Name)
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Flexed(1, rowGap()),
@@ -707,7 +708,7 @@ func LayoutClassicOETreeRow(ui *uiState, gtx layout.Context, row classicOETreeRo
 											return layout.Dimensions{}
 										}
 										l := material.Label(ui.Th, unit.Sp(9), classicOENote(row.Note))
-										l.Color = cTextDim
+										l.Color = uikit.CTextDim
 										l.MaxLines = 1
 										return l.Layout(gtx)
 									}),
@@ -1004,10 +1005,10 @@ func LayoutClassicOEEventDialog(ui *uiState, gtx layout.Context) layout.Dimensio
 				cardH := minInt(gtx.Dp(unit.Dp(680)), gtx.Constraints.Max.Y-gtx.Dp(unit.Dp(30)))
 				gtx.Constraints.Min = image.Pt(cardW, cardH)
 				gtx.Constraints.Max = image.Pt(cardW, cardH)
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Stack{}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
+							rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
 							return layout.Dimensions{Size: gtx.Constraints.Max}
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -1022,13 +1023,13 @@ func LayoutClassicOEEventDialog(ui *uiState, gtx layout.Context) layout.Dimensio
 										return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(12), title)
-												l.Color = cText
+												l.Color = uikit.CText
 												return l.Layout(gtx)
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(9), sub)
-												l.Color = cTextDim
+												l.Color = uikit.CTextDim
 												return l.Layout(gtx)
 											}),
 											layout.Flexed(1, rowGap()),
@@ -1037,11 +1038,11 @@ func LayoutClassicOEEventDialog(ui *uiState, gtx layout.Context) layout.Dimensio
 											}),
 										)
 									}),
-									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 										return PanelScrollView(ui, gtx, &ui.ClassicOEevtScroll, body)
 									}),
-									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 									layout.Rigid(footer),
 								)
 							})
@@ -1256,11 +1257,11 @@ func ClassicOEModifierRow(ui *uiState, gtx layout.Context, i int, m whe.FxModifi
 		ui.ClassicOEModifierBound = ""
 		ui.ClassicOEModifierError = ""
 	}
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if ui.ClassicOEModifierName == m.Name {
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	} else if c.Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(22))
@@ -1276,14 +1277,14 @@ func ClassicOEModifierRow(ui *uiState, gtx layout.Context, i int, m whe.FxModifi
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), m.Name)
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, rowGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), whe.ModifierTypeName(m.Type))
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -1326,7 +1327,7 @@ func LayoutClassicOEPreview(ui *uiState, gtx layout.Context) layout.Dimensions {
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, "Preview")
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return LayoutUnitCanvasColumn(ui, gtx) })
 			}),
@@ -1454,11 +1455,11 @@ func ClassicOEClauseRow(ui *uiState, gtx layout.Context, index int, clause whe.F
 		ui.ClassicOEClauseBound = ""
 		ui.ClassicOEClauseError = ""
 	}
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if ui.ClassicOEClauseName == clause.Name {
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	} else if click.Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(22))
@@ -1474,14 +1475,14 @@ func ClassicOEClauseRow(ui *uiState, gtx layout.Context, index int, clause whe.F
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), clause.Name)
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, rowGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), whe.ClauseTypeName(clause.Type))
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -1525,11 +1526,11 @@ func ClassicOEConditionRow(ui *uiState, gtx layout.Context, index int, condition
 		ui.ClassicOEConditionBound = ""
 		ui.ClassicOEConditionError = ""
 	}
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if ui.ClassicOEConditionName == condition.Name {
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	} else if click.Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	note := fmt.Sprintf("%d clauses", len(condition.ClauseNames))
 	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -1546,14 +1547,14 @@ func ClassicOEConditionRow(ui *uiState, gtx layout.Context, index int, condition
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), condition.Name)
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, rowGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), note)
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -2004,7 +2005,7 @@ func LayoutClassicOESelectedUIDisplayType(ui *uiState, gtx layout.Context) layou
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				label := material.Label(ui.Th, unit.Sp(9), "Display type")
-				label.Color = cTextDim
+				label.Color = uikit.CTextDim
 				return label.Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -2039,7 +2040,7 @@ func LayoutClassicOESelectedUIAxes(ui *uiState, gtx layout.Context, title string
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				label := material.Label(ui.Th, unit.Sp(9), title)
-				label.Color = cTextDim
+				label.Color = uikit.CTextDim
 				return label.Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -2053,7 +2054,7 @@ func LayoutClassicOESelectedUIAxes(ui *uiState, gtx layout.Context, title string
 						children = append(children,
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								label := material.Label(ui.Th, unit.Sp(8), axis)
-								label.Color = cTextDim
+								label.Color = uikit.CTextDim
 								gtx.Constraints.Min.X = gtx.Dp(12)
 								gtx.Constraints.Max.X = gtx.Dp(12)
 								return layout.Center.Layout(gtx, label.Layout)
@@ -2075,7 +2076,7 @@ func LayoutClassicOESelectedUIMatrix(ui *uiState, gtx layout.Context) layout.Dim
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				label := material.Label(ui.Th, unit.Sp(9), "Matrix")
-				label.Color = cTextDim
+				label.Color = uikit.CTextDim
 				return label.Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -2103,7 +2104,7 @@ func LayoutClassicOESelectedUIAxisHeadings(ui *uiState, gtx layout.Context, axes
 		axis := axis
 		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			label := material.Label(ui.Th, unit.Sp(8), axis)
-			label.Color = cTextDim
+			label.Color = uikit.CTextDim
 			return layout.Center.Layout(gtx, label.Layout)
 		}))
 		if i != len(axes)-1 {
@@ -2121,7 +2122,7 @@ func LayoutClassicOESelectedUIMatrixRow(ui *uiState, gtx layout.Context, row int
 					gtx.Constraints.Min.Y, gtx.Constraints.Max.Y = gtx.Dp(22), gtx.Dp(22)
 					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						label := material.Label(ui.Th, unit.Sp(8), axis)
-						label.Color = cTextDim
+						label.Color = uikit.CTextDim
 						return label.Layout(gtx)
 					})
 				}),
@@ -2149,7 +2150,7 @@ func LayoutClassicOESelectedUIMatrixRow(ui *uiState, gtx layout.Context, row int
 func ClassicOEWheEditorField(ui *uiState, gtx layout.Context, ed *widget.Editor) layout.Dimensions {
 	ed.SingleLine, ed.Submit = true, true
 	gtx.Constraints.Min.Y, gtx.Constraints.Max.Y = gtx.Dp(22), gtx.Dp(22)
-	return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			w := material.Editor(ui.Th, ed, "")
 			w.TextSize = unit.Sp(10)
@@ -2210,7 +2211,7 @@ func ClassicOEWheEditorRow(ui *uiState, gtx layout.Context, label string, ed *wi
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(9), label)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return l.Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {

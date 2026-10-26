@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"encoding/json"
 	"fmt"
@@ -539,7 +540,7 @@ func LayoutFrozenList(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), "Nothing has been frozen. Freezing a unit moves it out of the mod and clears what pointed at it; unfreezing puts both back.")
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				l.MaxLines = 6
 				return l.Layout(gtx)
 			})

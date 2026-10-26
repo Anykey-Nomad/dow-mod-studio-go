@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"image"
 	"path/filepath"
@@ -71,7 +72,7 @@ func SquadEmptyMessage(ui *uiState, gtx layout.Context, scanDone bool) layout.Di
 		msg = "Looking for the squads this unit belongs to…"
 	}
 	l := material.Label(ui.Th, unit.Sp(10), msg)
-	l.Color = cTextDim
+	l.Color = uikit.CTextDim
 	return l.Layout(gtx)
 }
 
@@ -81,12 +82,12 @@ func SquadEmptyMessage(ui *uiState, gtx layout.Context, scanDone bool) layout.Di
 // — and finding it means opening the squad otherwise.
 func LayoutUnitSquadRow(ui *uiState, gtx layout.Context, index int, s unitSquadRef) layout.Dimensions {
 	sel := index == ui.UnitSelRow
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	switch {
 	case sel:
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	case ui.UnitRowClicks[index].Hovered():
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return ui.UnitRowClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(squadRowHeightDp))
@@ -95,7 +96,7 @@ func LayoutUnitSquadRow(ui *uiState, gtx layout.Context, index int, s unitSquadR
 		gtx.Constraints.Max = sz
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -109,14 +110,14 @@ func LayoutUnitSquadRow(ui *uiState, gtx layout.Context, index int, s unitSquadR
 								name = name[:27] + "…"
 							}
 							l := material.Label(ui.Th, unit.Sp(11), name)
-							l.Color = cText
+							l.Color = uikit.CText
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, flexGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), squadSizeLabel(s))
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
@@ -167,7 +168,7 @@ func LayoutUnitSquadRightColumn(ui *uiState, gtx layout.Context, sec unitSection
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, sec.rightTitle)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					children := []layout.FlexChild{

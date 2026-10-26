@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
@@ -40,8 +41,8 @@ type (
 // boneAngleDeg maps any angle onto the rotation fields' 1..360 degree range.
 func boneAngleDeg(d float64) float64 { return unitdef.BoneAngleDeg(d) }
 
-// itoaPlain is a plain decimal integer as text.
-func itoaPlain(n int) string { return unitdef.ItoaPlain(n) }
+// ItoaPlain lives in uikit; the alias keeps every call site as it was.
+var itoaPlain = uikit.ItoaPlain
 
 // itoaCount is a count with the noun it counts: "1 unit", "52 units".
 func itoaCount(n int, one, many string) string { return unitdef.ItoaCount(n, one, many) }

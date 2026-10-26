@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"fmt"
 	"image"
 	"image/color"
@@ -415,17 +416,17 @@ func ModelAnimScrubOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.D
 	at := op.Offset(image.Point{X: int(left), Y: int(barY)}).Push(gtx.Ops)
 	origin := gtx
 
-	scrubFill(origin, 0, -scrubBarThickness/2, width, scrubBarThickness, cSaveBd)
+	scrubFill(origin, 0, -scrubBarThickness/2, width, scrubBarThickness, uikit.CSaveBd)
 	played := float32(v.Time) * width
 	if played > 0 {
-		scrubFill(origin, 0, -scrubBarThickness/2, played, scrubBarThickness, cSelectBd)
+		scrubFill(origin, 0, -scrubBarThickness/2, played, scrubBarThickness, uikit.CSelectBd)
 	}
 
 	// A tick every frame, thinned to what the width can carry.
 	step := int(math.Max(1, math.Floor(float64(n)/float64(width/scrubLabelPx))))
 	for f := 0; f < n; f += step {
 		x := frameX(f, n, width)
-		scrubFill(origin, x-0.5, -scrubBarThickness, 1, scrubBarThickness*2, cSaveBd)
+		scrubFill(origin, x-0.5, -scrubBarThickness, 1, scrubBarThickness*2, uikit.CSaveBd)
 	}
 
 	// The frames something fires on, marked above the bar so they read as
@@ -485,7 +486,7 @@ func ModelAnimScrubOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.D
 		if v.BoneKeyIndex >= 0 {
 			if f, ok := BoneKeyFrameAt(v); ok {
 				x := frameX(f, n, width)
-				scrubFill(origin, x-2, -scrubBarThickness-5, 4, scrubBarThickness*2+10, cText)
+				scrubFill(origin, x-2, -scrubBarThickness-5, 4, scrubBarThickness*2+10, uikit.CText)
 			}
 		}
 	}
@@ -515,7 +516,7 @@ func ModelAnimScrubOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.D
 		g.Constraints.Min = image.Point{}
 		g.Constraints.Max = image.Point{X: int(scrubLabelPx), Y: int(scrubLabelHeight)}
 		l := material.Label(ui.Th, unit.Sp(9), itoaPlain(f+1))
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		l.MaxLines = 1
 		l.Layout(g)
 		macro.Pop()
@@ -1011,7 +1012,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 					msg = "Loading textures…"
 				}
 				l := material.Label(ui.Th, unit.Sp(10), msg)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return layout.Center.Layout(gtx, l.Layout)
 			}),
 		)

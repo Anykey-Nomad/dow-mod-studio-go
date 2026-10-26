@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -58,7 +59,7 @@ func LayoutWhmModelViewport(ui *uiState, gtx layout.Context, t *fileTab) layout.
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, "Viewport")
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
 					func(gtx layout.Context) layout.Dimensions {
@@ -115,7 +116,7 @@ func WhmModelListControls(ui *uiState, gtx layout.Context, t *fileTab) layout.Di
 func WhmModelList(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	if t.ModelListMode == 3 {
 		if t.Model == nil || t.Model.Model == nil {
-			return centeredPanelLabel(gtx, ui.Th, "No model", unit.Sp(10), cTextDim)
+			return centeredPanelLabel(gtx, ui.Th, "No model", unit.Sp(10), uikit.CTextDim)
 		}
 		return UnitFXListWithHeader(ui, gtx, t.Model, &t.ModelFXClicks)
 	}
@@ -312,7 +313,7 @@ func LayoutWhmViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 				layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(9), "Object Editor model for "+t.Path)
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{} }),
@@ -352,7 +353,7 @@ func WhmInfoTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions
 	}
 	if t.WhmInfo == nil {
 		if t.WhmError == "" {
-			return centeredPanelLabel(gtx, ui.Th, "No model data", unit.Sp(10), cTextDim)
+			return centeredPanelLabel(gtx, ui.Th, "No model data", unit.Sp(10), uikit.CTextDim)
 		}
 		return layout.Dimensions{}
 	}

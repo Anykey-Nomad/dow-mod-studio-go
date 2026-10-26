@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"encoding/binary"
 	"fmt"
@@ -244,7 +245,7 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	if t == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "No image selected")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
@@ -254,13 +255,13 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 			return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(12), "Loading image…")
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(10), filepath.Base(t.Path))
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				}),
 			)
@@ -309,7 +310,7 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 							zoom = "Fit"
 						}
 						l := material.Label(ui.Th, unit.Sp(10), zoom)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ImageZoomIn, "+") }),
@@ -322,7 +323,7 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ImageMipPrev, "◀") }),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(10), fmt.Sprintf("Mip %d/%d", t.ImageMipLevel+1, len(t.ImageMipmaps)))
-								l.Color = cTextDim
+								l.Color = uikit.CTextDim
 								return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, l.Layout)
 							}),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ImageMipNext, "▶") }),
@@ -332,7 +333,7 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						b := t.ImageData.Bounds()
 						l := material.Label(ui.Th, unit.Sp(10), fmt.Sprintf("%s  %d × %d", t.ImageFormat, b.Dx(), b.Dy()))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 				)
@@ -448,22 +449,11 @@ func RshRawImage(data []byte, index int) (RshImage, []RshMip, error) {
 	return raster.RshRawImage(data, index)
 }
 
-// minInt and maxInt are general helpers, not image code: files across the app
-// reach for them, so they stayed behind with the call sites rather than move
-// into the decoder package.
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+// MinInt lives in uikit; the alias keeps every call site as it was.
+var minInt = uikit.MinInt
 
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
+// MaxInt lives in uikit; the alias keeps every call site as it was.
+var maxInt = uikit.MaxInt
 
 // ─── merged from wav_view.go ───────────────────────────────────────────────
 
@@ -741,7 +731,7 @@ func LayoutWavViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 	if t.WavData == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "No WAV data")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
@@ -777,9 +767,9 @@ func LayoutWavViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.WavStopClick, "Stop") }),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						bg := cSaveBg
+						bg := uikit.CSaveBg
 						if t.WavRepeat {
-							bg = cMenuOpen
+							bg = uikit.CMenuOpen
 						}
 						return ToggleButton(ui, gtx, &t.WavRepeatClick, "Repeat", t.WavRepeat, bg)
 					}),
@@ -799,7 +789,7 @@ func LayoutWavViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 							lbl = "Mute"
 						}
 						l := material.Label(ui.Th, unit.Sp(9), lbl)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
@@ -815,13 +805,13 @@ func LayoutWavViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 					layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("%d%%", t.WavVolumePct))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), fmtDuration(pos))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
@@ -829,7 +819,7 @@ func LayoutWavViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), fmtDuration(t.WavTotal))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 				)
@@ -872,10 +862,10 @@ func LayoutWavWaveform(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	playX := clampInt(int(float32(w)*frac), 0, w)
 
 	st := clip.Rect{Max: sz}.Push(gtx.Ops)
-	paint.ColorOp{Color: cContentBg}.Add(gtx.Ops)
+	paint.ColorOp{Color: uikit.CContentBg}.Add(gtx.Ops)
 	paint.PaintOp{}.Add(gtx.Ops)
 	st.Pop()
-	b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}
+	b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}
 	gtx.Constraints.Min = sz
 	gtx.Constraints.Max = sz
 	_ = b.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: sz} })

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/highlight"
 	"fmt"
 	"log"
@@ -141,7 +142,7 @@ func LayoutTextEditor(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimens
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), t.Path+"  —  read only, UTF-16LE .ucs")
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				l.MaxLines = 1
 				return l.Layout(gtx)
 			})
@@ -152,7 +153,7 @@ func LayoutTextEditor(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimens
 
 // Kept separate to make the central editor reusable by future script formats.
 func widgetBorderTextEditor(gtx layout.Context, th *material.Theme, editor *widget.Editor, dirty bool, ext string) layout.Dimensions {
-	borderColor := cBorderLight
+	borderColor := uikit.CBorderLight
 	if dirty {
 		borderColor = rgb(0x0078D4)
 	}
@@ -162,7 +163,7 @@ func widgetBorderTextEditor(gtx layout.Context, th *material.Theme, editor *widg
 		return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			ed := material.Editor(th, editor, "")
 			ed.TextSize = unit.Sp(12)
-			ed.HintColor = cTextDim
+			ed.HintColor = uikit.CTextDim
 			// Text is painted by the syntax layer below. Gio still owns the
 			// caret, selection, keyboard input and scrolling operations.
 			ed.Color = color.NRGBA{}
@@ -187,7 +188,7 @@ func widgetBorderTextEditor(gtx layout.Context, th *material.Theme, editor *widg
 const syntaxGutterDp = highlight.SyntaxGutterDp
 
 func paintSyntaxHighlight(gtx layout.Context, th *material.Theme, editor *widget.Editor, source, ext string) {
-	highlight.PaintSyntaxHighlight(gtx, th, editor, source, ext, cTextDim)
+	highlight.PaintSyntaxHighlight(gtx, th, editor, source, ext, uikit.CTextDim)
 }
 
 func itoa(v int) string { return highlight.Itoa(v) }

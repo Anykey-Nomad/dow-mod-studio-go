@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -2392,7 +2393,7 @@ func paintMarkerArrow(gtx layout.Context, from, to fauxgl.Vector) {
 			r.Max.Y = r.Min.Y + 2
 		}
 		a := clip.Rect(r).Push(gtx.Ops)
-		paint.ColorOp{Color: cMarkerHi}.Add(gtx.Ops)
+		paint.ColorOp{Color: uikit.CMarkerHi}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 		a.Pop()
 	}
@@ -2422,7 +2423,7 @@ func paintMarkerRing(gtx layout.Context, at fauxgl.Vector) {
 	}
 	for _, r := range bars {
 		a := clip.Rect(r).Push(gtx.Ops)
-		paint.ColorOp{Color: cMarkerHi}.Add(gtx.Ops)
+		paint.ColorOp{Color: uikit.CMarkerHi}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 		a.Pop()
 	}

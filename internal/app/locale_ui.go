@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -214,11 +215,11 @@ func LayoutLocaleField(ui *uiState, gtx layout.Context) layout.Dimensions {
 	gtx.Constraints.Max.Y = h
 	label := LocaleLabel(ui)
 	hover := ui.LocaleTrigger.Hovered() || ui.LocaleOpen
-	bg := cContentBg
+	bg := uikit.CContentBg
 	if ui.LocaleOpen {
-		bg = cMenuOpen
+		bg = uikit.CMenuOpen
 	} else if hover {
-		bg = cSaveBg
+		bg = uikit.CSaveBg
 	}
 	return ui.LocaleTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		// The content is recorded and replayed rather than laid out in place.
@@ -231,21 +232,21 @@ func LayoutLocaleField(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(11), "Locale")
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(11), label)
-					l.Color = cText
+					l.Color = uikit.CText
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(9), "▾")
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
@@ -307,10 +308,10 @@ func LayoutLocaleOverlay(ui *uiState, gtx layout.Context) layout.Dimensions {
 			paint.PaintOp{}.Add(gtx.Ops)
 			st.Pop()
 			st2 := clip.Rect{Max: sz}.Push(gtx.Ops)
-			paint.ColorOp{Color: cPanelBg}.Add(gtx.Ops)
+			paint.ColorOp{Color: uikit.CPanelBg}.Add(gtx.Ops)
 			paint.PaintOp{}.Add(gtx.Ops)
 			st2.Pop()
-			b := widget.Border{Color: cBorder, Width: unit.Dp(1)}
+			b := widget.Border{Color: uikit.CBorder, Width: unit.Dp(1)}
 			gtx.Constraints.Min = sz
 			gtx.Constraints.Max = sz
 			return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -336,12 +337,12 @@ func LocaleRow(ui *uiState, gtx layout.Context, idx int) layout.Dimensions {
 	lang := ui.LocaleList[idx]
 	click := &ui.LocaleClicks[idx]
 	active := strings.EqualFold(lang, LocaleLabel(ui))
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	switch {
 	case click.Hovered():
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	case active:
-		bg = cSaveBg
+		bg = uikit.CSaveBg
 	}
 	h := gtx.Dp(unit.Dp(localeRowHeightDp))
 	gtx.Constraints.Min.Y = h
@@ -353,7 +354,7 @@ func LocaleRow(ui *uiState, gtx layout.Context, idx int) layout.Dimensions {
 		macro := op.Record(gtx.Ops)
 		layout.Inset{Left: unit.Dp(10), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), lang)
-			l.Color = cText
+			l.Color = uikit.CText
 			l.MaxLines = 1
 			return l.Layout(gtx)
 		})
@@ -731,10 +732,10 @@ func LayoutLocaleEditDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 				cardH := gtx.Dp(unit.Dp(240))
 				gtx.Constraints.Min.X, gtx.Constraints.Max.X = cardW, cardW
 				gtx.Constraints.Min.Y, gtx.Constraints.Max.Y = cardH, cardH
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Stack{}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
+							rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
 							return layout.Dimensions{Size: gtx.Constraints.Max}
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -786,13 +787,13 @@ func LocaleEditCaption(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(11), r.label)
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(11), r.value)
-					l.Color = cText
+					l.Color = uikit.CText
 					l.Font.Weight = font.Medium
 					return l.Layout(gtx)
 				}),
@@ -816,7 +817,7 @@ func LocaleEditNote(ui *uiState, gtx layout.Context) layout.Dimensions {
 		note += "\nA free id will be allocated and written into the unit's field."
 	}
 	l := material.Label(ui.Th, unit.Sp(10), note)
-	l.Color = cTextDim
+	l.Color = uikit.CTextDim
 	return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, l.Layout)
 }
 
@@ -992,7 +993,7 @@ func LocaleRowBody(ui *uiState, gtx layout.Context, label, id string, rowDp unit
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, size, label)
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
 		}),
@@ -1002,9 +1003,9 @@ func LocaleRowBody(ui *uiState, gtx layout.Context, label, id string, rowDp unit
 			// A string is text; a missing one names something that is not
 			// there, and reads as a reference rather than as a value.
 			if hasText {
-				l.Color = cText
+				l.Color = uikit.CText
 			} else {
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 			}
 			l.MaxLines = 1
 			return l.Layout(gtx)

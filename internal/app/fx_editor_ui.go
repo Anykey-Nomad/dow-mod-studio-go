@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"image"
 	"math"
 	"strconv"
@@ -50,7 +51,7 @@ func ModelFxChecklist(ui *uiState, gtx layout.Context, v *modelViewer, clicks *[
 	if len(v.FxEffects) == 0 {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(9), "No FX events were resolved for this model.")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6), Top: unit.Dp(6)}.Layout(gtx, l.Layout)
 		}))
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -142,11 +143,11 @@ func FxChecklistViewer(ui *uiState, v *modelViewer) *modelViewer {
 }
 
 func FxChecklistRow(ui *uiState, gtx layout.Context, click *widget.Clickable, checked bool, title, marker string, selected, inTimeline bool) layout.Dimensions {
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if selected {
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	} else if click.Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp + 8))
@@ -154,7 +155,7 @@ func FxChecklistRow(ui *uiState, gtx layout.Context, click *widget.Clickable, ch
 		gtx.Constraints.Min, gtx.Constraints.Max = sz, sz
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					Rrect(ui, gtx, bg, sz, unit.Dp(2))
 				}
 				return layout.Dimensions{Size: sz}
@@ -171,12 +172,12 @@ func FxChecklistRow(ui *uiState, gtx layout.Context, click *widget.Clickable, ch
 								mark += "·"
 							}
 							l := material.Label(ui.Th, unit.Sp(10), mark+"  "+title)
-							l.Color, l.MaxLines = cText, 1
+							l.Color, l.MaxLines = uikit.CText, 1
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), marker)
-							l.Color, l.MaxLines = cTextDim, 1
+							l.Color, l.MaxLines = uikit.CTextDim, 1
 							return layout.Inset{Left: unit.Dp(20)}.Layout(gtx, l.Layout)
 						}),
 					)
@@ -426,8 +427,8 @@ func ModelFxAttributeDialog(ui *uiState, gtx layout.Context, v *modelViewer) lay
 			child.Constraints.Min, child.Constraints.Max = image.Pt(w, h), image.Pt(w, h)
 			off := op.Offset(at).Push(gtx.Ops)
 			defer off.Pop()
-			return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(child, func(gtx layout.Context) layout.Dimensions {
-				fillRect(gtx, cPanelBg, image.Pt(w, h))
+			return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(child, func(gtx layout.Context) layout.Dimensions {
+				fillRect(gtx, uikit.CPanelBg, image.Pt(w, h))
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FxAttributeTitle(ui, gtx, v, e) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -457,7 +458,7 @@ func ModelFxAttributeDialog(ui *uiState, gtx layout.Context, v *modelViewer) lay
 							return layout.Dimensions{}
 						}
 						l := material.Label(ui.Th, unit.Sp(9), v.FxAttrError)
-						l.Color = cProblem
+						l.Color = uikit.CProblem
 						return layout.Inset{Left: unit.Dp(10), Top: unit.Dp(4)}.Layout(gtx, l.Layout)
 					}),
 				)
@@ -502,13 +503,13 @@ func FxAttributeTitle(ui *uiState, gtx layout.Context, v *modelViewer, e fxOverl
 		}
 	}
 	titleRect.Pop()
-	fillRect(gtx, cHeaderBg, sz)
+	fillRect(gtx, uikit.CHeaderBg, sz)
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = titleW
 			gtx.Constraints.Max.X = titleW
 			l := material.Label(ui.Th, unit.Sp(11), e.Label+" attributes  ·  drag to move")
-			l.Color, l.MaxLines = cText, 1
+			l.Color, l.MaxLines = uikit.CText, 1
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(7)}.Layout(gtx, l.Layout)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -522,14 +523,14 @@ func FxAttributeField(ui *uiState, gtx layout.Context, label string, ed *widget.
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), label)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return layout.Inset{Right: unit.Dp(4)}.Layout(gtx, l.Layout)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				editor := material.Editor(ui.Th, ed, "")
 				editor.TextSize = unit.Sp(10)
-				editor.HintColor = cTextDim
-				return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}.Layout(gtx, editor.Layout)
+				editor.HintColor = uikit.CTextDim
+				return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}.Layout(gtx, editor.Layout)
 			}),
 		)
 	})
@@ -567,7 +568,7 @@ func FxAttributeButtonRows(ui *uiState, gtx layout.Context, v *modelViewer) layo
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(9), "clip: "+v.FxSelectionAnim)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return l.Layout(gtx)
 			}),
 		)

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -206,7 +207,7 @@ func UnitInfoTable(ui *uiState, gtx layout.Context) layout.Dimensions {
 	if d == nil {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return centeredPanelLabel(gtx, ui.Th, "No unit selected", unit.Sp(10), cTextDim)
+				return centeredPanelLabel(gtx, ui.Th, "No unit selected", unit.Sp(10), uikit.CTextDim)
 			}),
 		)
 	}
@@ -238,7 +239,7 @@ func UnitInfoTable(ui *uiState, gtx layout.Context) layout.Dimensions {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), "Could not read this unit:\n"+d.Error)
-				l.Color = cTextDim
+				l.Color = uikit.CTextDim
 				return l.Layout(gtx)
 			})
 		}))
@@ -809,7 +810,7 @@ func LayoutUnitFieldPanel(ui *uiState, gtx layout.Context, sec unitSection) layo
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitColumnHeader(ui, gtx, sec.rightTitle)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, body)
 			}),
@@ -831,7 +832,7 @@ func UnitFieldValueWidget(ui *uiState, gtx layout.Context, f *unitField) []layou
 				value = "True"
 			}
 			return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ToggleButton(ui, gtx, &ui.UnitBoolClick, value, f.Entry.BoolVal, cSelectBg)
+				return ToggleButton(ui, gtx, &ui.UnitBoolClick, value, f.Entry.BoolVal, uikit.CSelectBg)
 			})
 		}))
 	} else {
@@ -886,7 +887,7 @@ func UnitFieldButtons(ui *uiState, gtx layout.Context) []layout.FlexChild {
 func unitFieldNote(gtx layout.Context, th *material.Theme, text string) layout.Dimensions {
 	return layout.Inset{Left: unit.Dp(2), Right: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(th, unit.Sp(9), text)
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		l.MaxLines = 6
 		return l.Layout(gtx)
 	})
@@ -921,7 +922,7 @@ func LayoutUnitInfoRow(ui *uiState, gtx layout.Context, index int, f *unitField)
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(11), f.Group)
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					l.Font.Weight = font.SemiBold
 					l.MaxLines = 1
 					return l.Layout(gtx)
@@ -940,17 +941,17 @@ func LayoutUnitInfoRow(ui *uiState, gtx layout.Context, index int, f *unitField)
 // It is the same shape the selectable rows of the weapon lists use, so a row
 // looks selected or not in the same way wherever it is.
 func UnitInfoRowFrame(ui *uiState, gtx layout.Context, index int, body layout.Widget) layout.Dimensions {
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	switch {
 	case index == ui.UnitInfoSel:
-		bg = cSelectBg
+		bg = uikit.CSelectBg
 	case ui.UnitInfoClicks[index].Hovered():
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return ui.UnitInfoClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != cPanelBg {
+				if bg != uikit.CPanelBg {
 					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
 				}
 				return layout.Dimensions{Size: gtx.Constraints.Max}

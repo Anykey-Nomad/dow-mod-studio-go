@@ -2,6 +2,7 @@ package app
 
 import (
 	"dow-mod-studio/internal/app/render"
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/applog"
 	"dow-mod-studio/internal/modtree"
@@ -18,7 +19,6 @@ import (
 
 	"gioui.org/app"
 	"gioui.org/font/gofont"
-	"gioui.org/io/event"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -32,72 +32,13 @@ import (
 
 // ── colours — classic Win32 / Corsix palette ──────────────────────────────────
 
-func rgb(hex uint32) color.NRGBA {
-	return color.NRGBA{R: uint8(hex >> 16), G: uint8(hex >> 8), B: uint8(hex), A: 0xFF}
-}
+// Rgb lives in uikit; the alias keeps every call site as it was.
+var rgb = uikit.Rgb
+
 func rgba(r, g, b, a uint8) color.NRGBA { return color.NRGBA{R: r, G: g, B: b, A: a} }
 
-var (
-	// Dark is the default application theme. Keep these in one palette so
-	// panels, controls, and text remain visually consistent.
-	cBg          = rgb(0x1E1E1E)
-	cMenuBg      = rgb(0x252526)
-	cMenuHover   = rgb(0x343B45)
-	cMenuOpen    = rgb(0x234A63)
-	cBorder      = rgb(0x555555)
-	cBorderLight = rgb(0x414141)
-	cToolbarBg   = rgb(0x2D2D30)
-	cTabBarBg    = rgb(0x333333)
-	cTabOff      = rgb(0x292929)
-	cTabOn       = rgb(0x1E1E1E)
-	cContentBg   = rgb(0x181818)
-	cPanelBg     = rgb(0x252526)
-	cHeaderBg    = rgb(0x2D2D30)
-	cHeaderLine  = rgb(0x4A4A4A)
-	cSelectBg    = rgb(0x264A63)
-	// cMarkerHi outlines the marker picked in the markers list. Red, because
-	// nothing else in the panel is drawn in it and the point is to find one
-	// small thing on a model quickly.
-	cMarkerHi = rgb(0xFF3020)
-	cSelectBd = rgb(0x3C78A8)
-	// cFocusBd marks the row the keyboard is on, which is not the same thing as
-	// the row that is selected: a panel can keep the selection while the middle
-	// tree has the keyboard.
-	cFocusBd   = rgb(0x8FC7FF)
-	cText      = rgb(0xE6E6E6)
-	cTextDim   = rgb(0xA0A0A0)
-	cSaveBg    = rgb(0x303236)
-	cSaveBd    = rgb(0x555555)
-	cSaveHover = rgb(0x3A4652)
-	// cProblem marks a reference that names a file which is not there, which
-	// is the one thing in the object window that is certainly wrong.
-	cProblem = rgb(0xE06C75)
-
-	// tree source colors (like Corsix frmFiles: ThisMod, OtherMod, Engine)
-	cTreeThis   = rgb(0xE06C75) // reddish — this mod
-	cTreeOther  = rgb(0x82AAFF) // bluish — foreign / RequiredMod
-	cTreeEngine = rgb(0xB0B0B0) // grey — engine
-)
-
-func setColorTheme(dark bool) {
-	if dark {
-		cBg, cMenuBg, cMenuHover, cMenuOpen = rgb(0x1E1E1E), rgb(0x252526), rgb(0x343B45), rgb(0x234A63)
-		cBorder, cBorderLight, cToolbarBg, cTabBarBg = rgb(0x555555), rgb(0x414141), rgb(0x2D2D30), rgb(0x333333)
-		cTabOff, cTabOn, cContentBg, cPanelBg = rgb(0x292929), rgb(0x1E1E1E), rgb(0x181818), rgb(0x252526)
-		cHeaderBg, cHeaderLine, cSelectBg, cSelectBd = rgb(0x2D2D30), rgb(0x4A4A4A), rgb(0x264A63), rgb(0x3C78A8)
-		cFocusBd = rgb(0x8FC7FF)
-		cText, cTextDim, cSaveBg, cSaveBd, cSaveHover = rgb(0xE6E6E6), rgb(0xA0A0A0), rgb(0x303236), rgb(0x555555), rgb(0x3A4652)
-		cTreeThis, cTreeOther, cTreeEngine = rgb(0xE06C75), rgb(0x82AAFF), rgb(0xB0B0B0)
-		return
-	}
-	cBg, cMenuBg, cMenuHover, cMenuOpen = rgb(0xECECEC), rgb(0xF0F0F0), rgb(0xE5F3FF), rgb(0xCCE8FF)
-	cBorder, cBorderLight, cToolbarBg, cTabBarBg = rgb(0xA0A0A0), rgb(0xC8C8C8), rgb(0xE8E8E8), rgb(0xD4D0C8)
-	cTabOff, cTabOn, cContentBg, cPanelBg = rgb(0xE0E0E0), rgb(0xFFFFFF), rgb(0xD4D0C8), rgb(0xFFFFFF)
-	cHeaderBg, cHeaderLine, cSelectBg, cSelectBd = rgb(0xE8E8E8), rgb(0xB0B0B0), rgb(0xCCE8FF), rgb(0x99CCFF)
-	cFocusBd = rgb(0x1A5FB4)
-	cText, cTextDim, cSaveBg, cSaveBd, cSaveHover = rgb(0x000000), rgb(0x505050), rgb(0xE1E1E1), rgb(0xADADAD), rgb(0xE5F3FF)
-	cTreeThis, cTreeOther, cTreeEngine = rgb(0x802020), rgb(0x202080), rgb(0x808080)
-}
+// setColorTheme lives in uikit with the palette it paints.
+var setColorTheme = uikit.SetColorTheme
 
 func applyMaterialTheme(th *material.Theme, dark bool) {
 	setColorTheme(dark)
@@ -105,7 +46,7 @@ func applyMaterialTheme(th *material.Theme, dark bool) {
 		return
 	}
 	th.Palette = material.Palette{
-		Bg: cBg, Fg: cText, ContrastBg: cSaveBg, ContrastFg: cText,
+		Bg: uikit.CBg, Fg: uikit.CText, ContrastBg: uikit.CSaveBg, ContrastFg: uikit.CText,
 	}
 }
 
@@ -158,9 +99,8 @@ type rgdVisible = uistate.RgdVisible
 // never opened anything, and a right press in the tree opened the tab bar's
 // menu instead of the file's. The name is only here to make the tags readable
 // in a debugger.
-func newPointerTag(name string) event.Tag {
-	return &struct{ name string }{name: name}
-}
+// newPointerTag lives in uikit; the alias keeps the call sites.
+var newPointerTag = uikit.NewPointerTag
 
 func newUI(th *material.Theme) *uiState {
 	s := &uiState{Th: th, MenuOpen: -1, TabSel: 0, DarkTheme: true, GpuAPI: render.DefaultGPUAPI, KeyboardArea: "files", ImageCache: make(map[string]imageCacheEntry), ModRefreshCh: make(chan modCatalogRefreshResult, 1), ModFileWatchSignal: make(chan struct{}, 1), StateDirty: true, LeftTreePointerTag: newPointerTag("left-tree"), TabBarPointerTag: newPointerTag("tab-bar"), Locale: localeDefault}
@@ -198,41 +138,11 @@ func newUI(th *material.Theme) *uiState {
 
 // ── tab helpers ─────────────────────────────────────────────────────────────
 
-func EnsureTabClicks(ui *uiState) {
-	need := 1 + len(ui.OpenTabs)
-	if len(ui.TabClicks) < need {
-		old := ui.TabClicks
-		n := make([]widget.Clickable, need)
-		copy(n, old)
-		ui.TabClicks = n
-	} else if len(ui.TabClicks) > need {
-		// shrink handled explicitly in closeTabAt; if reached here via unexpected path, truncate preserving Module+prefix
-		ui.TabClicks = ui.TabClicks[:need]
-	}
-	if len(ui.TabCloses) < len(ui.OpenTabs) {
-		old := ui.TabCloses
-		n := make([]widget.Clickable, len(ui.OpenTabs))
-		copy(n, old)
-		ui.TabCloses = n
-	} else if len(ui.TabCloses) > len(ui.OpenTabs) {
-		ui.TabCloses = ui.TabCloses[:len(ui.OpenTabs)]
-	}
-	if ui.TabSel < 0 {
-		ui.TabSel = 0
-	}
-	if ui.TabSel > len(ui.OpenTabs) {
-		ui.TabSel = len(ui.OpenTabs)
-	}
-}
+// EnsureTabClicks lives in uikit; the alias keeps every call site as it was.
+var EnsureTabClicks = uikit.EnsureTabClicks
 
-func FindTabIndex(ui *uiState, path string) int {
-	for i, t := range ui.OpenTabs {
-		if t.Path == path {
-			return i
-		}
-	}
-	return -1
-}
+// FindTabIndex lives in uikit; the alias keeps every call site as it was.
+var FindTabIndex = uikit.FindTabIndex
 
 func ActiveTab(ui *uiState) *fileTab {
 	if ui.TabSel <= 0 || ui.TabSel > len(ui.OpenTabs) {
@@ -475,10 +385,10 @@ func run(w *app.Window) error {
 	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
 	th.TextSize = unit.Sp(13)
 	th.Palette = material.Palette{
-		Bg:         cBg,
-		Fg:         cText,
-		ContrastBg: cSaveBg,
-		ContrastFg: cText,
+		Bg:         uikit.CBg,
+		Fg:         uikit.CText,
+		ContrastBg: uikit.CSaveBg,
+		ContrastFg: uikit.CText,
 	}
 
 	ui := newUI(th)
@@ -725,7 +635,7 @@ func LoadModule(ui *uiState, path string) {
 
 func Layout(ui *uiState, gtx layout.Context) layout.Dimensions {
 	// window bg
-	fillRect(gtx, cBg, gtx.Constraints.Max)
+	fillRect(gtx, uikit.CBg, gtx.Constraints.Max)
 
 	// keep visibleNodes up to date for Layout to render
 	ui.VisibleNodes = GetVisibleNodes(ui)
@@ -736,7 +646,7 @@ func Layout(ui *uiState, gtx layout.Context) layout.Dimensions {
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutMenuBar(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cBorder, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CBorder, 1) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					if len(ui.OpenTabs) == 0 {
 						return layout.Dimensions{}
@@ -747,7 +657,7 @@ func Layout(ui *uiState, gtx layout.Context) layout.Dimensions {
 					if len(ui.OpenTabs) == 0 {
 						return layout.Dimensions{}
 					}
-					return hLine(gtx, cBorder, 1)
+					return hLine(gtx, uikit.CBorder, 1)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutContent(ui, gtx) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutStatusBar(ui, gtx) }),
@@ -840,10 +750,10 @@ func Layout(ui *uiState, gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{}
 			}
 			return layout.NE.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(10), ui.RgdTooltipText)
-						l.Color = cText
+						l.Color = uikit.CText
 						return l.Layout(gtx)
 					})
 				})
@@ -854,30 +764,14 @@ func Layout(ui *uiState, gtx layout.Context) layout.Dimensions {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-func hLine(gtx layout.Context, col color.NRGBA, h int) layout.Dimensions {
-	gtx.Constraints.Min.Y = h
-	gtx.Constraints.Max.Y = h
-	sz := image.Pt(gtx.Constraints.Max.X, h)
-	stack := clip.Rect{Max: sz}.Push(gtx.Ops)
-	paint.ColorOp{Color: col}.Add(gtx.Ops)
-	paint.PaintOp{}.Add(gtx.Ops)
-	stack.Pop()
-	return layout.Dimensions{Size: sz}
-}
+// HLine lives in uikit; the alias keeps every call site as it was.
+var hLine = uikit.HLine
 
-func fillRect(gtx layout.Context, col color.NRGBA, sz image.Point) {
-	stack := clip.Rect{Max: sz}.Push(gtx.Ops)
-	paint.ColorOp{Color: col}.Add(gtx.Ops)
-	paint.PaintOp{}.Add(gtx.Ops)
-	stack.Pop()
-}
+// FillRect lives in uikit; the alias keeps every call site as it was.
+var fillRect = uikit.FillRect
 
-func rrect(gtx layout.Context, col color.NRGBA, sz image.Point, r int) {
-	stack := clip.RRect{Rect: image.Rectangle{Max: sz}, SE: r, SW: r, NE: r, NW: r}.Push(gtx.Ops)
-	paint.ColorOp{Color: col}.Add(gtx.Ops)
-	paint.PaintOp{}.Add(gtx.Ops)
-	stack.Pop()
-}
+// Rrect lives in uikit; the alias keeps every call site as it was.
+var rrect = uikit.Rrect
 
 // ── toolbar ──────────────────────────────────────────────────────────────────
 
@@ -891,7 +785,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutFdaPlayer(ui, gtx, tab) }),
 			)
 		})
@@ -900,7 +794,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutWavViewer(ui, gtx, tab) }),
 			)
 		})
@@ -909,7 +803,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutWhmViewer(ui, gtx, tab) }),
 			)
 		})
@@ -919,7 +813,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutSgbViewer(ui, gtx, tab) }),
 			)
 		})
@@ -928,7 +822,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutImageViewer(ui, gtx, tab) }),
 			)
 		})
@@ -938,7 +832,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutSgaListing(ui, gtx, tab) }),
 			)
 		})
@@ -948,7 +842,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutTextEditor(ui, gtx, tab) }),
 			)
 		})
@@ -958,7 +852,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					if tab.RgdFile == nil {
 						if tab.RgdError != "" {
@@ -971,7 +865,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 						}
 						return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(11), "No RGD — this tab is empty")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						})
 					}
@@ -993,7 +887,7 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					// Keep the empty-state message inside the panel with a clear left margin.
@@ -1001,16 +895,16 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Max.X -= gtx.Dp(unit.Dp(16))
 					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return centeredPanelLabel(gtx, ui.Th, "No file selected", unit.Sp(11), cTextDim)
+							return centeredPanelLabel(gtx, ui.Th, "No file selected", unit.Sp(11), uikit.CTextDim)
 						}),
 						layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return centeredPanelLabel(gtx, ui.Th, "Module tab — click a .rgd/.fda/.jpg/.tga/.dds file in the left tree to open in a new tab", unit.Sp(10), cTextDim)
+							return centeredPanelLabel(gtx, ui.Th, "Module tab — click a .rgd/.fda/.jpg/.tga/.dds file in the left tree to open in a new tab", unit.Sp(10), uikit.CTextDim)
 						}),
 						layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							if len(ui.OpenTabs) > 0 {
-								return centeredPanelLabel(gtx, ui.Th, fmt.Sprintf("%d file tab(s) open — switch via the top tab bar", len(ui.OpenTabs)), unit.Sp(10), cTextDim)
+								return centeredPanelLabel(gtx, ui.Th, fmt.Sprintf("%d file tab(s) open — switch via the top tab bar", len(ui.OpenTabs)), unit.Sp(10), uikit.CTextDim)
 							}
 							return layout.Dimensions{}
 						}),
@@ -1063,14 +957,14 @@ func LayoutWaveform(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensio
 	}
 
 	// Background
-	bg := cContentBg
+	bg := uikit.CContentBg
 	stack := clip.Rect{Max: sz}.Push(gtx.Ops)
 	paint.ColorOp{Color: bg}.Add(gtx.Ops)
 	paint.PaintOp{}.Add(gtx.Ops)
 	stack.Pop()
 
 	// Border
-	b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}
+	b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}
 	gtx.Constraints.Min = sz
 	gtx.Constraints.Max = sz
 	_ = b.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: sz} })

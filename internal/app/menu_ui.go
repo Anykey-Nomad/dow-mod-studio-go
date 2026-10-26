@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"fmt"
 	"image"
 	"image/color"
@@ -26,7 +27,7 @@ func LayoutMenuBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := image.Pt(gtx.Constraints.Max.X, h)
-			fillRect(gtx, cMenuBg, sz)
+			fillRect(gtx, uikit.CMenuBg, sz)
 			return layout.Dimensions{Size: sz}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -74,16 +75,16 @@ func LayoutMenuRightGroup(ui *uiState, gtx layout.Context) layout.Dimensions {
 func MenuButton(ui *uiState, gtx layout.Context, idx int, label string) layout.Dimensions {
 	open := ui.MenuOpen == idx
 	hover := ui.MenuClicks[idx].Hovered()
-	bg := cMenuBg
+	bg := uikit.CMenuBg
 	if open {
-		bg = cMenuOpen
+		bg = uikit.CMenuOpen
 	} else if hover {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	border := color.NRGBA{}
 	hasBorder := open || hover
 	if open {
-		border = cBorder
+		border = uikit.CBorder
 	} else if hover {
 		border = rgba(0x99, 0xCC, 0xFF, 0xFF)
 	}
@@ -91,7 +92,7 @@ func MenuButton(ui *uiState, gtx layout.Context, idx int, label string) layout.D
 		macro := op.Record(gtx.Ops)
 		lblDims := layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(13), label)
-			l.Color = cText
+			l.Color = uikit.CText
 			return l.Layout(gtx)
 		})
 		call := macro.Stop()
@@ -195,10 +196,10 @@ func LayoutMenuDropdown(ui *uiState, gtx layout.Context) layout.Dimensions {
 			paint.PaintOp{}.Add(gtx2.Ops)
 			st.Pop()
 			st2 := clip.Rect{Max: sz}.Push(gtx2.Ops)
-			paint.ColorOp{Color: cPanelBg}.Add(gtx2.Ops)
+			paint.ColorOp{Color: uikit.CPanelBg}.Add(gtx2.Ops)
 			paint.PaintOp{}.Add(gtx2.Ops)
 			st2.Pop()
-			b := widget.Border{Color: cBorder, Width: unit.Dp(1)}
+			b := widget.Border{Color: uikit.CBorder, Width: unit.Dp(1)}
 			gtx2.Constraints.Min = sz
 			gtx2.Constraints.Max = sz
 			return b.Layout(gtx2, func(gtx layout.Context) layout.Dimensions {
@@ -213,7 +214,7 @@ func LayoutMenuDropdown(ui *uiState, gtx layout.Context) layout.Dimensions {
 									gtx.Constraints.Min.Y = 1
 									gtx.Constraints.Max.Y = 1
 									st := clip.Rect{Max: sz2}.Push(gtx.Ops)
-									paint.ColorOp{Color: cHeaderLine}.Add(gtx.Ops)
+									paint.ColorOp{Color: uikit.CHeaderLine}.Add(gtx.Ops)
 									paint.PaintOp{}.Add(gtx.Ops)
 									st.Pop()
 									return layout.Dimensions{Size: sz2}
@@ -233,9 +234,9 @@ func LayoutMenuDropdown(ui *uiState, gtx layout.Context) layout.Dimensions {
 func MenuItem(ui *uiState, gtx layout.Context, idx int, label string) layout.Dimensions {
 	click := &ui.MenuItemClicks[ui.MenuOpen][idx]
 	hover := click.Hovered()
-	bg := cPanelBg
+	bg := uikit.CPanelBg
 	if hover {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	h := gtx.Dp(unit.Dp(22))
 	gtx.Constraints.Min.Y = h
@@ -244,7 +245,7 @@ func MenuItem(ui *uiState, gtx layout.Context, idx int, label string) layout.Dim
 		macro := op.Record(gtx.Ops)
 		inner := layout.Inset{Left: unit.Dp(28), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(12), label)
-			l.Color = cText
+			l.Color = uikit.CText
 			return l.Layout(gtx)
 		})
 		call := macro.Stop()
@@ -275,10 +276,10 @@ func LayoutSettingsDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 				cardH := gtx.Dp(unit.Dp(410))
 				gtx.Constraints.Min.X, gtx.Constraints.Max.X = cardW, cardW
 				gtx.Constraints.Min.Y, gtx.Constraints.Max.Y = cardH, cardH
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Stack{}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(4))
+							rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(4))
 							return layout.Dimensions{Size: gtx.Constraints.Max}
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -287,7 +288,7 @@ func LayoutSettingsDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(14), "Settings")
 										l.Font.Weight = font.Medium
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
@@ -295,12 +296,12 @@ func LayoutSettingsDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(11), "Dark theme")
-												l.Color = cText
+												l.Color = uikit.CText
 												return l.Layout(gtx)
 											}),
 											layout.Flexed(1, rowGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												onBg := cMenuOpen
+												onBg := uikit.CMenuOpen
 												return ToggleButton(ui, gtx, &ui.SettingsThemeClick, "Enabled", ui.DarkTheme, onBg)
 											}),
 										)
@@ -310,18 +311,18 @@ func LayoutSettingsDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(11), "Game folder")
-												l.Color = cText
+												l.Color = uikit.CText
 												return l.Layout(gtx)
 											}),
 											layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 												h := gtx.Dp(unit.Dp(28))
 												gtx.Constraints.Min.Y = h
 												gtx.Constraints.Max.Y = h
-												return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+												return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 													return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 														ed := material.Editor(ui.Th, &ui.SettingsGameEditor, "")
 														ed.TextSize = unit.Sp(11)
-														ed.HintColor = cTextDim
+														ed.HintColor = uikit.CTextDim
 														return ed.Layout(gtx)
 													})
 												})
@@ -333,7 +334,7 @@ func LayoutSettingsDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(11), "Text editor formats")
-												l.Color = cText
+												l.Color = uikit.CText
 												return l.Layout(gtx)
 											}),
 											layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
@@ -341,11 +342,11 @@ func LayoutSettingsDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 												h := gtx.Dp(unit.Dp(28))
 												gtx.Constraints.Min.Y = h
 												gtx.Constraints.Max.Y = h
-												return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+												return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 													return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 														ed := material.Editor(ui.Th, &ui.SettingsFormatEditor, "")
 														ed.TextSize = unit.Sp(11)
-														ed.HintColor = cTextDim
+														ed.HintColor = uikit.CTextDim
 														return ed.Layout(gtx)
 													})
 												})
@@ -353,7 +354,7 @@ func LayoutSettingsDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 											layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(10), "Opened by one click or Enter, separated by commas or spaces")
-												l.Color = cTextDim
+												l.Color = uikit.CTextDim
 												return l.Layout(gtx)
 											}),
 										)
@@ -391,7 +392,7 @@ func LayoutAssocRows(ui *uiState, gtx layout.Context) layout.Dimensions {
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "File associations (this user)")
-			l.Color = cText
+			l.Color = uikit.CText
 			return l.Layout(gtx)
 		}),
 		layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
@@ -403,7 +404,7 @@ func LayoutAssocRows(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					l := material.Label(ui.Th, unit.Sp(11), t.Ext+" — "+t.Label)
-					l.Color = cText
+					l.Color = uikit.CText
 					l.MaxLines = 1
 					return l.Layout(gtx)
 				}),
@@ -411,7 +412,7 @@ func LayoutAssocRows(ui *uiState, gtx layout.Context) layout.Dimensions {
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					// The same pill the Dark theme row uses: lit when the
 					// format is registered, and the click adds or removes.
-					return ToggleButton(ui, gtx, &ui.AssocClicks[i], "Associated", on, cMenuOpen)
+					return ToggleButton(ui, gtx, &ui.AssocClicks[i], "Associated", on, uikit.CMenuOpen)
 				}),
 			)
 		}))
@@ -434,10 +435,10 @@ func LayoutClearRecycleDialog(ui *uiState, gtx layout.Context) layout.Dimensions
 				cardH := gtx.Dp(unit.Dp(164))
 				gtx.Constraints.Min = image.Pt(cardW, cardH)
 				gtx.Constraints.Max = image.Pt(cardW, cardH)
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Stack{}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(4))
+							rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(4))
 							return layout.Dimensions{Size: gtx.Constraints.Max}
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -446,13 +447,13 @@ func LayoutClearRecycleDialog(ui *uiState, gtx layout.Context) layout.Dimensions
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(14), "Empty Recycle Bin")
 										l.Font.Weight = font.Medium
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(11), "This action is irreversible. All files in the Recycle Bin will be permanently deleted.")
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Flexed(1, flexGap()),
@@ -493,10 +494,10 @@ func LayoutFileDeleteDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 				cardH := gtx.Dp(unit.Dp(164))
 				gtx.Constraints.Min = image.Pt(cardW, cardH)
 				gtx.Constraints.Max = image.Pt(cardW, cardH)
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Stack{}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-							rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(4))
+							rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(4))
 							return layout.Dimensions{Size: gtx.Constraints.Max}
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -505,13 +506,13 @@ func LayoutFileDeleteDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(14), "Delete File")
 										l.Font.Weight = font.Medium
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(11), fmt.Sprintf("Move %q to the Recycle Bin?", name))
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Flexed(1, flexGap()),
@@ -548,8 +549,8 @@ func DialogButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label 
 
 	hover := btn.Hovered()
 	pressed := btn.Pressed()
-	bg := cSaveBg
-	bd := cSaveBd
+	bg := uikit.CSaveBg
+	bd := uikit.CSaveBd
 	if primary {
 		bg = rgb(0x0078D4)
 		if pressed {
@@ -558,9 +559,9 @@ func DialogButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label 
 			bg = rgb(0x106EBE)
 		}
 	} else if pressed {
-		bg = cSaveBg
+		bg = uikit.CSaveBg
 	} else if hover {
-		bg = cSaveBg
+		bg = uikit.CSaveBg
 	}
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return widget.Border{Color: bd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -576,7 +577,7 @@ func DialogButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label 
 						if primary {
 							l.Color = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 						} else {
-							l.Color = cText
+							l.Color = uikit.CText
 						}
 						return l.Layout(gtx)
 					})
@@ -609,15 +610,15 @@ const (
 // from the engine reads differently from one in the mod being edited.
 func searchSourceColor(f *modtree.TreeFile) color.NRGBA {
 	if f == nil || f.Source == nil {
-		return cTextDim
+		return uikit.CTextDim
 	}
 	switch f.Source.Kind {
 	case modtree.KindThisMod:
-		return cTreeThis
+		return uikit.CTreeThis
 	case modtree.KindReqMod:
-		return cTreeOther
+		return uikit.CTreeOther
 	}
-	return cTreeEngine
+	return uikit.CTreeEngine
 }
 
 // searchFolderOf is the folder part of a virtual path, shown under the name.
@@ -918,14 +919,14 @@ func LayoutSearchField(ui *uiState, gtx layout.Context) layout.Dimensions {
 	gtx.Constraints.Min = size
 	gtx.Constraints.Max = size
 	hover := ui.SearchFieldClick.Hovered() || ui.SearchEditor.Focused(gtx)
-	border := cBorder
+	border := uikit.CBorder
 	if hover {
-		border = cSelectBd
+		border = uikit.CSelectBd
 	}
 	return ui.SearchFieldClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				rrect(gtx, cContentBg, size, gtx.Dp(unit.Dp(3)))
+				rrect(gtx, uikit.CContentBg, size, gtx.Dp(unit.Dp(3)))
 				return layout.Dimensions{Size: size}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -933,7 +934,7 @@ func LayoutSearchField(ui *uiState, gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(11), "Search")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
@@ -977,17 +978,17 @@ func LayoutSearchPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 	inner.Constraints.Min = image.Pt(w, maxH)
 	inner.Constraints.Max = image.Pt(w, maxH)
 
-	return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(inner, func(gtx layout.Context) layout.Dimensions {
+	return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(inner, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
+				rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutSearchFilters(ui, gtx) }),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutSearchStatus(ui, gtx) }),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutSearchResults(ui, gtx) }),
 					)
@@ -1003,7 +1004,7 @@ func LayoutSearchFilters(ui *uiState, gtx layout.Context) layout.Dimensions {
 		i, k := i, modtree.SearchKinds[i]
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ToggleButton(ui, gtx, &ui.SearchKindClicks[i], k.Label(), ui.SearchKind == k, cSelectBg)
+				return ToggleButton(ui, gtx, &ui.SearchKindClicks[i], k.Label(), ui.SearchKind == k, uikit.CSelectBg)
 			})
 		}))
 	}
@@ -1013,7 +1014,7 @@ func LayoutSearchFilters(ui *uiState, gtx layout.Context) layout.Dimensions {
 func LayoutSearchStatus(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(ui.Th, unit.Sp(10), ui.SearchStatus)
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		l.MaxLines = 1
 		return l.Layout(gtx)
 	})
@@ -1041,9 +1042,9 @@ func LayoutSearchRow(ui *uiState, gtx layout.Context, index int, hit modtree.Sea
 	selected := index == ui.SearchSel
 	hover := index < len(ui.SearchHover) && ui.SearchHover[index]
 	if selected || hover {
-		bg := cMenuHover
+		bg := uikit.CMenuHover
 		if selected {
-			bg = cSelectBg
+			bg = uikit.CSelectBg
 		}
 		rect := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
 		rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(unit.Dp(2)))
@@ -1074,20 +1075,20 @@ func LayoutSearchName(ui *uiState, gtx layout.Context, name string, hit modtree.
 		}
 	}
 	if at < 0 {
-		return SearchNameLabel(ui, gtx, name, cText)
+		return SearchNameLabel(ui, gtx, name, uikit.CText)
 	}
 	before := name[:at]
 	matched := name[at : at+len(word)]
 	after := name[at+len(word):]
 	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return SearchNameLabel(ui, gtx, before, cText)
+			return SearchNameLabel(ui, gtx, before, uikit.CText)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return SearchNameLabel(ui, gtx, matched, searchSourceColor(hit.File))
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return SearchNameLabel(ui, gtx, after, cText)
+			return SearchNameLabel(ui, gtx, after, uikit.CText)
 		}),
 	)
 }
@@ -1107,7 +1108,7 @@ func LayoutSearchPath(ui *uiState, gtx layout.Context, f *modtree.TreeFile) layo
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(9), searchFolderOf(f))
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			l.MaxLines = 1
 			return l.Layout(gtx)
 		}),

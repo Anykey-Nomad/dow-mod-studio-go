@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/sga"
@@ -282,10 +283,10 @@ func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 		cardH := minInt(gtx.Dp(unit.Dp(520)), gtx.Constraints.Max.Y-gtx.Dp(unit.Dp(30)))
 		gtx.Constraints.Min = image.Pt(cardW, cardH)
 		gtx.Constraints.Max = image.Pt(cardW, cardH)
-		return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Stack{}.Layout(gtx,
 				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-					rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
+					rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
 					return layout.Dimensions{Size: gtx.Constraints.Max}
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -299,7 +300,7 @@ func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout))
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), "Select one or more current/parent SGA archives. Existing current-mod files are preserved.")
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						}))
 						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout))
@@ -308,9 +309,9 @@ func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 							return ui.ArchiveList.Layout(gtx, len(ui.ArchiveOptions), func(gtx layout.Context, index int) layout.Dimensions {
 								opt := ui.ArchiveOptions[index]
 								click := &ui.ArchiveSelectClicks[index]
-								bg := cPanelBg
+								bg := uikit.CPanelBg
 								if click.Hovered() {
-									bg = cMenuHover
+									bg = uikit.CMenuHover
 								}
 								return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 									gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(28))
@@ -322,7 +323,7 @@ func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												box := image.Pt(gtx.Dp(unit.Dp(14)), gtx.Dp(unit.Dp(14)))
-												col := cBorder
+												col := uikit.CBorder
 												if ui.ArchiveSelected[index] {
 													col = rgb(0x0078D4)
 												}
@@ -335,7 +336,7 @@ func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 											layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												l := material.Label(ui.Th, unit.Sp(11), opt.Label)
-												l.Color = cText
+												l.Color = uikit.CText
 												return l.Layout(gtx)
 											}),
 										)
@@ -346,7 +347,7 @@ func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout))
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), ui.ArchiveStatus)
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 							return l.Layout(gtx)
 						}))
 						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout))

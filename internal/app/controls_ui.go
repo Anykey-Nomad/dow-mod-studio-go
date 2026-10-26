@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"fmt"
 	"image"
 	"image/color"
@@ -21,34 +22,8 @@ import (
 	"gioui.org/widget/material"
 )
 
-func centeredPanelLabel(gtx layout.Context, th *material.Theme, text string, size unit.Sp, col color.NRGBA) layout.Dimensions {
-	width := gtx.Constraints.Max.X
-	if width <= 0 {
-		width = gtx.Constraints.Min.X
-	}
-	if width <= 0 {
-		return layout.Dimensions{}
-	}
-	label := func(gtx layout.Context) layout.Dimensions {
-		l := material.Label(th, size, text)
-		l.Color = col
-		return l.Layout(gtx)
-	}
-	macro := op.Record(gtx.Ops)
-	measure := gtx
-	measure.Constraints.Min = image.Point{}
-	dims := label(measure)
-	macro.Stop()
-	x := (width - dims.Size.X) / 2
-	if x < 0 {
-		x = 0
-	}
-	defer op.Offset(image.Pt(x, 0)).Push(gtx.Ops).Pop()
-	draw := gtx
-	draw.Constraints.Min = image.Point{}
-	label(draw)
-	return layout.Dimensions{Size: image.Pt(width, dims.Size.Y)}
-}
+// CenteredPanelLabel lives in uikit; the alias keeps every call site as it was.
+var centeredPanelLabel = uikit.CenteredPanelLabel
 
 func centeredPanelWidget(gtx layout.Context, widget layout.Widget) layout.Dimensions {
 	width := gtx.Constraints.Max.X
@@ -85,8 +60,8 @@ func centeredPanelWidget(gtx layout.Context, widget layout.Widget) layout.Dimens
 func IconButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, glyph string, active bool) layout.Dimensions {
 	hover := btn.Hovered()
 	pressed := btn.Pressed()
-	bg := cSaveBg
-	bd := cSaveBd
+	bg := uikit.CSaveBg
+	bd := uikit.CSaveBd
 	if active {
 		bg = rgb(0x0078D4)
 		bd = rgb(0x005A9E)
@@ -96,9 +71,9 @@ func IconButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, glyph st
 			bg = rgb(0x106EBE)
 		}
 	} else if pressed {
-		bg = cSaveBg
+		bg = uikit.CSaveBg
 	} else if hover {
-		bg = cSaveHover
+		bg = uikit.CSaveHover
 	}
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return widget.Border{Color: bd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -123,7 +98,7 @@ func IconButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, glyph st
 						if active {
 							l.Color = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 						} else {
-							l.Color = cText
+							l.Color = uikit.CText
 						}
 						return l.Layout(gtx)
 					})
@@ -140,55 +115,12 @@ func MiniButtonDisabled(ui *uiState, gtx layout.Context, btn *widget.Clickable, 
 	return SmallButtonDisabled(ui, gtx, btn, label, disabled)
 }
 
-func SmallButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string) layout.Dimensions {
-	return SmallButtonDisabled(ui, gtx, btn, label, false)
-}
-func SmallButtonDisabled(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, disabled bool) layout.Dimensions {
-	hover := btn.Hovered() && !disabled
-	pressed := btn.Pressed() && !disabled
-	bg := cSaveBg
-	if disabled {
-		bg = cSaveBg
-	} else if pressed {
-		bg = cMenuOpen
-	} else if hover {
-		bg = cSaveHover
-	}
-	if disabled {
-		gtx = gtx.Disabled()
-	}
-	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return widget.Border{Color: cSaveBd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return layout.Stack{}.Layout(gtx,
-				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-					sz := gtx.Constraints.Min
-					if sz.X == 0 || sz.Y == 0 {
-						sz = gtx.Constraints.Max
-					}
-					if sz.X > gtx.Constraints.Max.X {
-						sz.X = gtx.Constraints.Max.X
-					}
-					if sz.Y > gtx.Constraints.Max.Y {
-						sz.Y = gtx.Constraints.Max.Y
-					}
-					rrect(gtx, bg, sz, gtx.Dp(3))
-					return layout.Dimensions{Size: sz}
-				}),
-				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(11), label)
-						if disabled {
-							l.Color = cTextDim
-						} else {
-							l.Color = cText
-						}
-						return l.Layout(gtx)
-					})
-				}),
-			)
-		})
-	})
-}
+// SmallButton lives in uikit; the alias keeps every call site as it was.
+var SmallButton = uikit.SmallButton
+
+// SmallButtonDisabled lives in uikit; the alias keeps every call site as it was.
+var SmallButtonDisabled = uikit.SmallButtonDisabled
+
 func PrimaryButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string) layout.Dimensions {
 	hover := btn.Hovered()
 	pressed := btn.Pressed()
@@ -229,20 +161,20 @@ func PrimaryButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label
 func ToggleButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label string, on bool, bgOn color.NRGBA) layout.Dimensions {
 	hover := btn.Hovered()
 	pressed := btn.Pressed()
-	bg := cSaveBg
+	bg := uikit.CSaveBg
 	if on {
 		bg = bgOn
 	}
 	if pressed {
-		bg = cMenuOpen
+		bg = uikit.CMenuOpen
 	} else if hover {
-		bg = cSaveHover
+		bg = uikit.CSaveHover
 		if on {
-			bg = cSelectBg
+			bg = uikit.CSelectBg
 		}
 	}
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return widget.Border{Color: cSaveBd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return widget.Border{Color: uikit.CSaveBd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Stack{}.Layout(gtx,
 				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 					sz := gtx.Constraints.Min
@@ -261,7 +193,7 @@ func ToggleButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, label 
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(10), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(11), label)
-						l.Color = cText
+						l.Color = uikit.CText
 						return l.Layout(gtx)
 					})
 				}),
@@ -287,11 +219,11 @@ func LayoutRightPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 			}
 			if v := UnitModelViewer(ui); v != nil && v.Model != nil {
 				children = append(children,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Model") }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), UnitModelFileLabel(ui))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						l.MaxLines = 2
 						return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(2)}.Layout(gtx, l.Layout)
 					}),
@@ -306,7 +238,7 @@ func LayoutRightPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "FDA Properties") }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FdaPropertiesTable(ui, gtx, tab) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "File Info") }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FdaInfoTable(ui, gtx, tab) }),
 			)
@@ -328,10 +260,10 @@ func LayoutRightPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 			}
 			if tab.Model != nil {
 				children = append(children,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "3D Preview") }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ModelInfoTable(ui, gtx, tab) }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Materials by Mesh") }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ModelMaterialDiagnosticsTable(ui, gtx, tab) }),
 				)
@@ -352,7 +284,7 @@ func LayoutRightPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Properties") }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return PropertiesTable(ui, gtx, tab) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Table Children") }),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ChildrenTable(ui, gtx, tab) }),
 			)
@@ -362,12 +294,12 @@ func LayoutRightPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Properties") }),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return centeredPanelLabel(gtx, ui.Th, "Module tab — open a file to see its properties", unit.Sp(10), cTextDim)
+				return centeredPanelLabel(gtx, ui.Th, "Module tab — open a file to see its properties", unit.Sp(10), uikit.CTextDim)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Table Children") }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return centeredPanelLabel(gtx, ui.Th, "—", unit.Sp(10), cTextDim)
+				return centeredPanelLabel(gtx, ui.Th, "—", unit.Sp(10), uikit.CTextDim)
 			}),
 		)
 	})
@@ -380,13 +312,13 @@ func sectionHeader(gtx layout.Context, th *material.Theme, title string) layout.
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := image.Pt(gtx.Constraints.Max.X, h)
-			fillRect(gtx, cHeaderBg, sz)
+			fillRect(gtx, uikit.CHeaderBg, sz)
 			return layout.Dimensions{Size: sz}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Left: unit.Dp(8), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(th, unit.Sp(11), title)
-				l.Color = cText
+				l.Color = uikit.CText
 				l.Font.Weight = font.Medium
 				return l.Layout(gtx)
 			})
@@ -401,7 +333,7 @@ func LayoutStatusBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := image.Pt(gtx.Constraints.Max.X, h)
-			fillRect(gtx, cBg, sz)
+			fillRect(gtx, uikit.CBg, sz)
 			return layout.Dimensions{Size: sz}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -413,7 +345,7 @@ func LayoutStatusBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 							txt = "Ready"
 						}
 						l := material.Label(ui.Th, unit.Sp(11), txt)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 				)
@@ -535,121 +467,17 @@ func HandleExportActiveTab(ui *uiState) {
 
 // ─── merged from table_ui.go ───────────────────────────────────────────────
 
-func TableHead(ui *uiState, gtx layout.Context, a, b string) layout.Dimensions {
-	h := gtx.Dp(unit.Dp(20))
-	gtx.Constraints.Min.Y = h
-	gtx.Constraints.Max.Y = h
-	return layout.Stack{}.Layout(gtx,
-		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			sz := image.Pt(gtx.Constraints.Max.X, h)
-			fillRect(gtx, cHeaderBg, sz)
-			return layout.Dimensions{Size: sz}
-		}),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(11), a)
-						l.Color = cTextDim
-						return l.Layout(gtx)
-					})
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, cHeaderLine) }),
-				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(11), b)
-						l.Color = cTextDim
-						return l.Layout(gtx)
-					})
-				}),
-			)
-		}),
-	)
-}
+// TableHead lives in uikit; the alias keeps every call site as it was.
+var TableHead = uikit.TableHead
 
-func vLine(gtx layout.Context, col color.NRGBA) layout.Dimensions {
-	w := gtx.Dp(unit.Dp(1))
-	h := gtx.Dp(unit.Dp(20))
-	sz := image.Pt(w, h)
-	gtx.Constraints.Min.X = w
-	gtx.Constraints.Max.X = w
-	st := clip.Rect{Max: sz}.Push(gtx.Ops)
-	paint.ColorOp{Color: col}.Add(gtx.Ops)
-	paint.PaintOp{}.Add(gtx.Ops)
-	st.Pop()
-	return layout.Dimensions{Size: sz}
-}
+// VLine lives in uikit; the alias keeps every call site as it was.
+var vLine = uikit.VLine
 
-func TableRow2(ui *uiState, gtx layout.Context, a, b string, alt bool) layout.Dimensions {
-	return TableRow2WithTooltip(ui, gtx, a, b, alt, "")
-}
+// TableRow2 lives in uikit; the alias keeps every call site as it was.
+var TableRow2 = uikit.TableRow2
 
-func TableRow2WithTooltip(ui *uiState, gtx layout.Context, a, b string, alt bool, tooltip string) layout.Dimensions {
-	h := gtx.Dp(unit.Dp(24))
-	gtx.Constraints.Min.Y = h
-	gtx.Constraints.Max.Y = h
-	bg := cPanelBg
-	if alt {
-		bg = cSaveBg
-	}
-	return layout.Stack{}.Layout(gtx,
-		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			sz := image.Pt(gtx.Constraints.Max.X, h)
-			fillRect(gtx, bg, sz)
-			return layout.Dimensions{Size: sz}
-		}),
-		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			if tooltip == "" {
-				return layout.Dimensions{}
-			}
-			if ui.RgdTooltipTags == nil {
-				ui.RgdTooltipTags = make(map[string]event.Tag)
-			}
-			tag, ok := ui.RgdTooltipTags[tooltip]
-			if !ok {
-				tag = newPointerTag(tooltip)
-				ui.RgdTooltipTags[tooltip] = tag
-			}
-			event.Op(gtx.Ops, tag)
-			for {
-				ev, ok := gtx.Event(pointer.Filter{Target: tag, Kinds: pointer.Enter | pointer.Leave})
-				if !ok {
-					break
-				}
-				e, ok := ev.(pointer.Event)
-				if !ok {
-					continue
-				}
-				switch e.Kind {
-				case pointer.Enter:
-					ui.RgdTooltipText = tooltip
-				case pointer.Leave:
-					ui.RgdTooltipText = ""
-				}
-			}
-			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, h)}
-		}),
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(11), a)
-						l.Color = cText
-						return l.Layout(gtx)
-					})
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return vLine(gtx, cBorderLight) }),
-				layout.Flexed(0.5, func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(11), b)
-						l.Color = cText
-						return l.Layout(gtx)
-					})
-				}),
-			)
-		}),
-	)
-}
+// TableRow2WithTooltip lives in uikit; the alias keeps every call site as it was.
+var TableRow2WithTooltip = uikit.TableRow2WithTooltip
 
 // ─── merged from tabs_ui.go ───────────────────────────────────────────────
 
@@ -696,7 +524,7 @@ func LayoutTabBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			sz := image.Pt(gtx.Constraints.Max.X, h)
-			fillRect(gtx, cTabBarBg, sz)
+			fillRect(gtx, uikit.CTabBarBg, sz)
 			return layout.Dimensions{Size: sz}
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -839,12 +667,12 @@ func TabAt(ui *uiState, p f32.Point) int {
 
 func Tab(ui *uiState, gtx layout.Context, idx int, label string, closeIdx int) layout.Dimensions {
 	sel := ui.TabSel == idx
-	bg := cTabOff
+	bg := uikit.CTabOff
 	closable := closeIdx >= 0
 	if sel {
-		bg = cTabOn
+		bg = uikit.CTabOn
 	} else if ui.TabClicks[idx].Hovered() {
-		bg = cMenuHover
+		bg = uikit.CMenuHover
 	}
 	return ui.TabClicks[idx].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		inner := func(gtx layout.Context) layout.Dimensions {
@@ -853,10 +681,10 @@ func Tab(ui *uiState, gtx layout.Context, idx int, label string, closeIdx int) l
 					return layout.Inset{Left: unit.Dp(10), Right: unit.Dp(2), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(12), label)
 						if sel {
-							l.Color = cText
+							l.Color = uikit.CText
 							l.Font.Weight = font.Medium
 						} else {
-							l.Color = cTextDim
+							l.Color = uikit.CTextDim
 						}
 						return l.Layout(gtx)
 					})
@@ -876,7 +704,7 @@ func Tab(ui *uiState, gtx layout.Context, idx int, label string, closeIdx int) l
 							if hover {
 								l.Color = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 							} else {
-								l.Color = cTextDim
+								l.Color = uikit.CTextDim
 							}
 							return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, l.Layout)
 						})
@@ -893,15 +721,15 @@ func Tab(ui *uiState, gtx layout.Context, idx int, label string, closeIdx int) l
 		paint.PaintOp{}.Add(gtx.Ops)
 		rr.Pop()
 		st := clip.Rect(image.Rect(0, 0, sz.X, 1)).Push(gtx.Ops)
-		paint.ColorOp{Color: cBorder}.Add(gtx.Ops)
+		paint.ColorOp{Color: uikit.CBorder}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 		st.Pop()
 		st = clip.Rect(image.Rect(0, 0, 1, sz.Y)).Push(gtx.Ops)
-		paint.ColorOp{Color: cBorder}.Add(gtx.Ops)
+		paint.ColorOp{Color: uikit.CBorder}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 		st.Pop()
 		st = clip.Rect(image.Rect(sz.X-1, 0, sz.X, sz.Y)).Push(gtx.Ops)
-		paint.ColorOp{Color: cBorder}.Add(gtx.Ops)
+		paint.ColorOp{Color: uikit.CBorder}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 		st.Pop()
 		if sel {
@@ -997,10 +825,10 @@ func LayoutTabContextMenu(ui *uiState, gtx layout.Context) layout.Dimensions {
 	paint.ColorOp{Color: rgba(0, 0, 0, 28)}.Add(gtx2.Ops)
 	paint.PaintOp{}.Add(gtx2.Ops)
 	st.Pop()
-	return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx2, func(gtx layout.Context) layout.Dimensions {
+	return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx2, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
 			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(3))
+				rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(3))
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {

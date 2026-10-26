@@ -1,7 +1,7 @@
 package app
 
 import (
-	"dow-mod-studio/internal/modifiers"
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"fmt"
@@ -21,22 +21,11 @@ import (
 	"gioui.org/widget"
 )
 
-// wheelNotchDelta is the magnitude of one click of a mouse wheel, which is
-// what a scroll amount is counted in. Windows reports WHEEL_DELTA (120) for
-// each notch and Gio passes it through with the sign flipped, so a wheel event
-// carrying ±120 is one click and anything smaller is a trackpad's finer report.
-//
-// It is named here because the amount is not a pixel count, and treating it as
-// one is what makes a wheel that is meant to move a list by a few lines move it
-// by five thousand instead.
-const wheelNotchDelta = 120
+// WheelNotchDelta lives in uikit; the alias keeps every call site as it was.
+const wheelNotchDelta = uikit.WheelNotchDelta
 
-func GetVisibleNodes(ui *uiState) []modtree.VisibleNode {
-	if ui.ModTree == nil {
-		return nil
-	}
-	return ui.ModTree.Flatten(ui.Expanded, ui.SelectedPath)
-}
+// GetVisibleNodes lives in uikit; the alias keeps every call site as it was.
+var GetVisibleNodes = uikit.GetVisibleNodes
 
 func EnsureRowHover(ui *uiState, n int) {
 	if len(ui.RowHover) < n {
@@ -1102,7 +1091,5 @@ func kindLabel(k modtree.SourceKind) string {
 	}
 }
 
-// heldModifiers reads the live state of the modifier keys straight from the
-// OS, for platforms where the window backend does not report it in events.
-// The implementation lives in internal/modifiers.
-func heldModifiers() key.Modifiers { return modifiers.HeldModifiers() }
+// HeldModifiers lives in uikit; the alias keeps every call site as it was.
+var heldModifiers = uikit.HeldModifiers

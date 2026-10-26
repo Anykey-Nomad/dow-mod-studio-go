@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"sort"
 	"strings"
@@ -142,7 +143,7 @@ func LayoutUnitLinksList(ui *uiState, gtx layout.Context) layout.Dimensions {
 func LinkGroupTitle(ui *uiState, gtx layout.Context, title string, n int) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(4), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(ui.Th, unit.Sp(9), title+"  ("+itoa(n)+")")
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return l.Layout(gtx)
 	})
 }
@@ -167,16 +168,16 @@ func LinkRow(ui *uiState, gtx layout.Context, r linkRow) layout.Dimensions {
 					gtx.Constraints.Min.X = w
 					gtx.Constraints.Max.X = w
 					l := material.Label(ui.Th, unit.Sp(10), clipName(label, 26))
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				})
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), name)
 				if r.found {
-					l.Color = cText
+					l.Color = uikit.CText
 				} else {
-					l.Color = cProblem
+					l.Color = uikit.CProblem
 				}
 				return l.Layout(gtx)
 			}),
@@ -189,7 +190,7 @@ func LinkRow(ui *uiState, gtx layout.Context, r linkRow) layout.Dimensions {
 func LinkNote(ui *uiState, gtx layout.Context, text string) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(ui.Th, unit.Sp(9), text)
-		l.Color = cTextDim
+		l.Color = uikit.CTextDim
 		return l.Layout(gtx)
 	})
 }
@@ -318,7 +319,7 @@ func ProblemRow(ui *uiState, gtx layout.Context, grp brokenLinkGroup) layout.Dim
 					gtx.Constraints.Min.X = w
 					gtx.Constraints.Max.X = w
 					l := material.Label(ui.Th, unit.Sp(10), grp.role.Label())
-					l.Color = cTextDim
+					l.Color = uikit.CTextDim
 					return l.Layout(gtx)
 				})
 			}),
@@ -326,7 +327,7 @@ func ProblemRow(ui *uiState, gtx layout.Context, grp brokenLinkGroup) layout.Dim
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(10), grp.ref)
-						l.Color = cProblem
+						l.Color = uikit.CProblem
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {

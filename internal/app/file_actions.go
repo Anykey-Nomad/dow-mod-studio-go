@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -734,11 +735,11 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 				gtx.Constraints.Min.X = cardW
 				gtx.Constraints.Max.Y = cardH
 				gtx.Constraints.Min.Y = cardH
-				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Stack{}.Layout(gtx,
 						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 							sz := gtx.Constraints.Max
-							rrect(gtx, cPanelBg, sz, gtx.Dp(4))
+							rrect(gtx, uikit.CPanelBg, sz, gtx.Dp(4))
 							return layout.Dimensions{Size: sz}
 						}),
 						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -747,13 +748,13 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(14), fp.Cfg.Title)
 										l.Font.Weight = font.Medium
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(11), fp.Cfg.Subtitle)
-										l.Color = cTextDim
+										l.Color = uikit.CTextDim
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
@@ -761,11 +762,11 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 										h := gtx.Dp(unit.Dp(28))
 										gtx.Constraints.Min.Y = h
 										gtx.Constraints.Max.Y = h
-										return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+										return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 											return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 												Ed := material.Editor(ui.Th, &fp.Ed, "")
 												Ed.TextSize = unit.Sp(11)
-												Ed.HintColor = cTextDim
+												Ed.HintColor = uikit.CTextDim
 												Ed.Hint = fp.Cfg.Hint
 												return Ed.Layout(gtx)
 											})
@@ -775,19 +776,19 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(11), "Folders and files")
 										l.Font.Weight = font.Medium
-										l.Color = cText
+										l.Color = uikit.CText
 										return l.Layout(gtx)
 									}),
 									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-										return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-											rrect(gtx, cContentBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
+										return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+											rrect(gtx, uikit.CContentBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
 											fp.List.Axis = layout.Vertical
 											return fp.List.Layout(gtx, len(fp.Rows), func(gtx layout.Context, index int) layout.Dimensions {
 												r := fp.Rows[index]
 												click := &fp.Clicks[index]
-												bg := cPanelBg
+												bg := uikit.CPanelBg
 												if click.Hovered() {
-													bg = cMenuHover
+													bg = uikit.CMenuHover
 												}
 												return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 													gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(26))
@@ -797,7 +798,7 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 													st.Pop()
 													return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 														l := material.Label(ui.Th, unit.Sp(11), r.Label)
-														l.Color = cText
+														l.Color = uikit.CText
 														return l.Layout(gtx)
 													})
 												})
@@ -807,7 +808,7 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 									layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										l := material.Label(ui.Th, unit.Sp(10), fp.Status)
-										l.Color = cTextDim
+										l.Color = uikit.CTextDim
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),

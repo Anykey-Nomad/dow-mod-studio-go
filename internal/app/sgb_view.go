@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"fmt"
 	"image"
 	"image/color"
@@ -83,7 +84,7 @@ func LayoutSgbViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 	if t == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "No scenario selected")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
@@ -98,7 +99,7 @@ func LayoutSgbViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 	if m == nil || t.SgbImage == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "No map data")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
@@ -134,7 +135,7 @@ func LayoutSgbViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(10), info)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
@@ -152,7 +153,7 @@ func LayoutSgbViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 				)
 			})
 		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			if t.SgbView3D && t.Model != nil {
 				// The scroll panel measures its tabs with a synthetic

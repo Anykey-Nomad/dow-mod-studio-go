@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
@@ -205,10 +206,10 @@ func LayoutNewObjDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min = image.Pt(cardW, cardH)
 			gtx.Constraints.Max = image.Pt(cardW, cardH)
-			return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Stack{}.Layout(gtx,
 					layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-						rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(4))
+						rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(4))
 						return layout.Dimensions{Size: gtx.Constraints.Max}
 					}),
 					layout.Stacked(func(gtx layout.Context) layout.Dimensions {
@@ -217,13 +218,13 @@ func LayoutNewObjDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 									l := material.Label(ui.Th, unit.Sp(14), "New "+ui.NewObjKind.NewObjNoun())
 									l.Font.Weight = font.Medium
-									l.Color = cText
+									l.Color = uikit.CText
 									return l.Layout(gtx)
 								}),
 								layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 									l := material.Label(ui.Th, unit.Sp(11), "Written to "+NewObjFolderLabel(ui))
-									l.Color = cTextDim
+									l.Color = uikit.CTextDim
 									return l.Layout(gtx)
 								}),
 								layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
@@ -231,11 +232,11 @@ func LayoutNewObjDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 									h := gtx.Dp(unit.Dp(28))
 									gtx.Constraints.Min.Y = h
 									gtx.Constraints.Max.Y = h
-									return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+									return widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 										return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 											ed := material.Editor(ui.Th, &ui.NewObjNameEditor, "")
 											ed.TextSize = unit.Sp(11)
-											ed.HintColor = cTextDim
+											ed.HintColor = uikit.CTextDim
 											ed.Hint = NewObjHint(ui)
 											return ed.Layout(gtx)
 										})
@@ -247,7 +248,7 @@ func LayoutNewObjDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 										return layout.Dimensions{}
 									}
 									l := material.Label(ui.Th, unit.Sp(10), ui.NewObjStatus)
-									l.Color = cTreeThis
+									l.Color = uikit.CTreeThis
 									return l.Layout(gtx)
 								}),
 								// The buttons take the space left over and sit along its bottom

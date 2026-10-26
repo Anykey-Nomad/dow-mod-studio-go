@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"dow-mod-studio/internal/app/uikit"
 	"fmt"
 	"io"
 	"log"
@@ -21,7 +22,7 @@ func FdaPropertiesTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dime
 	if t.FdaFile == nil && t.FdaError == "" {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(10), "No FDA selected")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
@@ -231,7 +232,7 @@ func LayoutFdaPlayer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 	if t.FdaFile == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "No FDA selected")
-			l.Color = cTextDim
+			l.Color = uikit.CTextDim
 			return l.Layout(gtx)
 		})
 	}
@@ -261,9 +262,9 @@ func LayoutFdaPlayer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.FdaStopBtn, "Stop") }),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						bg := cSaveBg
+						bg := uikit.CSaveBg
 						if t.FdaRepeat {
-							bg = cMenuOpen
+							bg = uikit.CMenuOpen
 						}
 						return ToggleButton(ui, gtx, &t.FdaRepeatBtn, "Repeat", t.FdaRepeat, bg)
 					}),
@@ -283,7 +284,7 @@ func LayoutFdaPlayer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 							lbl = "Mute"
 						}
 						l := material.Label(ui.Th, unit.Sp(9), lbl)
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
@@ -299,13 +300,13 @@ func LayoutFdaPlayer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 					layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("%d%%", t.FdaVolumePct))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), fmtDuration(pos))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
@@ -313,7 +314,7 @@ func LayoutFdaPlayer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						l := material.Label(ui.Th, unit.Sp(9), fmtDuration(t.FdaTotal))
-						l.Color = cTextDim
+						l.Color = uikit.CTextDim
 						return l.Layout(gtx)
 					}),
 				)
