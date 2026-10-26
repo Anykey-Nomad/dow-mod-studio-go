@@ -1,4 +1,4 @@
-package main
+package applog
 
 import (
 	"log"
@@ -21,16 +21,16 @@ import (
 //
 // An environment that says otherwise wins, because a reader who has measured
 // their own stutter with a different number knows more about it than this does.
-const gcPercent = 300
+const GcPercent = 300
 
 // tuneCollector is called once, before any window is opened. It has no effect
 // when GOGC is set in the environment, which is how a reader turns the pacing
 // back to Go's own without rebuilding.
-func tuneCollector() {
+func TuneCollector() {
 	if v := os.Getenv("GOGC"); v != "" {
 		log.Printf("gc: GOGC=%s in the environment, leaving the collector alone", v)
 		return
 	}
-	debug.SetGCPercent(gcPercent)
-	log.Printf("gc: collecting at %d%% of the live heap", gcPercent)
+	debug.SetGCPercent(GcPercent)
+	log.Printf("gc: collecting at %d%% of the live heap", GcPercent)
 }

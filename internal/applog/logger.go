@@ -1,4 +1,4 @@
-package main
+package applog
 
 import (
 	"fmt"
@@ -14,11 +14,11 @@ import (
 )
 
 var (
-	logFile      *os.File
-	logFilePath  string
-	logMu        sync.Mutex
-	logWriter    io.Writer
-	logCloseOnce sync.Once
+	LogFile      *os.File
+	LogFilePath  string
+	LogMu        sync.Mutex
+	LogWriter    io.Writer
+	LogCloseOnce sync.Once
 )
 
 // ── levels — INFO / WARN / ERROR ────────────────────────────────────────────
@@ -26,54 +26,54 @@ var (
 // and Lshortfile so the call site is still visible. No filtering by default —
 // all levels are emitted — but a future filter can check currentLogLevel.
 
-type logLevel int
+type LogLevel int
 
 const (
-	LevelDebug logLevel = iota
+	LevelDebug LogLevel = iota
 	LevelInfo
 	LevelWarn
 	LevelError
 )
 
-var currentLogLevel logLevel = LevelInfo
+var currentLogLevel LogLevel = LevelInfo
 
-func SetLogLevel(l logLevel)    { currentLogLevel = l }
-func CurrentLogLevel() logLevel { return currentLogLevel }
+func SetLogLevel(l LogLevel)    { currentLogLevel = l }
+func CurrentLogLevel() LogLevel { return currentLogLevel }
 
-func levelEnabled(l logLevel) bool { return l >= currentLogLevel }
+func LevelEnabled(l LogLevel) bool { return l >= currentLogLevel }
 
 func LogDebug(format string, args ...any) {
-	if !levelEnabled(LevelDebug) {
+	if !LevelEnabled(LevelDebug) {
 		return
 	}
 	log.Printf("DEBUG: "+format, args...)
 }
 func LogInfo(format string, args ...any) {
-	if !levelEnabled(LevelInfo) {
+	if !LevelEnabled(LevelInfo) {
 		return
 	}
 	log.Printf("INFO: "+format, args...)
 }
 func LogWarn(format string, args ...any) {
-	if !levelEnabled(LevelWarn) {
+	if !LevelEnabled(LevelWarn) {
 		return
 	}
 	log.Printf("WARN: "+format, args...)
 }
 func LogError(format string, args ...any) {
-	if !levelEnabled(LevelError) {
+	if !LevelEnabled(LevelError) {
 		return
 	}
 	log.Printf("ERROR: "+format, args...)
 }
 
 // legacy aliases (lowercase) for internal use
-func logInfof(format string, args ...any)  { LogInfo(format, args...) }
-func logWarnf(format string, args ...any)  { LogWarn(format, args...) }
-func logErrorf(format string, args ...any) { LogError(format, args...) }
+func LogInfof(format string, args ...any)  { LogInfo(format, args...) }
+func LogWarnf(format string, args ...any)  { LogWarn(format, args...) }
+func LogErrorf(format string, args ...any) { LogError(format, args...) }
 
 // logDir returns a writable log directory, trying exe dir, cwd, temp in order.
-func logDir() string {
+func LogDir() string {
 	candidates := []string{}
 	if exe, err := os.Executable(); err == nil {
 		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "log"))
@@ -102,8 +102,8 @@ func logDir() string {
 	return "log"
 }
 
-func initLogger() {
-	dir := logDir()
+func InitLogger() {
+	dir := LogDir()
 	_ = os.MkdirAll(dir, 0o755)
 	ts := time.Now().Format("2006-01-02_15-04-05")
 	pid := os.Getpid()
@@ -129,66 +129,66 @@ func initLogger() {
 		log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 		return
 	}
-	logFile = f
-	logFilePath = path
-	logWriter = io.MultiWriter(f, os.Stderr)
-	log.SetOutput(logWriter)
+	LogFile = f
+	LogFilePath = path
+	LogWriter = io.MultiWriter(f, os.Stderr)
+	log.SetOutput(LogWriter)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 	cwd, _ := os.Getwd()
 	exe, _ := os.Executable()
 	log.Printf("=== DoW Mod Studio started pid=%d exe=%q cwd=%q log=%q ===", pid, exe, cwd, path)
 	log.Printf("args: %q", os.Args)
-	go cleanupOldLogs(dir)
+	go CleanupOldLogs(dir)
 }
 
-func flushLogger() {
-	logMu.Lock()
-	defer logMu.Unlock()
-	if logFile != nil {
-		_ = logFile.Sync()
+func FlushLogger() {
+	LogMu.Lock()
+	defer LogMu.Unlock()
+	if LogFile != nil {
+		_ = LogFile.Sync()
 	}
 }
 
-func closeLogger() {
-	logCloseOnce.Do(func() {
-		flushLogger()
-		if logFile != nil {
+func CloseLogger() {
+	LogCloseOnce.Do(func() {
+		FlushLogger()
+		if LogFile != nil {
 			log.Printf("=== exiting ===")
-			_ = logFile.Sync()
-			_ = logFile.Close()
-			logFile = nil
+			_ = LogFile.Sync()
+			_ = LogFile.Close()
+			LogFile = nil
 		}
 	})
 }
 
-func handlePanic() {
+func HandlePanic() {
 	if r := recover(); r != nil {
-		if logFile == nil {
+		if LogFile == nil {
 			// try to init so we have a file
-			initLogger()
+			InitLogger()
 		}
 		log.Printf("PANIC: %v", r)
 		log.Printf("stack:\n%s", debug.Stack())
 		fmt.Fprintf(os.Stderr, "PANIC: %v\n%s\n", r, debug.Stack())
-		flushLogger()
-		closeLogger()
+		FlushLogger()
+		CloseLogger()
 		os.Exit(2)
 	}
 }
 
-func exitLogged(code int) {
-	flushLogger()
-	closeLogger()
+func ExitLogged(code int) {
+	FlushLogger()
+	CloseLogger()
 	os.Exit(code)
 }
 
 // openLogFolder opens the log directory in the system file manager.
 // It is safe to call from the UI thread (it spawns explorer/
 // xdg-open without blocking).
-func openLogFolder() error {
-	dir := logDir()
+func OpenLogFolder() error {
+	dir := LogDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		LogError("openLogFolder mkdir %q: %v", dir, err)
+		LogError("OpenLogFolder mkdir %q: %v", dir, err)
 		return err
 	}
 	LogInfo("opening log folder %q", dir)
@@ -207,7 +207,7 @@ func openLogFolder() error {
 	var cmd string
 	var args []string
 	switch {
-	case isWindows():
+	case IsWindows():
 		cmd = "explorer.exe"
 		args = []string{dir}
 	default:
@@ -222,23 +222,23 @@ func openLogFolder() error {
 	}
 	// Use os.StartProcess to avoid importing os/exec in logger.go.
 	// We need the full path to the opener - search PATH via LookPath equivalent.
-	path, err := lookupPath(cmd)
+	path, err := LookupPath(cmd)
 	if err != nil {
 		path = cmd
 	}
 	proc, err := os.StartProcess(path, append([]string{path}, args...), &os.ProcAttr{Files: []*os.File{nil, nil, nil}})
 	if err != nil {
-		LogError("openLogFolder StartProcess %q: %v", path, err)
+		LogError("OpenLogFolder StartProcess %q: %v", path, err)
 		return err
 	}
 	_ = proc.Release()
 	return nil
 }
 
-func openFileWithDefaultApp(path string) error {
+func OpenFileWithDefaultApp(path string) error {
 	var cmd string
 	var args []string
-	if isWindows() {
+	if IsWindows() {
 		cmd = "explorer.exe"
 		args = []string{path}
 	} else if _, err := os.Stat("/usr/bin/xdg-open"); err == nil {
@@ -248,7 +248,7 @@ func openFileWithDefaultApp(path string) error {
 		cmd = "open"
 		args = []string{path}
 	}
-	resolved, err := lookupPath(cmd)
+	resolved, err := LookupPath(cmd)
 	if err != nil {
 		resolved = cmd
 	}
@@ -260,15 +260,37 @@ func openFileWithDefaultApp(path string) error {
 	return nil
 }
 
-func openRecycleFolder() error {
-	dir, err := ensureRecycleBinDir()
+// The recycle bin the file actions move replaced files into lives beside
+// the log folder: both are per-user application data directories.
+
+func RecycleBinDir() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "DoW Mod Studio", "recycle"), nil
+}
+
+func EnsureRecycleBinDir() (string, error) {
+	dir, err := RecycleBinDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func OpenRecycleFolder() error {
+	dir, err := EnsureRecycleBinDir()
 	if err != nil {
 		return err
 	}
 	LogInfo("opening recycle bin folder %q", dir)
 	var cmd string
 	var args []string
-	if isWindows() {
+	if IsWindows() {
 		cmd = "explorer.exe"
 		args = []string{dir}
 	} else if _, err := os.Stat("/usr/bin/xdg-open"); err == nil {
@@ -278,7 +300,7 @@ func openRecycleFolder() error {
 		cmd = "open"
 		args = []string{dir}
 	}
-	path, err := lookupPath(cmd)
+	path, err := LookupPath(cmd)
 	if err != nil {
 		path = cmd
 	}
@@ -290,11 +312,11 @@ func openRecycleFolder() error {
 	return nil
 }
 
-func isWindows() bool {
+func IsWindows() bool {
 	return fmt.Sprintf("%c", filepath.Separator) == "\\"
 }
 
-func lookupPath(file string) (string, error) {
+func LookupPath(file string) (string, error) {
 	// minimal LookPath without importing os/exec
 	if filepath.IsAbs(file) {
 		return file, nil
@@ -312,7 +334,7 @@ func lookupPath(file string) (string, error) {
 			return full, nil
 		}
 		// on Windows, also try .exe suffix
-		if isWindows() && !hasSuffixFold(full, ".exe") {
+		if IsWindows() && !HasSuffixFold(full, ".exe") {
 			if _, err := os.Stat(full + ".exe"); err == nil {
 				return full + ".exe", nil
 			}
@@ -321,14 +343,14 @@ func lookupPath(file string) (string, error) {
 	return "", fmt.Errorf("executable %q not found in PATH", file)
 }
 
-func hasSuffixFold(s, suf string) bool {
+func HasSuffixFold(s, suf string) bool {
 	if len(s) < len(suf) {
 		return false
 	}
 	return strings.EqualFold(s[len(s)-len(suf):], suf)
 }
 
-func cleanupOldLogs(dir string) {
+func CleanupOldLogs(dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -373,5 +395,5 @@ func cleanupOldLogs(dir string) {
 		_ = os.Remove(v.path)
 		log.Printf("cleanupOldLogs: removed old %q", v.path)
 	}
-	flushLogger()
+	FlushLogger()
 }

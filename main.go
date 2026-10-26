@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"dow-mod-studio/internal/applog"
 	"dow-mod-studio/internal/audioplayer"
 	"dow-mod-studio/internal/fda"
 	"dow-mod-studio/internal/modtree"
@@ -1507,7 +1508,7 @@ func main() {
 			fmt.Println("  dow-mod-studio.exe --unregister      Remove .module file association")
 			fmt.Println("  dow-mod-studio.exe --assoc-status    Show association status")
 			fmt.Println("  dow-mod-studio.exe --debug-markers --module <file> --unit <name|path>  Dump model marker coordinates as JSON")
-			log.Printf("help shown, exiting 0; log=%q", logFilePath)
+			log.Printf("help shown, exiting 0; log=%q", applog.LogFilePath)
 			exitLogged(0)
 		}
 	}

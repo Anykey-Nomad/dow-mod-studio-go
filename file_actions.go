@@ -109,25 +109,6 @@ func (ui *uiState) textFormats() []string {
 	return ui.textEditorFormats
 }
 
-func recycleBinDir() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "DoW Mod Studio", "recycle"), nil
-}
-
-func ensureRecycleBinDir() (string, error) {
-	dir, err := recycleBinDir()
-	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
-	}
-	return dir, nil
-}
-
 func moveFileToRecycle(source, recycleDir string) (string, error) {
 	info, err := os.Lstat(source)
 	if err != nil {
