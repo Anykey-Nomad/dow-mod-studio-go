@@ -386,14 +386,14 @@ func TestTheViewportWindsTheClipAFrameAtATime(t *testing.T) {
 	if v.Playing {
 		t.Error("winding the clip left the model playing, so the frame would move on")
 	}
-	frame, frames := v.CurrentFrame()
+	frame, frames := CurrentFrame(v)
 	if frames != v.Anim.NumFrames || frame != 1 {
 		t.Fatalf("one step forward is on frame %d of %d, want frame 2", frame+1, frames)
 	}
 	unitViewportFrames(f, 2)
 	back := unitViewportButton(t, f, tab, &tab.ModelStepBack)
 	clickAt(f, back)
-	if again, _ := v.CurrentFrame(); again != 0 {
+	if again, _ := CurrentFrame(v); again != 0 {
 		t.Errorf("one step back is on frame %d, want the first", again+1)
 	}
 }
@@ -491,7 +491,7 @@ func TestTheZoomButtonsStepTheCameraAndResetBringsItBack(t *testing.T) {
 	// The three buttons are found once, then pressed in turn: each press is a
 	// step, and two steps in is nowhere near the factor of ten the wheel used
 	// to ask for.
-	v.ResetCamera()
+	ResetCamera(v)
 	fit := v.Distance
 	near := unitViewportSideButton(t, f, row, &tab.ModelZoomIn, "toggles")
 	far := unitViewportSideButton(t, f, row, &tab.ModelZoomOut, "toggles")

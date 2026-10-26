@@ -963,16 +963,16 @@ func keySelUI(v *modelViewer) *uiState {
 // keySelPosFrames and keySelRotFrames read the track back as frames, which is
 // what both the list and the strip call the place a key stands.
 func keySelPosFrames(v *modelViewer) []int {
-	out := make([]int, 0, len(v.BoneTrack().PosKey))
-	for _, k := range v.BoneTrack().PosKey {
+	out := make([]int, 0, len(BoneTrack(v).PosKey))
+	for _, k := range BoneTrack(v).PosKey {
 		out = append(out, frameAt(float64(k.Time), v.Anim.NumFrames))
 	}
 	return out
 }
 
 func keySelRotFrames(v *modelViewer) []int {
-	out := make([]int, 0, len(v.BoneTrack().RotKey))
-	for _, k := range v.BoneTrack().RotKey {
+	out := make([]int, 0, len(BoneTrack(v).RotKey))
+	for _, k := range BoneTrack(v).RotKey {
 		out = append(out, frameAt(float64(k.Time), v.Anim.NumFrames))
 	}
 	return out
@@ -993,7 +993,7 @@ func keySelFramesEqual(got, want []int) bool {
 func TestKeyFrameRowsAreListedPositionKeysThenRotationKeys(t *testing.T) {
 	v := keySelViewer()
 	want := []boneKeyRef{{mode: 0, frame: 2}, {mode: 0, frame: 5}, {mode: 1, frame: 3}, {mode: 1, frame: 7}}
-	got := v.BoneKeyRefs()
+	got := BoneKeyRefs(v)
 	if len(got) != len(want) {
 		t.Fatalf("the list has %d rows, want %d (%v)", len(got), len(want), got)
 	}
@@ -1006,23 +1006,23 @@ func TestKeyFrameRowsAreListedPositionKeysThenRotationKeys(t *testing.T) {
 
 func TestInsertBoneKeyCopyTakesTheValueOfTheKeyItCopies(t *testing.T) {
 	v := keySelViewer()
-	if !v.InsertBoneKeyCopy(4, 0, 2) {
+	if !InsertBoneKeyCopy(v, 4, 0, 2) {
 		t.Fatal("frame 4 carries no key, so a copy of frame 2 was refused")
 	}
 	if got, want := keySelPosFrames(v), []int{2, 4, 5}; !keySelFramesEqual(got, want) {
 		t.Fatalf("the position keys sit on frames %v, want %v — the track has to stay sorted", got, want)
 	}
-	if got := v.BoneTrack().PosKey[1].V; got != [3]float32{1, 2, 3} {
+	if got := BoneTrack(v).PosKey[1].V; got != [3]float32{1, 2, 3} {
 		t.Errorf("the new key holds %v, want the copied [1 2 3]", got)
 	}
-	if ref, ok := v.PickedBoneKeyRef(); !ok || ref != (boneKeyRef{mode: 0, frame: 4}) {
+	if ref, ok := PickedBoneKeyRef(v); !ok || ref != (boneKeyRef{mode: 0, frame: 4}) {
 		t.Errorf("the picked key is %+v (ok=%v), want the new one on frame 4", ref, ok)
 	}
 }
 
 func TestInsertBoneKeyCopyRefusesAFrameThatAlreadyHasAKey(t *testing.T) {
 	v := keySelViewer()
-	if v.InsertBoneKeyCopy(2, 0, 5) {
+	if InsertBoneKeyCopy(v, 2, 0, 5) {
 		t.Error("a second position key landed on frame 2, which already holds one")
 	}
 	if got := keySelPosFrames(v); len(got) != 2 {
@@ -1032,25 +1032,25 @@ func TestInsertBoneKeyCopyRefusesAFrameThatAlreadyHasAKey(t *testing.T) {
 
 func TestFreeBoneKeyFrameWalksOutToAFreeFrame(t *testing.T) {
 	v := keySelViewer()
-	if got := v.FreeBoneKeyFrame(5, 0, -1); got != 4 {
+	if got := FreeBoneKeyFrame(v, 5, 0, -1); got != 4 {
 		t.Errorf("the frame before position key 5 is %d, want 4", got)
 	}
 	// A run of taken frames is walked past rather than refused: insert a
 	// position key on 4 and the free frame before 5 becomes 3.
-	if !v.InsertBoneKeyCopy(4, 0, 2) {
+	if !InsertBoneKeyCopy(v, 4, 0, 2) {
 		t.Fatal("the key on frame 4 could not be inserted for the walk")
 	}
-	if got := v.FreeBoneKeyFrame(5, 0, -1); got != 3 {
+	if got := FreeBoneKeyFrame(v, 5, 0, -1); got != 3 {
 		t.Errorf("with frame 4 taken the free frame before 5 is %d, want 3", got)
 	}
 	// The other kind has its own keys: frame 4 is free for a rotation.
-	if got := v.FreeBoneKeyFrame(5, 1, -1); got != 4 {
+	if got := FreeBoneKeyFrame(v, 5, 1, -1); got != 4 {
 		t.Errorf("rotation keys do not stand on frame 4, so the free frame is %d, want 4", got)
 	}
-	if got := v.FreeBoneKeyFrame(0, 0, -1); got != -1 {
+	if got := FreeBoneKeyFrame(v, 0, 0, -1); got != -1 {
 		t.Errorf("there is no frame before 0, got %d", got)
 	}
-	if got := v.FreeBoneKeyFrame(v.Anim.NumFrames-1, 0, 1); got != -1 {
+	if got := FreeBoneKeyFrame(v, v.Anim.NumFrames-1, 0, 1); got != -1 {
 		t.Errorf("there is no frame after the last one, got %d", got)
 	}
 }
@@ -1060,7 +1060,7 @@ func TestDeleteBoneKeyAtKeepsThePickedKeyAimedAtItself(t *testing.T) {
 	// The position key on frame 5 is picked: it is the second of its kind,
 	// so taking the key on frame 2 out slides its index down.
 	v.BoneKeyIndex, v.BoneKeyMode = 1, 0
-	if !v.DeleteBoneKeyAt(2, 0) {
+	if !DeleteBoneKeyAt(v, 2, 0) {
 		t.Fatal("the key on frame 2 was not removed")
 	}
 	if got, want := keySelPosFrames(v), []int{5}; !keySelFramesEqual(got, want) {
@@ -1069,7 +1069,7 @@ func TestDeleteBoneKeyAtKeepsThePickedKeyAimedAtItself(t *testing.T) {
 	if v.BoneKeyIndex != 0 || v.BoneKeyMode != 0 {
 		t.Fatalf("the picked key is now (idx %d, mode %d), want (0, 0)", v.BoneKeyIndex, v.BoneKeyMode)
 	}
-	if ref, ok := v.PickedBoneKeyRef(); !ok || ref != (boneKeyRef{mode: 0, frame: 5}) {
+	if ref, ok := PickedBoneKeyRef(v); !ok || ref != (boneKeyRef{mode: 0, frame: 5}) {
 		t.Errorf("the picked key is %+v (ok=%v), want the one still standing on frame 5", ref, ok)
 	}
 }
@@ -1077,7 +1077,7 @@ func TestDeleteBoneKeyAtKeepsThePickedKeyAimedAtItself(t *testing.T) {
 func TestDeleteBoneKeyAtClearsThePickedKeyWhenItIsTheOne(t *testing.T) {
 	v := keySelViewer()
 	v.BoneKeyIndex, v.BoneKeyMode = 0, 0
-	if !v.DeleteBoneKeyAt(2, 0) {
+	if !DeleteBoneKeyAt(v, 2, 0) {
 		t.Fatal("the picked key was not removed")
 	}
 	if v.BoneKeyIndex != -1 || v.BoneKeyMode != -1 {
@@ -1090,7 +1090,7 @@ func TestDeleteBoneKeyAtClearsThePickedKeyWhenItIsTheOne(t *testing.T) {
 
 func TestRowClickPicksOneRowAndCtrlClickGathersMore(t *testing.T) {
 	v := keySelViewer()
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	ui := keySelUI(v)
 
 	BoneKeyRowClicked(ui, v, refs[1], refs, 0)
@@ -1132,7 +1132,7 @@ func TestRowClickPicksOneRowAndCtrlClickGathersMore(t *testing.T) {
 
 func TestShiftClickSpansFromTheAnchor(t *testing.T) {
 	v := keySelViewer()
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	ui := keySelUI(v)
 
 	BoneKeyRowClicked(ui, v, refs[1], refs, 0)            // the anchor: position key on frame 5
@@ -1153,7 +1153,7 @@ func TestShiftClickSpansFromTheAnchor(t *testing.T) {
 
 func TestDeleteTakesEveryPickedRowAway(t *testing.T) {
 	v := keySelViewer()
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	ui := keySelUI(v)
 
 	BoneKeyRowClicked(ui, v, refs[0], refs, 0)           // position key on frame 2
@@ -1195,13 +1195,13 @@ func TestKeyButtonsFallBackToTheStripPickedKey(t *testing.T) {
 
 func TestPickedRowsLeaveTheSelectionWhenTheirKeysGo(t *testing.T) {
 	v := keySelViewer()
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	ui := keySelUI(v)
 
 	BoneKeyRowClicked(ui, v, refs[0], refs, 0)
 	// The key is carried off its frame some other way — a drag on the strip
 	// dropped it onto another — and the row must not go on naming that frame.
-	if !v.DeleteBoneKeyAt(2, 0) {
+	if !DeleteBoneKeyAt(v, 2, 0) {
 		t.Fatal("the key on frame 2 was not removed")
 	}
 	if got := PickedBoneKeyRefs(ui, v); len(got) != 0 {
@@ -1214,7 +1214,7 @@ func TestPickedRowsLeaveTheSelectionWhenTheirKeysGo(t *testing.T) {
 
 func TestAnotherBoneStartsAFreshSelection(t *testing.T) {
 	v := keySelViewer()
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	ui := keySelUI(v)
 	BoneKeyRowClicked(ui, v, refs[0], refs, 0)
 
@@ -1231,7 +1231,7 @@ func TestAnotherBoneStartsAFreshSelection(t *testing.T) {
 
 func TestAddBeforeGivesEveryPickedRowItsOwnFrame(t *testing.T) {
 	v := keySelViewer()
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	ui := keySelUI(v)
 
 	BoneKeyRowClicked(ui, v, refs[0], refs, 0)           // position key on frame 2
@@ -1259,7 +1259,7 @@ func TestAddBeforeGivesEveryPickedRowItsOwnFrame(t *testing.T) {
 
 func TestAddAfterGivesEveryPickedRowItsOwnFrame(t *testing.T) {
 	v := keySelViewer()
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	ui := keySelUI(v)
 
 	BoneKeyRowClicked(ui, v, refs[0], refs, 0)
@@ -1273,13 +1273,13 @@ func TestAddAfterGivesEveryPickedRowItsOwnFrame(t *testing.T) {
 
 func TestAddBeforeWalksFurtherWhenTheNeighbourIsTaken(t *testing.T) {
 	v := keySelViewer()
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	ui := keySelUI(v)
 	// A position key on frame 3 makes frames 2 and 3 neighbours of the run.
-	if !v.InsertBoneKeyCopy(3, 0, 2) {
+	if !InsertBoneKeyCopy(v, 3, 0, 2) {
 		t.Fatal("the key on frame 3 could not be inserted")
 	}
-	refs = v.BoneKeyRefs()
+	refs = BoneKeyRefs(v)
 	row := -1
 	for i, r := range refs {
 		if r == (boneKeyRef{mode: 0, frame: 3}) {
@@ -1303,11 +1303,11 @@ func TestAddAroundSaysSoWhenNothingCanBeAdded(t *testing.T) {
 	// Frames 0 and 1 are filled in front of the position key on frame 2, so
 	// the walk backwards runs out of clip before it finds a free frame.
 	for _, frame := range []int{1, 0} {
-		if !v.InsertBoneKeyCopy(frame, 0, 2) {
+		if !InsertBoneKeyCopy(v, frame, 0, 2) {
 			t.Fatalf("the key on frame %d could not be inserted", frame)
 		}
 	}
-	refs := v.BoneKeyRefs()
+	refs := BoneKeyRefs(v)
 	for _, r := range refs {
 		if r == (boneKeyRef{mode: 0, frame: 2}) {
 			BoneKeyRowClicked(ui, v, r, refs, 0)
@@ -1576,7 +1576,7 @@ func TestLookThroughCameraAimsAtTheFocusPoint(t *testing.T) {
 		BoundMax: [3]float32{1, 1, 1},
 	}, "")
 	cam := WhmCamera{Name: "port_hud", Pos: [3]float32{4, 0, 6}, Fov: 30, FocusPoint: [3]float32{0, 1, 0}}
-	v.LookThroughCamera(cam)
+	LookThroughCamera(v, cam)
 
 	eye := boneRootFrame.MulPosition(render.Vec3From(cam.Pos))
 	focus := boneRootFrame.MulPosition(render.Vec3From(cam.FocusPoint))
@@ -1605,7 +1605,7 @@ func TestLookThroughCameraAimsAtTheFocusPoint(t *testing.T) {
 func TestLookThroughCameraKeepsAnUnusableFieldOfView(t *testing.T) {
 	v := newModelViewer(&WhmModel{Model: whm.Model{Vertices: []WhmVertex{{}}, BoundMax: [3]float32{1, 1, 1}}}, "")
 	for _, fov := range []float32{0, -20, 180} {
-		v.LookThroughCamera(WhmCamera{Name: "c", Pos: [3]float32{0, 0, 5}, Fov: fov})
+		LookThroughCamera(v, WhmCamera{Name: "c", Pos: [3]float32{0, 0, 5}, Fov: fov})
 		if v.FOV != render.DefaultFov {
 			t.Errorf("a field of view of %v was taken, leaving the view at %v", fov, v.FOV)
 		}
@@ -1622,8 +1622,8 @@ func TestResetCameraForgetsTheModelsCamera(t *testing.T) {
 	}
 	v := newModelViewer(model, "")
 	_, fit := model.ModelCenter()
-	v.LookThroughCamera(WhmCamera{Name: "shot", Pos: [3]float32{9, 9, 9}, Fov: 60})
-	v.ResetCamera()
+	LookThroughCamera(v, WhmCamera{Name: "shot", Pos: [3]float32{9, 9, 9}, Fov: 60})
+	ResetCamera(v)
 	if v.ActiveCamera != "" {
 		t.Errorf("the active camera survived a reset: %q", v.ActiveCamera)
 	}
@@ -1648,7 +1648,7 @@ func TestLookThroughCameraOnItsFocusPoint(t *testing.T) {
 	}
 	v := newModelViewer(model, "")
 	_, fit := model.ModelCenter()
-	v.LookThroughCamera(WhmCamera{Name: "degenerate", Pos: [3]float32{2, 2, 2}, FocusPoint: [3]float32{2, 2, 2}})
+	LookThroughCamera(v, WhmCamera{Name: "degenerate", Pos: [3]float32{2, 2, 2}, FocusPoint: [3]float32{2, 2, 2}})
 	if math.IsNaN(v.Distance) || math.IsInf(v.Distance, 0) {
 		t.Fatalf("the distance became %v", v.Distance)
 	}

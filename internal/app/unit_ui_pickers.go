@@ -1534,7 +1534,7 @@ func UnitImportApply(ui *uiState, v *modelViewer, replace bool) (added, replaced
 		ui.UnitBoneKeyErr = "no frame is picked"
 		return 0, 0, 0
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return 0, 0, 0
@@ -1592,7 +1592,7 @@ func UnitImportApply(ui *uiState, v *modelViewer, replace bool) (added, replaced
 		}
 	}
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	if added+replaced > 0 {
 		ui.UnitModelWhmDirty = true
 		ui.UnitBoneKeyErr = ""
@@ -1616,7 +1616,7 @@ func UnitImportApply(ui *uiState, v *modelViewer, replace bool) (added, replaced
 // bone's track. It reports whether a key was created and whether an
 // existing one was written over.
 func writeImportPos(t *WhmTrack, v *modelViewer, frame int, val [3]float32, replace bool) (added, replaced int) {
-	if idx := v.BoneKeyIndexAtFrame(frame, 0); idx >= 0 {
+	if idx := BoneKeyIndexAtFrame(v, frame, 0); idx >= 0 {
 		if !replace {
 			return 0, 0
 		}
@@ -1636,7 +1636,7 @@ func writeImportPos(t *WhmTrack, v *modelViewer, frame int, val [3]float32, repl
 
 // writeImportRot is writeImportPos for rotation keys.
 func writeImportRot(t *WhmTrack, v *modelViewer, frame int, val [4]float32, replace bool) (added, replaced int) {
-	if idx := v.BoneKeyIndexAtFrame(frame, 1); idx >= 0 {
+	if idx := BoneKeyIndexAtFrame(v, frame, 1); idx >= 0 {
 		if !replace {
 			return 0, 0
 		}

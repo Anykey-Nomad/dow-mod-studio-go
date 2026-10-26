@@ -185,7 +185,7 @@ func UnitModelSelectionToggle(ui *uiState, gtx layout.Context, v *modelViewer) l
 	check.TextSize = unit.Sp(9)
 	if ui.ClassicOESelectedUIVisible.Update(gtx) {
 		v.ShowSelection = ui.ClassicOESelectedUIVisible.Value
-		v.Invalidate()
+		Invalidate(v)
 	}
 	return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, check.Layout)
 }
@@ -366,7 +366,7 @@ const unitFrameLabelDp = 132
 // and it cannot be told from the picture.
 func UnitModelFrameLabel(ui *uiState, gtx layout.Context, v *modelViewer) layout.Dimensions {
 	text := "no frames to step through"
-	if frame, frames := v.CurrentFrame(); frames > 0 {
+	if frame, frames := CurrentFrame(v); frames > 0 {
 		text = fmt.Sprintf("frame %d of %d", frame+1, frames)
 		if keys := clipKeyFrames(v.Anim); len(keys) > 0 {
 			for i, k := range keys {
@@ -472,7 +472,7 @@ func HandleUnitModelListTabClicks(ui *uiState, gtx layout.Context, t *fileTab) {
 			}
 			ui.UnitViewportScroll = panelScrollState{}
 			if t != nil && t.Model != nil {
-				t.Model.Invalidate()
+				Invalidate(t.Model)
 			}
 		}
 	}
@@ -524,7 +524,7 @@ func UnitAnimListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, cli
 		a := anims[i]
 		c := &(*clicks)[i]
 		if c.Clicked(gtx) {
-			v.SelectAnim(i)
+			SelectAnim(v, i)
 			v.Playing = true
 			v.LastFrame = time.Time{}
 		}
@@ -719,7 +719,7 @@ func UnitBoneListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, cli
 // keys the current clip holds for it.
 func UnitBoneParams(ui *uiState, gtx layout.Context, v *modelViewer, i int) layout.Dimensions {
 	bone := v.Model.Bones[i]
-	pose := v.Pose()
+	pose := Pose(v)
 	pos := "—"
 	if i < len(pose.Bones) {
 		p := pose.Bones[i].MulPosition(fauxgl.Vector{})
@@ -744,7 +744,7 @@ func UnitBoneParams(ui *uiState, gtx layout.Context, v *modelViewer, i int) layo
 	}
 
 	if v.Anim != nil {
-		t := v.BoneTrack()
+		t := BoneTrack(v)
 		if t != nil && v.BoneIndex == i && (len(t.PosKey) > 0 || len(t.RotKey) > 0) {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
@@ -753,7 +753,7 @@ func UnitBoneParams(ui *uiState, gtx layout.Context, v *modelViewer, i int) layo
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return UnitBoneKeyListHeader(ui, gtx, v)
 			}))
-			refs := v.BoneKeyRefs()
+			refs := BoneKeyRefs(v)
 			EnsureUnitBoneKeyClicks(ui, len(refs))
 			BindBoneKeySelection(ui, v)
 			keyIdx := 0
@@ -903,7 +903,7 @@ func PickedBoneKeyRefs(ui *uiState, v *modelViewer) []boneKeyRef {
 		return nil
 	}
 	var out []boneKeyRef
-	for _, ref := range v.BoneKeyRefs() {
+	for _, ref := range BoneKeyRefs(v) {
 		if ui.UnitBoneKeySel[ref] {
 			out = append(out, ref)
 		}
@@ -934,7 +934,7 @@ func BoneKeyActionRefs(ui *uiState, v *modelViewer) []boneKeyRef {
 	if refs := PickedBoneKeyRefs(ui, v); len(refs) > 0 {
 		return refs
 	}
-	if ref, ok := v.PickedBoneKeyRef(); ok {
+	if ref, ok := PickedBoneKeyRef(v); ok {
 		return []boneKeyRef{ref}
 	}
 	return nil
@@ -948,7 +948,7 @@ func BoneKeyRowPicked(ui *uiState, v *modelViewer, ref boneKeyRef) bool {
 	if len(ui.UnitBoneKeySel) > 0 {
 		return ui.UnitBoneKeySel[ref]
 	}
-	got, ok := v.PickedBoneKeyRef()
+	got, ok := PickedBoneKeyRef(v)
 	return ok && got == ref
 }
 
@@ -1020,7 +1020,7 @@ func BoneKeyRowClicked(ui *uiState, v *modelViewer, ref boneKeyRef, refs []boneK
 			}
 		}
 	}
-	if at := v.BoneKeyIndexAtFrame(picked.frame, picked.mode); picked.mode >= 0 && at >= 0 {
+	if at := BoneKeyIndexAtFrame(v, picked.frame, picked.mode); picked.mode >= 0 && at >= 0 {
 		v.BoneKeyIndex, v.BoneKeyMode = at, picked.mode
 	} else {
 		v.BoneKeyIndex, v.BoneKeyMode = -1, -1
@@ -1035,12 +1035,12 @@ func BoneKeyRowClicked(ui *uiState, v *modelViewer, ref boneKeyRef, refs []boneK
 // keys instead of leaving it behind where it started. A frame carrying no
 // key of this bone leaves the selection as it was.
 func PickFrameKeyOnTimeline(ui *uiState, v *modelViewer) {
-	if v == nil || v.Anim == nil || v.BoneIndex < 0 || v.BoneTrack() == nil {
+	if v == nil || v.Anim == nil || v.BoneIndex < 0 || BoneTrack(v) == nil {
 		return
 	}
-	frame, _ := v.CurrentFrame()
-	posAt := v.BoneKeyIndexAtFrame(frame, 0)
-	rotAt := v.BoneKeyIndexAtFrame(frame, 1)
+	frame, _ := CurrentFrame(v)
+	posAt := BoneKeyIndexAtFrame(v, frame, 0)
+	rotAt := BoneKeyIndexAtFrame(v, frame, 1)
 	if posAt < 0 && rotAt < 0 {
 		return
 	}
@@ -1142,15 +1142,15 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 	// to, the rows of the list (or, with none picked, the key the strip picked)
 	// to take away or to add keys beside — is read here, before the layout below
 	// draws them disabled.
-	canAddKey := v != nil && v.Anim != nil && v.BoneIndex >= 0 && v.BoneTrack() != nil
+	canAddKey := v != nil && v.Anim != nil && v.BoneIndex >= 0 && BoneTrack(v) != nil
 	actionRefs := BoneKeyActionRefs(ui, v)
 	canDelKey := len(actionRefs) > 0
 	canAddAround := canAddKey && len(actionRefs) > 0
 	canShift := canDelKey
 	canMir := false
 	if v.Anim != nil {
-		frame, _ := v.CurrentFrame()
-		canMir = v.BoneKeyTarget(frame, 1) >= 0
+		frame, _ := CurrentFrame(v)
+		canMir = BoneKeyTarget(v, frame, 1) >= 0
 	}
 	dims := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -1628,8 +1628,8 @@ func ApplyBoneKeyFields(ui *uiState, v *modelViewer, mode int) {
 		ui.UnitBoneKeyErr = err.Error()
 		return
 	}
-	frame, _ := v.CurrentFrame()
-	target := v.BoneKeyTarget(frame, mode)
+	frame, _ := CurrentFrame(v)
+	target := BoneKeyTarget(v, frame, mode)
 	LogInfo("bone: apply %s: parsed=[%.3f %.3f %.3f] frame=%d target=%d picked(idx=%d mode=%d)",
 		boneGroupLog(mode), val[0], val[1], val[2], frame, target, v.BoneKeyIndex, v.BoneKeyMode)
 	if target < 0 {
@@ -1638,9 +1638,9 @@ func ApplyBoneKeyFields(ui *uiState, v *modelViewer, mode int) {
 		return
 	}
 	v.BoneKeyIndex, v.BoneKeyMode = target, mode
-	ok := v.SetBoneKeyPosition([3]float32{float32(val[0]), float32(val[1]), float32(val[2])})
+	ok := SetBoneKeyPosition(v, [3]float32{float32(val[0]), float32(val[1]), float32(val[2])})
 	if mode == 1 {
-		ok = v.SetBoneKeyRotation(quatFromEulerDeg(val[0], val[1], val[2]))
+		ok = SetBoneKeyRotation(v, quatFromEulerDeg(val[0], val[1], val[2]))
 	}
 	if !ok {
 		LogWarn("bone: apply %s: the write was refused (bone=%d mode=%d idx=%d)", boneGroupLog(mode), v.BoneIndex, v.BoneKeyMode, v.BoneKeyIndex)
@@ -1652,7 +1652,7 @@ func ApplyBoneKeyFields(ui *uiState, v *modelViewer, mode int) {
 	ui.UnitBoneKeyErr = ""
 	// The playhead is wound to the key that was just written so the edit is
 	// on show, then the group shows what the key now holds.
-	v.WindToPickedBoneKey()
+	WindToPickedBoneKey(v)
 	// The group is refilled from the key, so what is shown is what was
 	// stored: a rotation comes back as the degrees its quaternion means.
 	FillBoneKeyFields(ui, v, mode)
@@ -1712,7 +1712,7 @@ func SetAllBoneKeyFields(ui *uiState, v *modelViewer) {
 		ui.UnitBoneKeyErr = "no bone is picked"
 		return
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
@@ -1738,7 +1738,7 @@ func SetAllBoneKeyFields(ui *uiState, v *modelViewer) {
 			return
 		}
 	}
-	snap, haveSnap := v.SnapshotBoneTrack()
+	snap, haveSnap := SnapshotBoneTrack(v)
 	written := 0
 	if ch0 {
 		for i := range t.PosKey {
@@ -1767,7 +1767,7 @@ func SetAllBoneKeyFields(ui *uiState, v *modelViewer) {
 	}
 	// The pose cache predates the writes, so the viewport evaluates it again.
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	ui.UnitModelWhmDirty = true
 	ui.UnitBoneKeyErr = ""
 	FillBoneKeyFields(ui, v, 0)
@@ -1795,7 +1795,7 @@ func SyncBoneKeyFields(ui *uiState, gtx layout.Context, v *modelViewer) {
 	if v == nil {
 		return
 	}
-	frame, _ := v.CurrentFrame()
+	frame, _ := CurrentFrame(v)
 	sel := "no clip"
 	if v.Anim != nil {
 		sel = fmt.Sprintf("%s|%d|%d|%d", v.Anim.Name, v.BoneIndex, v.BoneKeyMode, v.BoneKeyIndex)
@@ -1834,9 +1834,9 @@ func FillBoneKeyFields(ui *uiState, v *modelViewer, mode int) {
 	var vals [3]float64
 	ok := false
 	if v != nil {
-		frame, _ := v.CurrentFrame()
-		if idx := v.BoneKeyTarget(frame, mode); idx >= 0 {
-			if t := v.BoneTrack(); t != nil {
+		frame, _ := CurrentFrame(v)
+		if idx := BoneKeyTarget(v, frame, mode); idx >= 0 {
+			if t := BoneTrack(v); t != nil {
 				if mode == 0 && idx < len(t.PosKey) {
 					p := t.PosKey[idx].V
 					vals = [3]float64{float64(p[0]), float64(p[1]), float64(p[2])}
@@ -1897,7 +1897,7 @@ func FillBoneKeyFields(ui *uiState, v *modelViewer, mode int) {
 	if now := ui.UnitBoneKeyFillText[mode]; now != prev {
 		frame := -1
 		if v != nil {
-			frame, _ = v.CurrentFrame()
+			frame, _ = CurrentFrame(v)
 		}
 		LogInfo("bone: fill %s frame=%d: [%s] (was [%s])", boneGroupLog(mode), frame,
 			strings.Join(now[:], " "), strings.Join(prev[:], " "))
@@ -2010,7 +2010,7 @@ func ApplyAnimFrameCount(ui *uiState, v *modelViewer) {
 		v.Anim.Duration = float32(float64(n) / fps)
 	}
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	ui.UnitModelWhmDirty = true
 	ui.UnitAnimFramesErr = ""
 	ui.StatusText = fmt.Sprintf("Clip %q: %d frames (was %d) at %.1f fps — Save WHM writes it",
@@ -2085,13 +2085,13 @@ func AddBoneKeyAtPlayhead(ui *uiState, v *modelViewer, mode int) {
 		ui.UnitBoneKeyErr = "no bone is picked"
 		return
 	}
-	if v.BoneTrack() == nil {
+	if BoneTrack(v) == nil {
 		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
-	snap, haveSnap := v.SnapshotBoneTrack()
-	frame, _ := v.CurrentFrame()
-	if !v.AddBoneKeyAtFrame(frame, mode) {
+	snap, haveSnap := SnapshotBoneTrack(v)
+	frame, _ := CurrentFrame(v)
+	if !AddBoneKeyAtFrame(v, frame, mode) {
 		// The key at the frame was picked all the same, so the fields show
 		// what it holds and the note says why nothing was created.
 		ui.UnitBoneKeyErr = fmt.Sprintf("frame %d already has a %s key", frame+1, kind)
@@ -2106,7 +2106,7 @@ func AddBoneKeyAtPlayhead(ui *uiState, v *modelViewer, mode int) {
 	PushBoneUndo(ui, snap, haveSnap)
 	ui.StatusText = fmt.Sprintf("Added a %s key on frame %d", kind, frame+1)
 	LogInfo("bone: %s key added on frame %d for bone %q (dirty=%v)",
-		kind, frame+1, v.BoneTrack().Name, ui.UnitModelWhmDirty)
+		kind, frame+1, BoneTrack(v).Name, ui.UnitModelWhmDirty)
 }
 
 // deleteBoneKeysAction is what the "Delete key" button does: every row the
@@ -2120,7 +2120,7 @@ func DeleteBoneKeysAction(ui *uiState, v *modelViewer) {
 		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.BoneTrack() == nil {
+	if BoneTrack(v) == nil {
 		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
@@ -2129,11 +2129,11 @@ func DeleteBoneKeysAction(ui *uiState, v *modelViewer) {
 		ui.UnitBoneKeyErr = "no key is picked"
 		return
 	}
-	name := v.BoneTrack().Name
-	snap, haveSnap := v.SnapshotBoneTrack()
+	name := BoneTrack(v).Name
+	snap, haveSnap := SnapshotBoneTrack(v)
 	removed := 0
 	for _, ref := range refs {
-		if v.DeleteBoneKeyAt(ref.frame, ref.mode) {
+		if DeleteBoneKeyAt(v, ref.frame, ref.mode) {
 			removed++
 		}
 	}
@@ -2171,7 +2171,7 @@ func AddBoneKeysAround(ui *uiState, v *modelViewer, dir int) {
 		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.BoneTrack() == nil {
+	if BoneTrack(v) == nil {
 		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
@@ -2193,8 +2193,8 @@ func AddBoneKeysAround(ui *uiState, v *modelViewer, dir int) {
 	added := make([]boneKeyRef, 0, len(refs))
 	blocked := 0
 	for _, ref := range refs {
-		f := v.FreeBoneKeyFrame(ref.frame, ref.mode, dir)
-		if f < 0 || !v.InsertBoneKeyCopy(f, ref.mode, ref.frame) {
+		f := FreeBoneKeyFrame(v, ref.frame, ref.mode, dir)
+		if f < 0 || !InsertBoneKeyCopy(v, f, ref.mode, ref.frame) {
 			blocked++
 			continue
 		}
@@ -2278,13 +2278,13 @@ func ApplyBoneAngleSliders(ui *uiState, v *modelViewer) {
 	if v == nil || v.Anim == nil {
 		return
 	}
-	frame, _ := v.CurrentFrame()
-	target := v.BoneKeyTarget(frame, 1)
+	frame, _ := CurrentFrame(v)
+	target := BoneKeyTarget(v, frame, 1)
 	if target < 0 {
 		ui.UnitBoneKeyErr = "this bone has no rotation key in the clip"
 		return
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil || target >= len(t.RotKey) {
 		ui.UnitBoneKeyErr = "the rotation key could not be written"
 		return
@@ -2307,12 +2307,12 @@ func ApplyBoneAngleSliders(ui *uiState, v *modelViewer) {
 	// the angle as it was before the hand touched the slider, and the rest of
 	// the drag reuses it until the button is let go.
 	if !ui.UnitBoneSliderUndoArmed {
-		if snap, ok := v.SnapshotBoneTrack(); ok {
+		if snap, ok := SnapshotBoneTrack(v); ok {
 			PushBoneUndo(ui, snap, true)
 		}
 		ui.UnitBoneSliderUndoArmed = true
 	}
-	if !v.SetBoneKeyRotation(quatFromEulerDeg(ang[0], ang[1], ang[2])) {
+	if !SetBoneKeyRotation(v, quatFromEulerDeg(ang[0], ang[1], ang[2])) {
 		ui.UnitBoneKeyErr = "the rotation key could not be written"
 		return
 	}
@@ -2334,29 +2334,29 @@ func MirrorBoneRotationAction(ui *uiState, v *modelViewer, axis int) {
 		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.BoneTrack() == nil {
+	if BoneTrack(v) == nil {
 		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
-	frame, _ := v.CurrentFrame()
-	target := v.BoneKeyTarget(frame, 1)
+	frame, _ := CurrentFrame(v)
+	target := BoneKeyTarget(v, frame, 1)
 	if target < 0 {
 		ui.UnitBoneKeyErr = "this bone has no rotation key in the clip"
 		return
 	}
 	v.BoneKeyIndex, v.BoneKeyMode = target, 1
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	before := eulerDegFromQuat(t.RotKey[target].V)
 	after := before
 	after[axis] = -after[axis]
-	snap, haveSnap := v.SnapshotBoneTrack()
-	if !v.SetBoneKeyRotation(quatFromEulerDeg(after[0], after[1], after[2])) {
+	snap, haveSnap := SnapshotBoneTrack(v)
+	if !SetBoneKeyRotation(v, quatFromEulerDeg(after[0], after[1], after[2])) {
 		ui.UnitBoneKeyErr = "the rotation key could not be written"
 		return
 	}
 	ui.UnitModelWhmDirty = true
 	ui.UnitBoneKeyErr = ""
-	v.WindToPickedBoneKey()
+	WindToPickedBoneKey(v)
 	FillBoneKeyFields(ui, v, 1)
 	PushBoneUndo(ui, snap, haveSnap)
 	msg := fmt.Sprintf("Mirrored %s about %s", t.Name, boneFieldAxes[axis])
@@ -2377,7 +2377,7 @@ func ShiftBoneKeysAction(ui *uiState, v *modelViewer, dir int) {
 		ui.UnitBoneKeyErr = "no clip is on show"
 		return
 	}
-	if v.BoneTrack() == nil {
+	if BoneTrack(v) == nil {
 		ui.UnitBoneKeyErr = "the bone has no track in this clip"
 		return
 	}
@@ -2387,9 +2387,9 @@ func ShiftBoneKeysAction(ui *uiState, v *modelViewer, dir int) {
 		return
 	}
 	n := BoneKeyShiftFrames(ui)
-	pickedOld, hasPicked := v.PickedBoneKeyRef()
-	snap, haveSnap := v.SnapshotBoneTrack()
-	newRefs, moved, blocked := v.ShiftBoneKeys(refs, dir*n)
+	pickedOld, hasPicked := PickedBoneKeyRef(v)
+	snap, haveSnap := SnapshotBoneTrack(v)
+	newRefs, moved, blocked := ShiftBoneKeys(v, refs, dir*n)
 	if moved == 0 && blocked == 0 {
 		ui.UnitBoneKeyErr = "no key could be shifted"
 		LogInfo("bone: shift %+d of %d key(s): nothing moved", dir*n, len(refs))
@@ -2409,7 +2409,7 @@ func ShiftBoneKeysAction(ui *uiState, v *modelViewer, dir int) {
 	// strip marks and the typed fields point at it again after the move.
 	for i, r := range refs {
 		if hasPicked && r == pickedOld && i < len(newRefs) {
-			if at := v.BoneKeyIndexAtFrame(newRefs[i].frame, newRefs[i].mode); at >= 0 {
+			if at := BoneKeyIndexAtFrame(v, newRefs[i].frame, newRefs[i].mode); at >= 0 {
 				v.BoneKeyIndex, v.BoneKeyMode = at, newRefs[i].mode
 			}
 			break
@@ -2485,7 +2485,7 @@ func UndoBoneKeyEdit(ui *uiState, v *modelViewer) bool {
 	}
 	s := ui.UnitBoneUndo[len(ui.UnitBoneUndo)-1]
 	ui.UnitBoneUndo = ui.UnitBoneUndo[:len(ui.UnitBoneUndo)-1]
-	if v == nil || !v.RestoreBoneTrack(s) {
+	if v == nil || !RestoreBoneTrack(v, s) {
 		ui.UnitBoneKeyErr = "could not restore the previous keys"
 		return false
 	}
@@ -2918,7 +2918,7 @@ func ResetUnitModel(ui *uiState) {
 		if ui.ModelGpu != nil && ui.UnitModel.Model.Model != nil {
 			ui.ModelGpu.Forget(&ui.UnitModel.Model.Model.Model)
 		}
-		ui.UnitModel.Model.Close()
+		Close(ui.UnitModel.Model)
 	}
 	ui.UnitModel = nil
 	ui.UnitModelCh = nil
@@ -3001,7 +3001,7 @@ func selectObjectAction(v *modelViewer, tree *modtree.ModTree, modelPath, action
 	if len(clips) == 0 {
 		return false
 	}
-	v.SelectAnimations(clips, true)
+	SelectAnimations(v, clips, true)
 	v.Playing = true
 	return true
 }
@@ -3106,31 +3106,31 @@ func UnitModelViewer(ui *uiState) *modelViewer {
 // -Z at its focus point. The direction is turned into the orbit camera's pair
 // the way render.BuildViewMatrix takes it apart: the yaw around the up axis, which is
 // Z, and the height off the horizon.
-func (v *modelViewer) LookThroughCamera(cam WhmCamera) {
+func LookThroughCamera(v *modelViewer, cam WhmCamera) {
 	if v == nil || v.Model == nil {
 		return
 	}
 	eye := boneRootFrame.MulPosition(render.Vec3From(cam.Pos))
 	focus := boneRootFrame.MulPosition(render.Vec3From(cam.FocusPoint))
 	v.CameraState = viewer.LookThroughCamera(v.CameraState, eye, focus, cam.Fov, cam.Name)
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // resetCamera puts the orbit camera back to the framing newModelViewer chose,
 // and forgets any camera of the model's that was being looked through.
-func (v *modelViewer) ResetCamera() {
+func ResetCamera(v *modelViewer) {
 	if v == nil {
 		return
 	}
 	camera := viewer.ResetCamera(v.CameraState)
 	v.CameraState = camera
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // panCamera shifts the orbit target in the camera's screen plane. Pixel motion
 // is scaled by the world-space width visible at the camera distance, so the
 // drag has consistent sensitivity across zoom levels and viewport sizes.
-func (v *modelViewer) PanCamera(dx, dy float64, height int) {
+func PanCamera(v *modelViewer, dx, dy float64, height int) {
 	if v == nil || height <= 0 || v.Distance <= 0 {
 		return
 	}
@@ -3153,7 +3153,7 @@ func (v *modelViewer) PanCamera(dx, dy float64, height int) {
 	worldPerPixel := 2 * v.Distance * math.Tan(v.FOV*math.Pi/360) / float64(height)
 	v.Center = v.Center.Sub(right.MulScalar(dx * worldPerPixel)).Add(up.MulScalar(dy * worldPerPixel))
 	v.ActiveCamera = ""
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // ─── merged from unit_mesh_material_ui.go ───────────────────────────────────────────────
@@ -3282,7 +3282,7 @@ func CloseUnitMeshMaterialDialog(ui *uiState, revert bool) {
 			if !equalRefs(cur, ui.UnitMeshMatOrig) {
 				applyMeshMaterialRefs(v.Model, ui.UnitMeshMatName, ui.UnitMeshMatOrig)
 				ReloadUnitModelMaterials(ui, v)
-				v.Invalidate()
+				Invalidate(v)
 			}
 		}
 	}
@@ -3305,7 +3305,7 @@ func PreviewUnitMeshMaterialDialog(ui *uiState) {
 	}
 	applyMeshMaterialRefs(v.Model, ui.UnitMeshMatName, UnitMeshMatFieldText(ui))
 	ReloadUnitModelMaterials(ui, v)
-	v.Invalidate()
+	Invalidate(v)
 	ui.UnitMeshMatErr = ""
 }
 
@@ -3342,7 +3342,7 @@ func SaveUnitMeshMaterialDialog(ui *uiState) {
 	}
 	applyMeshMaterialRefs(v.Model, ui.UnitMeshMatName, refs)
 	ReloadUnitModelMaterials(ui, v)
-	v.Invalidate()
+	Invalidate(v)
 	ui.UnitMeshMatErr = ""
 	// The file holds these now: Cancel after this point reverts to them.
 	ui.UnitMeshMatOrig = refs

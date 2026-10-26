@@ -141,7 +141,7 @@ func SgbMoveCamera(ui *uiState, t *fileTab, forward, strafe, seconds float64) bo
 	}
 	t.Model.Center.X, t.Model.Center.Y, t.Model.Center.Z = x, y, height
 	t.Model.ActiveCamera = ""
-	t.Model.Invalidate()
+	Invalidate(t.Model)
 	return true
 }
 

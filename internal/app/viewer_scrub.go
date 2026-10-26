@@ -127,7 +127,7 @@ func frameAt(at float64, numFrames int) int {
 // An event the clip fires twice is kept twice: a clip that rings a footstep at
 // a quarter and again at three quarters has two frames worth stopping at, and
 // collapsing them to the first would hide the second.
-func (v *modelViewer) ClipScrubEvents(anim string) []animScrubEvent {
+func ClipScrubEvents(v *modelViewer, anim string) []animScrubEvent {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 || anim == "" {
 		return nil
 	}
@@ -166,7 +166,7 @@ func scrubHit(r image.Rectangle, p f32.Point) bool {
 // all work from the same two numbers, so a press between the bar and the
 // numbers lands on the frame the pointer is over rather than a frame beside
 // it.
-func (v *modelViewer) ScrubGeometry() (left, width float32, ok bool) {
+func ScrubGeometry(v *modelViewer) (left, width float32, ok bool) {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return 0, 0, false
 	}
@@ -185,15 +185,15 @@ func (v *modelViewer) ScrubGeometry() (left, width float32, ok bool) {
 // movePickedBoneKeyToX moves the picked bone key to the frame under x on the
 // strip, over the same geometry scrubSeek seeks by, so the key lands on the
 // frame the cursor is on while it is dragged.
-func (v *modelViewer) MovePickedBoneKeyToX(x float32) bool {
+func MovePickedBoneKeyToX(v *modelViewer, x float32) bool {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return false
 	}
-	left, width, ok := v.ScrubGeometry()
+	left, width, ok := ScrubGeometry(v)
 	if !ok {
 		return false
 	}
-	return v.MovePickedBoneKeyToFrame(scrubBarAt(x, left, width, v.Anim.NumFrames))
+	return MovePickedBoneKeyToFrame(v, scrubBarAt(x, left, width, v.Anim.NumFrames))
 }
 
 // scrubSeek is the press or drag on the strip: the x is turned into a frame of
@@ -206,11 +206,11 @@ func (v *modelViewer) MovePickedBoneKeyToX(x float32) bool {
 // the caller passes false whenever the strip is drawing without them. The
 // marks themselves decide which keys are offered — a picked bone hides the
 // clip's own marks, so only its keys snap while they are what is drawn.
-func (v *modelViewer) ScrubSeek(x float32, snapKeys bool) bool {
+func ScrubSeek(v *modelViewer, x float32, snapKeys bool) bool {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return false
 	}
-	left, width, ok := v.ScrubGeometry()
+	left, width, ok := ScrubGeometry(v)
 	if !ok {
 		return false
 	}
@@ -221,26 +221,26 @@ func (v *modelViewer) ScrubSeek(x float32, snapKeys bool) bool {
 	// leave the playhead beside the key instead of on it.
 	frame := scrubBarAt(x, left, width, v.Anim.NumFrames)
 	if !snapKeys {
-		v.SeekFrame(frame)
+		SeekFrame(v, frame)
 		return false
 	}
 	// With a bone picked that bone's keys are what the strip marks, and a
 	// press on one of them both selects it and says the drag that may follow
 	// is a key drag.
-	if v.BoneTrack() != nil {
-		if keys := v.BoneKeyFrames(); len(keys) > 0 {
+	if BoneTrack(v) != nil {
+		if keys := BoneKeyFrames(v); len(keys) > 0 {
 			if f, ok := snapKeyFrame(x, keys, left, width, v.Anim.NumFrames); ok {
 				frame = f
-				if idx, mode, ok := v.BoneKeyFrame(frame); ok {
+				if idx, mode, ok := BoneKeyFrame(v, frame); ok {
 					v.BoneKeyIndex = idx
 					v.BoneKeyMode = mode
-					v.Invalidate()
-					v.SeekFrame(frame)
+					Invalidate(v)
+					SeekFrame(v, frame)
 					return true
 				}
 			}
 		}
-		v.SeekFrame(frame)
+		SeekFrame(v, frame)
 		return false
 	}
 	// No bone is picked, so the strip marks the clip's own keyframes — the
@@ -250,14 +250,14 @@ func (v *modelViewer) ScrubSeek(x float32, snapKeys bool) bool {
 			frame = f
 		}
 	}
-	v.SeekFrame(frame)
+	SeekFrame(v, frame)
 	return false
 }
 
 // seekFrame puts the playhead on a frame of the clip on show and holds it there,
 // the way the step buttons do: a click lands on a frame to be looked at, not
 // on a frame to be watched from, so playback stops until play is pressed again.
-func (v *modelViewer) SeekFrame(frame int) {
+func SeekFrame(v *modelViewer, frame int) {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
 		return
 	}
@@ -272,7 +272,7 @@ func (v *modelViewer) SeekFrame(frame int) {
 	if v.Time >= 1 {
 		v.Time = 0
 	}
-	v.Invalidate()
+	Invalidate(v)
 	log.Printf("3D preview: seek to frame %d of %s (%d frames)",
 		frame+1, v.Anim.Name, v.Anim.NumFrames)
 }
@@ -430,7 +430,7 @@ func ModelAnimScrubOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.D
 
 	// The frames something fires on, marked above the bar so they read as
 	// belonging to a frame rather than to the bar itself.
-	for _, e := range v.ClipScrubEvents(v.Anim.Name) {
+	for _, e := range ClipScrubEvents(v, v.Anim.Name) {
 		x := frameX(e.Frame, n, width)
 		col := cEventFX
 		if e.Sound {
@@ -455,7 +455,7 @@ func ModelAnimScrubOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.D
 	// tracks, and the rose marks below are the picked bone's alone. One
 	// list of marks is what the panel below talks about, so the rest are
 	// taken away rather than shown beside it.
-	if showKeys && v.BoneTrack() == nil {
+	if showKeys && BoneTrack(v) == nil {
 		lastKeyX := float32(-1e9)
 		for _, f := range clipKeyFrames(v.Anim) {
 			x := frameX(f, n, width)
@@ -472,7 +472,7 @@ func ModelAnimScrubOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.D
 	// they are what the bone parameters panel's keyframe rows are talking about.
 	if showKeys && v.BoneIndex >= 0 && v.BoneIndex < len(v.Model.Bones) {
 		lastBoneKeyX := float32(-1e9)
-		for _, f := range v.BoneKeyFrames() {
+		for _, f := range BoneKeyFrames(v) {
 			x := frameX(f, n, width)
 			if x-lastBoneKeyX < 4 {
 				continue
@@ -483,7 +483,7 @@ func ModelAnimScrubOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.D
 		// The picked bone key is drawn over its rose mark so it reads as the
 		// one the panel's "Set ..." buttons refer to.
 		if v.BoneKeyIndex >= 0 {
-			if f, ok := v.BoneKeyFrameAt(); ok {
+			if f, ok := BoneKeyFrameAt(v); ok {
 				x := frameX(f, n, width)
 				scrubFill(origin, x-2, -scrubBarThickness-5, 4, scrubBarThickness*2+10, cText)
 			}
@@ -581,7 +581,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 	if h < 1 {
 		h = 1
 	}
-	v.SetRenderSize(w, h)
+	SetRenderSize(v, w, h)
 	if FxStartSoundLoad(ui, v) {
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 	}
@@ -593,9 +593,9 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 		if v.ShowFX {
 			// The hardware frame draws this frame's particles itself, so the
 			// software picture is only built for the path that paints one.
-			fxDrawn = v.FxAdvance(gtx.Now, w, h, v.Options(w, h), ModelGpuUnavailable(ui, v) != "")
+			fxDrawn = FxAdvance(v, gtx.Now, w, h, Options(v, w, h), ModelGpuUnavailable(ui, v) != "")
 		} else if len(v.FxEffects) > 0 {
-			v.FxOrigins()
+			FxOrigins(v)
 		}
 		if fxDrawn {
 			v.Redraw = true
@@ -645,7 +645,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 		if RenderModelOnGpu(ui, gtx, t, w, h) {
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		} else {
-			v.RequestRender(w, h, render.ModelQualityFinal)
+			RequestRender(v, w, h, render.ModelQualityFinal)
 			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 		}
 	}
@@ -744,7 +744,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 					t.SgbObjectDragging, t.SgbObjectRotating = false, false
 					v.Seeking = true
 					v.Dragging = false
-					v.ScrubSeek(e.Position.X, true)
+					ScrubSeek(v, e.Position.X, true)
 					continue
 				}
 				gtx.Execute(key.FocusCmd{Tag: t.SgbCameraTag})
@@ -756,7 +756,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 				t.SgbSelectionCurrent = t.SgbSelectionAnchor
 				if !v.Dragging && len(t.SgbSelectedEntities) > 0 {
 					camera := engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}
-					if id, hit := sgbPickEntity(v.ModelData(), t.SgbEntityMeshIDs, camera, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); hit && t.SgbSelectedEntities[id] {
+					if id, hit := sgbPickEntity(ModelData(v), t.SgbEntityMeshIDs, camera, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); hit && t.SgbSelectedEntities[id] {
 						if (e.Modifiers | heldModifiers()).Contain(key.ModShift) {
 							t.SgbObjectRotating = true
 							t.SgbRotateLastX = e.Position.X
@@ -764,7 +764,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 							t.SgbSelecting = false
 							continue
 						}
-						if point, onTerrain := sgbPickTerrainPoint(v.ModelData(), camera, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); onTerrain {
+						if point, onTerrain := sgbPickTerrainPoint(ModelData(v), camera, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); onTerrain {
 							t.SgbObjectDragging = true
 							t.SgbDragHasPoint = true
 							t.SgbDragLast = point
@@ -775,7 +775,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 					}
 				}
 				if t.SgbObjectSelected != "" && !v.Dragging {
-					if point, hit := sgbPickTerrainPoint(v.ModelData(), engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); hit {
+					if point, hit := sgbPickTerrainPoint(ModelData(v), engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.SgbSelectionAnchor.X), float64(t.SgbSelectionAnchor.Y)); hit {
 						PlaceSgbObject(ui, t, point)
 					} else {
 						ui.StatusText = "Object placement — click on the terrain surface"
@@ -802,7 +802,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 			if scrubHit(v.ScrubRect, e.Position) {
 				v.Seeking = true
 				v.Dragging = false
-				picked := v.ScrubSeek(e.Position.X, t != ui.UnitModel || ui.UnitListMode == 2)
+				picked := ScrubSeek(v, e.Position.X, t != ui.UnitModel || ui.UnitListMode == 2)
 				v.KeyDrag = picked && t == ui.UnitModel
 				v.KeyDragMoved = false
 				LogInfo("3D preview: strip press pos=(%.1f, %.1f) keymark=%v", e.Position.X, e.Position.Y, v.KeyDrag)
@@ -822,11 +822,11 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 				}
 				dx := float64(e.Position.X - t.SgbRotateLastX)
 				t.SgbRotateLastX = e.Position.X
-				if rotated := sgbRotateEntities(t.SgbMap, v.ModelData(), t.SgbEntityMeshIDs, v.AnimatedEntities, t.SgbSelectedEntities, -dx*0.01); rotated > 0 {
+				if rotated := sgbRotateEntities(t.SgbMap, ModelData(v), t.SgbEntityMeshIDs, v.AnimatedEntities, t.SgbSelectedEntities, -dx*0.01); rotated > 0 {
 					GeometryChangedModelGpu(ui, v.Model)
 					t.SgbObjectMoved = true
 					t.SgbDirty = true
-					v.Invalidate()
+					Invalidate(v)
 					gtx.Execute(op.InvalidateCmd{})
 					ui.StatusText = fmt.Sprintf("Rotated %d selected map object(s) around vertical axis", rotated)
 				}
@@ -835,16 +835,16 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 			if t.Kind == "sgb" && t.SgbView3D && t.SgbObjectDragging && e.Buttons.Contain(pointer.ButtonPrimary) {
 				pixel := sgbCanvasToFramePoint(area, w, h, e.Position)
 				camera := engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}
-				if point, hit := sgbPickTerrainPoint(v.ModelData(), camera, float64(pixel.X), float64(pixel.Y)); hit {
+				if point, hit := sgbPickTerrainPoint(ModelData(v), camera, float64(pixel.X), float64(pixel.Y)); hit {
 					if t.SgbDragHasPoint {
 						dx, dy := point.X-t.SgbDragLast.X, point.Y-t.SgbDragLast.Y
 						var moved int
-						t.Model.AnimatedEntities, moved = sgbMoveEntitiesOnSurface(t.SgbMap, v.ModelData(), t.SgbEntityMeshIDs, v.AnimatedEntities, t.SgbSelectedEntities, dx, dy)
+						t.Model.AnimatedEntities, moved = sgbMoveEntitiesOnSurface(t.SgbMap, ModelData(v), t.SgbEntityMeshIDs, v.AnimatedEntities, t.SgbSelectedEntities, dx, dy)
 						if moved > 0 {
 							GeometryChangedModelGpu(ui, v.Model)
 							t.SgbObjectMoved = true
 							t.SgbDirty = true
-							v.Invalidate()
+							Invalidate(v)
 							gtx.Execute(op.InvalidateCmd{})
 							ui.StatusText = fmt.Sprintf("Moved %d selected map object(s) along the terrain", moved)
 						}
@@ -879,18 +879,18 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 				dx := float64(e.Position.X - v.LastX)
 				dy := float64(e.Position.Y - v.LastY)
 				v.LastX, v.LastY = e.Position.X, e.Position.Y
-				v.PanCamera(dx, dy, h)
+				PanCamera(v, dx, dy, h)
 				continue
 			}
 			if v.Seeking {
 				if v.KeyDrag {
-					if v.MovePickedBoneKeyToX(e.Position.X) {
+					if MovePickedBoneKeyToX(v, e.Position.X) {
 						ui.UnitModelWhmDirty = true
 						v.KeyDragMoved = true
 					}
 					continue
 				}
-				v.ScrubSeek(e.Position.X, t != ui.UnitModel || ui.UnitListMode == 2)
+				ScrubSeek(v, e.Position.X, t != ui.UnitModel || ui.UnitListMode == 2)
 				continue
 			}
 			if !v.Dragging {
@@ -903,13 +903,13 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 			v.Pitch = engine.ClampFloat64(v.Pitch+dy*0.01, -1.45, 1.45)
 			v.Redraw = true
 		case pointer.Scroll:
-			v.ZoomBy(modelZoomByDelta(e.Scroll.Y))
+			ZoomBy(v, modelZoomByDelta(e.Scroll.Y))
 			v.Redraw = true
 		case pointer.Release, pointer.Cancel:
 			if t.Kind == "sgb" && t.SgbView3D && t.SgbObjectRotating {
 				t.SgbObjectRotating = false
 				if e.Kind == pointer.Release && t.SgbObjectMoved {
-					v.Invalidate()
+					Invalidate(v)
 				}
 				t.SgbObjectMoved = false
 				gtx.Execute(op.InvalidateCmd{})
@@ -920,7 +920,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 				t.SgbDragHasPoint = false
 				t.SgbSelecting, t.SgbSelectionDrag = false, false
 				if e.Kind == pointer.Release && t.SgbObjectMoved {
-					v.Invalidate()
+					Invalidate(v)
 				}
 				t.SgbObjectMoved = false
 				gtx.Execute(op.InvalidateCmd{})
@@ -939,22 +939,22 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 				}
 				if e.Kind == pointer.Release {
 					if t.SgbSelectionDrag {
-						opts := v.Options(w, h)
-						selection := sgbRectangleEntities(v.ModelData(), t.SgbEntityMeshIDs, render.BuildViewMatrix(opts), w, h, sgbSelectionRect(t.SgbSelectionAnchor, t.SgbSelectionCurrent))
+						opts := Options(v, w, h)
+						selection := sgbRectangleEntities(ModelData(v), t.SgbEntityMeshIDs, render.BuildViewMatrix(opts), w, h, sgbSelectionRect(t.SgbSelectionAnchor, t.SgbSelectionCurrent))
 						t.SgbSelectedEntities = selection
-					} else if id, hit := sgbPickEntity(v.ModelData(), t.SgbEntityMeshIDs, engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.SgbSelectionCurrent.X), float64(t.SgbSelectionCurrent.Y)); hit {
+					} else if id, hit := sgbPickEntity(ModelData(v), t.SgbEntityMeshIDs, engine.Camera{Width: w, Height: h, Yaw: v.Yaw, Pitch: v.Pitch, Distance: v.Distance, Target: v.Center, Fov: v.FOV}, float64(t.SgbSelectionCurrent.X), float64(t.SgbSelectionCurrent.Y)); hit {
 						t.SgbSelectedEntities = map[int]bool{id: true}
 					} else {
 						clear(t.SgbSelectedEntities)
 					}
-					v.Invalidate()
+					Invalidate(v)
 				}
 				t.SgbSelecting, t.SgbSelectionDrag = false, false
 				gtx.Execute(op.InvalidateCmd{})
 				continue
 			}
 			if v.KeyDrag && v.KeyDragMoved {
-				if f, ok := v.BoneKeyFrameAt(); ok {
+				if f, ok := BoneKeyFrameAt(v); ok {
 					LogInfo("3D preview: bone key drag ended on frame %d", f+1)
 					ui.StatusText = fmt.Sprintf("Moved bone key to frame %d", f+1)
 				}
@@ -983,7 +983,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 		// The picked marker is painted in the frame's own transform, so it
 		// lands on the model exactly where the frame put it.
 		v.GpuFrame.Overlay(gtx, image.Rectangle{Max: area}, func(gtx layout.Context) {
-			v.PaintMarkerOverlay(gtx, w, h)
+			PaintMarkerOverlay(v, gtx, w, h)
 		})
 		if t.Kind == "sgb" && t.SgbView3D {
 			paintSgbSelectionMarquee(gtx, t, image.Rectangle{Max: area})
@@ -1033,8 +1033,8 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 		paint.NewImageOp(v.FxOverlay).Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 	}
-	v.PaintMarkerOverlay(gtx, w, h)
-	v.PaintFXAttributeMarkers(gtx, w, h)
+	PaintMarkerOverlay(v, gtx, w, h)
+	PaintFXAttributeMarkers(v, gtx, w, h)
 	if t.Kind == "sgb" && t.SgbView3D {
 		paintSgbSelection(gtx, t, v, w, h, true)
 	}
@@ -1053,7 +1053,7 @@ func ModelGizmoOverlay(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	if w <= 0 || h <= 0 {
 		return layout.Dimensions{}
 	}
-	opts := v.Options(w, h)
+	opts := Options(v, w, h)
 	measure := render.CameraAxesLayout(ui.Th, opts, false)
 	gtx.Constraints.Min = image.Point{}
 	d := measure(gtx)

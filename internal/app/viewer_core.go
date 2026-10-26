@@ -357,7 +357,7 @@ func newObjectModelViewer(model *WhmModel, modelFile string, ground image.Image)
 		draw.Draw(v.GroundImage, v.GroundImage.Bounds(), ground, b.Min, draw.Src)
 	}
 	v.ShowGround = v.GroundImage != nil
-	v.SelectAnim(unitDefaultAnim(model))
+	SelectAnim(v, unitDefaultAnim(model))
 	v.Playing = model != nil && len(model.Animations) > 0
 	v.LastFrame = time.Time{}
 	return v
@@ -366,12 +366,12 @@ func newObjectModelViewer(model *WhmModel, modelFile string, ground image.Image)
 // modelClose stops this viewer's async jobs.
 func ModelClose(ui *uiState, v *modelViewer) {
 	if v != nil {
-		v.Close()
+		Close(v)
 	}
 }
 
 // close stops any running render so the goroutine does not outlive the tab.
-func (v *modelViewer) Close() {
+func Close(v *modelViewer) {
 	if v == nil {
 		return
 	}
@@ -397,7 +397,7 @@ func (v *modelViewer) Close() {
 }
 
 // invalidate marks the frame stale, which makes the next layout start a render.
-func (v *modelViewer) Invalidate() {
+func Invalidate(v *modelViewer) {
 	if v != nil {
 		v.Redraw = true
 	}
@@ -405,7 +405,7 @@ func (v *modelViewer) Invalidate() {
 
 // setRenderSize records the size the next GPU render should use. A change means
 // the projection changed, so the view needs a redraw.
-func (v *modelViewer) SetRenderSize(w, h int) {
+func SetRenderSize(v *modelViewer, w, h int) {
 	if w < 1 || h < 1 {
 		return
 	}
@@ -449,7 +449,7 @@ func RenderModelOnGpu(ui *uiState, gtx layout.Context, t *fileTab, w, h int) boo
 		modelGpuSkipLogged = ""
 	}
 	gpu := ModelGpuRenderer(ui)
-	opts := v.Options(w, h)
+	opts := Options(v, w, h)
 	opts.Quality = render.ModelQualityFinal
 	if t.Kind == "sgb" && t.SgbView3D {
 		opts.SgbSelectedEntities = t.SgbSelectedEntities
@@ -474,7 +474,7 @@ func RenderModelOnGpu(ui *uiState, gtx layout.Context, t *fileTab, w, h int) boo
 	// a render that never returned.
 	firstGPUFrame := v.GpuFrame == nil
 	start := time.Now()
-	frame, err := gpu.Render(&v.Model.Model, v.Pose(), opts, mats, rsh)
+	frame, err := gpu.Render(&v.Model.Model, Pose(v), opts, mats, rsh)
 	if err == nil {
 		d := time.Since(start)
 		if firstGPUFrame {
@@ -564,15 +564,15 @@ func modelGpuErrTransient(err error) bool {
 		strings.Contains(s, "another command buffer is already being recorded")
 }
 
-func (v *modelViewer) RequestRender(width, height, quality int) {
+func RequestRender(v *modelViewer, width, height, quality int) {
 	if v.Rendering {
 		v.Pending = true
 		return
 	}
-	opts := v.Options(width, height)
+	opts := Options(v, width, height)
 	opts.Quality = quality
 	model := v.Model
-	pose := v.Pose()
+	pose := Pose(v)
 	v.Serial++
 	serial := v.Serial
 	ch := make(chan modelFrame, 1)
@@ -584,7 +584,7 @@ func (v *modelViewer) RequestRender(width, height, quality int) {
 }
 
 // modelData returns the decoded model the canvas renders, or nil before one is loaded.
-func (v *modelViewer) ModelData() *whm.Model {
+func ModelData(v *modelViewer) *whm.Model {
 	if v.Model == nil {
 		return nil
 	}
@@ -593,7 +593,7 @@ func (v *modelViewer) ModelData() *whm.Model {
 
 // selectionIndicatorIfShown returns DATASEUI geometry only while its preview
 // toggle is on; the settings themselves remain editable while it is off.
-func (v *modelViewer) SelectionIndicatorIfShown() *engine.SelectionIndicator {
+func SelectionIndicatorIfShown(v *modelViewer) *engine.SelectionIndicator {
 	if v == nil || !v.ShowSelection || v.SelectionIndicator == nil {
 		return nil
 	}
@@ -601,7 +601,7 @@ func (v *modelViewer) SelectionIndicatorIfShown() *engine.SelectionIndicator {
 }
 
 // options builds the render request for the current camera and pose.
-func (v *modelViewer) Options(width, height int) render.RenderOptions {
+func Options(v *modelViewer, width, height int) render.RenderOptions {
 	var mats map[string]render.WhmMaterial
 	if v.Textured {
 		mats = v.Materials
@@ -633,7 +633,7 @@ func (v *modelViewer) Options(width, height int) render.RenderOptions {
 			Marker:        render.PickedMarker(v.MarkerIndex),
 			PickedBone:    render.PickedBone(v.BoneIndex),
 			UVDefault:     v.Uv,
-			UVPerMaterial: v.UvMaterials, MeshAlpha: v.MeshAlphas(),
+			UVPerMaterial: v.UvMaterials, MeshAlpha: MeshAlphas(v),
 			AnimatedEntities: v.AnimatedEntities,
 		},
 		MaterialOverrides:  mats,
@@ -642,7 +642,7 @@ func (v *modelViewer) Options(width, height int) render.RenderOptions {
 		GroundImage:        v.GroundImage,
 		Ground:             v.ShowGround && v.GroundImage != nil,
 		FX:                 v.FxScene,
-		SelectionIndicator: v.SelectionIndicatorIfShown(),
+		SelectionIndicator: SelectionIndicatorIfShown(v),
 	}
 }
 
@@ -707,21 +707,21 @@ func PollViewerJobs(ui *uiState, t *fileTab) {
 					t.SgbSelectedEntities = make(map[int]bool)
 				}
 			}
-			v.Invalidate()
+			Invalidate(v)
 		default:
 		}
 	}
 	if v.FxCh != nil {
 		select {
 		case res := <-v.FxCh:
-			v.FxApply(res)
+			FxApply(v, res)
 		default:
 		}
 	}
 	if v.FxSoundCh != nil {
 		select {
 		case res := <-v.FxSoundCh:
-			v.FxApplySoundsOnly(res)
+			FxApplySoundsOnly(v, res)
 		default:
 		}
 	}
@@ -980,7 +980,7 @@ func onOff(b bool) string {
 // toggleSound turns the model's own audio on and off. Turning it off stops what
 // is playing at once, because a sound that keeps going after it was turned off
 // is the one case of this that is actually annoying.
-func (v *modelViewer) ToggleSound() {
+func ToggleSound(v *modelViewer) {
 	if v == nil {
 		return
 	}
@@ -1022,12 +1022,12 @@ const modelZoomStep = 1.15
 
 // zoomBy multiplies the camera distance, keeping it inside the range the viewer
 // allows. A factor above one moves the camera away from the model.
-func (v *modelViewer) ZoomBy(factor float64) {
+func ZoomBy(v *modelViewer, factor float64) {
 	if v == nil || factor <= 0 || factor == 1 {
 		return
 	}
 	v.CameraState = viewer.ZoomBy(v.CameraState, factor)
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // modelZoomByDelta turns a scroll amount into the factor it costs the camera.
@@ -1108,7 +1108,7 @@ func modelMeshNames(m *WhmModel) []string {
 // of whatever the clip says: both the software and the hardware renderer skip
 // a mesh whose alpha is 0, so this is the one place that turns the toggle into
 // a mesh that is not drawn.
-func (v *modelViewer) MeshAlphas() map[string]float32 {
+func MeshAlphas(v *modelViewer) map[string]float32 {
 	if v == nil || v.Model == nil {
 		return nil
 	}
@@ -1155,52 +1155,52 @@ func ModelControlClicks(ui *uiState, gtx layout.Context, t *fileTab) {
 	v := t.Model
 	if t.ModelPlay.Clicked(gtx) {
 		if v.Anim == nil {
-			v.SelectAnim(0)
+			SelectAnim(v, 0)
 		}
 		v.Playing = !v.Playing
 		v.LastFrame = time.Time{}
-		v.Invalidate()
+		Invalidate(v)
 	}
 	if t.ModelPrevAnim.Clicked(gtx) {
-		v.SelectAnim(v.AnimIndex - 1)
+		SelectAnim(v, v.AnimIndex-1)
 	}
 	if t.ModelNextAnim.Clicked(gtx) {
-		v.SelectAnim(v.AnimIndex + 1)
+		SelectAnim(v, v.AnimIndex+1)
 	}
 	if t.ModelStepBack.Clicked(gtx) {
-		v.StepFrame(-1)
+		StepFrame(v, -1)
 		PickFrameKeyOnTimeline(ui, v)
 	}
 	if t.ModelStepFwd.Clicked(gtx) {
-		v.StepFrame(1)
+		StepFrame(v, 1)
 		PickFrameKeyOnTimeline(ui, v)
 	}
 	if t.ModelReset.Clicked(gtx) {
-		v.ResetCamera()
+		ResetCamera(v)
 	}
 	if t.ModelZoomIn.Clicked(gtx) {
-		v.ZoomBy(modelZoomStep)
+		ZoomBy(v, modelZoomStep)
 	}
 	if t.ModelZoomOut.Clicked(gtx) {
-		v.ZoomBy(1 / modelZoomStep)
+		ZoomBy(v, 1/modelZoomStep)
 	}
 	if t.ModelSkeleton.Clicked(gtx) {
 		v.ShowSkeleton = !v.ShowSkeleton
 		log.Printf("3D preview: skeleton overlay %s", onOff(v.ShowSkeleton))
-		v.Invalidate()
+		Invalidate(v)
 	}
 	if t.ModelFX.Clicked(gtx) {
-		v.ToggleFX()
+		ToggleFX(v)
 	}
 	if t.ModelGround.Clicked(gtx) {
 		v.ShowGround = !v.ShowGround
 		log.Printf("3D preview: ground %s", onOff(v.ShowGround))
-		v.Invalidate()
+		Invalidate(v)
 	}
 	if t.ModelTexture.Clicked(gtx) {
 		v.Textured = !v.Textured
 		log.Printf("3D preview: textures %s", onOff(v.Textured))
-		v.Invalidate()
+		Invalidate(v)
 	}
 }
 
@@ -1261,7 +1261,7 @@ func UvTextureButton(ui *uiState, gtx layout.Context, btn *widget.Clickable, lab
 // ensureUVTextureClicks sizes the texture list's click targets. They are
 // rebuilt per model, so a list of the wrong length is replaced rather than
 // grown into.
-func (v *modelViewer) EnsureUVTextureClicks(n int) {
+func EnsureUVTextureClicks(v *modelViewer, n int) {
 	if len(v.UvTextureClicks) != n {
 		v.UvTextureClicks = make([]widget.Clickable, n)
 	}

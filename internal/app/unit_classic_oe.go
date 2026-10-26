@@ -751,7 +751,7 @@ func ClassicOETreeActivate(ui *uiState, row classicOETreeRow) {
 		ui.StatusText = fmt.Sprintf("Action Tree — no animation named %q in this model", row.Name)
 		return
 	}
-	v.SelectAnim(idx)
+	SelectAnim(v, idx)
 	v.Playing = true
 	v.LastFrame = time.Time{}
 }
@@ -1912,7 +1912,7 @@ func EnsureClassicOESelectedUI(ui *uiState) (whe.FxSelectedUI, bool, error) {
 		indicator := &engine.SelectionIndicator{DisplayType: v.DisplayType, Scale: v.Scale, Offset: v.Offset}
 		if model.SelectionIndicator == nil || *model.SelectionIndicator != *indicator {
 			model.SelectionIndicator = indicator
-			model.Invalidate()
+			Invalidate(model)
 		}
 	}
 	return v, true, nil
@@ -2257,7 +2257,7 @@ func HandleClassicOEWheInput(ui *uiState, gtx layout.Context) {
 	if ui.ClassicOESelectedUIVisible != nil && ui.ClassicOESelectedUIVisible.Update(gtx) {
 		if v := UnitModelViewer(ui); v != nil {
 			v.ShowSelection = ui.ClassicOESelectedUIVisible.Value
-			v.Invalidate()
+			Invalidate(v)
 		}
 	}
 	if ui.ClassicOESelectedUIApply.Clicked(gtx) {
@@ -2319,7 +2319,7 @@ func UpdateUnitSelectionIndicator(ui *uiState, value whe.FxSelectedUI) {
 		indicator := &engine.SelectionIndicator{DisplayType: value.DisplayType, Scale: value.Scale, Offset: value.Offset}
 		if v.SelectionIndicator == nil || *v.SelectionIndicator != *indicator {
 			v.SelectionIndicator = indicator
-			v.Invalidate()
+			Invalidate(v)
 		}
 	}
 }
@@ -2345,7 +2345,7 @@ func SyncUnitSelectionIndicator(ui *uiState, v *modelViewer) {
 		return
 	}
 	v.SelectionIndicator = indicator
-	v.Invalidate()
+	Invalidate(v)
 }
 
 func ApplyClassicOESelectedUI(ui *uiState) {

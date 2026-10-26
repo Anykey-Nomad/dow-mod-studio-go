@@ -1174,14 +1174,14 @@ func ApplySgbObjectMaterials(ui *uiState, tab *fileTab, result sgbObjectMaterial
 	if len(result.materials) > 0 {
 		tab.Model.Textured = true
 	}
-	tab.Model.Invalidate()
+	Invalidate(tab.Model)
 }
 
 func DeleteSelectedSgbEntities(ui *uiState, tab *fileTab) {
 	if tab == nil || tab.SgbMap == nil || tab.Model == nil || len(tab.SgbSelectedEntities) == 0 {
 		return
 	}
-	animated, removed := sgbRemoveEntities(tab.SgbMap, tab.Model.ModelData(), tab.SgbEntityMeshIDs, tab.Model.AnimatedEntities, tab.SgbSelectedEntities)
+	animated, removed := sgbRemoveEntities(tab.SgbMap, ModelData(tab.Model), tab.SgbEntityMeshIDs, tab.Model.AnimatedEntities, tab.SgbSelectedEntities)
 	if removed == 0 {
 		return
 	}
@@ -1191,7 +1191,7 @@ func DeleteSelectedSgbEntities(ui *uiState, tab *fileTab) {
 	}
 	clear(tab.SgbSelectedEntities)
 	GeometryChangedModelGpu(ui, tab.Model.Model)
-	tab.Model.Invalidate()
+	Invalidate(tab.Model)
 	tab.SgbDirty = true
 	ui.StatusText = fmt.Sprintf("Deleted %d selected map object(s)", removed)
 }
@@ -1232,7 +1232,7 @@ func AppendSgbPlacement(ui *uiState, tab *fileTab, request sgbPlacementRequest, 
 		return
 	}
 	entity := sgb.Entity{ID: id, BP: bp, Owner: request.owner, Name: blueprint, X: x, Y: y, Z: z}
-	if !sgbSceneAppendEntity(tab.Model.ModelData(), src, entity.PlacementOf(), entity.ID) {
+	if !sgbSceneAppendEntity(ModelData(tab.Model), src, entity.PlacementOf(), entity.ID) {
 		ui.StatusText = "Object placement failed: model has no renderable meshes"
 		return
 	}
@@ -1258,7 +1258,7 @@ func AppendSgbPlacement(ui *uiState, tab *fileTab, request sgbPlacementRequest, 
 		model:     src,
 		entityID:  entity.ID,
 	})
-	tab.Model.Invalidate()
+	Invalidate(tab.Model)
 	ui.StatusText = fmt.Sprintf("Placed %s at %.1f, %.1f, %.1f", filepath.Base(request.blueprint), entity.X, entity.Z, entity.Y)
 }
 

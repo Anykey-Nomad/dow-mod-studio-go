@@ -262,7 +262,7 @@ func HandleUnitMeshToggles(ui *uiState, gtx layout.Context) {
 		}
 		if ui.UnitMeshClicks[i].Clicked(gtx) {
 			setMeshHidden(names[i], !meshHidden(names[i]))
-			v.Invalidate()
+			Invalidate(v)
 		}
 	}
 }

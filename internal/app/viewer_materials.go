@@ -528,7 +528,7 @@ type uvNet struct {
 // empty name. The empty one is first because it is what a model with a single
 // map, or a reader who has not yet found out that it has two, wants to be
 // editing.
-func (v *modelViewer) UvSelectionList() []string {
+func UvSelectionList(v *modelViewer) []string {
 	out := []string{""}
 	if v == nil || v.Model == nil {
 		return out
@@ -549,7 +549,7 @@ func (v *modelViewer) UvSelectionList() []string {
 // material's own, or the one they all share. The pointer is what lets a
 // button change the mapping without every reader of it having to know which
 // one is selected.
-func (v *modelViewer) UvCurrent() *render.UVMapping {
+func UvCurrent(v *modelViewer) *render.UVMapping {
 	if v == nil {
 		return nil
 	}
@@ -575,19 +575,19 @@ func (v *modelViewer) UvCurrent() *render.UVMapping {
 // refilled from the new choice the next time the panel is laid out, not here,
 // so that a button press does not move the numbers under a pointer that is
 // still over the old ones.
-func (v *modelViewer) SelectUVMapping(material string) {
+func SelectUVMapping(v *modelViewer, material string) {
 	if v == nil || v.UvSelection == material {
 		return
 	}
-	v.UvPull()
+	UvPull(v)
 	v.UvSelection = material
 	v.UvSelectionDirty = true
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // uvOffset reads the two offset sliders as the shift of the map over the model,
 // in units of the map itself.
-func (v *modelViewer) UvOffset() [2]float32 {
+func UvOffset(v *modelViewer) [2]float32 {
 	if v == nil {
 		return [2]float32{}
 	}
@@ -599,7 +599,7 @@ func (v *modelViewer) UvOffset() [2]float32 {
 
 // uvScaleValue reads the scale slider. One is the middle of its travel and is
 // what an untouched model is drawn with.
-func (v *modelViewer) UvScaleValue() float32 {
+func UvScaleValue(v *modelViewer) float32 {
 	if v == nil {
 		return 1
 	}
@@ -609,8 +609,8 @@ func (v *modelViewer) UvScaleValue() float32 {
 // uvPush fills the sliders from the mapping they are editing. It runs when the
 // selection changes, and once at the start, so that the controls always show
 // the numbers of the mapping the frame is actually being drawn with.
-func (v *modelViewer) UvPush() {
-	m := v.UvCurrent()
+func UvPush(v *modelViewer) {
+	m := UvCurrent(v)
 	if m == nil {
 		return
 	}
@@ -626,28 +626,28 @@ func (v *modelViewer) UvPush() {
 
 // uvPull writes the sliders back into the mapping they are editing. It runs
 // after the sliders are laid out, because that is when a drag has been read.
-func (v *modelViewer) UvPull() {
-	m := v.UvCurrent()
+func UvPull(v *modelViewer) {
+	m := UvCurrent(v)
 	if m == nil {
 		return
 	}
-	m.Offset = v.UvOffset()
-	m.Scale = v.UvScaleValue()
+	m.Offset = UvOffset(v)
+	m.Scale = UvScaleValue(v)
 }
 
 // resetUVMapping puts the selected texture's map back where the file has it. It
 // is its own button because a reader who has been dragging the sliders needs
 // one, and because "Reset view" only moves the camera. With one texture
 // selected out of several it is that one and not the model that goes back.
-func (v *modelViewer) ResetUVMapping() {
+func ResetUVMapping(v *modelViewer) {
 	if v == nil {
 		return
 	}
-	if m := v.UvCurrent(); m != nil {
+	if m := UvCurrent(v); m != nil {
 		*m = render.UVIdentityMapping()
 	}
 	v.UvSelectionDirty = true
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // uvMappingNet multiplies the four operations together into uvNet.
@@ -676,9 +676,9 @@ func uvMappingNet(mirror bool, turns int, scale float32, off [2]float32) uvNet {
 }
 
 // net is the viewer's own mapping in that form.
-func (v *modelViewer) Net() uvNet {
+func Net(v *modelViewer) uvNet {
 	m := render.UVMapping{}
-	if cur := v.UvCurrent(); cur != nil {
+	if cur := UvCurrent(v); cur != nil {
 		m = *cur
 	}
 	return uvMappingNet(m.Mirror, m.Rotate, m.Scale, m.Offset)
@@ -687,8 +687,8 @@ func (v *modelViewer) Net() uvNet {
 // uvMappingSummary writes the mapping as the two expressions it works out to,
 // which is the form it can be written back down in: a line of this program's
 // own code, or the pair of numbers a model would carry in two more UV channels.
-func (v *modelViewer) UvMappingSummary() string {
-	n := v.Net()
+func UvMappingSummary(v *modelViewer) string {
+	n := Net(v)
 	return uvNetTerm(n.u, n.off[0]) + ", " + uvNetTerm(n.v, n.off[1])
 }
 
@@ -719,9 +719,9 @@ func uvNetTerm(coef [2]float32, off float32) string {
 // enough to be worth showing: a mirror and a half turn cancel on one axis and
 // swap to the other, and seeing the steps beside the result is what makes that
 // obvious rather than surprising.
-func (v *modelViewer) UvMappingSequence() string {
+func UvMappingSequence(v *modelViewer) string {
 	m := render.UVMapping{}
-	if cur := v.UvCurrent(); cur != nil {
+	if cur := UvCurrent(v); cur != nil {
 		m = *cur
 	}
 	var parts []string
@@ -748,9 +748,9 @@ func (v *modelViewer) UvMappingSequence() string {
 // offset, because the map repeats exactly that often: a reader who has just
 // dragged one to the far end of its travel and seen nothing happen is looking
 // at a bug in the model, not at their own mistake.
-func (v *modelViewer) UvMappingNote() string {
+func UvMappingNote(v *modelViewer) string {
 	off := [2]float32{}
-	if cur := v.UvCurrent(); cur != nil {
+	if cur := UvCurrent(v); cur != nil {
 		off = cur.Offset
 	}
 	if uvWholeTiles(off[0]) && uvWholeTiles(off[1]) {
@@ -770,7 +770,7 @@ func (v *modelViewer) UvMappingNote() string {
 // with the UVs at all: such a mesh is drawn from a one by one white map, so it
 // comes out as an untextured part of an otherwise textured model, and moving
 // the sliders will not change it.
-func (v *modelViewer) UvUnmappedMeshes() string {
+func UvUnmappedMeshes(v *modelViewer) string {
 	if v == nil || v.Model == nil || len(v.Materials) == 0 {
 		return ""
 	}
@@ -852,7 +852,7 @@ func modelUVAdd(v float32) string {
 
 // boneTrack returns the animation track that belongs to the picked bone, or nil
 // when the picked bone has no track in the current clip.
-func (v *modelViewer) BoneTrack() *WhmTrack {
+func BoneTrack(v *modelViewer) *WhmTrack {
 	if v.Anim == nil || v.BoneIndex < 0 || v.BoneIndex >= len(v.Model.Bones) {
 		return nil
 	}
@@ -866,8 +866,8 @@ func (v *modelViewer) BoneTrack() *WhmTrack {
 
 // boneKeyFrames is the set of frames on which the picked bone has a key, or nil
 // when there is nothing to snap to.
-func (v *modelViewer) BoneKeyFrames() []int {
-	t := v.BoneTrack()
+func BoneKeyFrames(v *modelViewer) []int {
+	t := BoneTrack(v)
 	if t == nil || v.Anim.NumFrames < 1 {
 		return nil
 	}
@@ -894,8 +894,8 @@ func (v *modelViewer) BoneKeyFrames() []int {
 
 // boneKeyCount is how many keyframes the picked bone has in the current clip,
 // counting position and rotation keys together.
-func (v *modelViewer) BoneKeyCount() int {
-	t := v.BoneTrack()
+func BoneKeyCount(v *modelViewer) int {
+	t := BoneTrack(v)
 	if t == nil {
 		return 0
 	}
@@ -905,18 +905,18 @@ func (v *modelViewer) BoneKeyCount() int {
 // boneKeySelect picks the bone keyframe closest to the current playhead, and
 // seeks so that frame is on show. When there is no key near the playhead the
 // picked key is cleared instead.
-func (v *modelViewer) BoneKeySelect() {
+func BoneKeySelect(v *modelViewer) {
 	if v.BoneIndex < 0 {
 		v.BoneKeyIndex = -1
 		v.BoneKeyMode = -1
 		return
 	}
-	frame, _ := v.CurrentFrame()
-	if idx, mode, ok := v.BoneKeyFrame(frame); ok {
+	frame, _ := CurrentFrame(v)
+	if idx, mode, ok := BoneKeyFrame(v, frame); ok {
 		v.BoneKeyIndex = idx
 		v.BoneKeyMode = mode
-		if f, ok := v.BoneKeyFrameAt(); ok {
-			v.SeekFrame(f)
+		if f, ok := BoneKeyFrameAt(v); ok {
+			SeekFrame(v, f)
 		}
 	} else {
 		v.BoneKeyIndex = -1
@@ -927,16 +927,16 @@ func (v *modelViewer) BoneKeySelect() {
 // setBoneKeyPositionFromPose writes the picked bone's pose position at the
 // current playhead into the picked position key, which is what the "Set pos
 // from pose" button in the bone parameters panel does.
-func (v *modelViewer) SetBoneKeyPositionFromPose() {
+func SetBoneKeyPositionFromPose(v *modelViewer) {
 	if v.BoneKeyMode != 0 || v.BoneKeyIndex < 0 || v.BoneIndex < 0 || v.Anim == nil {
 		return
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil || v.BoneKeyIndex >= len(t.PosKey) {
 		return
 	}
 	bone := v.Model.Bones[v.BoneIndex]
-	pose := v.Pose()
+	pose := Pose(v)
 	if v.BoneIndex >= len(pose.Bones) {
 		return
 	}
@@ -949,22 +949,22 @@ func (v *modelViewer) SetBoneKeyPositionFromPose() {
 	}
 	local := worldParent.Inverse().MulPosition(boneAtPose(worldBone))
 	t.PosKey[v.BoneKeyIndex].V = [3]float32{float32(local.X), float32(local.Y), float32(local.Z)}
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // setBoneKeyRotationFromPose writes the picked bone's pose rotation at the
 // current playhead into the picked rotation key, which is what the "Set rot
 // from pose" button in the bone parameters panel does.
-func (v *modelViewer) SetBoneKeyRotationFromPose() {
+func SetBoneKeyRotationFromPose(v *modelViewer) {
 	if v.BoneKeyMode != 1 || v.BoneKeyIndex < 0 || v.BoneIndex < 0 || v.Anim == nil {
 		return
 	}
-	track := v.BoneTrack()
+	track := BoneTrack(v)
 	if track == nil || v.BoneKeyIndex >= len(track.RotKey) {
 		return
 	}
 	bone := v.Model.Bones[v.BoneIndex]
-	pose := v.Pose()
+	pose := Pose(v)
 	if v.BoneIndex >= len(pose.Bones) {
 		return
 	}
@@ -977,7 +977,7 @@ func (v *modelViewer) SetBoneKeyRotationFromPose() {
 	}
 	localMat := worldParent.Inverse().Mul(worldBone)
 	track.RotKey[v.BoneKeyIndex].V = matrixQuat(localMat)
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // matrixQuat extracts a quaternion (x, y, z, w) from the rotation part of a
@@ -1031,8 +1031,8 @@ func boneAtPose(worldBone fauxgl.Matrix) fauxgl.Vector {
 }
 
 // boneKeyFrame picks the bone keyframe index and mode closest to the given frame.
-func (v *modelViewer) BoneKeyFrame(frame int) (int, int, bool) {
-	t := v.BoneTrack()
+func BoneKeyFrame(v *modelViewer, frame int) (int, int, bool) {
+	t := BoneTrack(v)
 	if t == nil {
 		return -1, -1, false
 	}
@@ -1065,11 +1065,11 @@ func (v *modelViewer) BoneKeyFrame(frame int) (int, int, bool) {
 
 // boneKeyFrameAt returns the frame a bone keyframe sits on, and whether it has
 // one to sit on. This is the frame the scrub bar can snap to for this bone key.
-func (v *modelViewer) BoneKeyFrameAt() (int, bool) {
-	if v.BoneKeyIndex < 0 || v.BoneKeyMode < 0 || v.Anim == nil || v.BoneTrack() == nil {
+func BoneKeyFrameAt(v *modelViewer) (int, bool) {
+	if v.BoneKeyIndex < 0 || v.BoneKeyMode < 0 || v.Anim == nil || BoneTrack(v) == nil {
 		return 0, false
 	}
-	track := v.BoneTrack()
+	track := BoneTrack(v)
 	var keyTime float32
 	switch v.BoneKeyMode {
 	case 0:
@@ -1095,7 +1095,7 @@ func (v *modelViewer) BoneKeyFrameAt() (int, bool) {
 // bone and writes two matrices per bone into fresh slices. During playback
 // that is the largest thing the preview allocates, and it is the same answer
 // every time.
-func (v *modelViewer) Pose() WhmPose {
+func Pose(v *modelViewer) WhmPose {
 	if v == nil || v.Model == nil {
 		return WhmPose{}
 	}
@@ -1138,7 +1138,7 @@ func (v *modelViewer) Pose() WhmPose {
 // the button down walks to the first frame and stays there, which is what
 // winding a tape by hand does. The last frame is the same as the first, so
 // stepping past it lands on the start rather than on a frame that is not there.
-func (v *modelViewer) StepFrame(delta int) {
+func StepFrame(v *modelViewer, delta int) {
 	if v == nil || v.Model == nil || v.Anim == nil || delta == 0 {
 		return
 	}
@@ -1162,7 +1162,7 @@ func (v *modelViewer) StepFrame(delta int) {
 	if float64(v.Time) >= 1 {
 		v.Time = 0
 	}
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // frameReadTolerance is how close to a frame boundary the playhead has to be
@@ -1173,7 +1173,7 @@ const frameReadTolerance = 1e-3
 // A clip with no frame count reports none, since there is nothing to count. The
 // play head is rounded rather than cut, so the frame a step lands on and the
 // frame the readout names are the same one.
-func (v *modelViewer) CurrentFrame() (int, int) {
+func CurrentFrame(v *modelViewer) (int, int) {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames <= 0 {
 		return 0, 0
 	}
@@ -1189,7 +1189,7 @@ func (v *modelViewer) CurrentFrame() (int, int) {
 }
 
 // selectAnim switches the playing clip, wrapping around the list.
-func (v *modelViewer) SelectAnim(index int) {
+func SelectAnim(v *modelViewer, index int) {
 	if v == nil {
 		return
 	}
@@ -1198,7 +1198,7 @@ func (v *modelViewer) SelectAnim(index int) {
 	if v.Model == nil || len(v.Model.Animations) == 0 {
 		v.Anim = nil
 		v.AnimIndex = 0
-		v.Invalidate()
+		Invalidate(v)
 		return
 	}
 	n := len(v.Model.Animations)
@@ -1213,13 +1213,13 @@ func (v *modelViewer) SelectAnim(index int) {
 	v.Time = 0
 	v.PoseValid = false
 	v.LastFrame = time.Time{}
-	v.Invalidate()
+	Invalidate(v)
 }
 
 // selectAnimations plays clips belonging to one action together on one model.
 // It uses the longest selected clip as the shared playback clock; individual
 // clip times are sampled against their own durations.
-func (v *modelViewer) SelectAnimations(anims []*WhmAnimation, playback bool) {
+func SelectAnimations(v *modelViewer, anims []*WhmAnimation, playback bool) {
 	if v == nil {
 		return
 	}
@@ -1234,7 +1234,7 @@ func (v *modelViewer) SelectAnimations(anims []*WhmAnimation, playback bool) {
 		v.Anim = nil
 		v.AnimPlaybackDuration = 0
 		v.PoseValid = false
-		v.Invalidate()
+		Invalidate(v)
 		return
 	}
 	v.Anim = longestAnimation(v.Anims)
@@ -1246,7 +1246,7 @@ func (v *modelViewer) SelectAnimations(anims []*WhmAnimation, playback bool) {
 	v.Time = 0
 	v.PoseValid = false
 	v.LastFrame = time.Time{}
-	v.Invalidate()
+	Invalidate(v)
 }
 
 func animationIndex(model *WhmModel, anim *WhmAnimation) int {

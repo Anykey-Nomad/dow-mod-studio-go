@@ -232,11 +232,11 @@ func TestMarkerArrowPointsAlongTheMarkerAxis(t *testing.T) {
 	t.Logf("marker %s at %v with forward %v", m.Markers[idx].Name, world, axis)
 
 	const w, h = 800, 600
-	tip, has := v.MarkerArrow(w, h)
+	tip, has := MarkerArrow(v, w, h)
 	if !has {
 		t.Skipf("marker %s produced no arrow at %dx%d; it may be off screen", m.Markers[idx].Name, w, h)
 	}
-	at, ok := v.MarkerHighlight(w, h)
+	at, ok := MarkerHighlight(v, w, h)
 	if !ok {
 		t.Fatalf("the ring has nowhere to draw but the arrow reports %v", tip)
 	}
@@ -244,7 +244,7 @@ func TestMarkerArrowPointsAlongTheMarkerAxis(t *testing.T) {
 	// The screen direction from the marker to the tip has to agree with the
 	// marker's own forward axis once that axis is projected, which is what
 	// makes the arrow an arrow and not just a line.
-	view := render.BuildViewMatrix(v.Options(w, h))
+	view := render.BuildViewMatrix(Options(v, w, h))
 	projected := fxProject(view, world.Add(axis.MulScalar(markerArrowWorldLength)), w, h)
 	if projected == nil {
 		t.Skip("the axis end is off screen, so there is nothing to compare against")
@@ -272,14 +272,14 @@ func TestMarkerArrowIsAbsentWhenThereIsNoAxis(t *testing.T) {
 	// No marker picked at all.
 	v := newModelViewer(m, "arrow_test.whm")
 	v.MarkerIndex = -1
-	if _, ok := v.MarkerArrow(100, 100); ok {
+	if _, ok := MarkerArrow(v, 100, 100); ok {
 		t.Errorf("an arrow was drawn with no marker picked")
 	}
 	// A marker index outside the model, which is what a stale index from a
 	// model that has since been replaced looks like.
 	v = newModelViewer(m, "arrow_test.whm")
 	v.MarkerIndex = len(m.Markers) + 5
-	if _, ok := v.MarkerArrow(100, 100); ok {
+	if _, ok := MarkerArrow(v, 100, 100); ok {
 		t.Errorf("an arrow was drawn for marker %d of %d", v.MarkerIndex, len(m.Markers))
 	}
 }

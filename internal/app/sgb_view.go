@@ -536,11 +536,11 @@ func paintSgbSelection(gtx layout.Context, tab *fileTab, viewer *modelViewer, wi
 		return
 	}
 	if drawBounds && viewer.Model != nil && len(tab.SgbSelectedEntities) > 0 {
-		pose := viewer.Pose()
+		pose := Pose(viewer)
 		if len(viewer.AnimatedEntities) > 0 {
 			pose = sgb.CombineEntityPoses(len(pose.Bones), viewer.AnimatedEntities)
 		}
-		bounds := render.SgbEntityProjectedBounds(viewer.ModelData(), tab.SgbEntityMeshIDs, render.BuildViewMatrix(viewer.Options(width, height)), width, height, pose, len(pose.Bones) > 0)
+		bounds := render.SgbEntityProjectedBounds(ModelData(viewer), tab.SgbEntityMeshIDs, render.BuildViewMatrix(Options(viewer, width, height)), width, height, pose, len(pose.Bones) > 0)
 		for id := range tab.SgbSelectedEntities {
 			box := bounds[id].Inset(-3).Intersect(area)
 			if !box.Empty() {
@@ -733,7 +733,7 @@ func sgbCameraTargetScreen(v *modelViewer, width, height int) (fauxgl.Vector, bo
 	if v == nil || width < 1 || height < 1 {
 		return fauxgl.Vector{}, false
 	}
-	at := fxProject(render.BuildViewMatrix(v.Options(width, height)), v.Center, width, height)
+	at := fxProject(render.BuildViewMatrix(Options(v, width, height)), v.Center, width, height)
 	if at == nil {
 		return fauxgl.Vector{}, false
 	}
@@ -742,7 +742,7 @@ func sgbCameraTargetScreen(v *modelViewer, width, height int) (fauxgl.Vector, bo
 
 // paintSgbCameraTargetOverlay draws nested contrasting circles so the current
 // surface point remains easy to spot against both terrain and placed objects.
-func (v *modelViewer) PaintSgbCameraTargetOverlay(gtx layout.Context, width, height int) {
+func PaintSgbCameraTargetOverlay(v *modelViewer, gtx layout.Context, width, height int) {
 	at, ok := sgbCameraTargetScreen(v, width, height)
 	if !ok {
 		return

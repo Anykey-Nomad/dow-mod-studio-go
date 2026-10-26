@@ -23,11 +23,11 @@ type boneTrackSnapshot struct {
 // made can be undone. It reports false when there is no clip or bone to record,
 // which the callers use to skip pushing an undo entry that could restore
 // nothing.
-func (v *modelViewer) SnapshotBoneTrack() (boneTrackSnapshot, bool) {
+func SnapshotBoneTrack(v *modelViewer) (boneTrackSnapshot, bool) {
 	if v == nil || v.Anim == nil || v.BoneIndex < 0 {
 		return boneTrackSnapshot{}, false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return boneTrackSnapshot{}, false
 	}
@@ -43,7 +43,7 @@ func (v *modelViewer) SnapshotBoneTrack() (boneTrackSnapshot, bool) {
 // from and leaves the pose cache cold, so the viewport redraws the restored
 // pose rather than the one the edit produced. It reports false when the track
 // the snapshot named is not in its clip any more.
-func (v *modelViewer) RestoreBoneTrack(s boneTrackSnapshot) bool {
+func RestoreBoneTrack(v *modelViewer, s boneTrackSnapshot) bool {
 	if s.anim == nil || s.boneIndex < 0 {
 		return false
 	}
@@ -60,7 +60,7 @@ func (v *modelViewer) RestoreBoneTrack(s boneTrackSnapshot) bool {
 	t.PosKey = append([]WhmKey3(nil), s.posKey...)
 	t.RotKey = append([]WhmKey4(nil), s.rotKey...)
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	return true
 }
 
@@ -103,11 +103,11 @@ func timeForFrame(frame, numFrames int) float32 {
 // The bool says whether a key was created. Selection always ends up on the key
 // at the frame, created or found, which is what makes the panel's typed fields
 // show what the next edit would write.
-func (v *modelViewer) AddBoneKeyAtFrame(frame, mode int) bool {
+func AddBoneKeyAtFrame(v *modelViewer, frame, mode int) bool {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 || mode < 0 || mode > 1 {
 		return false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return false
 	}
@@ -117,7 +117,7 @@ func (v *modelViewer) AddBoneKeyAtFrame(frame, mode int) bool {
 		for i := range t.PosKey {
 			if frameAt(float64(t.PosKey[i].Time), v.Anim.NumFrames) == frame {
 				v.BoneKeyIndex, v.BoneKeyMode = i, 0
-				v.Invalidate()
+				Invalidate(v)
 				return false
 			}
 		}
@@ -125,7 +125,7 @@ func (v *modelViewer) AddBoneKeyAtFrame(frame, mode int) bool {
 		for i := range t.RotKey {
 			if frameAt(float64(t.RotKey[i].Time), v.Anim.NumFrames) == frame {
 				v.BoneKeyIndex, v.BoneKeyMode = i, 1
-				v.Invalidate()
+				Invalidate(v)
 				return false
 			}
 		}
@@ -137,7 +137,7 @@ func (v *modelViewer) AddBoneKeyAtFrame(frame, mode int) bool {
 	// about to fill — the new key would hold zero instead of the pose.
 	// With the cache warmed here, the write below reads the frame as it
 	// looked before the edit, which is the value the key should keep.
-	v.Pose()
+	Pose(v)
 	if mode == 0 {
 		at := 0
 		for at < len(t.PosKey) && t.PosKey[at].Time <= now {
@@ -163,12 +163,12 @@ func (v *modelViewer) AddBoneKeyAtFrame(frame, mode int) bool {
 	// The value comes from the pose on show, exactly as "Set ... from pose"
 	// writes it into an existing key.
 	if mode == 0 {
-		v.SetBoneKeyPositionFromPose()
+		SetBoneKeyPositionFromPose(v)
 	} else {
-		v.SetBoneKeyRotationFromPose()
+		SetBoneKeyRotationFromPose(v)
 	}
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	LogInfo("bone: added %s key at frame %d of bone %q", boneGroupLog(mode), frame, t.Name)
 	return true
 }
@@ -187,11 +187,11 @@ type boneKeyRef struct {
 // boneKeyRefs is every key of the picked bone's track in the order the panel
 // lists them: position keys first, rotation keys after, each kind in frame
 // order — which is the order the track itself keeps.
-func (v *modelViewer) BoneKeyRefs() []boneKeyRef {
+func BoneKeyRefs(v *modelViewer) []boneKeyRef {
 	if v == nil || v.Anim == nil {
 		return nil
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return nil
 	}
@@ -209,11 +209,11 @@ func (v *modelViewer) BoneKeyRefs() []boneKeyRef {
 // frame, or -1 when there is none. A key whose time rounds onto the frame
 // counts as being on it, since that is what the list and the strip both call
 // the frame it is on.
-func (v *modelViewer) BoneKeyIndexAtFrame(frame, mode int) int {
+func BoneKeyIndexAtFrame(v *modelViewer, frame, mode int) int {
 	if v == nil || v.Anim == nil {
 		return -1
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return -1
 	}
@@ -239,11 +239,11 @@ func (v *modelViewer) BoneKeyIndexAtFrame(frame, mode int) int {
 // and its frame, or no ref at all when nothing is picked. Unlike
 // boneKeyFrameAt it counts a key standing on frame zero, which is a real key
 // rather than the absence of one.
-func (v *modelViewer) PickedBoneKeyRef() (boneKeyRef, bool) {
-	if !v.PickedBoneKeyValid() {
+func PickedBoneKeyRef(v *modelViewer) (boneKeyRef, bool) {
+	if !PickedBoneKeyValid(v) {
 		return boneKeyRef{mode: -1}, false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	keyTime := float32(0)
 	if v.BoneKeyMode == 0 {
 		keyTime = t.PosKey[v.BoneKeyIndex].Time
@@ -258,12 +258,12 @@ func (v *modelViewer) PickedBoneKeyRef() (boneKeyRef, bool) {
 // kind, or −1 when the clip runs out first. That is where "+ before" and
 // "+ after" put the key they add: the neighbouring frame when it is free,
 // further out when a key already stands there.
-func (v *modelViewer) FreeBoneKeyFrame(from, mode, dir int) int {
+func FreeBoneKeyFrame(v *modelViewer, from, mode, dir int) int {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 || (dir != -1 && dir != 1) {
 		return -1
 	}
 	for f := from + dir; f >= 0 && f < v.Anim.NumFrames; f += dir {
-		if v.BoneKeyIndexAtFrame(f, mode) < 0 {
+		if BoneKeyIndexAtFrame(v, f, mode) < 0 {
 			return f
 		}
 	}
@@ -280,21 +280,21 @@ func (v *modelViewer) FreeBoneKeyFrame(from, mode, dir int) int {
 // The bool says whether a key was created. A key of that kind already on the
 // frame, a frame outside the clip, or a source that is not on the track all
 // leave it alone — two keys of one kind on a frame are the same frame twice.
-func (v *modelViewer) InsertBoneKeyCopy(frame, mode, srcFrame int) bool {
+func InsertBoneKeyCopy(v *modelViewer, frame, mode, srcFrame int) bool {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 || mode < 0 || mode > 1 {
 		return false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return false
 	}
 	frame = minInt(maxInt(frame, 0), v.Anim.NumFrames-1)
-	if v.BoneKeyIndexAtFrame(frame, mode) >= 0 {
+	if BoneKeyIndexAtFrame(v, frame, mode) >= 0 {
 		return false
 	}
 	now := timeForFrame(frame, v.Anim.NumFrames)
 	if mode == 0 {
-		src := v.BoneKeyIndexAtFrame(srcFrame, 0)
+		src := BoneKeyIndexAtFrame(v, srcFrame, 0)
 		if src < 0 {
 			return false
 		}
@@ -307,7 +307,7 @@ func (v *modelViewer) InsertBoneKeyCopy(frame, mode, srcFrame int) bool {
 		copy(t.PosKey[at+1:], t.PosKey[at:])
 		t.PosKey[at] = WhmKey3{Time: now, V: val}
 	} else {
-		src := v.BoneKeyIndexAtFrame(srcFrame, 1)
+		src := BoneKeyIndexAtFrame(v, srcFrame, 1)
 		if src < 0 {
 			return false
 		}
@@ -323,9 +323,9 @@ func (v *modelViewer) InsertBoneKeyCopy(frame, mode, srcFrame int) bool {
 	// The list grew at a known place: the new key is the one to aim the
 	// typed fields and the strip at, which is what the selection on show
 	// should be on anyway.
-	v.BoneKeyIndex, v.BoneKeyMode = v.BoneKeyIndexAtFrame(frame, mode), mode
+	v.BoneKeyIndex, v.BoneKeyMode = BoneKeyIndexAtFrame(v, frame, mode), mode
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	LogInfo("bone: added %s key at frame %d of bone %q (copied from frame %d)",
 		boneGroupLog(mode), frame, t.Name, srcFrame)
 	return true
@@ -336,15 +336,15 @@ func (v *modelViewer) InsertBoneKeyCopy(frame, mode, srcFrame int) bool {
 // at itself when an earlier key leaves — its index slides down with the
 // removal — and is cleared when the key removed is the picked one, so a later
 // typed apply is never aimed at whatever slid into the gap.
-func (v *modelViewer) DeleteBoneKeyAt(frame, mode int) bool {
+func DeleteBoneKeyAt(v *modelViewer, frame, mode int) bool {
 	if v == nil || v.Anim == nil {
 		return false
 	}
-	idx := v.BoneKeyIndexAtFrame(frame, mode)
+	idx := BoneKeyIndexAtFrame(v, frame, mode)
 	if idx < 0 {
 		return false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return false
 	}
@@ -370,14 +370,14 @@ func (v *modelViewer) DeleteBoneKeyAt(frame, mode int) bool {
 		return false
 	}
 	if pickedFrame >= 0 {
-		if at := v.BoneKeyIndexAtFrame(pickedFrame, mode); at >= 0 {
+		if at := BoneKeyIndexAtFrame(v, pickedFrame, mode); at >= 0 {
 			v.BoneKeyIndex, v.BoneKeyMode = at, mode
 		} else {
 			v.BoneKeyIndex, v.BoneKeyMode = -1, -1
 		}
 	}
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	return true
 }
 
@@ -385,11 +385,11 @@ func (v *modelViewer) DeleteBoneKeyAt(frame, mode int) bool {
 // shrink under the selection when a key is deleted or a drag drops one onto
 // another, and a button that acts on the picked key has to be off then rather
 // than aimed at whatever key slid into its place.
-func (v *modelViewer) PickedBoneKeyValid() bool {
+func PickedBoneKeyValid(v *modelViewer) bool {
 	if v == nil || v.Anim == nil || v.BoneKeyIndex < 0 || v.BoneKeyMode < 0 {
 		return false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return false
 	}
@@ -403,11 +403,11 @@ func (v *modelViewer) PickedBoneKeyValid() bool {
 // leaves nothing picked: the key it pointed at is gone, and promoting a
 // neighbour would silently aim the next typed apply at a key the reader never
 // chose. The list stays sorted because removal cannot unsort it.
-func (v *modelViewer) DeletePickedBoneKey() bool {
+func DeletePickedBoneKey(v *modelViewer) bool {
 	if v == nil || v.Anim == nil || v.BoneKeyIndex < 0 || v.BoneKeyMode < 0 {
 		return false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return false
 	}
@@ -431,7 +431,7 @@ func (v *modelViewer) DeletePickedBoneKey() bool {
 	}
 	v.BoneKeyIndex, v.BoneKeyMode = -1, -1
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	return true
 }
 
@@ -442,11 +442,11 @@ func (v *modelViewer) DeletePickedBoneKey() bool {
 // two keys of one kind on a frame are the same frame twice, and the key being
 // moved is the one the reader is dropping. The bool says whether anything
 // moved; a drop on the frame the key already sits on changes nothing.
-func (v *modelViewer) MovePickedBoneKeyToFrame(frame int) bool {
+func MovePickedBoneKeyToFrame(v *modelViewer, frame int) bool {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 || v.BoneKeyIndex < 0 || v.BoneKeyMode < 0 {
 		return false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return false
 	}
@@ -510,7 +510,7 @@ func (v *modelViewer) MovePickedBoneKeyToFrame(frame int) bool {
 		v.BoneKeyIndex = at
 	}
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	LogInfo("bone: moved %s key of bone %q to frame %d",
 		boneGroupLog(v.BoneKeyMode), t.Name, frame)
 	return true
@@ -596,11 +596,11 @@ func shiftKeyFrames(frames []int, moving map[int]bool, delta, n int) (target map
 // by one of those stays put rather than landing on it. The selection the
 // caller holds is remapped onto the frames the keys ended on, so a run of
 // shifts can carry a whole block along the clip without reselecting.
-func (v *modelViewer) ShiftBoneKeys(refs []boneKeyRef, delta int) (newRefs []boneKeyRef, moved, blocked int) {
+func ShiftBoneKeys(v *modelViewer, refs []boneKeyRef, delta int) (newRefs []boneKeyRef, moved, blocked int) {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 || delta == 0 {
 		return nil, 0, 0
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil {
 		return nil, 0, 0
 	}
@@ -696,7 +696,7 @@ func (v *modelViewer) ShiftBoneKeys(refs []boneKeyRef, delta int) (newRefs []bon
 	}
 	if moved > 0 {
 		v.PoseValid = false
-		v.Invalidate()
+		Invalidate(v)
 	}
 	return newRefs, moved, blocked
 }
@@ -712,11 +712,11 @@ func (v *modelViewer) ShiftBoneKeys(refs []boneKeyRef, delta int) (newRefs []bon
 // when the picked key is not a position key or the bone has no such key,
 // which is what lets a typed apply say nothing happened rather than write
 // into the wrong track.
-func (v *modelViewer) SetBoneKeyPosition(p [3]float32) bool {
+func SetBoneKeyPosition(v *modelViewer, p [3]float32) bool {
 	if v == nil || v.Anim == nil || v.BoneKeyMode != 0 || v.BoneKeyIndex < 0 {
 		return false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil || v.BoneKeyIndex >= len(t.PosKey) {
 		return false
 	}
@@ -726,17 +726,17 @@ func (v *modelViewer) SetBoneKeyPosition(p [3]float32) bool {
 	// rewritten key gives a different one: drop it so the viewport redraws
 	// the pose the edit produced rather than the one from before it.
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	return true
 }
 
 // setBoneKeyRotation writes a quaternion into the picked rotation key, for
 // the same reasons as setBoneKeyPosition.
-func (v *modelViewer) SetBoneKeyRotation(q [4]float32) bool {
+func SetBoneKeyRotation(v *modelViewer, q [4]float32) bool {
 	if v == nil || v.Anim == nil || v.BoneKeyMode != 1 || v.BoneKeyIndex < 0 {
 		return false
 	}
-	t := v.BoneTrack()
+	t := BoneTrack(v)
 	if t == nil || v.BoneKeyIndex >= len(t.RotKey) {
 		return false
 	}
@@ -744,7 +744,7 @@ func (v *modelViewer) SetBoneKeyRotation(q [4]float32) bool {
 	LogInfo("bone: stored rotation bone=%q key=%d = (%.3f %.3f %.3f %.3f)", t.Name, v.BoneKeyIndex, q[0], q[1], q[2], q[3])
 	// Same as setBoneKeyPosition: the cached pose predates the edit.
 	v.PoseValid = false
-	v.Invalidate()
+	Invalidate(v)
 	return true
 }
 
@@ -753,12 +753,12 @@ func (v *modelViewer) SetBoneKeyRotation(q [4]float32) bool {
 // frame on show. -1 means the picked bone has no such key in the clip at all.
 // Resolving the target the same way on the way in and on the way out is what
 // keeps the fields showing the values that pressing Enter would write.
-func (v *modelViewer) BoneKeyTarget(frame, mode int) int {
+func BoneKeyTarget(v *modelViewer, frame, mode int) int {
 	if v == nil || v.Anim == nil {
 		return -1
 	}
 	if v.BoneKeyMode == mode && v.BoneKeyIndex >= 0 {
-		if t := v.BoneTrack(); t != nil {
+		if t := BoneTrack(v); t != nil {
 			n := len(t.PosKey)
 			if mode == 1 {
 				n = len(t.RotKey)
@@ -768,15 +768,15 @@ func (v *modelViewer) BoneKeyTarget(frame, mode int) int {
 			}
 		}
 	}
-	return v.BoneKeyIndexForMode(frame, mode)
+	return BoneKeyIndexForMode(v, frame, mode)
 }
 
 // boneKeyIndexForMode is the index of the picked bone's key of the given mode
 // nearest to the frame, or -1 when the bone has no key of that kind. Unlike
 // boneKeyFrame there is no distance limit: an apply aims at the key it would
 // write, and the nearest one is it however far away it sits.
-func (v *modelViewer) BoneKeyIndexForMode(frame, mode int) int {
-	t := v.BoneTrack()
+func BoneKeyIndexForMode(v *modelViewer, frame, mode int) int {
+	t := BoneTrack(v)
 	if t == nil || v.Anim == nil {
 		return -1
 	}
@@ -806,11 +806,11 @@ func (v *modelViewer) BoneKeyIndexForMode(frame, mode int) int {
 // somewhere else: an edit only shows on the viewport where its key is, and
 // "applied" should be something the eye can confirm without hunting for the
 // frame. A playhead already on the frame is left where it is.
-func (v *modelViewer) WindToPickedBoneKey() {
+func WindToPickedBoneKey(v *modelViewer) {
 	if v == nil || v.Anim == nil {
 		return
 	}
-	track := v.BoneTrack()
+	track := BoneTrack(v)
 	if track == nil || v.BoneKeyIndex < 0 {
 		return
 	}
@@ -830,8 +830,8 @@ func (v *modelViewer) WindToPickedBoneKey() {
 		return
 	}
 	frame := frameAt(float64(keyTime), v.Anim.NumFrames)
-	if cur, _ := v.CurrentFrame(); frame != cur {
-		v.SeekFrame(frame)
+	if cur, _ := CurrentFrame(v); frame != cur {
+		SeekFrame(v, frame)
 	}
 }
 

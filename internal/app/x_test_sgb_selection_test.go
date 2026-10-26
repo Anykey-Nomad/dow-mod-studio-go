@@ -633,13 +633,13 @@ func TestSgbTerrainTextureRealMap(t *testing.T) {
 	v.MaxDistance = v.FitDistance
 	v.Distance = d
 	for range 100 {
-		v.ZoomBy(0.5)
+		ZoomBy(v, 0.5)
 	}
 	if v.Distance < sgbCameraMinDistance-1e-9 {
 		t.Errorf("zoomed past the minimum: %v", v.Distance)
 	}
 	for range 100 {
-		v.ZoomBy(2)
+		ZoomBy(v, 2)
 	}
 	if v.Distance > v.FitDistance+1e-9 {
 		t.Errorf("zoomed past the fit: %v", v.Distance)

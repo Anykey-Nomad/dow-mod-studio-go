@@ -30,7 +30,7 @@ func TestMeshVisibilityTogglesAndMeshAlphas(t *testing.T) {
 
 	v := newModelViewer(model, "")
 	// Nothing hidden and no clip playing: nil means every mesh is drawn whole.
-	if got := v.MeshAlphas(); got != nil {
+	if got := MeshAlphas(v); got != nil {
 		t.Fatalf("meshAlphas with nothing hidden = %v, want nil", got)
 	}
 
@@ -38,7 +38,7 @@ func TestMeshVisibilityTogglesAndMeshAlphas(t *testing.T) {
 	if !meshHidden("body") || !meshHidden("Body") {
 		t.Error("a mesh hidden under one casing is not hidden under another")
 	}
-	alphas := v.MeshAlphas()
+	alphas := MeshAlphas(v)
 	if a, ok := alphas["body"]; !ok || a != 0 {
 		t.Errorf("hidden mesh alpha = %v (present %v), want 0 present", a, ok)
 	}
@@ -50,7 +50,7 @@ func TestMeshVisibilityTogglesAndMeshAlphas(t *testing.T) {
 	if meshHidden("body") {
 		t.Error("showing a mesh left it hidden")
 	}
-	if got := v.MeshAlphas(); got != nil {
+	if got := MeshAlphas(v); got != nil {
 		t.Fatalf("meshAlphas after showing = %v, want nil", got)
 	}
 }
