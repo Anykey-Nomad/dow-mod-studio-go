@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"image/color"
@@ -599,8 +600,8 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 		// that keeps sounding behind another section is a leak, not a feature.
 		// The Classic OE double-click dialog is the exception: while it is
 		// up, the editors it embeds are the section, wherever the panel sits.
-		if ui.EvtPlayer.playing || ui.EvtPlayer.audition != nil {
-			ui.EvtPlayer.stopAll()
+		if ui.EvtPlayer.Playing || ui.EvtPlayer.Audition != nil {
+			ui.EvtPlayer.StopAll()
 		}
 		return
 	}
@@ -653,7 +654,7 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 			// The panel leaves the timeline behind completely, and a sound
 			// it was auditioning belongs to that timeline.
 			if !ui.UnitEvtFocusAction {
-				ui.EvtPlayer.stopAll()
+				ui.EvtPlayer.StopAll()
 			}
 			ui.UnitEvtFocusAction = true
 			ui.UnitEvtActionSel = i
@@ -835,7 +836,7 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 func UnitEvtUpdateEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, pick evtPickTarget, batchTime bool) {
 	ed.SingleLine = true
 	ed.Submit = true
-	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
 		// A field with a list opens its picker instead of taking the caret: the
 		// picker's own filter takes the typing.
 		if pick != evtPickNone {
@@ -868,7 +869,7 @@ func UnitEvtUpdateShiftEditor(ui *uiState, gtx layout.Context) {
 	ed := &ui.UnitEvtShiftEd
 	ed.SingleLine = true
 	ed.Submit = true
-	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	for {
@@ -2439,7 +2440,7 @@ func UnitActUpdateNameEditor(ui *uiState, gtx layout.Context) {
 	ed := &ui.UnitActNameEd
 	ed.SingleLine = true
 	ed.Submit = true
-	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	if !ed.Focused(gtx) {
@@ -2522,7 +2523,7 @@ func RenameSelectedUnitAction(ui *uiState) {
 func UnitActUpdateEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, row int) {
 	ed.SingleLine = true
 	ed.Submit = true
-	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
 		ui.UnitActSel = row
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
@@ -3808,7 +3809,7 @@ func UnitEventPanelForm(ui *uiState, gtx layout.Context) layout.Dimensions {
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return SmallButtonDisabled(ui, gtx, &ui.EvtPlayer.playEv, "▶ Sound", !UnitEvtSelectedIsSound(ui))
+					return SmallButtonDisabled(ui, gtx, &ui.EvtPlayer.PlayEv, "▶ Sound", !UnitEvtSelectedIsSound(ui))
 				}),
 			)
 		}),
@@ -4052,8 +4053,7 @@ func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.F
 // opens this picker over the object window. A value typed in the picker's
 // filter is used as it is, for a name or path the list does not carry.
 
-// evtPickTarget is the event field a picker fills in.
-type evtPickTarget int
+type evtPickTarget = uistate.EvtPickTarget
 
 const (
 	evtPickNone evtPickTarget = iota
@@ -4067,33 +4067,18 @@ const (
 // effects does not lay out hundreds of rows a frame.
 const evtPickerMaxHits = 300
 
-// evtPicker is the list dialog. all is every value the target can take, hits
-// is what the filter lets through, and clicks has one entry per hit.
-type evtPicker struct {
-	open   bool
-	target evtPickTarget
-	ed     widget.Editor
-	filter string
-	all    []string
-	hits   []string
-	clicks []widget.Clickable
-	list   layout.List
-
-	useTyped widget.Clickable
-	browse   widget.Clickable
-	cancel   widget.Clickable
-}
+type evtPicker = uistate.EvtPicker
 
 // openEvtPicker shows the list for one field, with every value of it ready.
 func OpenEvtPicker(ui *uiState, t evtPickTarget) {
 	p := &ui.EvtPick
-	p.open = true
-	p.target = t
-	p.all = EvtPickerItems(ui, t)
-	p.ed.SingleLine = true
-	p.ed.Submit = true
-	p.ed.SetText("")
-	p.filter = ""
+	p.Open = true
+	p.Target = t
+	p.All = EvtPickerItems(ui, t)
+	p.Ed.SingleLine = true
+	p.Ed.Submit = true
+	p.Ed.SetText("")
+	p.Filter = ""
 	RefreshEvtPickerHits(ui)
 }
 
@@ -4175,17 +4160,17 @@ func evtTreeFolderFiles(tree *modtree.ModTree, folder string, exts []string, kee
 // refreshEvtPickerHits filters the list by what is in the filter box.
 func RefreshEvtPickerHits(ui *uiState) {
 	p := &ui.EvtPick
-	q := strings.ToLower(strings.TrimSpace(p.filter))
-	p.hits = p.hits[:0]
-	for _, s := range p.all {
+	q := strings.ToLower(strings.TrimSpace(p.Filter))
+	p.Hits = p.Hits[:0]
+	for _, s := range p.All {
 		if q == "" || strings.Contains(strings.ToLower(s), q) {
-			p.hits = append(p.hits, s)
-			if len(p.hits) >= evtPickerMaxHits {
+			p.Hits = append(p.Hits, s)
+			if len(p.Hits) >= evtPickerMaxHits {
 				break
 			}
 		}
 	}
-	p.clicks = make([]widget.Clickable, len(p.hits))
+	p.Clicks = make([]widget.Clickable, len(p.Hits))
 }
 
 // handleEvtPickerInput is the picker's input: typing narrows the list, a row
@@ -4195,7 +4180,7 @@ func HandleEvtPickerInput(ui *uiState, gtx layout.Context) {
 	p := &ui.EvtPick
 	submitted := false
 	for {
-		ev, ok := p.ed.Update(gtx)
+		ev, ok := p.Ed.Update(gtx)
 		if !ok {
 			break
 		}
@@ -4203,27 +4188,27 @@ func HandleEvtPickerInput(ui *uiState, gtx layout.Context) {
 			submitted = true
 		}
 	}
-	if text := strings.TrimSpace(p.ed.Text()); text != p.filter {
-		p.filter = text
+	if text := strings.TrimSpace(p.Ed.Text()); text != p.Filter {
+		p.Filter = text
 		RefreshEvtPickerHits(ui)
 	}
-	if p.cancel.Clicked(gtx) {
-		p.open = false
+	if p.Cancel.Clicked(gtx) {
+		p.Open = false
 		return
 	}
-	if p.target == evtPickSound && p.browse.Clicked(gtx) {
-		p.open = false
+	if p.Target == evtPickSound && p.Browse.Clicked(gtx) {
+		p.Open = false
 		OpenSoundFilePicker(ui)
 		return
 	}
-	for i := range p.clicks {
-		if p.clicks[i].Clicked(gtx) && i < len(p.hits) {
-			ApplyEvtPick(ui, p.target, p.hits[i])
+	for i := range p.Clicks {
+		if p.Clicks[i].Clicked(gtx) && i < len(p.Hits) {
+			ApplyEvtPick(ui, p.Target, p.Hits[i])
 			return
 		}
 	}
-	if p.useTyped.Clicked(gtx) || submitted {
-		ApplyEvtPick(ui, p.target, p.filter)
+	if p.UseTyped.Clicked(gtx) || submitted {
+		ApplyEvtPick(ui, p.Target, p.Filter)
 	}
 }
 
@@ -4232,7 +4217,7 @@ func HandleEvtPickerInput(ui *uiState, gtx layout.Context) {
 // its definition holds, so the form shows what picking it will fire.
 func ApplyEvtPick(ui *uiState, t evtPickTarget, value string) {
 	value = strings.TrimSpace(value)
-	ui.EvtPick.open = false
+	ui.EvtPick.Open = false
 	if value == "" {
 		return
 	}
@@ -4269,12 +4254,12 @@ func ApplyEvtPick(ui *uiState, t evtPickTarget, value string) {
 // dialog.
 func OpenSoundFilePicker(ui *uiState) {
 	OpenFilePicker(ui, pickConfig{
-		title:    "Choose a sound",
-		subtitle: "An .fda from the mod file tree; a .wav is converted to .fda in this mod",
-		hint:     `Data\sound\...`,
-		exts:     []string{".fda", ".wav"},
-		modTree:  true,
-		onPick: func(path string) (bool, string) {
+		Title:    "Choose a sound",
+		Subtitle: "An .fda from the mod file tree; a .wav is converted to .fda in this mod",
+		Hint:     `Data\sound\...`,
+		Exts:     []string{".fda", ".wav"},
+		ModTree:  true,
+		OnPick: func(path string) (bool, string) {
 			field, err := SoundFieldFor(ui, path)
 			if err != nil {
 				return false, err.Error()
@@ -4398,7 +4383,7 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Top: unit.Dp(14), Bottom: unit.Dp(14), Left: unit.Dp(14), Right: unit.Dp(14)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.Th, unit.Sp(14), evtPickerTitle(p.target))
+										l := material.Label(ui.Th, unit.Sp(14), evtPickerTitle(p.Target))
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
@@ -4409,19 +4394,19 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 										gtx.Constraints.Max.Y = h
 										return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 											return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												ed := material.Editor(ui.Th, &p.ed, "")
-												ed.TextSize = unit.Sp(11)
-												ed.HintColor = cTextDim
-												ed.Hint = "filter, or type a value"
-												return ed.Layout(gtx)
+												Ed := material.Editor(ui.Th, &p.Ed, "")
+												Ed.TextSize = unit.Sp(11)
+												Ed.HintColor = cTextDim
+												Ed.Hint = "filter, or type a value"
+												return Ed.Layout(gtx)
 											})
 										})
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										note := "Nothing to choose from here: type the value."
-										if len(p.all) > 0 {
-											note = strconv.Itoa(len(p.hits)) + " of " + strconv.Itoa(len(p.all)) + " shown"
+										if len(p.All) > 0 {
+											note = strconv.Itoa(len(p.Hits)) + " of " + strconv.Itoa(len(p.All)) + " shown"
 										}
 										l := material.Label(ui.Th, unit.Sp(9), note)
 										l.Color = cTextDim
@@ -4429,9 +4414,9 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 										return l.Layout(gtx)
 									}),
 									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-										return LayoutListWithScrollbar(ui, gtx, nil, &p.list, unitRowHeightDp, len(p.hits), func(gtx layout.Context, i int) layout.Dimensions {
-											return p.clicks[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.Th, unit.Sp(10), p.hits[i])
+										return LayoutListWithScrollbar(ui, gtx, nil, &p.List, unitRowHeightDp, len(p.Hits), func(gtx layout.Context, i int) layout.Dimensions {
+											return p.Clicks[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+												l := material.Label(ui.Th, unit.Sp(10), p.Hits[i])
 												l.Color = cText
 												l.MaxLines = 1
 												return layout.Inset{Top: unit.Dp(3), Bottom: unit.Dp(3), Left: unit.Dp(6)}.Layout(gtx, l.Layout)
@@ -4441,21 +4426,21 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 									layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										children := []layout.FlexChild{}
-										if p.target == evtPickSound {
+										if p.Target == evtPickSound {
 											children = append(children,
 												layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-													return SmallButton(ui, gtx, &p.browse, "Browse file...")
+													return SmallButton(ui, gtx, &p.Browse, "Browse file...")
 												}),
 												layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 											)
 										}
 										children = append(children,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return SmallButton(ui, gtx, &p.useTyped, "Use typed")
+												return SmallButton(ui, gtx, &p.UseTyped, "Use typed")
 											}),
 											layout.Flexed(1, layout.Spacer{Width: unit.Dp(0)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return SmallButton(ui, gtx, &p.cancel, "Cancel")
+												return SmallButton(ui, gtx, &p.Cancel, "Cancel")
 											}),
 										)
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
@@ -4483,85 +4468,14 @@ func LayoutEvtPicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 // fire by crossing their moment rather than by landing on it, so a dropped
 // frame skips nothing.
 
-// unitEvtFire is one sound of a timeline playback: when it fires (in the
-// timeline's own seconds, sentinels already resolved) and the sound path its
-// definition names.
-type unitEvtFire struct {
-	at   float64
-	name string
-	path string
-}
+type unitEvtFire = uistate.UnitEvtFire
 
-// unitEvtPlayer holds everything the Events section's audio needs. It is a
-// value on uiState rather than a pointer built on demand, because the click
-// widgets inside it must keep their identity across frames.
-type unitEvtPlayer struct {
-	playEv widget.Clickable // play the selected event's sound
-	tlPlay widget.Clickable // play / pause / resume the selected timeline
-	tlStop widget.Clickable // stop the timeline playback
-	scrub  struct{}         // pointer tag of the scrub strip
-
-	// audition is the single event's sound while it sounds.
-	audition *fx.SoundVoice
-
-	// Timeline playback state.
-	playing  bool
-	paused   bool
-	dragging bool
-	// forTimeline and forDoc pin the playback to the selection it was started
-	// from: picking another timeline or another .whe under a playing one
-	// stops it rather than leaving sounds firing for a list not on screen.
-	forTimeline string
-	forDoc      *whe.Document
-	pos         float64 // playhead, seconds into the timeline
-	duration    float64 // moment of the last timed event
-	last        time.Time
-	order       []unitEvtFire
-	next        int
-	voices      []*fx.SoundVoice
-	// cache keys decoded samples by the file picked to play them, so a
-	// footstep fired at five moments is decoded once.
-	cache map[string]*fx.SoundSample
-}
-
-func (p *unitEvtPlayer) stopVoices() {
-	for _, v := range p.voices {
-		v.Stop()
-	}
-	p.voices = nil
-}
-
-func (p *unitEvtPlayer) expire() {
-	now := time.Now()
-	kept := p.voices[:0]
-	for _, v := range p.voices {
-		if now.Before(v.EndsAt) {
-			kept = append(kept, v)
-			continue
-		}
-		v.Stop()
-	}
-	p.voices = kept
-}
-
-func (p *unitEvtPlayer) stopAll() {
-	p.stopVoices()
-	if p.audition != nil {
-		p.audition.Stop()
-		p.audition = nil
-	}
-	p.playing = false
-	p.paused = false
-	p.dragging = false
-	p.pos = 0
-	p.next = 0
-	p.order = nil
-}
+type unitEvtPlayer = uistate.UnitEvtPlayer
 
 // evtPlayerStopAll is the section's exit hook: it only touches anything when
 // something is actually sounding, so the per-frame call is free.
 func EvtPlayerStopAll(ui *uiState) {
-	ui.EvtPlayer.stopAll()
+	ui.EvtPlayer.StopAll()
 }
 
 // unitEvtStartVoice hands one decoded sample to a fresh oto player, the same
@@ -4588,8 +4502,8 @@ func unitEvtStartVoice(s *fx.SoundSample) (*fx.SoundVoice, error) {
 // the game, but a preview the user is checking wants the same answer twice.
 func UnitEvtLoadSound(ui *uiState, p string) (*fx.SoundSample, string, error) {
 	pl := &ui.EvtPlayer
-	if pl.cache == nil {
-		pl.cache = map[string]*fx.SoundSample{}
+	if pl.Cache == nil {
+		pl.Cache = map[string]*fx.SoundSample{}
 	}
 	if ui.ModTree == nil {
 		return nil, "", fmt.Errorf("no mod is loaded")
@@ -4600,14 +4514,14 @@ func UnitEvtLoadSound(ui *uiState, p string) (*fx.SoundSample, string, error) {
 		return nil, "", whe.SoundMissing(p)
 	}
 	file := b.Files[0]
-	if s, done := pl.cache[file]; done {
+	if s, done := pl.Cache[file]; done {
 		return s, file, nil
 	}
 	s, err := fxSoundDecodeForPlayback(ui.ModTree, roots, file)
 	if err != nil {
 		return nil, file, err
 	}
-	pl.cache[file] = s
+	pl.Cache[file] = s
 	return s, file, nil
 }
 
@@ -4654,9 +4568,9 @@ func UnitEvtPlaySelectedSound(ui *uiState) {
 		return
 	}
 	p := &ui.EvtPlayer
-	if p.audition != nil {
-		p.audition.Stop()
-		p.audition = nil
+	if p.Audition != nil {
+		p.Audition.Stop()
+		p.Audition = nil
 	}
 	s, file, err := UnitEvtLoadSound(ui, path)
 	if err != nil {
@@ -4668,7 +4582,7 @@ func UnitEvtPlaySelectedSound(ui *uiState) {
 		ui.StatusText = "Play failed: " + err.Error()
 		return
 	}
-	p.audition = v
+	p.Audition = v
 	ui.StatusText = "Playing " + filepath.Base(file)
 }
 
@@ -4699,54 +4613,37 @@ func UnitEvtTimelinePlay(ui *uiState, gtx layout.Context) {
 		if at >= 0 && at <= 1e30 && at > duration {
 			duration = at
 		}
-		order = append(order, unitEvtFire{at: at, name: ev.Name, path: strings.TrimSpace(path)})
+		order = append(order, unitEvtFire{At: at, Name: ev.Name, Path: strings.TrimSpace(path)})
 	}
 	if len(order) == 0 {
 		ui.StatusText = "No sounds fire on " + tl.Name
 		return
 	}
-	sort.SliceStable(order, func(i, j int) bool { return order[i].at < order[j].at })
+	sort.SliceStable(order, func(i, j int) bool { return order[i].At < order[j].At })
 	// After the sort, so entry events stay ahead of everything timed at zero
 	// and exit events behind everything else.
 	for i := range order {
 		switch {
-		case order[i].at < 0:
-			order[i].at = 0
-		case order[i].at > 1e30:
-			order[i].at = duration
+		case order[i].At < 0:
+			order[i].At = 0
+		case order[i].At > 1e30:
+			order[i].At = duration
 		}
 	}
-	p.stopVoices()
-	p.order = order
-	p.duration = duration
-	p.pos = 0
-	p.next = 0
-	p.playing = true
-	p.paused = false
-	p.forTimeline = tl.Name
-	p.forDoc = ui.UnitEvtDoc
-	p.last = gtx.Now
-	if p.last.IsZero() {
-		p.last = time.Now()
+	p.StopVoices()
+	p.Order = order
+	p.Duration = duration
+	p.Pos = 0
+	p.Next = 0
+	p.Playing = true
+	p.Paused = false
+	p.ForTimeline = tl.Name
+	p.ForDoc = ui.UnitEvtDoc
+	p.Last = gtx.Now
+	if p.Last.IsZero() {
+		p.Last = time.Now()
 	}
 	ui.StatusText = fmt.Sprintf("Playing %s: %d sounds over %.2fs", tl.Name, len(order), duration)
-}
-
-// unitEvtPlayerSeek winds the playhead to a fraction of the timeline's length.
-// Everything sounding stops, and the fire cursor moves with the playhead, so a
-// sound already passed stays quiet until the playhead is wound back before it.
-func (p *unitEvtPlayer) seek(frac float64) {
-	if !p.playing {
-		return
-	}
-	p.pos = frac * p.duration
-	p.stopVoices()
-	for p.next > 0 && p.order[p.next-1].at > p.pos {
-		p.next--
-	}
-	for p.next < len(p.order) && p.order[p.next].at <= p.pos {
-		p.next++
-	}
 }
 
 // unitEvtPlayerTick is one frame of the transport. It reads the three buttons,
@@ -4755,36 +4652,36 @@ func (p *unitEvtPlayer) seek(frac float64) {
 // running when the user touches nothing.
 func UnitEvtPlayerTick(ui *uiState, gtx layout.Context) {
 	p := &ui.EvtPlayer
-	if p.playing && (p.forDoc != ui.UnitEvtDoc || p.forTimeline != ui.UnitEvtTimeline) {
-		p.stopAll()
+	if p.Playing && (p.ForDoc != ui.UnitEvtDoc || p.ForTimeline != ui.UnitEvtTimeline) {
+		p.StopAll()
 	}
-	if p.tlStop.Clicked(gtx) {
-		p.stopAll()
+	if p.TlStop.Clicked(gtx) {
+		p.StopAll()
 		ui.StatusText = "Playback stopped"
 	}
-	if p.tlPlay.Clicked(gtx) {
-		if p.playing {
-			p.paused = !p.paused
+	if p.TlPlay.Clicked(gtx) {
+		if p.Playing {
+			p.Paused = !p.Paused
 		} else {
 			UnitEvtTimelinePlay(ui, gtx)
 		}
 	}
-	if p.playEv.Clicked(gtx) {
+	if p.PlayEv.Clicked(gtx) {
 		UnitEvtPlaySelectedSound(ui)
 	}
-	if p.audition != nil && !time.Now().Before(p.audition.EndsAt) {
-		p.audition.Stop()
-		p.audition = nil
+	if p.Audition != nil && !time.Now().Before(p.Audition.EndsAt) {
+		p.Audition.Stop()
+		p.Audition = nil
 	}
-	if !p.playing {
+	if !p.Playing {
 		return
 	}
 	now := gtx.Now
 	if now.IsZero() {
 		now = time.Now()
 	}
-	dt := now.Sub(p.last).Seconds()
-	p.last = now
+	dt := now.Sub(p.Last).Seconds()
+	p.Last = now
 	if dt < 0 {
 		dt = 0
 	}
@@ -4793,28 +4690,28 @@ func UnitEvtPlayerTick(ui *uiState, gtx layout.Context) {
 	if dt > 0.25 {
 		dt = 0.25
 	}
-	if !p.paused && !p.dragging {
-		p.pos += dt
+	if !p.Paused && !p.Dragging {
+		p.Pos += dt
 	}
-	for p.next < len(p.order) && p.order[p.next].at <= p.pos {
-		f := p.order[p.next]
-		p.next++
-		s, _, err := UnitEvtLoadSound(ui, f.path)
+	for p.Next < len(p.Order) && p.Order[p.Next].At <= p.Pos {
+		f := p.Order[p.Next]
+		p.Next++
+		s, _, err := UnitEvtLoadSound(ui, f.Path)
 		if err != nil {
-			log.Printf("evt play: %s: %v", f.name, err)
+			log.Printf("evt play: %s: %v", f.Name, err)
 			continue
 		}
 		v, err := unitEvtStartVoice(s)
 		if err != nil {
-			log.Printf("evt play: %s: %v", f.name, err)
+			log.Printf("evt play: %s: %v", f.Name, err)
 			continue
 		}
-		p.voices = append(p.voices, v)
+		p.Voices = append(p.Voices, v)
 	}
-	p.expire()
-	if p.pos >= p.duration && len(p.voices) == 0 {
-		p.playing = false
-		p.paused = false
+	p.Expire()
+	if p.Pos >= p.Duration && len(p.Voices) == 0 {
+		p.Playing = false
+		p.Paused = false
 	}
 	gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
 }
@@ -4827,8 +4724,8 @@ func LayoutUnitEvtTransport(ui *uiState, gtx layout.Context) layout.Dimensions {
 	p := &ui.EvtPlayer
 	noTl := ui.UnitEvtDoc == nil || SelectedUnitEventTimeline(ui) == nil
 	btn := "Play"
-	if p.playing {
-		if p.paused {
+	if p.Playing {
+		if p.Paused {
 			btn = "Resume"
 		} else {
 			btn = "Pause"
@@ -4837,17 +4734,17 @@ func LayoutUnitEvtTransport(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return SmallButtonDisabled(ui, gtx, &p.tlPlay, btn, noTl)
+				return SmallButtonDisabled(ui, gtx, &p.TlPlay, btn, noTl)
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return SmallButtonDisabled(ui, gtx, &p.tlStop, "Stop", !p.playing)
+				return SmallButtonDisabled(ui, gtx, &p.TlStop, "Stop", !p.Playing)
 			}),
 			layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				text := ""
-				if p.playing || p.pos > 0 {
-					text = fmt.Sprintf("%.2f / %.2f s", p.pos, p.duration)
+				if p.Playing || p.Pos > 0 {
+					text = fmt.Sprintf("%.2f / %.2f s", p.Pos, p.Duration)
 				}
 				l := material.Label(ui.Th, unit.Sp(9), text)
 				l.Color = cTextDim
@@ -4876,16 +4773,16 @@ func LayoutUnitEvtScrub(ui *uiState, gtx layout.Context, hDp int) layout.Dimensi
 	gtx.Constraints.Min = image.Pt(w, h)
 	gtx.Constraints.Max = image.Pt(w, h)
 	frac := 0.0
-	if p.duration > 0 {
-		frac = math.Max(0, math.Min(1, p.pos/p.duration))
+	if p.Duration > 0 {
+		frac = math.Max(0, math.Min(1, p.Pos/p.Duration))
 	}
 	posX := int(float64(w) * frac)
 	// Input first: the strip registers itself, reads whatever the pointer did
 	// to it, and only then draws at the position those events settled on.
 	stack := clip.Rect{Max: image.Pt(w, h)}.Push(gtx.Ops)
-	event.Op(gtx.Ops, &p.scrub)
+	event.Op(gtx.Ops, &p.Scrub)
 	for {
-		ev, ok := gtx.Event(pointer.Filter{Target: &p.scrub, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel})
+		ev, ok := gtx.Event(pointer.Filter{Target: &p.Scrub, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel})
 		if !ok {
 			break
 		}
@@ -4895,14 +4792,14 @@ func LayoutUnitEvtScrub(ui *uiState, gtx layout.Context, hDp int) layout.Dimensi
 		}
 		switch e.Kind {
 		case pointer.Press, pointer.Drag:
-			if !p.playing {
+			if !p.Playing {
 				break
 			}
 			f := float64(e.Position.X) / float64(w)
-			p.dragging = true
-			p.seek(math.Max(0, math.Min(1, f)))
+			p.Dragging = true
+			p.Seek(math.Max(0, math.Min(1, f)))
 		case pointer.Release, pointer.Cancel:
-			p.dragging = false
+			p.Dragging = false
 		}
 	}
 	stack.Pop()
@@ -4910,9 +4807,9 @@ func LayoutUnitEvtScrub(ui *uiState, gtx layout.Context, hDp int) layout.Dimensi
 	if posX > 0 {
 		unitEvtFillRect(gtx, image.Rect(0, 0, posX, h), cSelectBg)
 	}
-	if p.duration > 0 {
-		for _, f := range p.order {
-			x := int(float64(w) * (f.at / p.duration))
+	if p.Duration > 0 {
+		for _, f := range p.Order {
+			x := int(float64(w) * (f.At / p.Duration))
 			if x < 0 {
 				x = 0
 			}

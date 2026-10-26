@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"dow-mod-studio/internal/app/uistate"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -25,26 +26,14 @@ import (
 	"gioui.org/widget/material"
 )
 
-type imageDecodeResult struct {
-	data    image.Image
-	mipmaps []image.Image
-	format  string
-	bytes   int
-	err     error
-}
+type imageDecodeResult = uistate.ImageDecodeResult
 
 const (
 	imageCacheMaxBytes   int64 = 256 << 20
 	imageCacheMaxEntries       = 16
 )
 
-type imageCacheEntry struct {
-	data     image.Image
-	mipmaps  []image.Image
-	format   string
-	bytes    int
-	cachedAt uint64
-}
+type imageCacheEntry = uistate.ImageCacheEntry
 
 func imageCacheKey(path string) string {
 	return strings.ToLower(filepath.Clean(path))
@@ -60,7 +49,7 @@ func CachedImage(ui *uiState, path string) (imageCacheEntry, bool) {
 		return imageCacheEntry{}, false
 	}
 	ui.ImageCacheSeq++
-	entry.cachedAt = ui.ImageCacheSeq
+	entry.CachedAt = ui.ImageCacheSeq
 	ui.ImageCache[key] = entry
 	return entry, true
 }
@@ -86,19 +75,19 @@ func CacheDecodedImage(ui *uiState, path string, data image.Image, mipmaps []ima
 	}
 	ui.ImageCacheSeq++
 	ui.ImageCache[key] = imageCacheEntry{
-		data:     data,
-		mipmaps:  append([]image.Image(nil), mipmaps...),
-		format:   strings.ToUpper(format),
-		bytes:    bytes,
-		cachedAt: ui.ImageCacheSeq,
+		Data:     data,
+		Mipmaps:  append([]image.Image(nil), mipmaps...),
+		Format:   strings.ToUpper(format),
+		Bytes:    bytes,
+		CachedAt: ui.ImageCacheSeq,
 	}
 	ui.ImageCacheBytes += cost
 	for len(ui.ImageCache) > imageCacheMaxEntries || ui.ImageCacheBytes > imageCacheMaxBytes {
 		var oldestKey string
 		var oldestAt uint64
 		for k, entry := range ui.ImageCache {
-			if oldestKey == "" || entry.cachedAt < oldestAt {
-				oldestKey, oldestAt = k, entry.cachedAt
+			if oldestKey == "" || entry.CachedAt < oldestAt {
+				oldestKey, oldestAt = k, entry.CachedAt
 			}
 		}
 		if oldestKey == "" {
@@ -110,10 +99,10 @@ func CacheDecodedImage(ui *uiState, path string, data image.Image, mipmaps []ima
 }
 
 func imageCacheEntryCost(entry imageCacheEntry) int64 {
-	if len(entry.mipmaps) > 0 {
-		return imageImagesCost(entry.mipmaps)
+	if len(entry.Mipmaps) > 0 {
+		return imageImagesCost(entry.Mipmaps)
 	}
-	return imageImagesCost([]image.Image{entry.data})
+	return imageImagesCost([]image.Image{entry.Data})
 }
 
 func imageImagesCost(images []image.Image) int64 {
@@ -149,11 +138,11 @@ func OpenImage(ui *uiState, virtualPath string) {
 		t := &fileTab{
 			Path:          virtualPath,
 			Kind:          "image",
-			ImageData:     entry.data,
-			ImageMipmaps:  append([]image.Image(nil), entry.mipmaps...),
+			ImageData:     entry.Data,
+			ImageMipmaps:  append([]image.Image(nil), entry.Mipmaps...),
 			ImageMipLevel: 0,
-			ImageBytes:    entry.bytes,
-			ImageFormat:   entry.format,
+			ImageBytes:    entry.Bytes,
+			ImageFormat:   entry.Format,
 			ImageFit:      false,
 			ImageZoom:     1,
 		}
@@ -186,13 +175,13 @@ func StartImageDecode(ui *uiState, t *fileTab, tree *modtree.ModTree) {
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(t.Path)), ".")
 	path := t.Path
 	go func() {
-		result := imageDecodeResult{format: strings.ToUpper(format)}
+		result := imageDecodeResult{Format: strings.ToUpper(format)}
 		data, err := tree.ReadFile(path)
-		result.bytes = len(data)
+		result.Bytes = len(data)
 		if err == nil {
-			result.data, result.mipmaps, result.format, err = decodeImageDataWithMips(data, format)
+			result.Data, result.Mipmaps, result.Format, err = decodeImageDataWithMips(data, format)
 		}
-		result.err = err
+		result.Err = err
 		select {
 		case ch <- result:
 		case <-ctx.Done():
@@ -215,13 +204,13 @@ func PollImageDecodes(ui *uiState) {
 				t.ImageDecodeStop = nil
 			}
 			t.ImageLoading = false
-			t.ImageBytes = result.bytes
-			t.ImageFormat = strings.ToUpper(result.format)
-			t.ImageData = result.data
-			t.ImageMipmaps = result.mipmaps
+			t.ImageBytes = result.Bytes
+			t.ImageFormat = strings.ToUpper(result.Format)
+			t.ImageData = result.Data
+			t.ImageMipmaps = result.Mipmaps
 			t.ImageMipLevel = 0
-			if result.err != nil {
-				t.ImageError = result.err.Error()
+			if result.Err != nil {
+				t.ImageError = result.Err.Error()
 				if ActiveTab(ui) == t {
 					ui.StatusText = fmt.Sprintf("Failed to open %s: %s", filepath.Base(t.Path), t.ImageError)
 				}

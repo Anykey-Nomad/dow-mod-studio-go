@@ -2,6 +2,7 @@ package app
 
 import (
 	"dow-mod-studio/internal/app/render"
+	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/cliphist"
 	"encoding/json"
 	"fmt"
@@ -308,7 +309,7 @@ func RestoreSavedTab(ui *uiState, saved persistedTab) {
 type (
 	clipKind      = cliphist.ClipKind
 	clipEntry     = cliphist.ClipEntry
-	clipHistory   = cliphist.ClipHistory
+	clipHistory   = uistate.ClipHistory
 	boneKeyClip   = cliphist.BoneKeyClip
 	wheEventClip  = cliphist.WheEventClip
 	wheActionClip = cliphist.WheActionClip

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"log"
@@ -8,14 +9,12 @@ import (
 	"strings"
 	"time"
 
-	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/raster"
 	"dow-mod-studio/internal/whm"
 	"gioui.org/layout"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
-	"github.com/fogleman/fauxgl"
 )
 
 const whmGroundTexture = unitGroundTexture
@@ -413,11 +412,9 @@ func orDash(s string) string {
 // the model — pose, markers, alpha — and Go does not allow methods on a
 // non-local type. The embedded field promotes every field the parser fills,
 // so the rest of the code reads m.Bones and friends unchanged.
-type WhmModel struct {
-	whm.Model
-}
+type WhmModel = uistate.WhmModel
 
-type WhmPose = whm.Pose
+type WhmPose = uistate.WhmPose
 
 var boneRootFrame = whm.RootFrame
 
@@ -427,13 +424,13 @@ type (
 	WhmBone         = whm.Bone
 	WhmMarker       = whm.Marker
 	WhmCamera       = whm.Camera
-	WhmKey3         = whm.Key3
-	WhmKey4         = whm.Key4
+	WhmKey3         = uistate.WhmKey3
+	WhmKey4         = uistate.WhmKey4
 	WhmTrack        = whm.Track
 	WhmTrackKind    = whm.TrackKind
 	WhmMeshTrack    = whm.MeshTrack
 	WhmTextureTrack = whm.TextureTrack
-	WhmAnimation    = whm.Animation
+	WhmAnimation    = uistate.WhmAnimation
 )
 
 const (
@@ -457,13 +454,4 @@ func ParseSgmModel(data []byte) (*WhmModel, error) {
 		return nil, err
 	}
 	return &WhmModel{Model: *m}, nil
-}
-
-// ModelCenter returns the midpoint of the model bounds and a distance that
-// frames the whole model, which is what the viewer needs to frame a new model.
-func (m *WhmModel) ModelCenter() (fauxgl.Vector, float64) {
-	if m == nil {
-		return engine.ModelCenter(nil)
-	}
-	return engine.ModelCenter(&m.Model)
 }

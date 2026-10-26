@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"image"
 	"image/color"
 	"math"
@@ -199,7 +200,7 @@ func LayoutFileContextMenu(ui *uiState, gtx layout.Context) layout.Dimensions {
 	}
 	menuW := gtx.Dp(unit.Dp(196))
 	menuH := gtx.Dp(unit.Dp(86))
-	y := 32 + ui.ContextMenuAnchor*gtx.Dp(unit.Dp(19)) - ui.LeftScroll.offset
+	y := 32 + ui.ContextMenuAnchor*gtx.Dp(unit.Dp(19)) - ui.LeftScroll.Offset
 	if y < 28 {
 		y = 28
 	}
@@ -277,30 +278,9 @@ func absorbDialogCardPress(gtx layout.Context, tag event.Tag) {
 	st.Pop()
 }
 
-type panelSplitterState struct {
-	tag           event.Tag
-	hover         bool
-	dragging      bool
-	layoutOrigin  int
-	startPointerX float32
+type panelSplitterState = uistate.PanelSplitterState
 
-	startLeft  int
-	startRight int
-}
-
-type panelScrollState struct {
-	tag           event.Tag
-	scrollTag     event.Tag
-	offset        int
-	contentHeight int
-	viewport      int
-	hasBar        bool
-	hoverBar      bool
-	dragging      bool
-	startY        float32
-
-	startOffset int
-}
+type panelScrollState = uistate.PanelScrollState
 
 func clampInt(v, lo, hi int) int {
 	if hi < lo {
@@ -392,12 +372,12 @@ func LayoutPanelSplitter(ui *uiState, gtx layout.Context, index int, total int) 
 	// splitter's position in the previous frame. Keep that rendered origin
 	// separately from the widths being updated by this frame's input; using
 	// the new origin with old local coordinates makes slow drags oscillate.
-	eventOrigin := s.layoutOrigin
+	eventOrigin := s.LayoutOrigin
 	rect := clip.Rect{Max: image.Pt(w, gtx.Constraints.Max.Y)}.Push(gtx.Ops)
-	event.Op(gtx.Ops, &s.tag)
+	event.Op(gtx.Ops, &s.Tag)
 	pointer.CursorColResize.Add(gtx.Ops)
 	for {
-		ev, ok := gtx.Event(pointer.Filter{Target: &s.tag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Enter | pointer.Leave})
+		ev, ok := gtx.Event(pointer.Filter{Target: &s.Tag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Enter | pointer.Leave})
 		if !ok {
 			break
 		}
@@ -407,35 +387,35 @@ func LayoutPanelSplitter(ui *uiState, gtx layout.Context, index int, total int) 
 		}
 		switch e.Kind {
 		case pointer.Enter:
-			s.hover = true
+			s.Hover = true
 		case pointer.Leave:
-			if !s.dragging {
-				s.hover = false
+			if !s.Dragging {
+				s.Hover = false
 			}
 		case pointer.Press:
-			s.dragging = true
-			s.hover = true
-			s.startPointerX = float32(eventOrigin) + e.Position.X
-			s.startLeft = ui.LeftPanelWidth
-			s.startRight = ui.RightPanelWidth
+			s.Dragging = true
+			s.Hover = true
+			s.StartPointerX = float32(eventOrigin) + e.Position.X
+			s.StartLeft = ui.LeftPanelWidth
+			s.StartRight = ui.RightPanelWidth
 		case pointer.Drag:
-			if !s.dragging {
+			if !s.Dragging {
 				break
 			}
 			pointerX := float32(eventOrigin) + e.Position.X
 			ui.LeftPanelWidth, ui.RightPanelWidth = panelSplitterWidthFromDrag(
-				index, pointerX, s.startPointerX, s.startLeft, s.startRight,
+				index, pointerX, s.StartPointerX, s.StartLeft, s.StartRight,
 			)
 			ClampPanelWidths(ui, total)
 		case pointer.Release, pointer.Cancel:
-			s.dragging = false
+			s.Dragging = false
 		}
 	}
 	// Record the origin of the operations emitted below. Pointer positions
 	// received before the next layout will be relative to this origin.
-	s.layoutOrigin = panelSplitterLayoutOrigin(index, total, w, ui.LeftPanelWidth, ui.RightPanelWidth)
+	s.LayoutOrigin = panelSplitterLayoutOrigin(index, total, w, ui.LeftPanelWidth, ui.RightPanelWidth)
 	col := cBorder
-	if s.hover || s.dragging {
+	if s.Hover || s.Dragging {
 		col = rgb(0x0078D4)
 	}
 	fillRect(gtx, col, image.Pt(w, gtx.Constraints.Max.Y))
@@ -503,24 +483,24 @@ func PanelScrollView(ui *uiState, gtx layout.Context, state *panelScrollState, c
 		measured = content(measureGTX)
 	}
 	macro.Stop()
-	state.contentHeight = measured.Size.Y
-	state.viewport = viewport.Y
-	state.hasBar = state.contentHeight > state.viewport
+	state.ContentHeight = measured.Size.Y
+	state.Viewport = viewport.Y
+	state.HasBar = state.ContentHeight > state.Viewport
 	barW := 0
-	if state.hasBar {
+	if state.HasBar {
 		barW = gtx.Dp(unit.Dp(panelScrollbarWidthDp))
 	}
-	state.offset = clampInt(state.offset, 0, maxInt(0, state.contentHeight-state.viewport))
+	state.Offset = clampInt(state.Offset, 0, maxInt(0, state.ContentHeight-state.Viewport))
 
 	area := clip.Rect{Max: viewport}.Push(gtx.Ops)
 	// Wheel events cover the whole panel, but are pass-through so buttons and
 	// editors inside the panel still receive their own pointer events.
 	pass := pointer.PassOp{}.Push(gtx.Ops)
-	event.Op(gtx.Ops, &state.scrollTag)
+	event.Op(gtx.Ops, &state.ScrollTag)
 	pass.Pop()
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
-			Target: &state.scrollTag,
+			Target: &state.ScrollTag,
 			Kinds:  pointer.Scroll,
 			// A filter with no scroll range takes the whole of a wheel
 			// gesture and hands the panel none of it, so the range has to be
@@ -536,20 +516,20 @@ func PanelScrollView(ui *uiState, gtx layout.Context, state *panelScrollState, c
 		if !ok {
 			continue
 		}
-		if e.Kind == pointer.Scroll && state.hasBar {
+		if e.Kind == pointer.Scroll && state.HasBar {
 			// Gio's wheel is positive downwards, which is the direction the
 			// offset grows in, and Windows negates the raw wheel delta on the
 			// way in, so this is the whole of the sign there is to it.
-			state.offset += int(e.Scroll.Y * panelScrollWheelStepPx)
+			state.Offset += int(e.Scroll.Y * panelScrollWheelStepPx)
 		}
 	}
 	// Only the actual scrollbar strip accepts press/drag events. Registering a
 	// full-panel handler here would cover the tree rows and prevent selection.
-	if state.hasBar {
+	if state.HasBar {
 		barRect := clip.Rect{Min: image.Pt(viewport.X-barW, 0), Max: viewport}.Push(gtx.Ops)
-		event.Op(gtx.Ops, &state.tag)
+		event.Op(gtx.Ops, &state.Tag)
 		for {
-			ev, ok := gtx.Event(pointer.Filter{Target: &state.tag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Enter | pointer.Leave})
+			ev, ok := gtx.Event(pointer.Filter{Target: &state.Tag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Enter | pointer.Leave})
 			if !ok {
 				break
 			}
@@ -559,31 +539,31 @@ func PanelScrollView(ui *uiState, gtx layout.Context, state *panelScrollState, c
 			}
 			switch e.Kind {
 			case pointer.Enter:
-				state.hoverBar = true
+				state.HoverBar = true
 			case pointer.Leave:
-				if !state.dragging {
-					state.hoverBar = false
+				if !state.Dragging {
+					state.HoverBar = false
 				}
 			case pointer.Press:
-				state.dragging = true
-				state.startY = e.Position.Y
-				state.startOffset = state.offset
+				state.Dragging = true
+				state.StartY = e.Position.Y
+				state.StartOffset = state.Offset
 			case pointer.Drag:
-				if state.dragging {
+				if state.Dragging {
 					thumb := panelScrollThumbSize(state, viewport.Y)
 					track := viewport.Y - thumb
 					if track > 0 {
-						delta := e.Position.Y - state.startY
-						state.offset = state.startOffset + int(delta/float32(track)*float32(maxInt(0, state.contentHeight-state.viewport)))
+						delta := e.Position.Y - state.StartY
+						state.Offset = state.StartOffset + int(delta/float32(track)*float32(maxInt(0, state.ContentHeight-state.Viewport)))
 					}
 				}
 			case pointer.Release, pointer.Cancel:
-				state.dragging = false
+				state.Dragging = false
 			}
 		}
 		barRect.Pop()
 	}
-	state.offset = clampInt(state.offset, 0, maxInt(0, state.contentHeight-state.viewport))
+	state.Offset = clampInt(state.Offset, 0, maxInt(0, state.ContentHeight-state.Viewport))
 
 	renderGTX := gtx
 	renderGTX.Constraints.Min.Y = 0
@@ -601,30 +581,30 @@ func PanelScrollView(ui *uiState, gtx layout.Context, state *panelScrollState, c
 	// measured height is what the layout pass above believed; rendering at
 	// the same numbers keeps the sections in their own rows, and the clip
 	// below is what cuts the overflow off at the viewport.
-	renderH := state.contentHeight
+	renderH := state.ContentHeight
 	if renderH < viewport.Y {
 		renderH = viewport.Y
 	}
 	renderGTX.Constraints.Max.Y = renderH
-	if state.offset > 0 {
-		shift := op.Offset(image.Pt(0, -state.offset)).Push(gtx.Ops)
+	if state.Offset > 0 {
+		shift := op.Offset(image.Pt(0, -state.Offset)).Push(gtx.Ops)
 		content(renderGTX)
 		shift.Pop()
 	} else {
 		content(renderGTX)
 	}
 	area.Pop()
-	if state.hasBar {
+	if state.HasBar {
 		drawPanelScrollbar(gtx, state, viewport, barW)
 	}
 	return layout.Dimensions{Size: viewport}
 }
 
 func panelScrollThumbSize(state *panelScrollState, viewport int) int {
-	if state == nil || state.contentHeight <= viewport || viewport <= 0 {
+	if state == nil || state.ContentHeight <= viewport || viewport <= 0 {
 		return viewport
 	}
-	thumb := viewport * viewport / state.contentHeight
+	thumb := viewport * viewport / state.ContentHeight
 	if thumb < 24 {
 		thumb = 24
 	}
@@ -642,10 +622,10 @@ func drawPanelScrollbar(gtx layout.Context, state *panelScrollState, viewport im
 	track := clip.Rect{Min: image.Pt(x, 0), Max: viewport}.Push(gtx.Ops)
 	fillRect(gtx, cContentBg, image.Pt(width, viewport.Y))
 	thumb := panelScrollThumbSize(state, viewport.Y)
-	maxOffset := maxInt(1, state.contentHeight-state.viewport)
-	y := state.offset * (viewport.Y - thumb) / maxOffset
+	maxOffset := maxInt(1, state.ContentHeight-state.Viewport)
+	y := state.Offset * (viewport.Y - thumb) / maxOffset
 	col := cBorder
-	if state.hoverBar || state.dragging {
+	if state.HoverBar || state.Dragging {
 		col = rgb(0x0078D4)
 	}
 	// Offset the thumb into the track.
@@ -665,26 +645,26 @@ func LayoutListWithScrollbar(ui *uiState, gtx layout.Context, state *panelScroll
 	list.Axis = layout.Vertical
 	dims := list.Layout(gtx, count, element)
 	if state != nil {
-		state.viewport = gtx.Constraints.Max.Y
-		state.contentHeight = list.Position.Length
-		state.hasBar = state.contentHeight > state.viewport
-		if state.hasBar {
-			state.offset = clampInt(state.offset, 0, state.contentHeight-state.viewport)
+		state.Viewport = gtx.Constraints.Max.Y
+		state.ContentHeight = list.Position.Length
+		state.HasBar = state.ContentHeight > state.Viewport
+		if state.HasBar {
+			state.Offset = clampInt(state.Offset, 0, state.ContentHeight-state.Viewport)
 			// List owns wheel scrolling; mirror its position for the thumb.
-			state.offset = list.Position.First*rowHeight + list.Position.Offset
-			state.offset = clampInt(state.offset, 0, maxInt(0, state.contentHeight-state.viewport))
+			state.Offset = list.Position.First*rowHeight + list.Position.Offset
+			state.Offset = clampInt(state.Offset, 0, maxInt(0, state.ContentHeight-state.Viewport))
 		} else {
-			state.offset = 0
+			state.Offset = 0
 		}
 		barW := 0
-		if state.hasBar {
+		if state.HasBar {
 			barW = gtx.Dp(unit.Dp(panelScrollbarWidthDp))
 		}
-		if state.hasBar {
+		if state.HasBar {
 			barRect := clip.Rect{Min: image.Pt(gtx.Constraints.Max.X-barW, 0), Max: gtx.Constraints.Max}.Push(gtx.Ops)
-			event.Op(gtx.Ops, &state.tag)
+			event.Op(gtx.Ops, &state.Tag)
 			for {
-				ev, ok := gtx.Event(pointer.Filter{Target: &state.tag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Enter | pointer.Leave})
+				ev, ok := gtx.Event(pointer.Filter{Target: &state.Tag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Enter | pointer.Leave})
 				if !ok {
 					break
 				}
@@ -694,32 +674,32 @@ func LayoutListWithScrollbar(ui *uiState, gtx layout.Context, state *panelScroll
 				}
 				switch e.Kind {
 				case pointer.Enter:
-					state.hoverBar = true
+					state.HoverBar = true
 				case pointer.Leave:
-					if !state.dragging {
-						state.hoverBar = false
+					if !state.Dragging {
+						state.HoverBar = false
 					}
 				case pointer.Press:
-					state.dragging = true
-					state.startY = e.Position.Y
-					state.startOffset = state.offset
+					state.Dragging = true
+					state.StartY = e.Position.Y
+					state.StartOffset = state.Offset
 				case pointer.Drag:
-					if state.dragging {
+					if state.Dragging {
 						thumb := panelScrollThumbSize(state, gtx.Constraints.Max.Y)
 						track := gtx.Constraints.Max.Y - thumb
 						if track > 0 {
-							delta := e.Position.Y - state.startY
+							delta := e.Position.Y - state.StartY
 							items := int(delta / float32(maxInt(1, rowHeight)))
 							list.ScrollBy(float32(items))
 						}
 					}
 				case pointer.Release, pointer.Cancel:
-					state.dragging = false
+					state.Dragging = false
 				}
 			}
 			barRect.Pop()
 		}
-		if state.hasBar {
+		if state.HasBar {
 			// The list already occupies the panel; draw only the bar over it.
 			drawPanelScrollbar(gtx, state, gtx.Constraints.Max, barW)
 		}

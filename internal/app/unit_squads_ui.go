@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"image"
 	"path/filepath"
 	"strings"
@@ -130,7 +131,7 @@ func LayoutUnitSquadRow(ui *uiState, gtx layout.Context, index int, s unitSquadR
 // one number; one that scales says a range. Neither is the default, because the
 // game always writes both fields.
 func squadSizeLabel(s unitSquadRef) string {
-	min, max := strings.TrimSpace(s.unitMin), strings.TrimSpace(s.unitMax)
+	min, max := strings.TrimSpace(s.UnitMin), strings.TrimSpace(s.UnitMax)
 	switch {
 	case min == "" && max == "":
 		return ""
@@ -177,12 +178,12 @@ func LayoutUnitSquadRightColumn(ui *uiState, gtx layout.Context, sec unitSection
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return UnitKeyValueRow(ui, gtx, "Race", s.race, false)
+								return UnitKeyValueRow(ui, gtx, "Race", s.Race, false)
 							})
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return UnitKeyValueRow(ui, gtx, "File", s.path, false)
+								return UnitKeyValueRow(ui, gtx, "File", s.Path, false)
 							})
 						}),
 					}
@@ -313,10 +314,10 @@ var squadCounts = []struct {
 // are the squad's, not the unit's, which is the whole point of the column: none of
 // them could be read out of the unit's file.
 func squadFields(tree *modtree.ModTree, s unitSquadRef) []unitField {
-	if tree == nil || s.path == "" {
+	if tree == nil || s.Path == "" {
 		return nil
 	}
-	data, err := tree.ReadFile(s.path)
+	data, err := tree.ReadFile(s.Path)
 	if err != nil {
 		return nil
 	}
@@ -340,10 +341,10 @@ func squadFields(tree *modtree.ModTree, s unitSquadRef) []unitField {
 	// their own cost_ext and leaves birth_resource empty, so five rows of zero
 	// would be the whole group on every squad of the base game.
 	for _, cur := range birthResourceOrder {
-		if s.birthResource[cur] == "0" {
+		if s.BirthResource[cur] == "0" {
 			continue
 		}
-		add("Birth cost", birthResourceLabels[cur], s.birthResource[cur])
+		add("Birth cost", birthResourceLabels[cur], s.BirthResource[cur])
 	}
 	for _, sc := range squadScalars {
 		add(sc.group, sc.label, rgdEntryStr(rgdFindPath(rf.Root, sc.path...)))
@@ -422,36 +423,10 @@ func squadRowsForTest(refs map[string][]unitSquadRef) *uiState {
 const squadRacesFolder = "attrib\\sbps\\races"
 
 // unitSquadRef is one squad a unit takes part in.
-type unitSquadRef struct {
-	// path is the squad's own .rgd in the tree.
-	path string
-	// name is its file name without extension, which is how the game names it.
-	name string
-	// race is the folder it sits under, e.g. "necrons".
-	race string
-	// unitMin and unitMax are squad_loadout_ext's unit_min and unit_max: how
-	// many of this unit the squad is built from. They are kept as the strings
-	// the file holds rather than as numbers, because the column shows them
-	// verbatim and a .rgd can carry a float where an int is expected.
-	unitMin string
-	unitMax string
-	// birthResource is the squad's birth_resource table, the cost of raising
-	// the squad as a whole. It is a separate cost from the unit's own
-	// cost_ext, and it is the one a player pays.
-	birthResource map[string]string
-	// path fields the unit the squad is made of, for the row's own reference.
-	unitRef string
-}
+type unitSquadRef = uistate.UnitSquadRef
 
 // unitSquadBatch is a slice of the scan's results. done marks the last one.
-type unitSquadBatch struct {
-	// byUnit maps a lower cased unit path to the squads naming it. The unit
-	// path is the key rather than the reference written in the squad, because
-	// the dialog already knows a unit by its path and resolving the reference
-	// back would be work done twice.
-	byUnit map[string][]unitSquadRef
-	done   bool
-}
+type unitSquadBatch = uistate.UnitSquadBatch
 
 // unitSquadBatchSize is how many squads one batch carries.
 const unitSquadBatchSize = 24
@@ -486,7 +461,7 @@ func StartUnitSquadScan(ui *uiState, tree *modtree.ModTree) {
 				out[k] = v
 			}
 			select {
-			case ch <- unitSquadBatch{byUnit: out, done: done}:
+			case ch <- unitSquadBatch{ByUnit: out, Done: done}:
 				batch = make(map[string][]unitSquadRef)
 				return true
 			case <-stop:
@@ -495,7 +470,7 @@ func StartUnitSquadScan(ui *uiState, tree *modtree.ModTree) {
 		}
 		for _, f := range files {
 			for _, ref := range squadsOfUnit(tree, f) {
-				key := strings.ToLower(ref.unitRef)
+				key := strings.ToLower(ref.UnitRef)
 				batch[key] = append(batch[key], ref)
 			}
 			if len(batch) >= unitSquadBatchSize && !flush(false) {
@@ -531,14 +506,14 @@ func PollUnitSquads(ui *uiState) bool {
 	for {
 		select {
 		case b := <-ui.UnitSquadsCh:
-			for path, refs := range b.byUnit {
+			for path, refs := range b.ByUnit {
 				// A batch can carry a unit the previous batch also carried, so
 				// the lists are concatenated rather than replaced. Deduplication
 				// is the reader's job: a squad appears once per trooper_base it
 				// declares, and no squad in the DXP3 tree declares more than one.
 				ui.UnitSquads[path] = append(ui.UnitSquads[path], refs...)
 			}
-			if b.done {
+			if b.Done {
 				ui.UnitSquadsDone = true
 				StopUnitSquadScan(ui)
 			}
@@ -581,10 +556,10 @@ func squadRefLess(a, b unitSquadRef) bool {
 	if an, bn := squadNameOf(a), squadNameOf(b); an != bn {
 		return an < bn
 	}
-	if a.name != b.name {
-		return a.name < b.name
+	if a.Name != b.Name {
+		return a.Name < b.Name
 	}
-	return a.path < b.path
+	return a.Path < b.Path
 }
 
 // squadNameOf is a squad's name with the trailing _squad dropped, which is the
@@ -596,10 +571,10 @@ func squadRefLess(a, b unitSquadRef) bool {
 // chaos_squad_sorcerer whole is the lesser evil: it is what the file is called,
 // and the row's own file is shown in the right-hand column.
 func squadNameOf(s unitSquadRef) string {
-	if n, stripped := strings.CutSuffix(s.name, "_squad"); stripped && n != "" {
+	if n, stripped := strings.CutSuffix(s.Name, "_squad"); stripped && n != "" {
 		return n
 	}
-	return s.name
+	return s.Name
 }
 
 // squadsOfUnit reads one squad file and returns one entry per trooper_base it
@@ -609,10 +584,10 @@ func squadNameOf(s unitSquadRef) string {
 // also has a size and a birth cost, and reading the file a second time to get
 // those would be a wasted read per squad.
 func squadsOfUnit(tree *modtree.ModTree, f unitSquadRef) []unitSquadRef {
-	if tree == nil || f.path == "" {
+	if tree == nil || f.Path == "" {
 		return nil
 	}
-	data, err := tree.ReadFile(f.path)
+	data, err := tree.ReadFile(f.Path)
 	if err != nil {
 		return nil
 	}
@@ -627,9 +602,9 @@ func squadsOfUnit(tree *modtree.ModTree, f unitSquadRef) []unitSquadRef {
 	// The size and the birth cost belong to the squad rather than to any one
 	// trooper, so they are read once here and copied onto every entry.
 	base := f
-	base.unitMin = strings.TrimSpace(rgdEntryStr(rgdFindChild(loadout, "unit_min")))
-	base.unitMax = strings.TrimSpace(rgdEntryStr(rgdFindChild(loadout, "unit_max")))
-	base.birthResource = readBirthResource(loadout)
+	base.UnitMin = strings.TrimSpace(rgdEntryStr(rgdFindChild(loadout, "unit_min")))
+	base.UnitMax = strings.TrimSpace(rgdEntryStr(rgdFindChild(loadout, "unit_max")))
+	base.BirthResource = readBirthResource(loadout)
 
 	var out []unitSquadRef
 	for _, c := range loadout.Children {
@@ -645,7 +620,7 @@ func squadsOfUnit(tree *modtree.ModTree, f unitSquadRef) []unitSquadRef {
 			continue
 		}
 		entry := base
-		entry.unitRef = p
+		entry.UnitRef = p
 		out = append(out, entry)
 	}
 	return out
@@ -697,9 +672,9 @@ func collectSquadRgds(tree *modtree.ModTree) []unitSquadRef {
 				continue
 			}
 			out = append(out, unitSquadRef{
-				path: file.FullPath,
-				name: name,
-				race: race.Name,
+				Path: file.FullPath,
+				Name: name,
+				Race: race.Name,
 			})
 		}
 	}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/modtree"
 	"fmt"
 	"log"
@@ -250,13 +251,7 @@ func currentModArchivePaths(watch modCatalogWatch) []string {
 	return paths
 }
 
-type modCatalogRefreshResult struct {
-	path     string
-	baseTree *modtree.ModTree
-	snapshot string
-	newTree  *modtree.ModTree
-	err      error
-}
+type modCatalogRefreshResult = uistate.ModCatalogRefreshResult
 
 func StopModFileWatcher(ui *uiState) {
 	if ui.ModFileWatcher != nil {
@@ -319,15 +314,15 @@ func PollModCatalog(ui *uiState) {
 	refreshCh := ui.ModRefreshCh
 	ui.ModRefreshRunning = true
 	go func() {
-		result := modCatalogRefreshResult{path: modulePath, baseTree: baseTree}
-		result.snapshot = watch.snapshot()
-		if result.snapshot == "" || result.snapshot == knownSnapshot {
+		result := modCatalogRefreshResult{Path: modulePath, BaseTree: baseTree}
+		result.Snapshot = watch.snapshot()
+		if result.Snapshot == "" || result.Snapshot == knownSnapshot {
 			refreshCh <- result
 			return
 		}
-		result.newTree, result.err = modtree.BuildModTree(result.path, "English")
-		if result.newTree != nil {
-			result.snapshot = watchFromTree(result.newTree).snapshot()
+		result.NewTree, result.Err = modtree.BuildModTree(result.Path, "English")
+		if result.NewTree != nil {
+			result.Snapshot = watchFromTree(result.NewTree).snapshot()
 		}
 		refreshCh <- result
 	}()
@@ -347,23 +342,23 @@ func PollModCatalogResult(ui *uiState) (modCatalogRefreshResult, bool) {
 }
 
 func ApplyModCatalogResult(ui *uiState, result modCatalogRefreshResult) {
-	if result.path != ui.ModulePath || result.baseTree != ui.ModTree {
-		if result.newTree != nil {
-			result.newTree.Close()
+	if result.Path != ui.ModulePath || result.BaseTree != ui.ModTree {
+		if result.NewTree != nil {
+			result.NewTree.Close()
 		}
 		return
 	}
-	if result.err != nil {
+	if result.Err != nil {
 		return
 	}
-	if result.newTree == nil {
-		ui.ModSnapshot = result.snapshot
+	if result.NewTree == nil {
+		ui.ModSnapshot = result.Snapshot
 		return
 	}
-	ui.ModSnapshot = result.snapshot
+	ui.ModSnapshot = result.Snapshot
 	oldPosition := ui.LeftList.Position
 	oldTree := ui.ModTree
-	ui.ModTree = result.newTree
+	ui.ModTree = result.NewTree
 	oldTree.Close()
 	ui.LeftList.Position = oldPosition
 	ui.VisibleNodes = nil

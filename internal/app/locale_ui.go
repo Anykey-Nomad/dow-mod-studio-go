@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"os"
@@ -511,7 +512,7 @@ func localeOverrideIsOurs(entry localeEntry) bool { return locstrings.LocaleOver
 // exactly how a modder's own table overrides a string.
 
 // localeRowAction is what a press on a localised row means.
-type localeRowAction int
+type localeRowAction = uistate.LocaleRowAction
 
 const (
 	// localeRowNothing is a press that is not asking for anything: a plain
@@ -568,10 +569,7 @@ func localeRowActionFor(hasText, alt, ctrl bool) localeRowAction {
 // because a press is noticed during layout and acted on in the input pass, one
 // frame later, and a request that can be dropped in between would be a press
 // that silently did nothing.
-type localeEditRequest struct {
-	id     string
-	action localeRowAction
-}
+type localeEditRequest = uistate.LocaleEditRequest
 
 // ── the request ─────────────────────────────────────────────────────────────
 
@@ -885,7 +883,7 @@ func PollLocaleEditPress(ui *uiState, gtx layout.Context, tag event.Tag, id stri
 		if action == localeRowNothing {
 			continue
 		}
-		ui.LocalePendingRequest = localeEditRequest{id: id, action: action}
+		ui.LocalePendingRequest = localeEditRequest{Id: id, Action: action}
 	}
 }
 

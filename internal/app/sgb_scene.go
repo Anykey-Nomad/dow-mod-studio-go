@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"log"
@@ -638,36 +639,17 @@ type sgbEnvironmentEntry struct {
 	expanded bool
 }
 
-type sgbPlacementRequest struct {
-	blueprint string
-	point     fauxgl.Vector
-	owner     int
-}
+type sgbPlacementRequest = uistate.SgbPlacementRequest
 
 func sgbNewPlayerList() *widget.Enum {
 	return &widget.Enum{Value: "neutral"}
 }
 
-type sgbObjectModelResult struct {
-	blueprint string
-	modelPath string
-	model     *whm.Model
-}
+type sgbObjectModelResult = uistate.SgbObjectModelResult
 
-type sgbObjectMaterialRequest struct {
-	blueprint string
-	modelPath string
-	model     *whm.Model
-	entityID  int
-}
+type sgbObjectMaterialRequest = uistate.SgbObjectMaterialRequest
 
-type sgbObjectMaterialsResult struct {
-	request     sgbObjectMaterialRequest
-	materials   map[string]render.WhmMaterial
-	rsh         map[string][]byte
-	diagnostics map[string]modelMaterialDiagnostic
-	missing     int
-}
+type sgbObjectMaterialsResult = uistate.SgbObjectMaterialsResult
 
 func sgbEnvironmentEntries(root *modtree.TreeFolder, expanded map[string]bool) []sgbEnvironmentEntry {
 	if root == nil {
@@ -725,7 +707,7 @@ func EnsureSgbObjectModel(ui *uiState, tab *fileTab) {
 	tab.SgbObjectModelCh = ch
 	go func() {
 		model, modelPath := sgbBlueprintModelWithPath(tree, blueprint)
-		ch <- sgbObjectModelResult{blueprint: blueprint, modelPath: modelPath, model: model}
+		ch <- sgbObjectModelResult{Blueprint: blueprint, ModelPath: modelPath, Model: model}
 	}()
 }
 
@@ -736,16 +718,16 @@ func PollSgbObjectModel(ui *uiState, tab *fileTab) bool {
 	select {
 	case result := <-tab.SgbObjectModelCh:
 		tab.SgbObjectModelCh = nil
-		if strings.EqualFold(tab.SgbObjectSelected, result.blueprint) {
-			tab.SgbObjectModel = result.model
-			tab.SgbObjectModelFile = result.modelPath
-			if result.model == nil {
+		if strings.EqualFold(tab.SgbObjectSelected, result.Blueprint) {
+			tab.SgbObjectModel = result.Model
+			tab.SgbObjectModelFile = result.ModelPath
+			if result.Model == nil {
 				tab.SgbPlacementPending = nil
-				ui.StatusText = "Could not load selected environment object " + filepath.Base(result.blueprint)
-			} else if len(result.model.Meshes) == 0 {
-				ui.StatusText = "Selected object has no renderable meshes: " + filepath.Base(result.blueprint)
+				ui.StatusText = "Could not load selected environment object " + filepath.Base(result.Blueprint)
+			} else if len(result.Model.Meshes) == 0 {
+				ui.StatusText = "Selected object has no renderable meshes: " + filepath.Base(result.Blueprint)
 			} else {
-				StartSgbObjectMaterials(ui, tab, result.blueprint, result.model)
+				StartSgbObjectMaterials(ui, tab, result.Blueprint, result.Model)
 			}
 		}
 		return true
@@ -1021,22 +1003,22 @@ func PlaceSgbObject(ui *uiState, tab *fileTab, point fauxgl.Vector) {
 		return
 	}
 	if tab.Model.Loading || tab.ModelMaterialCh != nil || tab.Model.Rendering || tab.Model.FrameCh != nil || tab.Model.GpuRetries > 0 || tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) > 0 {
-		tab.SgbPlacementPending = &sgbPlacementRequest{blueprint: tab.SgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
+		tab.SgbPlacementPending = &sgbPlacementRequest{Blueprint: tab.SgbObjectSelected, Point: point, Owner: sgbSelectedPlayerOwner(tab)}
 		ui.StatusText = "Object placement — waiting for the map scene to finish loading"
 		return
 	}
 	if !strings.EqualFold(tab.SgbObjectModelPath, tab.SgbObjectSelected) || tab.SgbObjectModel == nil {
-		tab.SgbPlacementPending = &sgbPlacementRequest{blueprint: tab.SgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
+		tab.SgbPlacementPending = &sgbPlacementRequest{Blueprint: tab.SgbObjectSelected, Point: point, Owner: sgbSelectedPlayerOwner(tab)}
 		EnsureSgbObjectModel(ui, tab)
 		ui.StatusText = "Loading selected environment object…"
 		return
 	}
 	if tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) > 0 {
-		tab.SgbPlacementPending = &sgbPlacementRequest{blueprint: tab.SgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}
+		tab.SgbPlacementPending = &sgbPlacementRequest{Blueprint: tab.SgbObjectSelected, Point: point, Owner: sgbSelectedPlayerOwner(tab)}
 		ui.StatusText = "Loading selected object materials…"
 		return
 	}
-	AppendSgbPlacement(ui, tab, sgbPlacementRequest{blueprint: tab.SgbObjectSelected, point: point, owner: sgbSelectedPlayerOwner(tab)}, tab.SgbObjectModel)
+	AppendSgbPlacement(ui, tab, sgbPlacementRequest{Blueprint: tab.SgbObjectSelected, Point: point, Owner: sgbSelectedPlayerOwner(tab)}, tab.SgbObjectModel)
 }
 
 func StartSgbObjectMaterials(ui *uiState, tab *fileTab, blueprint string, model *whm.Model) {
@@ -1044,17 +1026,17 @@ func StartSgbObjectMaterials(ui *uiState, tab *fileTab, blueprint string, model 
 		return
 	}
 	QueueSgbObjectMaterials(ui, tab, sgbObjectMaterialRequest{
-		blueprint: blueprint,
-		modelPath: tab.SgbObjectModelFile,
-		model:     model,
+		Blueprint: blueprint,
+		ModelPath: tab.SgbObjectModelFile,
+		Model:     model,
 	})
 }
 
 func QueueSgbObjectMaterials(ui *uiState, tab *fileTab, request sgbObjectMaterialRequest) {
-	if tab == nil || request.model == nil {
+	if tab == nil || request.Model == nil {
 		return
 	}
-	key := strings.ToLower(request.modelPath)
+	key := strings.ToLower(request.ModelPath)
 	if result, ok := tab.SgbObjectMaterialsCache[key]; ok {
 		ApplySgbObjectMaterials(ui, tab, result)
 		return
@@ -1062,17 +1044,17 @@ func QueueSgbObjectMaterials(ui *uiState, tab *fileTab, request sgbObjectMateria
 	if tab.SgbObjectMaterialsLoaded == nil {
 		tab.SgbObjectMaterialsLoaded = make(map[string]bool)
 	}
-	if request.modelPath != "" && tab.SgbObjectMaterialsLoaded[key] {
+	if request.ModelPath != "" && tab.SgbObjectMaterialsLoaded[key] {
 		return
 	}
-	if tab.SgbObjectMaterialsCh != nil && strings.EqualFold(tab.SgbObjectMaterialsActive.modelPath, request.modelPath) {
-		if request.entityID != 0 && tab.SgbObjectMaterialsActive.entityID == 0 {
-			tab.SgbObjectMaterialsActive.entityID = request.entityID
+	if tab.SgbObjectMaterialsCh != nil && strings.EqualFold(tab.SgbObjectMaterialsActive.ModelPath, request.ModelPath) {
+		if request.EntityID != 0 && tab.SgbObjectMaterialsActive.EntityID == 0 {
+			tab.SgbObjectMaterialsActive.EntityID = request.EntityID
 		}
 		return
 	}
 	for _, queued := range tab.SgbObjectMaterialsPending {
-		if strings.EqualFold(queued.modelPath, request.modelPath) {
+		if strings.EqualFold(queued.ModelPath, request.ModelPath) {
 			return
 		}
 	}
@@ -1091,10 +1073,10 @@ func LaunchNextSgbObjectMaterials(ui *uiState, tab *fileTab) {
 	tab.SgbObjectMaterialsCh = ch
 	tab.SgbObjectMaterialsActive = request
 	go func() {
-		rsh, materials, missing, diagnostics := sgbEntityMaterials(tree, request.modelPath, request.model, "", nil)
+		rsh, materials, missing, diagnostics := sgbEntityMaterials(tree, request.ModelPath, request.Model, "", nil)
 		ch <- sgbObjectMaterialsResult{
-			request: request, materials: materials, rsh: rsh,
-			diagnostics: diagnostics, missing: missing,
+			Request: request, Materials: materials, Rsh: rsh,
+			Diagnostics: diagnostics, Missing: missing,
 		}
 	}()
 }
@@ -1107,22 +1089,22 @@ func PollSgbObjectMaterials(ui *uiState, tab *fileTab) bool {
 	case result := <-tab.SgbObjectMaterialsCh:
 		tab.SgbObjectMaterialsCh = nil
 		tab.SgbObjectMaterialsActive = sgbObjectMaterialRequest{}
-		key := strings.ToLower(result.request.modelPath)
+		key := strings.ToLower(result.Request.ModelPath)
 		active := tab.SgbObjectMaterialsActive
 		if tab.SgbObjectMaterialsCache == nil {
 			tab.SgbObjectMaterialsCache = make(map[string]sgbObjectMaterialsResult)
 		}
 		cached := result
-		cached.request.entityID = 0
+		cached.Request.EntityID = 0
 		tab.SgbObjectMaterialsCache[key] = cached
 		if tab.SgbObjectMaterialsLoaded == nil {
 			tab.SgbObjectMaterialsLoaded = make(map[string]bool)
 		}
 		tab.SgbObjectMaterialsLoaded[key] = true
-		result.request = active
+		result.Request = active
 		ApplySgbObjectMaterials(ui, tab, result)
-		if result.missing > 0 {
-			ui.StatusText = fmt.Sprintf("Placed object materials: %d texture(s) could not be resolved", result.missing)
+		if result.Missing > 0 {
+			ui.StatusText = fmt.Sprintf("Placed object materials: %d texture(s) could not be resolved", result.Missing)
 		}
 		LaunchNextSgbObjectMaterials(ui, tab)
 		return true
@@ -1144,34 +1126,34 @@ func ApplySgbObjectMaterials(ui *uiState, tab *fileTab, result sgbObjectMaterial
 	if tab.Model.MaterialDiagnostics == nil {
 		tab.Model.MaterialDiagnostics = make(map[string]modelMaterialDiagnostic)
 	}
-	if result.request.modelPath != "" && tab.SgbEntityModelFiles != nil {
+	if result.Request.ModelPath != "" && tab.SgbEntityModelFiles != nil {
 		for id, modelPath := range tab.SgbEntityModelFiles {
-			if !strings.EqualFold(modelPath, result.request.modelPath) {
+			if !strings.EqualFold(modelPath, result.Request.ModelPath) {
 				continue
 			}
 			prefix := fmt.Sprintf("entity-%d::", id)
-			for _, mesh := range result.request.model.Meshes {
+			for _, mesh := range result.Request.Model.Meshes {
 				if mesh.Material == "" {
 					continue
 				}
 				unique := prefix + mesh.Material
 				lookup := mesh.Material
-				if _, ok := result.materials[lookup]; !ok && mesh.MaterialPath != "" {
+				if _, ok := result.Materials[lookup]; !ok && mesh.MaterialPath != "" {
 					lookup = mesh.MaterialPath
 				}
-				if material, ok := result.materials[lookup]; ok {
+				if material, ok := result.Materials[lookup]; ok {
 					tab.Model.Materials[unique] = material
 				}
-				if data, ok := result.rsh[lookup]; ok {
+				if data, ok := result.Rsh[lookup]; ok {
 					tab.Model.RshData[unique] = data
 				}
-				if diagnostic, ok := result.diagnostics[lookup]; ok {
+				if diagnostic, ok := result.Diagnostics[lookup]; ok {
 					tab.Model.MaterialDiagnostics[unique] = diagnostic
 				}
 			}
 		}
 	}
-	if len(result.materials) > 0 {
+	if len(result.Materials) > 0 {
 		tab.Model.Textured = true
 	}
 	Invalidate(tab.Model)
@@ -1209,29 +1191,29 @@ func sgbSelectedPlayerOwner(tab *fileTab) int {
 
 func AppendSgbPlacement(ui *uiState, tab *fileTab, request sgbPlacementRequest, src *whm.Model) {
 	if tab == nil || tab.SgbMap == nil || tab.Model == nil || tab.Model.Model == nil || src == nil ||
-		!strings.EqualFold(tab.SgbObjectSelected, request.blueprint) {
+		!strings.EqualFold(tab.SgbObjectSelected, request.Blueprint) {
 		return
 	}
 	m := tab.SgbMap
-	blueprint := canonicalSgbBlueprintPath(request.blueprint)
+	Blueprint := canonicalSgbBlueprintPath(request.Blueprint)
 	bp := -1
 	for i, existing := range m.Blueprints {
-		if strings.EqualFold(canonicalSgbBlueprintPath(existing), blueprint) {
+		if strings.EqualFold(canonicalSgbBlueprintPath(existing), Blueprint) {
 			bp = i
 			break
 		}
 	}
 	if bp < 0 {
 		bp = len(m.Blueprints)
-		m.Blueprints = append(m.Blueprints, blueprint)
+		m.Blueprints = append(m.Blueprints, Blueprint)
 	}
 	id := sgbNextPlacementID(m.Entities, tab.SgbNextEntityID)
-	x, y, z := sgbPlacementWorldToEntity(request.point)
-	if request.owner < 0 || request.owner > 8 {
-		ui.StatusText = fmt.Sprintf("Object placement failed: invalid player slot %d", request.owner)
+	x, y, z := sgbPlacementWorldToEntity(request.Point)
+	if request.Owner < 0 || request.Owner > 8 {
+		ui.StatusText = fmt.Sprintf("Object placement failed: invalid player slot %d", request.Owner)
 		return
 	}
-	entity := sgb.Entity{ID: id, BP: bp, Owner: request.owner, Name: blueprint, X: x, Y: y, Z: z}
+	entity := sgb.Entity{ID: id, BP: bp, Owner: request.Owner, Name: Blueprint, X: x, Y: y, Z: z}
 	if !sgbSceneAppendEntity(ModelData(tab.Model), src, entity.PlacementOf(), entity.ID) {
 		ui.StatusText = "Object placement failed: model has no renderable meshes"
 		return
@@ -1253,13 +1235,13 @@ func AppendSgbPlacement(ui *uiState, tab *fileTab, request sgbPlacementRequest, 
 	}
 	tab.SgbEntityModelFiles[entity.ID] = tab.SgbObjectModelFile
 	QueueSgbObjectMaterials(ui, tab, sgbObjectMaterialRequest{
-		blueprint: request.blueprint,
-		modelPath: tab.SgbObjectModelFile,
-		model:     src,
-		entityID:  entity.ID,
+		Blueprint: request.Blueprint,
+		ModelPath: tab.SgbObjectModelFile,
+		Model:     src,
+		EntityID:  entity.ID,
 	})
 	Invalidate(tab.Model)
-	ui.StatusText = fmt.Sprintf("Placed %s at %.1f, %.1f, %.1f", filepath.Base(request.blueprint), entity.X, entity.Z, entity.Y)
+	ui.StatusText = fmt.Sprintf("Placed %s at %.1f, %.1f, %.1f", filepath.Base(request.Blueprint), entity.X, entity.Z, entity.Y)
 }
 
 func sgbBlueprintModel(tree *modtree.ModTree, blueprintPath string) *whm.Model {

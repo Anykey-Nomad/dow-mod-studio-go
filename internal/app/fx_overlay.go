@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"image/color"
@@ -138,7 +139,7 @@ func fxBuildGpuScene(effects []fxOverlayEffect, textures map[string]*image.RGBA,
 		// Build ribbons in the same model-space units. Only authored local
 		// dimensions and displacement change; marker origins stay anchored.
 		addRibbon := func(rb fx.BeamRibbon, preservesMarkerSpan bool) {
-			rb = e.fxScaleRibbon(rb, preservesMarkerSpan)
+			rb = e.FxScaleRibbon(rb, preservesMarkerSpan)
 			if rb.Alpha <= 0 || rb.Width <= 0 {
 				return
 			}
@@ -148,19 +149,19 @@ func fxBuildGpuScene(effects []fxOverlayEffect, textures map[string]*image.RGBA,
 			g := group(fxGroupKey{additive: rb.Additive, texture: name, origin: fxGroupOrigin(e.Origin)}, e.Origin)
 			g.Beams = append(g.Beams, fxGpuBeam{Ribbon: rb, Eye: eye})
 		}
-		spansMarkers := e.fxSpansMarkers()
-		for _, rb := range e.Sim.Beams(e.Origin, e.fxFarPoint(), spansMarkers) {
-			rb = e.fxMarkerRibbon(rb)
+		spansMarkers := e.FxSpansMarkers()
+		for _, rb := range e.Sim.Beams(e.Origin, e.FxFarPoint(), spansMarkers) {
+			rb = e.FxMarkerRibbon(rb)
 			if e.TurnAngles != [3]float64{} {
-				rb.From = e.Origin.Add(e.fxTurnVector(rb.From.Sub(e.Origin)))
-				rb.To = e.Origin.Add(e.fxTurnVector(rb.To.Sub(e.Origin)))
+				rb.From = e.Origin.Add(e.FxTurnVector(rb.From.Sub(e.Origin)))
+				rb.To = e.Origin.Add(e.FxTurnVector(rb.To.Sub(e.Origin)))
 			}
 			addRibbon(rb, spansMarkers)
 		}
-		axX, axY, axZ := e.fxRingFrame()
+		axX, axY, axZ := e.FxRingFrame()
 		markerFrame := [3]fauxgl.Vector{axX, axY, axZ}
 		for _, rb := range e.Sim.Rings(e.Origin, axX, axY, axZ, camUp) {
-			rb = e.fxTurnRibbon(rb)
+			rb = e.FxTurnRibbon(rb)
 			addRibbon(rb, false)
 		}
 		// Particles are composited after their beams. Their offsets and radii
@@ -169,9 +170,9 @@ func fxBuildGpuScene(effects []fxOverlayEffect, textures map[string]*image.RGBA,
 			if sp.A <= 0 {
 				continue
 			}
-			sp = e.fxTurnSprite(sp)
+			sp = e.FxTurnSprite(sp)
 			sp = fxOrientSprite(sp, markerFrame)
-			sp = fxScaleSprite(sp, e.fxScaleOrOne())
+			sp = fxScaleSprite(sp, e.FxScaleOrOne())
 			name := fxTexturePath(sp.Texture)
 			// Sprites store positions relative to their effect origin, so two
 			// effects with the same texture cannot share a group if they attach
@@ -394,17 +395,17 @@ func FxReload(ui *uiState, v *modelViewer, doc *whe.Document) {
 // whatever it could not read.
 func FxApply(v *modelViewer, res fxLoadResult) {
 	v.FxCh = nil
-	if res.err != nil {
-		v.FxErr = res.err.Error()
+	if res.Err != nil {
+		v.FxErr = res.Err.Error()
 	} else {
 		v.FxErr = ""
 	}
-	v.FxEffects = res.effects
-	v.FxTextures = res.textures
-	if len(res.timelines) > 0 {
-		v.FxTimelines = res.timelines
+	v.FxEffects = res.Effects
+	v.FxTextures = res.Textures
+	if len(res.Timelines) > 0 {
+		v.FxTimelines = res.Timelines
 	}
-	log.Printf("3D preview: effects resolved: %d effects, %d sprite textures", len(res.effects), len(res.textures))
+	log.Printf("3D preview: Effects resolved: %d Effects, %d sprite Textures", len(res.Effects), len(res.Textures))
 	if v.FxErr != "" {
 		log.Printf("3D preview: effects unavailable: %v", v.FxErr)
 	}
@@ -418,7 +419,7 @@ func FxApply(v *modelViewer, res fxLoadResult) {
 	// while this one waits for the FX button, and replacing a working player
 	// with an equal one would restart any sound already playing.
 	if v.FxSound == nil {
-		FxApplySounds(v, res, res.timelines)
+		FxApplySounds(v, res, res.Timelines)
 	}
 	v.FxLast = time.Time{}
 	v.FxOverlay = nil
@@ -427,7 +428,7 @@ func FxApply(v *modelViewer, res fxLoadResult) {
 // fxApplySoundsOnly takes the sound half of the work on its own, for the
 // worker that reads the audio without resolving any effects.
 func FxApplySoundsOnly(v *modelViewer, res fxLoadResult) {
-	FxApplySounds(v, res, res.timelines)
+	FxApplySounds(v, res, res.Timelines)
 }
 
 // fxApplySounds builds the sound player from what the worker resolved, and
@@ -438,13 +439,13 @@ func FxApplySounds(v *modelViewer, res fxLoadResult, timelines []whe.FxTimeline)
 	// bar reads them to mark the frames a clip fires something on, and a model
 	// with effects but no audio would otherwise lose them.
 	v.FxTimelines = timelines
-	if len(res.soundBundles) == 0 {
+	if len(res.SoundBundles) == 0 {
 		return
 	}
-	v.FxSound = fx.NewSoundPlayer(res.soundBundles, timelines, res.sounds.Snapshot())
+	v.FxSound = fx.NewSoundPlayer(res.SoundBundles, timelines, res.Sounds.Snapshot())
 	v.FxSoundOn = true
 	log.Printf("3D preview: sounds wired: %d events, %d samples decoded",
-		len(res.soundBundles), res.sounds.Len())
+		len(res.SoundBundles), res.Sounds.Len())
 }
 
 // fxSoundTick tells the sound player how far into the clip on screen the
@@ -477,7 +478,7 @@ func FxOrigins(v *modelViewer) {
 	for i := range v.FxEffects {
 		e := &v.FxEffects[i]
 		e.TurnAxes = [3]fauxgl.Vector{fxAxisX, fxAxisY, fxAxisZ}
-		e.TurnAngles = [3]float64{v.fxRotX * math.Pi / 180, v.fxRotY * math.Pi / 180, v.fxRotZ * math.Pi / 180}
+		e.TurnAngles = [3]float64{v.FxRotX * math.Pi / 180, v.FxRotY * math.Pi / 180, v.FxRotZ * math.Pi / 180}
 		// Keep a complete frame even when this effect's event does not name
 		// a marker on the model. ModelMarkerFrame uses the same Z-up basis as
 		// the model viewer; FX values stay local until transformed below.
@@ -514,7 +515,7 @@ func FxOrigins(v *modelViewer) {
 		// fallback and is transformed by the same attachment frame as spray
 		// offsets. Without one, a free beam follows its marker's forward axis.
 		if e.Sim != nil && e.Sim.Axis.Length() > 1e-6 {
-			e.Axis = e.fxMarkerVector(e.Sim.Axis)
+			e.Axis = e.FxMarkerVector(e.Sim.Axis)
 		} else if axis, ok := v.Model.MarkerBeamAxis(e.Marker, pose, true); ok {
 			// A beam runs along the tube it plays at, which is the marker's
 			// second frame column, not the direction MarkerAxis scores the
@@ -572,73 +573,16 @@ var (
 	fxAxisZ = fauxgl.Vector{Z: 1}
 )
 
-// fxFallbackFrame is the frame an effect with no marker of its own is laid out
-// in: the file's own axes, standing in for the marker matrix the effect would
-// have been played at. Every local vector an effect file writes - Offset,
-// Volume, Arc, the emission axis - keeps its authored Y-up frame all the way
-// through the simulation, and this frame is the one that turns it into model
-// space: the file's second axis is vertical, so it becomes the world's up,
-// and its third becomes the world's Y. That is exactly the frame a marker's
-// own columns give an attached effect, and it is why the vertical of a
-// descending spray stays vertical instead of being swapped onto a horizontal
-// axis a second time.
-//
-// Standing in the world's own axes instead is what made these effects arrive
-// sideways. A marker's X, Y and Z are its right, up and forward; leaving them
-// as the world's right, forward and up puts the marker's up on the ground, so
-// every Offset written along it becomes a sideways displacement and a ring
-// lying in the marker's plane ends up standing on edge. The world's own axes
-// are still the frame the correction rotation turns about, which is a
-// separate thing: those are read as viewer angles, not as the file's.
-//
-// It is a frame in its own right, all three axes independent, which is what
-// the parts that measure an Offset across two axes and take the third from
-// their cross product need. Filling in the missing axes one at a time
-// instead hands back three copies of one direction, and the cross product of
-// two of those is zero: the Offset's third component vanishes and the panel's
-// own plane has no normal to be laid out in.
-var fxFallbackFrame = [3]fauxgl.Vector{
-	{X: 1}, // the file's X, across
-	{Z: 1}, // the file's Y, up
-	{Y: 1}, // the file's Z, forward
-}
+var fxFallbackFrame = uistate.FxFallbackFrame
 
-// fxRotated turns v by X, then Y, then Z around the supplied fixed axes in
-// marker space. Keeping each axis fixed makes the fields independent. Angles
-// are radians; the pivot is supplied by the caller as a vector relative to the
-// marker origin.
+// fxRotated forwards to uistate, which needs it for the shared state.
 func fxRotated(v fauxgl.Vector, rx, ry, rz float64, axes [3]fauxgl.Vector) fauxgl.Vector {
-	if rx != 0 {
-		v = fxRotateAbout(v, axes[0], rx)
-	}
-	if ry != 0 {
-		v = fxRotateAbout(v, axes[1], ry)
-	}
-	if rz != 0 {
-		v = fxRotateAbout(v, axes[2], rz)
-	}
-	return v
+	return uistate.FxRotated(v, rx, ry, rz, axes)
 }
 
-// fxRotateAbout turns v through angle radians around axis, by Rodrigues'
-// formula: the part of v along the axis is fixed, the part across it sweeps in
-// the circle the cross product names. It is the rotation matrix written out
-// without building one, which matters here because it runs for every axis of
-// every effect on every frame.
+// fxRotateAbout forwards to uistate, which needs it for the shared state.
 func fxRotateAbout(v, axis fauxgl.Vector, angle float64) fauxgl.Vector {
-	if angle == 0 {
-		return v
-	}
-	a := axis.Normalize()
-	if a == (fauxgl.Vector{}) {
-		// No frame to turn about: leaving the vector alone beats turning it
-		// about an arbitrary axis and calling the result a heading.
-		return v
-	}
-	c, s := math.Cos(angle), math.Sin(angle)
-	return v.MulScalar(c).
-		Add(a.Cross(v).MulScalar(s)).
-		Add(a.MulScalar(a.Dot(v) * (1 - c)))
+	return uistate.FxRotateAbout(v, axis, angle)
 }
 
 // fxAdvance runs the simulations and rebuilds what this frame draws of them: the
@@ -700,7 +644,7 @@ func FxAdvance(v *modelViewer, now time.Time, w, h int, opts render.RenderOption
 	if v.FxAnim != anim {
 		v.FxAnim = anim
 		for i := range v.FxEffects {
-			if v.FxEffects[i].fxPlaysFor(anim) && v.FxEffects[i].Sim != nil {
+			if v.FxEffects[i].FxPlaysFor(anim) && v.FxEffects[i].Sim != nil {
 				v.FxEffects[i].Sim.Reset()
 			}
 		}
@@ -818,7 +762,7 @@ func FxStepOnClip(v *modelViewer, active []fxOverlayEffect, anim string, dt floa
 		if e.Sim == nil {
 			continue
 		}
-		fire := e.fxFireTime(anim)
+		fire := e.FxFireTime(anim)
 		at := whe.TimeSeconds(fire, clipLen)
 		// Not reached yet: it is left alone and not drawn, which is what the
 		// game shows — the effect does not exist before its moment.
@@ -868,14 +812,14 @@ func FxEffectSelected(v *modelViewer, index int, anim string) bool {
 	if v.FxManualOff[index] {
 		return false
 	}
-	return v.FxManualOn[index] || v.FxEffects[index].fxPlaysFor(anim)
+	return v.FxManualOn[index] || v.FxEffects[index].FxPlaysFor(anim)
 }
 
 func FxEffectVisible(v *modelViewer, index int) bool {
 	if v == nil || index < 0 || index >= len(v.FxEffects) {
 		return false
 	}
-	return v.FxEffects[index].fxPlaysFor(v.FxSelectionAnim)
+	return v.FxEffects[index].FxPlaysFor(v.FxSelectionAnim)
 }
 
 func FxSetEffectSelected(v *modelViewer, index int, anim string, selected bool) {
@@ -918,7 +862,7 @@ func FxActiveEffects(v *modelViewer, anim string) []fxOverlayEffect {
 			continue
 		}
 		e := v.FxEffects[i]
-		if e.Timed && !e.fxPlaysFor(anim) {
+		if e.Timed && !e.FxPlaysFor(anim) {
 			e.Timed = false
 			e.FireTimes = nil
 		}
@@ -957,145 +901,9 @@ func fxScaledEffects(effects []fxOverlayEffect, scale float64) []fxOverlayEffect
 	return out
 }
 
-// fxOverlayEffect is one effect playing at one point in model space: the
-// simulation, and the marker of the model it hangs off.
-type fxAttributeOverride struct {
-	Origin           fauxgl.Vector
-	HasOrigin        bool
-	Rotation         [3]float64
-	ShowDirection    bool
-	ShowMarker       bool
-	ScaleDistance    float64
-	HasScaleDistance bool
-}
+type fxAttributeOverride = uistate.FxAttributeOverride
 
-type fxOverlayEffect struct {
-	Sim   *fx.FxSim
-	Label string
-	// FxName is the effect file this came from, as the event named it. It
-	// is kept for the viewport's readout: an event name on its own does not
-	// say which of the game's several thousand effect files was played.
-	FxName string
-	// Marker is the index of the model's marker the effect plays at, or
-	// -1 for one with no marker to play at. Origin is where that falls
-	// under the pose on screen, and is refreshed every frame because a
-	// marker on a moving bone moves with it.
-	Marker int
-	Origin fauxgl.Vector
-	// Ground marks an effect whose event, effect path or attachment point
-	// explicitly identifies it as a ground/dust effect. Its marker still
-	// supplies the horizontal position, while its height is anchored to the
-	// model's lowest bound so animated or orphaned effects do not float.
-	Ground bool
-	// OtherMarker is the far end of a beam, -1 when the effect named no
-	// second marker. Far is that marker under the pose on screen, refreshed
-	// for the same reason Origin is. Spans reports whether the beam should
-	// take its Length from the gap between the two rather than in model
-	// units.
-	//
-	// HasOther is what says the far end is real. The index alone cannot:
-	// zero is a valid marker, so an effect built without one set would
-	// quietly span to the model's first marker.
-	HasOther    bool
-	OtherMarker int
-	Far         fauxgl.Vector
-	Spans       bool
-	// Axis is where the marker's own frame points, for a beam whose event
-	// named no second marker. A beam with a partner spans the two; a beam
-	// without one runs this far along its Length curve. Right and Up are the
-	// marker's other two axes, which is the frame a ring's Offset is written
-	// in and the plane a ring with Billboard off keeps.
-	Axis  fauxgl.Vector
-	Right fauxgl.Vector
-	Up    fauxgl.Vector
-	// AlignToOther comes from fx_transform = self_to_other. The local FX
-	// forward axis (renderer-local +Z) then aims from the event marker to
-	// its paired marker instead of following an arbitrary marker-frame axis.
-	AlignToOther bool
-	// Frame is the FX-local X/Y/Z frame in model space. By default that is
-	// the marker frame; an FX root with No_Rotate keeps its authored frame
-	// instead of inheriting the marker's orientation.
-	Frame [3]fauxgl.Vector
-	// TurnAxes and TurnAngles describe the correction rotation in the marker's
-	// animated frame. Vectors are rotated about Origin, which remains fixed.
-	TurnAxes        [3]fauxgl.Vector
-	TurnAngles      [3]float64
-	ManualOrigin    fauxgl.Vector
-	HasManualOrigin bool
-	ShowDirection   bool
-	ShowMarker      bool
-	Direction       fauxgl.Vector
-	ScaleDistance   float64
-
-	// Scale uniformly adjusts model-local FX positions and dimensions for the
-	// preview. Zero and one both mean "as authored".
-	Scale float64
-	// EventScale is the fx_scale the event itself carried, applied uniformly
-	// on top of Scale. Zero means the event named none.
-	EventScale float64
-	// Animations are the clips that fire this effect. With Timed set, an
-	// effect in no clip at all plays on none of them, since something else
-	// triggers it in the game.
-	Animations []string
-	Timed      bool
-	// FireTimes is Animations again, but with the moment each clip fires this
-	// event: the key is a clip name in lower case and the value the timeline's
-	// own time. A clip in Animations with no entry here fires on entering it,
-	// which is what a timeline written -1 means.
-	//
-	// It is kept beside Animations rather than inside it so that a model with
-	// no timelines at all still builds: those effects have no time to honour
-	// and play from the start, which is what an empty set has always meant.
-	FireTimes map[string]float64
-}
-
-// fxFireTime is when this effect starts on the named clip, and whether the
-// timeline said at all. A clip with no time of its own fires on entering,
-// which is the -1 the game writes for "as the animation begins".
-func (e *fxOverlayEffect) fxFireTime(anim string) float64 {
-	if e.FireTimes != nil {
-		if at, ok := e.FireTimes[strings.ToLower(anim)]; ok {
-			return at
-		}
-	}
-	return -1
-}
-
-// fxTotalScale is every scale that applies to this effect: the preview's own
-// knob and the one the event was written with.
-func (e *fxOverlayEffect) fxTotalScale() float64 {
-	s := e.Scale
-	if s <= 0 {
-		s = 1
-	}
-	if e.EventScale > 0 {
-		s *= e.EventScale
-	}
-	return s
-}
-
-// fxPlaysFor reports whether this effect belongs to the clip on screen. A
-// model with timelines plays only what its clip fires; one without them plays
-// everything, which is what an effect list from a blueprint alone means.
-func (e *fxOverlayEffect) fxPlaysFor(anim string) bool {
-	if !e.Timed {
-		return true
-	}
-	if anim == "" {
-		return false
-	}
-	for _, a := range e.Animations {
-		if strings.EqualFold(a, anim) {
-			return true
-		}
-	}
-	return false
-}
-
-// fxScaleOrOne is the effect's combined preview and authored-event scale.
-func (e *fxOverlayEffect) fxScaleOrOne() float64 {
-	return e.fxTotalScale()
-}
+type fxOverlayEffect = uistate.FxOverlayEffect
 
 // fxScaleSprite scales a sprite's model-local displacement and radius together.
 // A sprite with no authored radius uses the fallback in the same model units.
@@ -1113,157 +921,9 @@ func fxScaleSprite(sp fx.Sprite, scale float64) fx.Sprite {
 	return sp
 }
 
-// fxScaleRibbon scales authored ribbon dimensions without scaling the model
-// marker gap when a beam connects two model markers. A local start offset still
-// scales and translates the full beam; an unanchored beam or ring scales around
-// the effect's fixed origin. Rotation is applied last so scale remains uniform
-// in the effect's own frame.
-func (e *fxOverlayEffect) fxScaleRibbon(rb fx.BeamRibbon, preservesMarkerSpan bool) fx.BeamRibbon {
-	scale := e.fxScaleOrOne()
-	if preservesMarkerSpan {
-		delta := rb.From.Sub(e.Origin).MulScalar(scale - 1)
-		rb.From = rb.From.Add(delta)
-		rb.To = rb.To.Add(delta)
-	} else {
-		rb.From = e.Origin.Add(rb.From.Sub(e.Origin).MulScalar(scale))
-		rb.To = e.Origin.Add(rb.To.Sub(e.Origin).MulScalar(scale))
-	}
-	rb.Width *= scale
-	rb.Arc = rb.Arc.MulScalar(scale)
-	rb.Noise *= scale
-	return e.fxTurnRibbon(rb)
-}
-
-// fxSpansMarkers reports whether this beam's Length is a fraction of the gap
-// between two markers of the model's own.
-//
-// Both halves have to hold. fx_length = distance asks for the span between the
-// markers, but fire_muzzle_beam writes it alongside fx_other = target: the far
-// end there is the unit that was shot, which a model viewer has no way of
-// naming, so there is no gap to be a fraction of. Reading its 6.23 as a
-// fraction clamps to the whole stand-in distance and leaves a stub at the
-// muzzle pointing down the marker axis rather than out along the barrel.
-func (e *fxOverlayEffect) fxSpansMarkers() bool {
-	return e.Spans && e.HasOther
-}
-
-// fxTurnVector rotates a displacement in the marker's local frame without
-// translating its pivot. The marker position itself is never passed here: the
-// caller measures from it, so every turn in the viewer happens about the
-// marker rather than about the model.
-func (e *fxOverlayEffect) fxTurnVector(v fauxgl.Vector) fauxgl.Vector {
-	return fxRotated(v, e.TurnAngles[0], e.TurnAngles[1], e.TurnAngles[2], e.TurnAxes)
-}
-
-// fxMarkerRibbon maps a beam's FX-local displacement into its attached
-// marker frame. The marker-to-marker span is already in model space and stays
-// fixed; the local start offset and arc are transformed with the marker.
-func (e *fxOverlayEffect) fxMarkerRibbon(rb fx.BeamRibbon) fx.BeamRibbon {
-	// The FX's Offset is local to the attachment, while the beam's span is
-	// already expressed by its world-space marker endpoints. Transform the
-	// local start offset, then translate both endpoints by the same amount.
-	offset := rb.From.Sub(e.Origin)
-	worldOffset := e.fxMarkerVector(offset)
-	rb.From = e.Origin.Add(worldOffset)
-	rb.To = rb.To.Add(worldOffset)
-	rb.Arc = e.fxMarkerVector(rb.Arc)
-	if e.AlignToOther && e.HasOther && (e.Sim == nil || !e.Sim.NoRotate) {
-		direction := e.Far.Sub(e.Origin).Normalize()
-		if direction.Length() > 1e-6 {
-			rb.To = rb.From.Add(direction.MulScalar(rb.To.Sub(rb.From).Length()))
-			forward := e.Frame[2].Normalize()
-			rb.Arc = fxRotateVectorBetween(rb.Arc, forward, direction)
-		}
-	}
-	return rb
-}
-
+// fxRotateVectorBetween forwards to uistate, which needs it for the shared state.
 func fxRotateVectorBetween(v, from, to fauxgl.Vector) fauxgl.Vector {
-	from, to = from.Normalize(), to.Normalize()
-	if from.Length() < 1e-6 || to.Length() < 1e-6 {
-		return v
-	}
-	cross := from.Cross(to)
-	sin := cross.Length()
-	cos := engine.ClampFloat64(from.Dot(to), -1, 1)
-	if sin < 1e-6 {
-		if cos > 0 {
-			return v
-		}
-		axis := fxFallbackFrame[0].Sub(from.MulScalar(fxFallbackFrame[0].Dot(from))).Normalize()
-		if axis.Length() < 1e-6 {
-			return v
-		}
-		return axis.MulScalar(2 * axis.Dot(v)).Sub(v)
-	}
-	axis := cross.DivScalar(sin)
-	return v.MulScalar(cos).
-		Add(axis.Cross(v).MulScalar(sin)).
-		Add(axis.MulScalar(axis.Dot(v) * (1 - cos)))
-}
-
-// fxTurnRibbon rotates generated ribbon geometry around the marker. A
-// billboard ring keeps facing the camera; only its centre offset moves, while
-// a marker-plane ring rotates with its local frame.
-func (e *fxOverlayEffect) fxTurnRibbon(rb fx.BeamRibbon) fx.BeamRibbon {
-	if e.TurnAngles == [3]float64{} {
-		return rb
-	}
-	centre := rb.From.Add(rb.To).MulScalar(0.5)
-	halfSpan := rb.To.Sub(rb.From).MulScalar(0.5)
-	centre = e.Origin.Add(e.fxTurnVector(centre.Sub(e.Origin)))
-	if !rb.Billboard {
-		halfSpan = e.fxTurnVector(halfSpan)
-		if rb.Fixed {
-			rb.Across = e.fxTurnVector(rb.Across)
-		}
-	}
-	rb.From = centre.Sub(halfSpan)
-	rb.To = centre.Add(halfSpan)
-	rb.Arc = e.fxTurnVector(rb.Arc)
-	return rb
-}
-
-// fxTurnSprite rotates a particle's local position and orientation with its
-// marker. Applying the correction after adding the effect origin would also
-// rotate the attachment point around the model center, detaching the effect.
-func (e *fxOverlayEffect) fxTurnSprite(sp fx.Sprite) fx.Sprite {
-	local := fauxgl.Vector{X: sp.Pos[0], Y: sp.Pos[1], Z: sp.Pos[2]}
-	world := e.fxTurnVector(e.fxMarkerVector(local))
-	sp.Pos = [3]float64{world.X, world.Y, world.Z}
-	if sp.Horizontal {
-		normal := fauxgl.Vector{X: sp.PlaneNormal[0], Y: sp.PlaneNormal[1], Z: sp.PlaneNormal[2]}
-		if normal.Length() < 1e-6 {
-			normal = fauxgl.Vector{Y: 1}
-		}
-		normal = e.fxTurnVector(e.fxMarkerVector(normal)).Normalize()
-		sp.PlaneNormal = [3]float64{normal.X, normal.Y, normal.Z}
-	}
-	return sp
-}
-
-// fxMarkerVector converts a displacement from the emitter's local FX frame
-// into model space. Gravity and launch motion are simulated in that same local
-// frame, so mapping the resulting displacement here carries both with the
-// attached marker while leaving the marker origin fixed.
-func (e *fxOverlayEffect) fxMarkerVector(v fauxgl.Vector) fauxgl.Vector {
-	if e.Sim != nil && e.Sim.NoRotate {
-		// No_Rotate drops the marker's rotation, not the coordinate swap:
-		// the simulation keeps every vector in the file's own Y-up frame,
-		// and this renderer is Z up, so the file axes are still carried
-		// over the way fxFallbackFrame carries them.
-		return fxFallbackFrame[0].MulScalar(v.X).
-			Add(fxFallbackFrame[1].MulScalar(v.Y)).
-			Add(fxFallbackFrame[2].MulScalar(v.Z))
-	}
-	if e.Frame == [3]fauxgl.Vector{} {
-		return v
-	}
-	x, y, z := e.Frame[0], e.Frame[1], e.Frame[2]
-	if x.Length() < 1e-6 || y.Length() < 1e-6 || z.Length() < 1e-6 {
-		return v
-	}
-	return x.MulScalar(v.X).Add(y.MulScalar(v.Y)).Add(z.MulScalar(v.Z))
+	return uistate.FxRotateVectorBetween(v, from, to)
 }
 
 // fxFrameToward rotates the local FX frame so renderer-local +Z follows the
@@ -1319,66 +979,7 @@ func fxOrientSprite(sp fx.Sprite, frame [3]fauxgl.Vector) fx.Sprite {
 	return sp
 }
 
-// fxFarPoint is where a beam of this effect ends.
-//
-// An event that named a second marker is asking for the beam to span the two,
-// and that is the far point. An event that named only one is not: its beam
-// runs forward along the marker's own axis for the length the file wrote. The
-// Length curve is a fraction in the first case and a length in model units in
-// the second, which is why the two readings cannot be merged — and the run
-// here is long enough to see, because a model unit on a .whm is about the
-// length of a weapon.
-func (e *fxOverlayEffect) fxFarPoint() fauxgl.Vector {
-	if e.HasOther {
-		return e.Far
-	}
-	axis := e.Axis
-	if n := axis.Length(); n > 1e-6 {
-		axis = axis.Normalize()
-	} else {
-		// No marker to take a direction from, so nothing says which way the
-		// beam runs. Up is the only direction the files themselves keep
-		// meaning: these are ground strikes written to fall out of the sky,
-		// and the renderer is Z up, so a bolt of twelve units leaves the
-		// monolith standing rather than lying across it. The old fallback was
-		// the model's own X, which sent awakening_lighting_ground's twelve
-		// unit LIGHTNING_BEAM out sideways from the middle of the building at
-		// ground height.
-		axis = fxAxisZ
-	}
-	return e.Origin.Add(axis.MulScalar(fxBeamFreeLength))
-}
-
-// fxBeamFreeLength is how far a beam with no partner marker runs, in model
-// units. It stands in for the Length curve, which fxBeamSamples then reads as
-// the fraction of this it actually covers.
-const fxBeamFreeLength = 1.0
-
-// fxRingFrame is the effect's local X/Y/Z, which is the frame a ring lying in
-// the marker's plane is laid out in: the map's upright axis along X, its width
-// along Z, and the Offset measured across Y and Z.
-//
-// This is deliberately not Right, Up and Axis. Those are read for the jobs
-// they already do - Right and Up come from MarkerBasis, the two columns
-// across the marker's forward axis, and Axis is that forward axis itself - so
-// asking for the ring's frame out of them hands over the forward axis where
-// the upright one belongs, and every panel that keeps its own plane comes out
-// lying on its side.
-// An effect whose event names no marker is laid out in fxFallbackFrame, the
-// whole frame rather than per-axis stand-ins: one missing axis filled in on
-// its own hands back a frame whose axes are no longer a frame, and the parts
-// that take two of them and cross them for the third get a zero where a
-// direction should be.
-func (e *fxOverlayEffect) fxRingFrame() (axX, axY, axZ fauxgl.Vector) {
-	if e.Sim != nil && e.Sim.NoRotate {
-		return fxFallbackFrame[0], fxFallbackFrame[1], fxFallbackFrame[2]
-	}
-	axX, axY, axZ = e.Frame[0], e.Frame[1], e.Frame[2]
-	if axX.Length() < 1e-6 || axY.Length() < 1e-6 || axZ.Length() < 1e-6 {
-		return fxFallbackFrame[0], fxFallbackFrame[1], fxFallbackFrame[2]
-	}
-	return axX, axY, axZ
-}
+const fxBeamFreeLength = uistate.FxBeamFreeLength
 
 // fxOverlayBounds is the size the overlay is drawn at. It is the size of the
 // frame it goes over, so the two line up without a second calculation.
@@ -1418,35 +1019,35 @@ func renderFxOverlay(effects []fxOverlayEffect, opts render.RenderOptions, w, h 
 		// Beams first: they are the long shapes a particle is drawn on top
 		// of. Keep marker-to-marker distances fixed while scaling authored
 		// dimensions and local offsets, just as in the GPU scene builder.
-		spansMarkers := e.fxSpansMarkers()
-		for _, rb := range e.Sim.Beams(e.Origin, e.fxFarPoint(), spansMarkers) {
-			rb = e.fxMarkerRibbon(rb)
+		spansMarkers := e.FxSpansMarkers()
+		for _, rb := range e.Sim.Beams(e.Origin, e.FxFarPoint(), spansMarkers) {
+			rb = e.FxMarkerRibbon(rb)
 			if e.TurnAngles != [3]float64{} {
-				rb.From = e.Origin.Add(e.fxTurnVector(rb.From.Sub(e.Origin)))
-				rb.To = e.Origin.Add(e.fxTurnVector(rb.To.Sub(e.Origin)))
+				rb.From = e.Origin.Add(e.FxTurnVector(rb.From.Sub(e.Origin)))
+				rb.To = e.Origin.Add(e.FxTurnVector(rb.To.Sub(e.Origin)))
 			}
-			rb = e.fxScaleRibbon(rb, spansMarkers)
+			rb = e.FxScaleRibbon(rb, spansMarkers)
 			if rb.Alpha > 0 && rb.Width > 0 {
 				drawFxBeam(out, view, eye, w, h, rb, textures)
 			}
 		}
-		axX, axY, axZ := e.fxRingFrame()
+		axX, axY, axZ := e.FxRingFrame()
 		markerFrame := [3]fauxgl.Vector{axX, axY, axZ}
 		for _, rb := range e.Sim.Rings(e.Origin, axX, axY, axZ, up) {
-			rb = e.fxScaleRibbon(rb, false)
+			rb = e.FxScaleRibbon(rb, false)
 			if rb.Alpha > 0 && rb.Width > 0 {
 				drawFxBeam(out, view, eye, w, h, rb, textures)
 			}
 		}
 		for _, sp := range e.Sim.Sprites() {
-			sp = e.fxTurnSprite(sp)
+			sp = e.FxTurnSprite(sp)
 			sp = fxOrientSprite(sp, markerFrame)
 			world := fauxgl.Vector{
 				X: e.Origin.X + sp.Pos[0],
 				Y: e.Origin.Y + sp.Pos[1],
 				Z: e.Origin.Z + sp.Pos[2],
 			}
-			sp = fxScaleSprite(sp, e.fxScaleOrOne())
+			sp = fxScaleSprite(sp, e.FxScaleOrOne())
 			if sp.Horizontal {
 				drawFxHorizontalSprite(out, view, w, h, world, sp.Radius, sp, textures)
 			} else {
@@ -1661,28 +1262,7 @@ func fxTexturePath(name string) string {
 	return c[0]
 }
 
-// fxLoadResult is what the worker that resolves a model's effects sends back.
-type fxLoadResult struct {
-	effects  []fxOverlayEffect
-	textures map[string]*image.RGBA
-	// sounds is every sample the worker decoded, keyed by its virtual path.
-	// Decoding a .fda takes long enough that doing it on the frame that first
-	// plays one would drop the sound that asked for it.
-	//
-	// It is a cache rather than a map because the fills that decode a sound's
-	// other variants run at the same time as each other and the caller reads
-	// this as soon as the worker is done. SoundSet is how a caller gets at it.
-	sounds *fx.SoundCache
-	// soundBundles is the event name to the files that may serve it: a sound
-	// path in a .whe names a folder of variants, and which of them plays is
-	// the game's choice at the moment it plays.
-	soundBundles map[string]fx.SoundBundle
-	// timelines are the motion timelines of the .whe, which say when each of
-	// those events fires in the clip. They came out of the same parse, so they
-	// are carried rather than read again.
-	timelines []whe.FxTimeline
-	err       error
-}
+type fxLoadResult = uistate.FxLoadResult
 
 // fxTimelineMap indexes a model's motion timelines by event: event name (lower
 // case) to the animations that fire it. A timeline names the clips it blends
@@ -1823,9 +1403,9 @@ func loadModelEffects(tree *modtree.ModTree, model *WhmModel, modelFile string, 
 // ones the preview shows.
 func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile string, opts fxLoadOpts, liveWhe *whe.Document) fxLoadResult {
 	res := fxLoadResult{
-		textures:     map[string]*image.RGBA{},
-		sounds:       fx.NewSoundCache(),
-		soundBundles: map[string]fx.SoundBundle{},
+		Textures:     map[string]*image.RGBA{},
+		Sounds:       fx.NewSoundCache(),
+		SoundBundles: map[string]fx.SoundBundle{},
 	}
 	// Samples the sound-only worker already decoded are handed over rather
 	// than decoded again. Both workers read the same .whe, so without this the
@@ -1833,7 +1413,7 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 	// second time.
 	if len(opts.decoded) > 0 {
 		for k, s := range opts.decoded {
-			res.sounds.Put(k, s)
+			res.Sounds.Put(k, s)
 		}
 	}
 	if tree == nil || model == nil {
@@ -1842,7 +1422,7 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 	loadStart := time.Now()
 	bindings, _, err := fx.ResolveEventsForModel(tree, modelFile)
 	if err != nil {
-		res.err = err
+		res.Err = err
 		return res
 	}
 	tEvents := time.Since(loadStart)
@@ -1935,7 +1515,7 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 		sim := fx.NewFxSim(file)
 		tSim += time.Since(simStart)
 		tLua += time.Since(luaStart)
-		marker := fxEventMarker(model, b.Event, len(res.effects))
+		marker := fxEventMarker(model, b.Event, len(res.Effects))
 		other := fxBeamOtherMarker(model, b.Event)
 		e := fxOverlayEffect{
 			Sim:          sim,
@@ -1981,7 +1561,7 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 		if axis, ok := model.MarkerBeamAxis(marker, rest, true); ok {
 			e.Axis = axis
 		} else if sim != nil && sim.Axis.Length() > 1e-6 {
-			e.Axis = e.fxMarkerVector(sim.Axis)
+			e.Axis = e.FxMarkerVector(sim.Axis)
 		}
 		if sim != nil && sim.NoRotate {
 			// No_Rotate overrides marker orientation, not the FX file's
@@ -1997,7 +1577,7 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 		if e.AlignToOther && sim != nil && !sim.NoRotate {
 			e.Frame = fxFrameToward(e.Frame, e.Far.Sub(e.Origin))
 		}
-		res.effects = append(res.effects, e)
+		res.Effects = append(res.Effects, e)
 		// Every map the effect names, decoded once however many nodes
 		// point at it. The sprites are asked for rather than the file
 		// scanned, so only the maps the running effect actually uses
@@ -2054,21 +1634,21 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 	}
 	for path, img := range seen {
 		if img != nil {
-			res.textures[path] = img
+			res.Textures[path] = img
 		}
 	}
 	tEffects := time.Since(loadStart)
 	// The timelines are this loader's own answer either way: the scrub bar
 	// reads them whatever becomes of the sounds, and the sound worker's own
 	// result carries the same ones out of the same file.
-	res.timelines = timelines
+	res.Timelines = timelines
 	if opts.audio {
 		fxLoadWheAudio(tree, modelFile, liveWhe, &res)
 	}
 	log.Printf("3D preview: fx load in %v: events %v, timelines %v, effects %v (read %v, parse %v, sim %v, textures %v), sounds %v; %d bindings, %d effects, %d textures from %d fx files",
 		time.Since(loadStart), tEvents, tTimelines-tEvents,
 		tEffects-tTimelines, tRead, tParse, tSim, tTex, time.Since(loadStart)-tEffects,
-		len(bindings), len(res.effects), len(res.textures), len(parsedFx))
+		len(bindings), len(res.Effects), len(res.Textures), len(parsedFx))
 	return res
 }
 
@@ -2103,15 +1683,15 @@ func loadModelSounds(tree *modtree.ModTree, modelFile string) fxLoadResult {
 // reload only pays for the paths that changed.
 func loadModelSoundsWhe(tree *modtree.ModTree, modelFile string, liveWhe *whe.Document, decoded map[string]*fx.SoundSample) fxLoadResult {
 	res := fxLoadResult{
-		sounds:       fx.NewSoundCache(),
-		soundBundles: map[string]fx.SoundBundle{},
+		Sounds:       fx.NewSoundCache(),
+		SoundBundles: map[string]fx.SoundBundle{},
 	}
 	if tree == nil {
 		return res
 	}
 	if len(decoded) > 0 {
 		for k, s := range decoded {
-			res.sounds.Put(k, s)
+			res.Sounds.Put(k, s)
 		}
 	}
 	fxLoadWheAudio(tree, modelFile, liveWhe, &res)
@@ -2144,7 +1724,7 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 	// depend on there being any sound to play. Returning below on an empty
 	// sound list without them would hand the caller a set that clears what the
 	// other worker has already put there.
-	res.timelines = timelines
+	res.Timelines = timelines
 	// One worker per sound that names a folder of variants, all of them
 	// finished before this returns: the samples are handed to the player as one
 	// set once it does.
@@ -2202,7 +1782,7 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 			}
 			j.b = b
 			first := b.Files[0]
-			if _, done := res.sounds.Get(first); done {
+			if _, done := res.Sounds.Get(first); done {
 				return
 			}
 			s, err := fxSoundDecodeForPlayback(tree, roots, first)
@@ -2210,7 +1790,7 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 				j.err = err
 				return
 			}
-			res.sounds.Put(first, s)
+			res.Sounds.Put(first, s)
 		}(j)
 	}
 	wg.Wait()
@@ -2219,12 +1799,12 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 			log.Printf("3D preview: sound %q: %v", j.ev.Path, j.err)
 			continue
 		}
-		res.soundBundles[j.name] = j.b
+		res.SoundBundles[j.name] = j.b
 		if len(j.b.Files) > 1 {
 			fills.Add(1)
 			go func(b fx.SoundBundle) {
 				defer fills.Done()
-				fxSoundFillVariants(tree, roots, b, res.sounds)
+				fxSoundFillVariants(tree, roots, b, res.Sounds)
 			}(j.b)
 		}
 	}
@@ -2239,7 +1819,7 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 	variantWait := time.Since(waitStart)
 	log.Printf("3D preview: sounds in %v (resolve + first %v, variants %v): %d bundles",
 		time.Since(soundStart), time.Since(soundStart)-variantWait, variantWait,
-		len(res.soundBundles))
+		len(res.SoundBundles))
 }
 
 // fxSoundAlwaysPlays says whether a sound the model's timelines never fire is
@@ -2922,7 +2502,7 @@ func fxOriginAxisFrames(e fxOverlayEffect, model *WhmModel, marker int, pose Whm
 	// The attribute editor's correction is applied to the effect geometry
 	// after its attachment frame, so show the corrected local frame here too.
 	for i := range local {
-		local[i] = e.fxTurnVector(local[i])
+		local[i] = e.FxTurnVector(local[i])
 	}
 	return [2][3]fauxgl.Vector{local, {{X: 1}, {Y: 1}, {Z: 1}}}
 }
@@ -3086,12 +2666,6 @@ func fxAxesColor(c [4]float64) color.NRGBA {
 }
 
 // ─── merged from fx_markers.go ───────────────────────────────────────────────
-
-// boneIndexByName keeps the UI call site on WhmModel while the model logic
-// itself lives alongside the parsed model in internal/whm.
-func (m *WhmModel) boneIndexByName(name string) int {
-	return m.Model.BoneIndexByName(name)
-}
 
 // modelMarkerForwards remains for existing same-package diagnostics; the
 // cached marker-frame analysis is implemented by internal/whm.Model.

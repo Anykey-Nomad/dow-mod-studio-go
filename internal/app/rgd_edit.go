@@ -28,7 +28,7 @@ func RgdEnsureEditorClick(ui *uiState, ed *widget.Editor) *rgdEditorClickState {
 	}
 	state, ok := ui.RgdEditorClicks[ed]
 	if !ok {
-		state = &rgdEditorClickState{editor: ed}
+		state = &rgdEditorClickState{Editor: ed}
 		ui.RgdEditorClicks[ed] = state
 	}
 	return state
@@ -36,8 +36,8 @@ func RgdEnsureEditorClick(ui *uiState, ed *widget.Editor) *rgdEditorClickState {
 
 func FocusClickedRgdEditor(ui *uiState, gtx layout.Context) {
 	for _, state := range ui.RgdEditorClicks {
-		if state.click.Clicked(gtx) {
-			gtx.Execute(key.FocusCmd{Tag: state.editor})
+		if state.Click.Clicked(gtx) {
+			gtx.Execute(key.FocusCmd{Tag: state.Editor})
 		}
 	}
 }
@@ -646,7 +646,7 @@ func PollLocaleLinkPress(ui *uiState, gtx layout.Context, tag event.Tag, value s
 		case localeRowJump:
 			ui.LocalePending = id
 		case localeRowEdit, localeRowCreate:
-			ui.LocalePendingRequest = localeEditRequest{id: id, action: action}
+			ui.LocalePendingRequest = localeEditRequest{Id: id, Action: action}
 			ui.LocalePendingField = e
 			ui.LocalePendingFieldKey = fieldKey
 		}
@@ -751,7 +751,7 @@ func TableRowEditor(ui *uiState, gtx layout.Context, label string, ed *widget.Ed
 									// consumed during input, while PassOp keeps the editor's own
 									// text hit-testing intact.
 									pass := pointer.PassOp{}.Push(gtx.Ops)
-									dims := click.click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+									dims := click.Click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 										return layout.Dimensions{Size: gtx.Constraints.Max}
 									})
 									pass.Pop()

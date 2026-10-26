@@ -375,7 +375,7 @@ func ActivateSelectedRgdNode(ui *uiState, gtx layout.Context) {
 	}
 	// RGD entries do not have a separate file to open. Keep the entry selected,
 	// reveal its properties, and focus the editable property when possible.
-	ui.RightScroll.offset = 0
+	ui.RightScroll.Offset = 0
 	if selected.IsTable {
 		gtx.Execute(key.FocusCmd{Tag: &tab.RgdRefEditor})
 	} else if selected.Entry.Type != rgd.RgdTypeBool && rgdIsEditableType(selected.Entry.Type) {
@@ -752,7 +752,7 @@ func HandleInput(ui *uiState, gtx layout.Context) {
 		return
 	}
 	// The event picker is modal over the Events section the same way.
-	if ui.EvtPick.open {
+	if ui.EvtPick.Open {
 		HandleEvtPickerInput(ui, gtx)
 		return
 	}
@@ -802,18 +802,18 @@ func HandleInput(ui *uiState, gtx layout.Context) {
 	// Alt+Ctrl on a localised row, or a click on one with no text, was seen the
 	// same way. The request is acted on here because putting a dialog up is the
 	// input pass's business, not a layout's.
-	if req := ui.LocalePendingRequest; req.action != localeRowNothing {
+	if req := ui.LocalePendingRequest; req.Action != localeRowNothing {
 		ui.LocalePendingRequest = localeEditRequest{}
-		switch req.action {
+		switch req.Action {
 		case localeRowJump:
-			JumpToLocaleEntry(ui, req.id)
+			JumpToLocaleEntry(ui, req.Id)
 		case localeRowEdit, localeRowCreate:
 			// A press in the file view knows its own entry; one in the object
 			// window has to be looked up among the unit's rows.
 			field := ui.LocalePendingField
 			if field == nil {
 				if d := CurrentUnitDetails(ui); d != nil {
-					field = localeFieldForID(d, req.id)
+					field = localeFieldForID(d, req.Id)
 				}
 			}
 			fieldKey := ui.LocalePendingFieldKey
@@ -822,7 +822,7 @@ func HandleInput(ui *uiState, gtx layout.Context) {
 			}
 			ui.LocalePendingField = nil
 			ui.LocalePendingFieldKey = ""
-			OpenLocaleEdit(ui, req.id, req.action, field, fieldKey)
+			OpenLocaleEdit(ui, req.Id, req.Action, field, fieldKey)
 		}
 	}
 	// The search field owns the arrow and Enter keys while it is open, so it

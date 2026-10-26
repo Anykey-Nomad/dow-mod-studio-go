@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"log"
 	"os"
@@ -116,11 +117,7 @@ func OpenWheViaUnit(ui *uiState, path string) {
 // ── .sga → a listing of the archive ─────────────────────────────────────────
 
 // sgaRow is one line of the archive listing tab.
-type sgaRow struct {
-	path  string // the entry's path inside the archive, e.g. "Data\art\..."
-	isDir bool
-	size  int64
-}
+type sgaRow = uistate.SgaRow
 
 // openSgaArchive opens an .sga as a read-only listing of what it carries.
 // Nothing is extracted: the archive is the game's own packaging, and a listing
@@ -177,11 +174,11 @@ func sgaWalkRows(arch *sga.SGAFile, dirID int, prefix string, rows []sgaRow) []s
 	for _, e := range entries {
 		p := prefix + "\\" + e.Name
 		if e.IsDir {
-			rows = append(rows, sgaRow{path: p, isDir: true})
+			rows = append(rows, sgaRow{Path: p, IsDir: true})
 			rows = sgaWalkRows(arch, e.DirID, p, rows)
 			continue
 		}
-		rows = append(rows, sgaRow{path: p, size: e.Size})
+		rows = append(rows, sgaRow{Path: p, Size: e.Size})
 	}
 	return rows
 }
@@ -218,13 +215,13 @@ func LayoutSgaListing(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimens
 			r := t.SgaRows[index]
 			gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(20))
 			gtx.Constraints.Max.Y = gtx.Dp(unit.Dp(20))
-			name := r.path
-			if r.isDir {
+			name := r.Path
+			if r.IsDir {
 				name += "\\"
 			}
 			size := ""
-			if !r.isDir {
-				size = sgaSizeLabel(r.size)
+			if !r.IsDir {
+				size = sgaSizeLabel(r.Size)
 			}
 			return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
@@ -343,7 +340,7 @@ const steamDowFolder = `C:/Program Files/Steam/steamapps/common/Dawn of War Defi
 func discoverModuleFiles(dirs []string) []moduleCandidate {
 	var modules []moduleCandidate
 	for _, r := range listPickFiles(dirs, func(name string) bool { return pickExt(name) == ".module" }) {
-		modules = append(modules, moduleCandidate{path: r.path, folder: r.folder})
+		modules = append(modules, moduleCandidate{path: r.Path, folder: r.Folder})
 	}
 	return modules
 }
@@ -371,13 +368,13 @@ func ModuleRoots(ui *uiState) []string {
 // openModulePicker shows the Open Module dialog over the .module files.
 func OpenModulePicker(ui *uiState) {
 	OpenFilePicker(ui, pickConfig{
-		title:    "Open Module",
-		subtitle: "Enter a .module file or the Dawn of War folder to scan",
-		hint:     `C:\Program Files\Steam\steamapps\common\Dawn of War Definitive Edition`,
-		exts:     []string{".module"},
-		roots:    func() []string { return ModuleRoots(ui) },
-		start:    ui.ModulePath,
-		onPick: func(path string) (bool, string) {
+		Title:    "Open Module",
+		Subtitle: "Enter a .module file or the Dawn of War folder to scan",
+		Hint:     `C:\Program Files\Steam\steamapps\common\Dawn of War Definitive Edition`,
+		Exts:     []string{".module"},
+		Roots:    func() []string { return ModuleRoots(ui) },
+		Start:    ui.ModulePath,
+		OnPick: func(path string) (bool, string) {
 			path = ResolveModulePath(ui, path)
 			if !pathExists(path) {
 				return false, "No such module file: " + path

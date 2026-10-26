@@ -3,6 +3,7 @@ package app
 import (
 	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/app/render"
+	"dow-mod-studio/internal/app/uistate"
 	"math"
 	"sort"
 )
@@ -12,12 +13,7 @@ import (
 // writes into the track it came from rather than whatever is picked when the
 // undo is pressed. The two key lists are copied outright — a key is a time and
 // a fixed-size value, so the copy shares nothing with the live track.
-type boneTrackSnapshot struct {
-	anim      *WhmAnimation
-	boneIndex int
-	posKey    []WhmKey3
-	rotKey    []WhmKey4
-}
+type boneTrackSnapshot = uistate.BoneTrackSnapshot
 
 // snapshotBoneTrack copies the picked bone's key track so an edit about to be
 // made can be undone. It reports false when there is no clip or bone to record,
@@ -32,10 +28,10 @@ func SnapshotBoneTrack(v *modelViewer) (boneTrackSnapshot, bool) {
 		return boneTrackSnapshot{}, false
 	}
 	return boneTrackSnapshot{
-		anim:      v.Anim,
-		boneIndex: v.BoneIndex,
-		posKey:    append([]WhmKey3(nil), t.PosKey...),
-		rotKey:    append([]WhmKey4(nil), t.RotKey...),
+		Anim:      v.Anim,
+		BoneIndex: v.BoneIndex,
+		PosKey:    append([]WhmKey3(nil), t.PosKey...),
+		RotKey:    append([]WhmKey4(nil), t.RotKey...),
 	}, true
 }
 
@@ -44,21 +40,21 @@ func SnapshotBoneTrack(v *modelViewer) (boneTrackSnapshot, bool) {
 // pose rather than the one the edit produced. It reports false when the track
 // the snapshot named is not in its clip any more.
 func RestoreBoneTrack(v *modelViewer, s boneTrackSnapshot) bool {
-	if s.anim == nil || s.boneIndex < 0 {
+	if s.Anim == nil || s.BoneIndex < 0 {
 		return false
 	}
 	var t *WhmTrack
-	for i := range s.anim.Bones {
-		if s.anim.Bones[i].Bone == s.boneIndex {
-			t = &s.anim.Bones[i]
+	for i := range s.Anim.Bones {
+		if s.Anim.Bones[i].Bone == s.BoneIndex {
+			t = &s.Anim.Bones[i]
 			break
 		}
 	}
 	if t == nil {
 		return false
 	}
-	t.PosKey = append([]WhmKey3(nil), s.posKey...)
-	t.RotKey = append([]WhmKey4(nil), s.rotKey...)
+	t.PosKey = append([]WhmKey3(nil), s.PosKey...)
+	t.RotKey = append([]WhmKey4(nil), s.RotKey...)
 	v.PoseValid = false
 	Invalidate(v)
 	return true
@@ -179,10 +175,7 @@ func AddBoneKeyAtFrame(v *modelViewer, frame, mode int) bool {
 // index after it, while the frames of the keys that stay where they are do
 // not move, so a selection of several rows would otherwise be pointing at
 // other people's keys after the first deletion.
-type boneKeyRef struct {
-	mode  int // 0 position, 1 rotation
-	frame int
-}
+type boneKeyRef = uistate.BoneKeyRef
 
 // boneKeyRefs is every key of the picked bone's track in the order the panel
 // lists them: position keys first, rotation keys after, each kind in frame
@@ -197,10 +190,10 @@ func BoneKeyRefs(v *modelViewer) []boneKeyRef {
 	}
 	out := make([]boneKeyRef, 0, len(t.PosKey)+len(t.RotKey))
 	for i := range t.PosKey {
-		out = append(out, boneKeyRef{mode: 0, frame: frameAt(float64(t.PosKey[i].Time), v.Anim.NumFrames)})
+		out = append(out, boneKeyRef{Mode: 0, Frame: frameAt(float64(t.PosKey[i].Time), v.Anim.NumFrames)})
 	}
 	for i := range t.RotKey {
-		out = append(out, boneKeyRef{mode: 1, frame: frameAt(float64(t.RotKey[i].Time), v.Anim.NumFrames)})
+		out = append(out, boneKeyRef{Mode: 1, Frame: frameAt(float64(t.RotKey[i].Time), v.Anim.NumFrames)})
 	}
 	return out
 }
@@ -241,7 +234,7 @@ func BoneKeyIndexAtFrame(v *modelViewer, frame, mode int) int {
 // rather than the absence of one.
 func PickedBoneKeyRef(v *modelViewer) (boneKeyRef, bool) {
 	if !PickedBoneKeyValid(v) {
-		return boneKeyRef{mode: -1}, false
+		return boneKeyRef{Mode: -1}, false
 	}
 	t := BoneTrack(v)
 	keyTime := float32(0)
@@ -250,7 +243,7 @@ func PickedBoneKeyRef(v *modelViewer) (boneKeyRef, bool) {
 	} else {
 		keyTime = t.RotKey[v.BoneKeyIndex].Time
 	}
-	return boneKeyRef{mode: v.BoneKeyMode, frame: frameAt(float64(keyTime), v.Anim.NumFrames)}, true
+	return boneKeyRef{Mode: v.BoneKeyMode, Frame: frameAt(float64(keyTime), v.Anim.NumFrames)}, true
 }
 
 // freeBoneKeyFrame walks out from a frame in the given direction (−1 back,
@@ -607,8 +600,8 @@ func ShiftBoneKeys(v *modelViewer, refs []boneKeyRef, delta int) (newRefs []bone
 	n := v.Anim.NumFrames
 	moving := [2]map[int]bool{{}, {}}
 	for _, r := range refs {
-		if r.mode == 0 || r.mode == 1 {
-			moving[r.mode][r.frame] = true
+		if r.Mode == 0 || r.Mode == 1 {
+			moving[r.Mode][r.Frame] = true
 		}
 	}
 	tgt := [2]map[int]int{}
@@ -687,11 +680,11 @@ func ShiftBoneKeys(v *modelViewer, refs []boneKeyRef, delta int) (newRefs []bone
 	}
 	// The selection follows the keys to the frames they landed on.
 	for _, r := range refs {
-		if r.mode != 0 && r.mode != 1 {
+		if r.Mode != 0 && r.Mode != 1 {
 			continue
 		}
-		if nf, ok := tgt[r.mode][r.frame]; ok {
-			newRefs = append(newRefs, boneKeyRef{mode: r.mode, frame: nf})
+		if nf, ok := tgt[r.Mode][r.Frame]; ok {
+			newRefs = append(newRefs, boneKeyRef{Mode: r.Mode, Frame: nf})
 		}
 	}
 	if moved > 0 {

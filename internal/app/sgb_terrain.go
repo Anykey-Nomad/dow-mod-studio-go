@@ -301,30 +301,30 @@ func StartSgbSceneLoad(ui *uiState, t *fileTab, material string) {
 	go func() {
 		// Phase one: the ground. Its diffuse is the only material the
 		// terrain-only model the tab opened with can show.
-		ground := modelMaterialResult{materials: map[string]render.WhmMaterial{}, more: true}
+		ground := modelMaterialResult{Materials: map[string]render.WhmMaterial{}, More: true}
 		if img := sgbBuildTerrainTexture(tree, path, m); img != nil {
-			ground.materials[material] = render.WhmMaterial{Texture: render.NewModelTexture(img), Color: render.RgbaWhite}
+			ground.Materials[material] = render.WhmMaterial{Texture: render.NewModelTexture(img), Color: render.RgbaWhite}
 		} else {
-			ground.missing = 1
+			ground.Missing = 1
 		}
 		ch <- ground
 		// Phase two: the scene — terrain plus every resolvable object —
 		// with the entity .rsh materials alongside the ground's.
-		res := modelMaterialResult{materials: map[string]render.WhmMaterial{}, missing: ground.missing,
-			diagnostics: map[string]modelMaterialDiagnostic{},
+		res := modelMaterialResult{Materials: map[string]render.WhmMaterial{}, Missing: ground.Missing,
+			Diagnostics: map[string]modelMaterialDiagnostic{},
 		}
-		for name, mat := range ground.materials {
-			res.materials[name] = mat
-			res.diagnostics[name] = modelMaterialDiagnostic{Format: "SGB terrain diffuse", Status: "decoded in memory"}
+		for name, mat := range ground.Materials {
+			res.Materials[name] = mat
+			res.Diagnostics[name] = modelMaterialDiagnostic{Format: "SGB terrain diffuse", Status: "decoded in memory"}
 		}
 		if scene, entityMeshes, animatedEntities := sgbBuildSceneModelWithEntityAnimations(tree, m, material); scene != nil {
-			res.model = &WhmModel{Model: *scene}
-			res.entityMeshes = entityMeshes
-			res.animatedEntities = animatedEntities
+			res.Model = &WhmModel{Model: *scene}
+			res.EntityMeshes = entityMeshes
+			res.AnimatedEntities = animatedEntities
 			var entityDiagnostics map[string]modelMaterialDiagnostic
-			res.rsh, res.materials, res.missing, entityDiagnostics = sgbEntityMaterials(tree, path, scene, material, res.materials)
+			res.Rsh, res.Materials, res.Missing, entityDiagnostics = sgbEntityMaterials(tree, path, scene, material, res.Materials)
 			for name, diag := range entityDiagnostics {
-				res.diagnostics[name] = diag
+				res.Diagnostics[name] = diag
 			}
 		}
 		ch <- res
@@ -361,7 +361,7 @@ func sgbEntityMaterials(tree *modtree.ModTree, sceneFile string, scene *whm.Mode
 	}
 	files, paths := resolveModelMaterialsWithPaths(tree, materialSearchRoots(tree), sceneFile, names)
 	res := decodeModelMaterials(files, true)
-	attachMaterialSourcePaths(res.diagnostics, paths)
+	attachMaterialSourcePaths(res.Diagnostics, paths)
 	for _, mesh := range scene.Meshes {
 		if mesh.Material == "" || mesh.Material == keep || mesh.Material == sgb.WaterMaterialName {
 			continue
@@ -370,26 +370,26 @@ func sgbEntityMaterials(tree *modtree.ModTree, sceneFile string, scene *whm.Mode
 		if mesh.MaterialPath != "" {
 			key = mesh.MaterialPath
 		}
-		if mat, ok := res.materials[key]; ok {
+		if mat, ok := res.Materials[key]; ok {
 			base[mesh.Material] = mat
 		}
-		if raw, ok := res.rsh[key]; ok {
-			res.rsh[mesh.Material] = raw
+		if raw, ok := res.Rsh[key]; ok {
+			res.Rsh[mesh.Material] = raw
 		}
-		if diag, ok := res.diagnostics[key]; ok {
+		if diag, ok := res.Diagnostics[key]; ok {
 			diag.ResolvedPath = paths[key]
-			res.diagnostics[mesh.Material] = diag
+			res.Diagnostics[mesh.Material] = diag
 		}
 	}
-	for name, mat := range res.materials {
+	for name, mat := range res.Materials {
 		base[name] = mat
 	}
 	for _, name := range names {
-		if _, ok := res.diagnostics[name]; !ok {
-			res.diagnostics[name] = modelMaterialDiagnostic{Format: "—", Status: "not found"}
+		if _, ok := res.Diagnostics[name]; !ok {
+			res.Diagnostics[name] = modelMaterialDiagnostic{Format: "—", Status: "not found"}
 		}
 	}
-	return res.rsh, base, res.missing, res.diagnostics
+	return res.Rsh, base, res.Missing, res.Diagnostics
 }
 
 // sgbBlendTiles paints tile textures over a relief-sized preview image. Kept

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/sga"
 	"dow-mod-studio/internal/sgapack"
@@ -23,10 +24,7 @@ import (
 	"gioui.org/widget/material"
 )
 
-type archiveOption struct {
-	source *modtree.FileSource
-	label  string
-}
+type archiveOption = uistate.ArchiveOption
 
 func OpenArchiveDialog(ui *uiState) {
 	if ui.ModTree == nil {
@@ -45,10 +43,10 @@ func OpenArchiveDialog(ui *uiState) {
 		}
 		seen[key] = true
 		label := fmt.Sprintf("%s — %s", source.ModName, source.SourceName)
-		ui.ArchiveOptions = append(ui.ArchiveOptions, archiveOption{source: source, label: label})
+		ui.ArchiveOptions = append(ui.ArchiveOptions, archiveOption{Source: source, Label: label})
 	}
 	sort.Slice(ui.ArchiveOptions, func(i, j int) bool {
-		return strings.ToLower(ui.ArchiveOptions[i].label) < strings.ToLower(ui.ArchiveOptions[j].label)
+		return strings.ToLower(ui.ArchiveOptions[i].Label) < strings.ToLower(ui.ArchiveOptions[j].Label)
 	})
 	ui.ArchiveSelected = make([]bool, len(ui.ArchiveOptions))
 	ui.ArchiveSelectClicks = make([]widget.Clickable, len(ui.ArchiveOptions))
@@ -198,20 +196,20 @@ func ExtractSelectedArchives(ui *uiState) {
 	filesWritten := 0
 	filesSkipped := 0
 	for i, option := range ui.ArchiveOptions {
-		if i >= len(ui.ArchiveSelected) || !ui.ArchiveSelected[i] || option.source == nil || option.source.SGAHandle == nil {
+		if i >= len(ui.ArchiveSelected) || !ui.ArchiveSelected[i] || option.Source == nil || option.Source.SGAHandle == nil {
 			continue
 		}
 		selected++
-		for toc := 0; toc < option.source.SGAHandle.ToCCount(); toc++ {
-			root := option.source.SGAHandle.ToCName(toc)
+		for toc := 0; toc < option.Source.SGAHandle.ToCCount(); toc++ {
+			root := option.Source.SGAHandle.ToCName(toc)
 			if root == "" {
 				root = "Data"
 			}
-			dir, err := option.source.SGAHandle.RootDir(toc)
+			dir, err := option.Source.SGAHandle.RootDir(toc)
 			if err != nil {
 				continue
 			}
-			filesWritten, filesSkipped = ExtractSGADir(ui, option.source.SGAHandle, dir, root, filesWritten, filesSkipped)
+			filesWritten, filesSkipped = ExtractSGADir(ui, option.Source.SGAHandle, dir, root, filesWritten, filesSkipped)
 		}
 	}
 	ui.ArchiveStatus = fmt.Sprintf("Extracted %d file(s), skipped %d existing", filesWritten, filesSkipped)
@@ -336,7 +334,7 @@ func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.Th, unit.Sp(11), opt.label)
+												l := material.Label(ui.Th, unit.Sp(11), opt.Label)
 												l.Color = cText
 												return l.Layout(gtx)
 											}),

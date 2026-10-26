@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"io"
@@ -425,54 +426,15 @@ func DuplicateCurrentModFile(ui *uiState, virtualPath string) error {
 // hold thousands of files.
 const pickMaxRows = 300
 
-// pickConfig is what a caller hands the dialog when it opens.
-type pickConfig struct {
-	title, subtitle, hint string
-	exts                  []string // lower case with the dot; a bare name gets the first
-	// modTree makes the picker use the mod file tree: its list is the tree's
-	// files, folders are not browsed on disk, and only tree paths are accepted.
-	// Sounds, FX and the timeline import ask for it; Open Module does not.
-	modTree bool
-	roots   func() []string
-	start   string
-	// onPick receives the path that was chosen. It returns whether the dialog
-	// may close, and a status line for the dialog when it may not.
-	onPick func(path string) (bool, string)
-}
+type pickConfig = uistate.PickConfig
 
-type pickRow struct {
-	path   string
-	label  string
-	folder string
-	isDir  bool
-}
+type pickRow = uistate.PickRow
 
-// filePicker is the dialog's state. It lives once on the window, since one
-// file dialog is open at a time.
-type filePicker struct {
-	cfg    pickConfig
-	ed     widget.Editor
-	status string
-	dir    string // folder being browsed; "" while the start list is shown
-	last   string // the field's text as the dialog last saw it
-	filter string
-	all    []pickRow
-	rows   []pickRow
-	clicks []widget.Clickable
-	list   layout.List
-	ok     widget.Clickable
-	cancel widget.Clickable
-}
+type filePicker = uistate.FilePicker
 
-// pickExt is the lower case extension of a file name or path, dot included,
-// or "" when the last part has none. A backslash or slash after the dot means
-// the dot belongs to a folder.
+// pickExt forwards to uistate, which needs it for the shared state.
 func pickExt(name string) string {
-	i := strings.LastIndexByte(name, '.')
-	if i < 0 || strings.ContainsAny(name[i:], `\/`) {
-		return ""
-	}
-	return strings.ToLower(name[i:])
+	return uistate.PickExt(name)
 }
 
 // pickFilterOf is the part of a typed path the list is filtered by: the last
@@ -499,38 +461,20 @@ func pathExists(p string) bool {
 	return err == nil
 }
 
-func (fp *filePicker) allows(name string) bool {
-	if len(fp.cfg.exts) == 0 {
-		return true
-	}
-	ext := pickExt(name)
-	for _, e := range fp.cfg.exts {
-		if ext == e {
-			return true
-		}
-	}
-	return false
-}
-
-func (fp *filePicker) setText(s string) {
-	fp.ed.SetText(s)
-	fp.last = s
-}
-
 // openFilePicker shows the dialog for one caller.
 func OpenFilePicker(ui *uiState, cfg pickConfig) {
 	fp := &ui.FilePick
-	fp.cfg = cfg
-	fp.ed.SingleLine = true
-	fp.ed.Submit = true
-	fp.status = ""
-	fp.filter = ""
-	fp.dir = ""
-	fp.setText(cfg.start)
+	fp.Cfg = cfg
+	fp.Ed.SingleLine = true
+	fp.Ed.Submit = true
+	fp.Status = ""
+	fp.Filter = ""
+	fp.Dir = ""
+	fp.SetText(cfg.Start)
 	ui.FilePickOpen = true
-	if cfg.start != "" && !cfg.modTree {
-		if info, err := os.Stat(cfg.start); err == nil && info.IsDir() {
-			FpBrowse(ui, cfg.start)
+	if cfg.Start != "" && !cfg.ModTree {
+		if info, err := os.Stat(cfg.Start); err == nil && info.IsDir() {
+			FpBrowse(ui, cfg.Start)
 			return
 		}
 	}
@@ -540,7 +484,7 @@ func OpenFilePicker(ui *uiState, cfg pickConfig) {
 // fpStartList shows the start list: the module's files for a tree caller, or
 // the folders and matching files of the caller's roots.
 func FpStartList(ui *uiState) {
-	ui.FilePick.dir = ""
+	ui.FilePick.Dir = ""
 	FpRebuild(ui)
 }
 
@@ -554,38 +498,38 @@ func FpBrowse(ui *uiState, dir string) {
 	}
 	dir = filepath.Clean(dir)
 	RememberRecentFolder(ui, dir)
-	fp.dir = dir
-	fp.setText(dir)
-	fp.filter = ""
+	fp.Dir = dir
+	fp.SetText(dir)
+	fp.Filter = ""
 	parent := filepath.Dir(dir)
-	up := pickRow{path: parent, label: "..", folder: dir, isDir: true}
+	up := pickRow{Path: parent, Label: "..", Folder: dir, IsDir: true}
 	if parent == dir {
-		up.path = ""
+		up.Path = ""
 	}
-	fp.all = []pickRow{up}
+	fp.All = []pickRow{up}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		fp.status = "Cannot read " + dir + ": " + err.Error()
+		fp.Status = "Cannot read " + dir + ": " + err.Error()
 	}
 	var subs, files []pickRow
 	for _, e := range entries {
 		full := filepath.Join(dir, e.Name())
 		if e.IsDir() {
-			subs = append(subs, pickRow{path: full, label: e.Name() + `\`, folder: dir, isDir: true})
+			subs = append(subs, pickRow{Path: full, Label: e.Name() + `\`, Folder: dir, IsDir: true})
 			continue
 		}
-		if fp.allows(e.Name()) {
-			files = append(files, pickRow{path: full, label: e.Name(), folder: dir})
+		if fp.Allows(e.Name()) {
+			files = append(files, pickRow{Path: full, Label: e.Name(), Folder: dir})
 		}
 	}
 	sort.Slice(subs, func(i, j int) bool {
-		return strings.ToLower(subs[i].label) < strings.ToLower(subs[j].label)
+		return strings.ToLower(subs[i].Label) < strings.ToLower(subs[j].Label)
 	})
-	fp.all = append(fp.all, subs...)
-	fp.all = append(fp.all, files...)
+	fp.All = append(fp.All, subs...)
+	fp.All = append(fp.All, files...)
 	FpRebuild(ui)
 	if err == nil {
-		fp.status = fmt.Sprintf("%d folder(s), %d file(s) in %s", len(subs), len(files), dir)
+		fp.Status = fmt.Sprintf("%d folder(s), %d file(s) in %s", len(subs), len(files), dir)
 	}
 }
 
@@ -593,46 +537,46 @@ func FpBrowse(ui *uiState, dir string) {
 func FpStartRows(ui *uiState, filter string) []pickRow {
 	fp := &ui.FilePick
 	q := strings.ToLower(filter)
-	if fp.cfg.modTree {
+	if fp.Cfg.ModTree {
 		var out []pickRow
 		if ui.ModTree == nil {
-			ui.FilePick.status = "No mod is loaded: the mod file tree is empty"
+			ui.FilePick.Status = "No mod is loaded: the mod file tree is empty"
 			return nil
 		}
 		modtree.SearchWalk(ui.ModTree.Root, func(f *modtree.TreeFile) {
-			if f == nil || len(out) >= pickMaxRows || !fp.allows(f.Name) {
+			if f == nil || len(out) >= pickMaxRows || !fp.Allows(f.Name) {
 				return
 			}
 			if q != "" && !strings.Contains(strings.ToLower(f.FullPath), q) {
 				return
 			}
-			out = append(out, pickRow{path: f.FullPath, label: f.FullPath, folder: filepath.Dir(f.FullPath)})
+			out = append(out, pickRow{Path: f.FullPath, Label: f.FullPath, Folder: filepath.Dir(f.FullPath)})
 		})
 		return out
 	}
 	var dirs []string
-	if fp.cfg.roots != nil {
-		dirs = fp.cfg.roots()
+	if fp.Cfg.Roots != nil {
+		dirs = fp.Cfg.Roots()
 	}
 	out := discoverFolderRows(dirs)
-	out = append(out, listPickFiles(dirs, fp.allows)...)
+	out = append(out, listPickFiles(dirs, fp.Allows)...)
 	return out
 }
 
 // fpRebuild recomputes the rows for the current filter and folder.
 func FpRebuild(ui *uiState) {
 	fp := &ui.FilePick
-	if fp.dir == "" {
-		fp.all = FpStartRows(ui, fp.filter)
+	if fp.Dir == "" {
+		fp.All = FpStartRows(ui, fp.Filter)
 	}
-	q := strings.ToLower(fp.filter)
-	fp.rows = fp.rows[:0]
-	for _, r := range fp.all {
-		if r.label == ".." || q == "" || strings.Contains(strings.ToLower(r.label), q) {
-			fp.rows = append(fp.rows, r)
+	q := strings.ToLower(fp.Filter)
+	fp.Rows = fp.Rows[:0]
+	for _, r := range fp.All {
+		if r.Label == ".." || q == "" || strings.Contains(strings.ToLower(r.Label), q) {
+			fp.Rows = append(fp.Rows, r)
 		}
 	}
-	fp.clicks = make([]widget.Clickable, len(fp.rows))
+	fp.Clicks = make([]widget.Clickable, len(fp.Rows))
 }
 
 // discoverFolderRows lists the existing roots as folders to open.
@@ -650,7 +594,7 @@ func discoverFolderRows(dirs []string) []pickRow {
 		}
 		seen[key] = true
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			rows = append(rows, pickRow{path: dir, label: dir, folder: filepath.Dir(dir), isDir: true})
+			rows = append(rows, pickRow{Path: dir, Label: dir, Folder: filepath.Dir(dir), IsDir: true})
 		}
 	}
 	return rows
@@ -680,11 +624,11 @@ func listPickFiles(dirs []string, allows func(string) bool) []pickRow {
 				continue
 			}
 			seen[key] = true
-			out = append(out, pickRow{path: p, label: p, folder: dir})
+			out = append(out, pickRow{Path: p, Label: p, Folder: dir})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
-		return strings.ToLower(out[i].path) < strings.ToLower(out[j].path)
+		return strings.ToLower(out[i].Path) < strings.ToLower(out[j].Path)
 	})
 	return out
 }
@@ -696,7 +640,7 @@ func HandleFilePicker(ui *uiState, gtx layout.Context) {
 	fp := &ui.FilePick
 	submitted := false
 	for {
-		ev, ok := fp.ed.Update(gtx)
+		ev, ok := fp.Ed.Update(gtx)
 		if !ok {
 			break
 		}
@@ -704,65 +648,65 @@ func HandleFilePicker(ui *uiState, gtx layout.Context) {
 			submitted = true
 		}
 	}
-	if text := fp.ed.Text(); text != fp.last {
-		fp.last = text
+	if text := fp.Ed.Text(); text != fp.Last {
+		fp.Last = text
 		t := cleanDialogPath(text)
-		if t != "" && !fp.cfg.modTree {
+		if t != "" && !fp.Cfg.ModTree {
 			if info, err := os.Stat(t); err == nil && info.IsDir() {
 				FpBrowse(ui, t)
 				return
 			}
 		}
-		fp.filter = pickFilterOf(t)
+		fp.Filter = pickFilterOf(t)
 		FpRebuild(ui)
 	}
-	if fp.cancel.Clicked(gtx) {
+	if fp.Cancel.Clicked(gtx) {
 		ui.FilePickOpen = false
 		return
 	}
-	for i := range fp.clicks {
-		if !fp.clicks[i].Clicked(gtx) || i >= len(fp.rows) {
+	for i := range fp.Clicks {
+		if !fp.Clicks[i].Clicked(gtx) || i >= len(fp.Rows) {
 			continue
 		}
-		r := fp.rows[i]
-		if r.isDir {
-			FpBrowse(ui, r.path)
+		r := fp.Rows[i]
+		if r.IsDir {
+			FpBrowse(ui, r.Path)
 			return
 		}
-		fp.setText(r.path)
-		fp.status = "Selected " + r.path
+		fp.SetText(r.Path)
+		fp.Status = "Selected " + r.Path
 		return
 	}
-	if !fp.ok.Clicked(gtx) && !submitted {
+	if !fp.Ok.Clicked(gtx) && !submitted {
 		return
 	}
-	path := cleanDialogPath(fp.ed.Text())
+	path := cleanDialogPath(fp.Ed.Text())
 	if path == "" {
-		fp.status = "Choose a file"
+		fp.Status = "Choose a file"
 		return
 	}
-	if fp.cfg.modTree && filepath.IsAbs(path) {
-		fp.status = "This picker uses the mod file tree: choose a file from the list"
+	if fp.Cfg.ModTree && filepath.IsAbs(path) {
+		fp.Status = "This picker uses the mod file tree: choose a file from the list"
 		return
 	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
 		FpBrowse(ui, path)
 		return
 	}
-	if pickExt(path) == "" && !pathExists(path) && len(fp.cfg.exts) > 0 {
-		path += fp.cfg.exts[0]
+	if pickExt(path) == "" && !pathExists(path) && len(fp.Cfg.Exts) > 0 {
+		path += fp.Cfg.Exts[0]
 	}
-	if !fp.allows(path) {
-		fp.status = "Choose a " + strings.Join(fp.cfg.exts, " or ") + " file"
+	if !fp.Allows(path) {
+		fp.Status = "Choose a " + strings.Join(fp.Cfg.Exts, " or ") + " file"
 		return
 	}
-	accepted, status := fp.cfg.onPick(path)
+	accepted, status := fp.Cfg.OnPick(path)
 	if accepted {
 		ui.FilePickOpen = false
 		return
 	}
 	if status != "" {
-		fp.status = status
+		fp.Status = status
 	}
 }
 
@@ -801,14 +745,14 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(16), Left: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.Th, unit.Sp(14), fp.cfg.title)
+										l := material.Label(ui.Th, unit.Sp(14), fp.Cfg.Title)
 										l.Font.Weight = font.Medium
 										l.Color = cText
 										return l.Layout(gtx)
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.Th, unit.Sp(11), fp.cfg.subtitle)
+										l := material.Label(ui.Th, unit.Sp(11), fp.Cfg.Subtitle)
 										l.Color = cTextDim
 										return l.Layout(gtx)
 									}),
@@ -819,11 +763,11 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 										gtx.Constraints.Max.Y = h
 										return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 											return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-												ed := material.Editor(ui.Th, &fp.ed, "")
-												ed.TextSize = unit.Sp(11)
-												ed.HintColor = cTextDim
-												ed.Hint = fp.cfg.hint
-												return ed.Layout(gtx)
+												Ed := material.Editor(ui.Th, &fp.Ed, "")
+												Ed.TextSize = unit.Sp(11)
+												Ed.HintColor = cTextDim
+												Ed.Hint = fp.Cfg.Hint
+												return Ed.Layout(gtx)
 											})
 										})
 									}),
@@ -837,10 +781,10 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 										return widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 											rrect(gtx, cContentBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(3)))
-											fp.list.Axis = layout.Vertical
-											return fp.list.Layout(gtx, len(fp.rows), func(gtx layout.Context, index int) layout.Dimensions {
-												r := fp.rows[index]
-												click := &fp.clicks[index]
+											fp.List.Axis = layout.Vertical
+											return fp.List.Layout(gtx, len(fp.Rows), func(gtx layout.Context, index int) layout.Dimensions {
+												r := fp.Rows[index]
+												click := &fp.Clicks[index]
 												bg := cPanelBg
 												if click.Hovered() {
 													bg = cMenuHover
@@ -852,7 +796,7 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 													paint.PaintOp{}.Add(gtx.Ops)
 													st.Pop()
 													return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-														l := material.Label(ui.Th, unit.Sp(11), r.label)
+														l := material.Label(ui.Th, unit.Sp(11), r.Label)
 														l.Color = cText
 														return l.Layout(gtx)
 													})
@@ -862,7 +806,7 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 									}),
 									layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-										l := material.Label(ui.Th, unit.Sp(10), fp.status)
+										l := material.Label(ui.Th, unit.Sp(10), fp.Status)
 										l.Color = cTextDim
 										return l.Layout(gtx)
 									}),
@@ -871,11 +815,11 @@ func LayoutFilePicker(ui *uiState, gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Flexed(1, rowGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return DialogButton(ui, gtx, &fp.cancel, "Cancel", false)
+												return DialogButton(ui, gtx, &fp.Cancel, "Cancel", false)
 											}),
 											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												return DialogButton(ui, gtx, &fp.ok, "Open", true)
+												return DialogButton(ui, gtx, &fp.Ok, "Open", true)
 											}),
 										)
 									}),

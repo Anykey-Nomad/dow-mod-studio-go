@@ -641,7 +641,7 @@ func RunSearch(ui *uiState, force bool) {
 	ui.LastSearchKind = kind
 	ui.SearchQuerySet = true
 	ui.SearchSel = 0
-	ui.SearchScroll.offset = 0
+	ui.SearchScroll.Offset = 0
 	ui.SearchHits = nil
 	if q == "" || ui.ModTree == nil {
 		EnsureSearchClicks(ui, 0)
@@ -859,12 +859,12 @@ func HandleSearchArrows(ui *uiState, gtx layout.Context) {
 			// Keep the selected row inside the viewport, mirroring what the
 			// list's own scrolling would have done.
 			top := ui.SearchSel * rowH
-			if top < ui.SearchScroll.offset {
-				ui.SearchScroll.offset = top
-			} else if top+rowH > ui.SearchScroll.offset+ui.SearchScroll.viewport {
-				ui.SearchScroll.offset = top + rowH - ui.SearchScroll.viewport
+			if top < ui.SearchScroll.Offset {
+				ui.SearchScroll.Offset = top
+			} else if top+rowH > ui.SearchScroll.Offset+ui.SearchScroll.Viewport {
+				ui.SearchScroll.Offset = top + rowH - ui.SearchScroll.Viewport
 			}
-			ui.SearchScroll.offset = clampInt(ui.SearchScroll.offset, 0, maxInt(0, ui.SearchScroll.contentHeight-ui.SearchScroll.viewport))
+			ui.SearchScroll.Offset = clampInt(ui.SearchScroll.Offset, 0, maxInt(0, ui.SearchScroll.ContentHeight-ui.SearchScroll.Viewport))
 		}
 	}
 }
@@ -898,7 +898,7 @@ func SearchPanelWanted(ui *uiState, text string) bool {
 func CloseSearch(ui *uiState) {
 	ui.SearchVisible = false
 	ui.SearchSel = 0
-	ui.SearchScroll.offset = 0
+	ui.SearchScroll.Offset = 0
 	ui.SearchHeldQuery = strings.TrimSpace(ui.SearchEditor.Text())
 }
 

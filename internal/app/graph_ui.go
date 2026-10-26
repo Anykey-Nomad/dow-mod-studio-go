@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"sort"
 	"strings"
 
@@ -374,10 +375,7 @@ func clipName(s string, n int) string {
 // them at all.
 
 // graphLinkBatch is a slice of the scan's results. done marks the last one.
-type graphLinkBatch struct {
-	links []graphLink
-	done  bool
-}
+type graphLinkBatch = uistate.GraphLinkBatch
 
 // graphLinkBatchSize is how many links one batch carries. The links of one
 // unit arrive together, so a unit is never split across two batches.
@@ -416,7 +414,7 @@ func StartGraphLinkScan(ui *uiState) *modGraph {
 			out := make([]graphLink, len(batch))
 			copy(out, batch)
 			select {
-			case ch <- graphLinkBatch{links: out, done: done}:
+			case ch <- graphLinkBatch{Links: out, Done: done}:
 				batch = batch[:0]
 				return true
 			case <-stop:
@@ -459,9 +457,9 @@ func PollGraphLinks(ui *uiState) bool {
 		select {
 		case batch := <-ui.GraphLinksCh:
 			if ui.GraphLinksGraph != nil {
-				ui.GraphLinksGraph.AddScannedLinks(batch.links)
+				ui.GraphLinksGraph.AddScannedLinks(batch.Links)
 			}
-			if batch.done {
+			if batch.Done {
 				if ui.GraphLinksGraph != nil {
 					ui.GraphLinksGraph.FinishLinkScan()
 				}

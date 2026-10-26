@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"errors"
 	"fmt"
 	"image"
@@ -758,26 +759,26 @@ func UnitBoneParams(ui *uiState, gtx layout.Context, v *modelViewer, i int) layo
 			BindBoneKeySelection(ui, v)
 			keyIdx := 0
 			for idx, k := range t.PosKey {
-				ref := boneKeyRef{mode: 0, frame: frameAt(float64(k.Time), v.Anim.NumFrames)}
+				ref := boneKeyRef{Mode: 0, Frame: frameAt(float64(k.Time), v.Anim.NumFrames)}
 				c := &ui.UnitBoneKeyClicks[keyIdx]
 				if c.Clicked(gtx) {
 					BoneKeyRowClicked(ui, v, ref, refs, UnitListModifiers(ui))
 				}
 				selected := BoneKeyRowPicked(ui, v, ref)
-				text := fmt.Sprintf("pos %d  frame %d  %.3f, %.3f, %.3f", idx+1, ref.frame+1, k.V[0], k.V[1], k.V[2])
+				text := fmt.Sprintf("pos %d  Frame %d  %.3f, %.3f, %.3f", idx+1, ref.Frame+1, k.V[0], k.V[1], k.V[2])
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return UnitBoneKeyRow(ui, gtx, c, selected, text)
 				}))
 				keyIdx++
 			}
 			for idx, k := range t.RotKey {
-				ref := boneKeyRef{mode: 1, frame: frameAt(float64(k.Time), v.Anim.NumFrames)}
+				ref := boneKeyRef{Mode: 1, Frame: frameAt(float64(k.Time), v.Anim.NumFrames)}
 				c := &ui.UnitBoneKeyClicks[keyIdx]
 				if c.Clicked(gtx) {
 					BoneKeyRowClicked(ui, v, ref, refs, UnitListModifiers(ui))
 				}
 				selected := BoneKeyRowPicked(ui, v, ref)
-				text := fmt.Sprintf("rot %d  frame %d  %.3f, %.3f, %.3f, %.3f", idx+1, ref.frame+1, k.V[0], k.V[1], k.V[2], k.V[3])
+				text := fmt.Sprintf("rot %d  Frame %d  %.3f, %.3f, %.3f, %.3f", idx+1, ref.Frame+1, k.V[0], k.V[1], k.V[2], k.V[3])
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return UnitBoneKeyRow(ui, gtx, c, selected, text)
 				}))
@@ -886,7 +887,7 @@ func BindBoneKeySelection(ui *uiState, v *modelViewer) {
 	LogInfo("bone: keyframe selection bound to %q -> %q: cleared", ui.UnitBoneKeySelBound, bound)
 	ui.UnitBoneKeySelBound = bound
 	ui.UnitBoneKeySel = nil
-	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	ui.UnitBoneKeySelAnchor = boneKeyRef{Mode: -1}
 }
 
 // pickedBoneKeyRefs is the rows of the list that are picked and whose keys
@@ -899,7 +900,7 @@ func PickedBoneKeyRefs(ui *uiState, v *modelViewer) []boneKeyRef {
 	}
 	if v == nil || v.Anim == nil {
 		ui.UnitBoneKeySel = nil
-		ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
+		ui.UnitBoneKeySelAnchor = boneKeyRef{Mode: -1}
 		return nil
 	}
 	var out []boneKeyRef
@@ -918,7 +919,7 @@ func PickedBoneKeyRefs(ui *uiState, v *modelViewer) []boneKeyRef {
 	LogInfo("bone: keyframe selection dropped %d row(s) whose keys are gone", len(ui.UnitBoneKeySel)-len(out))
 	ui.UnitBoneKeySel = fresh
 	if len(fresh) == 0 {
-		ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
+		ui.UnitBoneKeySelAnchor = boneKeyRef{Mode: -1}
 	}
 	return out
 }
@@ -968,7 +969,7 @@ func BoneKeyRowClicked(ui *uiState, v *modelViewer, ref boneKeyRef, refs []boneK
 		ui.UnitBoneKeySel = make(map[boneKeyRef]bool)
 	}
 	switch {
-	case shift && ui.UnitBoneKeySelAnchor.mode >= 0:
+	case shift && ui.UnitBoneKeySelAnchor.Mode >= 0:
 		lo, hi := -1, -1
 		for i, r := range refs {
 			if r == ui.UnitBoneKeySelAnchor {
@@ -992,15 +993,15 @@ func BoneKeyRowClicked(ui *uiState, v *modelViewer, ref boneKeyRef, refs []boneK
 		for _, r := range refs[lo : hi+1] {
 			ui.UnitBoneKeySel[r] = true
 		}
-		LogInfo("bone: Shift+click spans %d row(s), frames %d..%d", hi-lo+1, refs[lo].frame, refs[hi].frame)
+		LogInfo("bone: Shift+click spans %d row(s), frames %d..%d", hi-lo+1, refs[lo].Frame, refs[hi].Frame)
 	case ctrl:
 		if ui.UnitBoneKeySel[ref] {
 			delete(ui.UnitBoneKeySel, ref)
-			LogInfo("bone: Ctrl+click takes frame %d (%s) out of the selection", ref.frame, boneGroupLog(ref.mode))
+			LogInfo("bone: Ctrl+click takes Frame %d (%s) out of the selection", ref.Frame, boneGroupLog(ref.Mode))
 		} else {
 			ui.UnitBoneKeySel[ref] = true
 			ui.UnitBoneKeySelAnchor = ref
-			LogInfo("bone: Ctrl+click adds frame %d (%s) to the selection", ref.frame, boneGroupLog(ref.mode))
+			LogInfo("bone: Ctrl+click adds Frame %d (%s) to the selection", ref.Frame, boneGroupLog(ref.Mode))
 		}
 	default:
 		ui.UnitBoneKeySel = map[boneKeyRef]bool{ref: true}
@@ -1010,7 +1011,7 @@ func BoneKeyRowClicked(ui *uiState, v *modelViewer, ref boneKeyRef, refs []boneK
 	// among the picked ones, otherwise the last row still picked — in list
 	// order, so the choice does not depend on map iteration — and none when
 	// the selection is empty.
-	picked := boneKeyRef{mode: -1}
+	picked := boneKeyRef{Mode: -1}
 	if ui.UnitBoneKeySel[ref] {
 		picked = ref
 	} else {
@@ -1020,8 +1021,8 @@ func BoneKeyRowClicked(ui *uiState, v *modelViewer, ref boneKeyRef, refs []boneK
 			}
 		}
 	}
-	if at := BoneKeyIndexAtFrame(v, picked.frame, picked.mode); picked.mode >= 0 && at >= 0 {
-		v.BoneKeyIndex, v.BoneKeyMode = at, picked.mode
+	if at := BoneKeyIndexAtFrame(v, picked.Frame, picked.Mode); picked.Mode >= 0 && at >= 0 {
+		v.BoneKeyIndex, v.BoneKeyMode = at, picked.Mode
 	} else {
 		v.BoneKeyIndex, v.BoneKeyMode = -1, -1
 	}
@@ -1057,13 +1058,13 @@ func PickFrameKeyOnTimeline(ui *uiState, v *modelViewer) {
 	}
 	sel := map[boneKeyRef]bool{}
 	if posAt >= 0 {
-		sel[boneKeyRef{mode: 0, frame: frame}] = true
+		sel[boneKeyRef{Mode: 0, Frame: frame}] = true
 	}
 	if rotAt >= 0 {
-		sel[boneKeyRef{mode: 1, frame: frame}] = true
+		sel[boneKeyRef{Mode: 1, Frame: frame}] = true
 	}
 	ui.UnitBoneKeySel = sel
-	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: mode, frame: frame}
+	ui.UnitBoneKeySelAnchor = boneKeyRef{Mode: mode, Frame: frame}
 	FillBoneKeyFields(ui, v, 0)
 	FillBoneKeyFields(ui, v, 1)
 	LogInfo("bone: step picked frame %d: posKey=%v rotKey=%v picked=%s",
@@ -2133,7 +2134,7 @@ func DeleteBoneKeysAction(ui *uiState, v *modelViewer) {
 	snap, haveSnap := SnapshotBoneTrack(v)
 	removed := 0
 	for _, ref := range refs {
-		if DeleteBoneKeyAt(v, ref.frame, ref.mode) {
+		if DeleteBoneKeyAt(v, ref.Frame, ref.Mode) {
 			removed++
 		}
 	}
@@ -2145,7 +2146,7 @@ func DeleteBoneKeysAction(ui *uiState, v *modelViewer) {
 	// are gone, and leaving the selection behind would aim the next button at
 	// frames that now hold other keys or nothing at all.
 	ui.UnitBoneKeySel = nil
-	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	ui.UnitBoneKeySelAnchor = boneKeyRef{Mode: -1}
 	ui.UnitModelWhmDirty = true
 	ui.UnitBoneKeyErr = ""
 	FillBoneKeyFields(ui, v, 0)
@@ -2186,19 +2187,19 @@ func AddBoneKeysAround(ui *uiState, v *modelViewer, dir int) {
 	}
 	sort.Slice(refs, func(i, j int) bool {
 		if dir < 0 {
-			return refs[i].frame > refs[j].frame
+			return refs[i].Frame > refs[j].Frame
 		}
-		return refs[i].frame < refs[j].frame
+		return refs[i].Frame < refs[j].Frame
 	})
 	added := make([]boneKeyRef, 0, len(refs))
 	blocked := 0
 	for _, ref := range refs {
-		f := FreeBoneKeyFrame(v, ref.frame, ref.mode, dir)
-		if f < 0 || !InsertBoneKeyCopy(v, f, ref.mode, ref.frame) {
+		f := FreeBoneKeyFrame(v, ref.Frame, ref.Mode, dir)
+		if f < 0 || !InsertBoneKeyCopy(v, f, ref.Mode, ref.Frame) {
 			blocked++
 			continue
 		}
-		added = append(added, boneKeyRef{mode: ref.mode, frame: f})
+		added = append(added, boneKeyRef{Mode: ref.Mode, Frame: f})
 	}
 	if len(added) == 0 {
 		ui.UnitBoneKeyErr = fmt.Sprintf("no free frame %s those keys", side)
@@ -2401,7 +2402,7 @@ func ShiftBoneKeysAction(ui *uiState, v *modelViewer, dir int) {
 	for _, ref := range newRefs {
 		ui.UnitBoneKeySel[ref] = true
 	}
-	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	ui.UnitBoneKeySelAnchor = boneKeyRef{Mode: -1}
 	if len(newRefs) > 0 {
 		ui.UnitBoneKeySelAnchor = newRefs[0]
 	}
@@ -2409,8 +2410,8 @@ func ShiftBoneKeysAction(ui *uiState, v *modelViewer, dir int) {
 	// strip marks and the typed fields point at it again after the move.
 	for i, r := range refs {
 		if hasPicked && r == pickedOld && i < len(newRefs) {
-			if at := BoneKeyIndexAtFrame(v, newRefs[i].frame, newRefs[i].mode); at >= 0 {
-				v.BoneKeyIndex, v.BoneKeyMode = at, newRefs[i].mode
+			if at := BoneKeyIndexAtFrame(v, newRefs[i].Frame, newRefs[i].Mode); at >= 0 {
+				v.BoneKeyIndex, v.BoneKeyMode = at, newRefs[i].Mode
 			}
 			break
 		}
@@ -2464,7 +2465,7 @@ const boneUndoLimit = 16
 // A snapshot with nothing in it (no clip or bone at the time) is dropped, and
 // the stack is capped so it cannot grow without bound.
 func PushBoneUndo(ui *uiState, s boneTrackSnapshot, ok bool) {
-	if !ok || (len(s.posKey) == 0 && len(s.rotKey) == 0 && s.anim == nil) {
+	if !ok || (len(s.PosKey) == 0 && len(s.RotKey) == 0 && s.Anim == nil) {
 		return
 	}
 	ui.UnitBoneUndo = append(ui.UnitBoneUndo, s)
@@ -2493,14 +2494,14 @@ func UndoBoneKeyEdit(ui *uiState, v *modelViewer) bool {
 	// pointed at, so both are cleared and the fields refill from what is
 	// actually there now.
 	ui.UnitBoneKeySel = nil
-	ui.UnitBoneKeySelAnchor = boneKeyRef{mode: -1}
+	ui.UnitBoneKeySelAnchor = boneKeyRef{Mode: -1}
 	ui.UnitModelWhmDirty = true
 	ui.UnitBoneKeyErr = ""
 	FillBoneKeyFields(ui, v, 0)
 	FillBoneKeyFields(ui, v, 1)
 	ui.StatusText = "Restored the keys before the last edit"
 	LogInfo("bone: undo restored track of bone %d: %d pos, %d rot keys (dirty=%v)",
-		s.boneIndex, len(s.posKey), len(s.rotKey), ui.UnitModelWhmDirty)
+		s.BoneIndex, len(s.PosKey), len(s.RotKey), ui.UnitModelWhmDirty)
 	return true
 }
 
@@ -2731,14 +2732,7 @@ var errNoUnitModel = errors.New("no model file for this unit")
 // unitModelResult carries a decoded model back to the UI goroutine. The unit it
 // was read for travels with it, since a load started for one unit can finish
 // after the reader has moved on to another.
-type unitModelResult struct {
-	unit        string
-	path        string
-	model       *WhmModel
-	groundImage image.Image
-	work        time.Duration // reading, parsing and the ground image
-	err         error
-}
+type unitModelResult = uistate.UnitModelResult
 
 // unitModelSource is everything about a unit that the loader needs, copied off
 // the UI goroutine before the load starts so the worker touches no UI state.
@@ -2881,29 +2875,29 @@ func StartUnitModel(ui *uiState, src unitModelSource) {
 	ui.UnitModelCh = ch
 	ui.UnitModelStart = time.Now()
 	go func() {
-		res := unitModelResult{unit: src.unit}
+		res := unitModelResult{Unit: src.unit}
 		workStart := time.Now()
-		res.path = unitModelPath(tree, src)
-		if res.path == "" {
-			res.err = errNoUnitModel
+		res.Path = unitModelPath(tree, src)
+		if res.Path == "" {
+			res.Err = errNoUnitModel
 			ch <- res
 			return
 		}
-		data, err := tree.ReadFile(res.path)
+		data, err := tree.ReadFile(res.Path)
 		if err != nil {
-			res.err = err
+			res.Err = err
 			ch <- res
 			return
 		}
 		model, err := ParseWhmModel(data)
 		if err != nil {
-			res.err = err
+			res.Err = err
 			ch <- res
 			return
 		}
-		res.model = model
-		res.groundImage = loadWhmGroundImage(tree)
-		res.work = time.Since(workStart)
+		res.Model = model
+		res.GroundImage = loadWhmGroundImage(tree)
+		res.Work = time.Since(workStart)
 		ch <- res
 	}()
 }
@@ -3030,12 +3024,12 @@ func PollUnitModel(ui *uiState) {
 	select {
 	case res := <-ui.UnitModelCh:
 		ui.UnitModelCh = nil
-		if res.unit != ui.UnitModelFor {
+		if res.Unit != ui.UnitModelFor {
 			// The reader has moved on to another unit while this one loaded.
 			return
 		}
-		if res.err != nil {
-			ui.UnitModelErr = res.err.Error()
+		if res.Err != nil {
+			ui.UnitModelErr = res.Err.Error()
 			return
 		}
 		// The gap between what the worker spent and what the reader waited is
@@ -3044,15 +3038,15 @@ func PollUnitModel(ui *uiState) {
 		// that did not.
 		total := time.Since(ui.UnitModelStart)
 		LogInfo("3D preview: model of %q on screen after %v (worker %v, waiting for a frame %v)",
-			res.path, total, res.work, total-res.work)
-		tab := &fileTab{Path: res.path, Kind: "whm"}
-		tab.Model = newObjectModelViewer(res.model, res.path, res.groundImage)
-		selectObjectAction(tab.Model, ui.ModTree, res.path, "idle")
+			res.Path, total, res.Work, total-res.Work)
+		tab := &fileTab{Path: res.Path, Kind: "whm"}
+		tab.Model = newObjectModelViewer(res.Model, res.Path, res.GroundImage)
+		selectObjectAction(tab.Model, ui.ModTree, res.Path, "idle")
 		// The canvas is a third of the window wide here, so the playback strip
 		// is drawn in the panel beside it rather than under it.
 		tab.Model.SideControls = true
 		ui.UnitModel = tab
-		ui.UnitModelPath = res.path
+		ui.UnitModelPath = res.Path
 		// A freshly read model starts clean, and its keys rebind the typed
 		// fields: the previous model's edits are not its edits.
 		ui.UnitModelWhmDirty = false

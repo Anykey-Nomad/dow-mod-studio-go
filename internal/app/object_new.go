@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"strings"
@@ -22,8 +23,7 @@ import (
 // module folder and the mod tree knows about it straight away — which is what
 // makes the new object appear in the object window without a reload.
 
-// newObjKind is what the dialog is being opened to create.
-type newObjKind int
+type newObjKind = uistate.NewObjKind
 
 const (
 	// newObjUnit is a unit: a file under the race's troops folder.
@@ -33,27 +33,11 @@ const (
 	newObjBuilding
 )
 
-// newObjNoun is what the dialog calls the thing it is about to write.
-func (k newObjKind) newObjNoun() string {
-	if k == newObjBuilding {
-		return "building"
-	}
-	return "unit"
-}
-
-// newObjPath is where an object of this kind and name would be written.
-func (k newObjKind) newObjPath(race, name string) string {
-	if k == newObjBuilding {
-		return structureTemplateName{Race: race, Name: name}.StructureTemplateVirtualPath()
-	}
-	return unitTemplateName{Race: race, Name: name}.UnitTemplateVirtualPath()
-}
-
 // newObjTemplateNameError is why a name cannot become an object file, said in
 // the dialog's own terms rather than as a file system error the user cannot act
 // on.
 func newObjTemplateNameError(kind newObjKind, name string) error {
-	noun := kind.newObjNoun()
+	noun := kind.NewObjNoun()
 	trimmed := strings.TrimSpace(name)
 	switch {
 	case trimmed == "":
@@ -88,9 +72,9 @@ func CreateNewObject(ui *uiState, kind newObjKind, race, name string) (string, e
 		return "", err
 	}
 	if race == "" {
-		return "", fmt.Errorf("no race is selected, so there is no folder to write the %s into", kind.newObjNoun())
+		return "", fmt.Errorf("no race is selected, so there is no folder to write the %s into", kind.NewObjNoun())
 	}
-	virtual := kind.newObjPath(race, name)
+	virtual := kind.NewObjPath(race, name)
 	if ui.ModTree.FindFile(virtual) != nil {
 		return "", fmt.Errorf("%s already exists", name)
 	}
@@ -102,10 +86,10 @@ func CreateNewObject(ui *uiState, kind newObjKind, race, name string) (string, e
 	}
 	data, err := file.MarshalBinary()
 	if err != nil {
-		return "", fmt.Errorf("the %s could not be written: %v", kind.newObjNoun(), err)
+		return "", fmt.Errorf("the %s could not be written: %v", kind.NewObjNoun(), err)
 	}
 	if _, err := ui.ModTree.WriteOverlayFile(virtual, data); err != nil {
-		return "", fmt.Errorf("the %s could not be saved: %v", kind.newObjNoun(), err)
+		return "", fmt.Errorf("the %s could not be saved: %v", kind.NewObjNoun(), err)
 	}
 	// The catalogue is a snapshot of the tree, so it is thrown away and read
 	// again: that is what puts the new object in the list and in the pickers.
@@ -167,7 +151,7 @@ func SelectNewObject(ui *uiState, race, virtual string) {
 func OpenNewObjDialog(ui *uiState, kind newObjKind) {
 	race := CurrentRace(ui)
 	if race == nil {
-		ui.StatusText = "Choose a race before creating a " + kind.newObjNoun()
+		ui.StatusText = "Choose a race before creating a " + kind.NewObjNoun()
 		return
 	}
 	CloseUnitPickers(ui)
@@ -192,7 +176,7 @@ func NewObjFolderLabel(ui *uiState) string {
 	if race == nil {
 		return ""
 	}
-	return ui.NewObjKind.newObjPath(race.Name, "name")
+	return ui.NewObjKind.NewObjPath(race.Name, "name")
 }
 
 // layoutNewObjDialog draws the dialog as an overlay over the whole window: a
@@ -231,7 +215,7 @@ func LayoutNewObjDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(16), Left: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									l := material.Label(ui.Th, unit.Sp(14), "New "+ui.NewObjKind.newObjNoun())
+									l := material.Label(ui.Th, unit.Sp(14), "New "+ui.NewObjKind.NewObjNoun())
 									l.Font.Weight = font.Medium
 									l.Color = cText
 									return l.Layout(gtx)
@@ -341,7 +325,7 @@ func HandleNewObjDialogInput(ui *uiState, gtx layout.Context) {
 	}
 	race := CurrentRace(ui)
 	if race == nil {
-		ui.NewObjStatus = "No race is selected, so there is nowhere to write the " + ui.NewObjKind.newObjNoun()
+		ui.NewObjStatus = "No race is selected, so there is nowhere to write the " + ui.NewObjKind.NewObjNoun()
 		return
 	}
 	virtual, err := CreateNewObject(ui, ui.NewObjKind, race.Name, ui.NewObjNameEditor.Text())

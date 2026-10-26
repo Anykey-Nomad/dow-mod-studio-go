@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/modgraph"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
@@ -15,11 +16,11 @@ import (
 // ── types ────────────────────────────────────────────────────────────────────
 
 type (
-	modGraph    = modgraph.ModGraph
+	modGraph    = uistate.ModGraph
 	graphKind   = modgraph.GraphKind
 	graphRole   = modgraph.GraphRole
 	graphEntity = modgraph.GraphEntity
-	graphLink   = modgraph.GraphLink
+	graphLink   = uistate.GraphLink
 )
 
 // ── kinds and roles ──────────────────────────────────────────────────────────

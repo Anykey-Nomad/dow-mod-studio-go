@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"image/color"
@@ -1264,22 +1265,19 @@ func HandleUnitRowInput(ui *uiState, gtx layout.Context) {
 // clip it belongs to and which frame it stands on. The selection is keyed
 // this way because several clips can be open at once and a frame number on
 // its own says which of them it came from.
-type unitImpRef struct {
-	anim  int
-	frame int
-}
+type unitImpRef = uistate.UnitImpRef
 
 // openUnitImportDialog shows the file dialog over the module's .whm files; a
 // path typed in full or a file from the list is read when the dialog is
 // confirmed.
 func OpenUnitImportDialog(ui *uiState) {
 	OpenFilePicker(ui, pickConfig{
-		title:    "Import frame's timeline",
-		subtitle: "Choose the .whm to read keyframes from — a path, or a file from the module",
-		hint:     `Data\art\ebps\...\model.whm`,
-		exts:     []string{".whm"},
-		modTree:  true,
-		onPick: func(path string) (bool, string) {
+		Title:    "Import frame's timeline",
+		Subtitle: "Choose the .whm to read keyframes from — a path, or a file from the module",
+		Hint:     `Data\art\ebps\...\model.whm`,
+		Exts:     []string{".whm"},
+		ModTree:  true,
+		OnPick: func(path string) (bool, string) {
 			before := ui.UnitImpModel
 			UnitImportRead(ui, path)
 			if ui.UnitImpModel == before {
@@ -1331,7 +1329,7 @@ func UnitImportRead(ui *uiState, path string) {
 	ui.UnitImpAnimClicks = make([]widget.Clickable, len(m.Animations))
 	ui.UnitImpFrameClicks = make(map[unitImpRef]*widget.Clickable)
 	ui.UnitImpSel = make(map[unitImpRef]bool)
-	ui.UnitImpAnchor = unitImpRef{anim: -1}
+	ui.UnitImpAnchor = unitImpRef{Anim: -1}
 	ui.UnitImpStatus = fmt.Sprintf("Imported %s — %d clip(s)", filepath.Base(path), len(m.Animations))
 	LogInfo("bone: import: loaded %q (%d animations, %d bones)", path, len(m.Animations), len(m.Bones))
 }
@@ -1347,7 +1345,7 @@ func UnitImportBoneIndex(ui *uiState, v *modelViewer) int {
 	if name == "" {
 		return -1
 	}
-	return ui.UnitImpModel.boneIndexByName(name)
+	return ui.UnitImpModel.BoneIndexByName(name)
 }
 
 // unitImportFrames lists the frames the matched bone has keys on in one
@@ -1453,13 +1451,13 @@ func UnitImportRowClicked(ui *uiState, ref unitImpRef, frames []int, mods key.Mo
 	}
 	ctrl, shift := mods.Contain(key.ModCtrl), mods.Contain(key.ModShift)
 	switch {
-	case shift && ui.UnitImpAnchor.anim == ref.anim && ui.UnitImpAnchor.anim >= 0:
+	case shift && ui.UnitImpAnchor.Anim == ref.Anim && ui.UnitImpAnchor.Anim >= 0:
 		lo, hi := -1, -1
 		for i, f := range frames {
-			if f == ui.UnitImpAnchor.frame {
+			if f == ui.UnitImpAnchor.Frame {
 				lo = i
 			}
-			if f == ref.frame {
+			if f == ref.Frame {
 				hi = i
 			}
 		}
@@ -1473,9 +1471,9 @@ func UnitImportRowClicked(ui *uiState, ref unitImpRef, frames []int, mods key.Mo
 		}
 		ui.UnitImpSel = make(map[unitImpRef]bool, hi-lo+1)
 		for _, f := range frames[lo : hi+1] {
-			ui.UnitImpSel[unitImpRef{anim: ref.anim, frame: f}] = true
+			ui.UnitImpSel[unitImpRef{Anim: ref.Anim, Frame: f}] = true
 		}
-		LogInfo("bone: import: Shift+click spans %d frame(s) of clip %d", hi-lo+1, ref.anim)
+		LogInfo("bone: import: Shift+click spans %d frame(s) of clip %d", hi-lo+1, ref.Anim)
 	case ctrl:
 		if ui.UnitImpSel[ref] {
 			delete(ui.UnitImpSel, ref)
@@ -1525,10 +1523,10 @@ func UnitImportApply(ui *uiState, v *modelViewer, replace bool) (added, replaced
 		refs = append(refs, ref)
 	}
 	sort.Slice(refs, func(i, j int) bool {
-		if refs[i].anim != refs[j].anim {
-			return refs[i].anim < refs[j].anim
+		if refs[i].Anim != refs[j].Anim {
+			return refs[i].Anim < refs[j].Anim
 		}
-		return refs[i].frame < refs[j].frame
+		return refs[i].Frame < refs[j].Frame
 	})
 	if len(refs) == 0 {
 		ui.UnitBoneKeyErr = "no frame is picked"
@@ -1543,11 +1541,11 @@ func UnitImportApply(ui *uiState, v *modelViewer, replace bool) (added, replaced
 	// Replace records the source keys it took, so they can be found again.
 	var keys boneKeyClip
 	for _, ref := range refs {
-		if ref.anim < 0 || ref.anim >= len(ui.UnitImpModel.Animations) {
+		if ref.Anim < 0 || ref.Anim >= len(ui.UnitImpModel.Animations) {
 			skipped++
 			continue
 		}
-		sa := &ui.UnitImpModel.Animations[ref.anim]
+		sa := &ui.UnitImpModel.Animations[ref.Anim]
 		var st *WhmTrack
 		for i := range sa.Bones {
 			if sa.Bones[i].Bone == src {
@@ -1559,12 +1557,12 @@ func UnitImportApply(ui *uiState, v *modelViewer, replace bool) (added, replaced
 			skipped++
 			continue
 		}
-		frame := ref.frame
-		if frame < 0 {
+		Frame := ref.Frame
+		if Frame < 0 {
 			skipped++
 			continue
 		}
-		if frame >= v.Anim.NumFrames {
+		if Frame >= v.Anim.NumFrames {
 			// The source clip runs longer than the one on show:
 			// the frame has nowhere to land.
 			skipped++
@@ -1572,21 +1570,21 @@ func UnitImportApply(ui *uiState, v *modelViewer, replace bool) (added, replaced
 		}
 		// Position keys the source frame carries.
 		for i := range st.PosKey {
-			if frameAt(float64(st.PosKey[i].Time), sa.NumFrames) != frame {
+			if frameAt(float64(st.PosKey[i].Time), sa.NumFrames) != Frame {
 				continue
 			}
 			keys.Pos = append(keys.Pos, st.PosKey[i])
-			a, r := writeImportPos(t, v, frame, st.PosKey[i].V, replace)
+			a, r := writeImportPos(t, v, Frame, st.PosKey[i].V, replace)
 			added += a
 			replaced += r
 		}
 		// Rotation keys, the same way.
 		for i := range st.RotKey {
-			if frameAt(float64(st.RotKey[i].Time), sa.NumFrames) != frame {
+			if frameAt(float64(st.RotKey[i].Time), sa.NumFrames) != Frame {
 				continue
 			}
 			keys.Rot = append(keys.Rot, st.RotKey[i])
-			a, r := writeImportRot(t, v, frame, st.RotKey[i].V, replace)
+			a, r := writeImportRot(t, v, Frame, st.RotKey[i].V, replace)
 			added += a
 			replaced += r
 		}
@@ -1759,7 +1757,7 @@ func UnitImportSection(ui *uiState, gtx layout.Context, v *modelViewer) layout.D
 			}
 			for _, f := range frames {
 				f := f
-				ref := unitImpRef{anim: i, frame: f}
+				ref := unitImpRef{Anim: i, Frame: f}
 				rc := UnitImportRowClick(ui, ref)
 				if rc.Clicked(gtx) {
 					UnitImportRowClicked(ui, ref, frames, UnitListModifiers(ui))

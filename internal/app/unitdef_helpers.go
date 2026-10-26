@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/unitdef"
@@ -22,14 +23,14 @@ type (
 	unitKind              = unitdef.UnitKind
 	unitEntry             = unitdef.UnitEntry
 	raceEntry             = unitdef.RaceEntry
-	unitCatalog           = unitdef.UnitCatalog
+	unitCatalog           = uistate.UnitCatalog
 	abilityRef            = unitdef.AbilityRef
 	unitField             = unitdef.UnitField
 	unitWeapon            = unitdef.UnitWeapon
 	weaponSlot            = unitdef.WeaponSlot
-	unitDetails           = unitdef.UnitDetails
-	unitTemplateName      = unitdef.UnitTemplateName
-	structureTemplateName = unitdef.StructureTemplateName
+	unitDetails           = uistate.UnitDetails
+	unitTemplateName      = uistate.UnitTemplateName
+	structureTemplateName = uistate.StructureTemplateName
 	fieldKind             = unitdef.FieldKind
 	fieldSpec             = unitdef.FieldSpec
 )

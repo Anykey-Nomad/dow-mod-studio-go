@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"image"
 	"image/color"
 	"strings"
@@ -555,10 +556,10 @@ func ActionIcon(ui *uiState, name string) image.Image {
 	}
 	key := strings.ToLower(strings.TrimSpace(name))
 	if e, ok := ui.ActionIcons[key]; ok {
-		return e.img
+		return e.Img
 	}
 	img := ReadIconAt(ui, actionIconCommandsDir+`\`+file)
-	ui.ActionIcons[key] = iconCacheEntry{img: img, tried: true}
+	ui.ActionIcons[key] = iconCacheEntry{Img: img, Tried: true}
 	return img
 }
 
@@ -700,10 +701,7 @@ func actionIconHasWord(n, word string) bool {
 // iconCacheEntry is one unit's icon lookup. A miss is cached as well — img is
 // nil and tried says the lookup was made — so a unit with no icon is not
 // searched for again on every frame.
-type iconCacheEntry struct {
-	img   image.Image
-	tried bool
-}
+type iconCacheEntry = uistate.IconCacheEntry
 
 // unitIcon returns the decoded icon of a unit or building, or nil when the mod
 // has none.
@@ -717,10 +715,10 @@ func UnitIcon(ui *uiState, u unitEntry) image.Image {
 		ui.UnitIconsMod = mod
 	}
 	if e, ok := ui.UnitIcons[u.Path]; ok {
-		return e.img
+		return e.Img
 	}
 	img := LoadUnitIcon(ui, u)
-	ui.UnitIcons[u.Path] = iconCacheEntry{img: img, tried: true}
+	ui.UnitIcons[u.Path] = iconCacheEntry{Img: img, Tried: true}
 	return img
 }
 

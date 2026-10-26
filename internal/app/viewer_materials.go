@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -24,11 +25,7 @@ import (
 
 // modelMaterialDiagnostic is what the material inspector can tell about a
 // material reference, whether resolution and decoding succeeded or not.
-type modelMaterialDiagnostic struct {
-	ResolvedPath string
-	Format       string
-	Status       string
-}
+type modelMaterialDiagnostic = uistate.ModelMaterialDiagnostic
 
 // loadModelMaterials resolves every mesh material of a model to its diffuse
 // map. A .whm may name a .rsh, a compiled .rtx, or a bare base name; the
@@ -62,10 +59,10 @@ func LoadModelMaterials(ui *uiState, v *modelViewer, result chan<- modelMaterial
 	go func() {
 		files, paths := resolveModelMaterialsWithPaths(tree, roots, model, names)
 		decoded := decodeModelMaterials(files, raw)
-		attachMaterialSourcePaths(decoded.diagnostics, paths)
+		attachMaterialSourcePaths(decoded.Diagnostics, paths)
 		for _, name := range names {
-			if _, ok := decoded.diagnostics[name]; !ok {
-				decoded.diagnostics[name] = modelMaterialDiagnostic{Format: "—", Status: "not found"}
+			if _, ok := decoded.Diagnostics[name]; !ok {
+				decoded.Diagnostics[name] = modelMaterialDiagnostic{Format: "—", Status: "not found"}
 			}
 		}
 		result <- decoded
@@ -204,9 +201,9 @@ func decodedMaterialFormat(format string, data []byte) string {
 // for the software renderer used by diagnostic/fallback paths.
 func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult {
 	res := modelMaterialResult{
-		materials:   map[string]render.WhmMaterial{},
-		rsh:         map[string][]byte{},
-		diagnostics: map[string]modelMaterialDiagnostic{},
+		Materials:   map[string]render.WhmMaterial{},
+		Rsh:         map[string][]byte{},
+		Diagnostics: map[string]modelMaterialDiagnostic{},
 	}
 	for name, data := range files {
 		diag := modelMaterialDiagnostic{Status: "unrecognized image data"}
@@ -216,7 +213,7 @@ func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult
 		if rshErr == nil {
 			diag.Format = rshMaterialFormat(rshInfo.Format)
 			if raw {
-				res.rsh[name] = data
+				res.Rsh[name] = data
 			}
 			img, _, err = decodeRshImage(data, 0)
 		} else {
@@ -233,15 +230,15 @@ func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult
 		}
 		if err == nil && img != nil {
 			diag.Status = "decoded"
-			res.materials[name] = render.WhmMaterial{Texture: render.NewModelTexture(img), Color: render.RgbaWhite}
+			res.Materials[name] = render.WhmMaterial{Texture: render.NewModelTexture(img), Color: render.RgbaWhite}
 		} else if rshErr != nil {
 			diag.Status = "decode failed"
 		}
-		res.diagnostics[name] = diag
+		res.Diagnostics[name] = diag
 	}
 	for name := range files {
-		if _, ok := res.materials[name]; !ok {
-			res.missing++
+		if _, ok := res.Materials[name]; !ok {
+			res.Missing++
 		}
 	}
 	return res
@@ -592,8 +589,8 @@ func UvOffset(v *modelViewer) [2]float32 {
 		return [2]float32{}
 	}
 	return [2]float32{
-		modelUVMinOffset + v.uvU.Value*(modelUVMaxOffset-modelUVMinOffset),
-		modelUVMinOffset + v.uvV.Value*(modelUVMaxOffset-modelUVMinOffset),
+		modelUVMinOffset + v.UvU.Value*(modelUVMaxOffset-modelUVMinOffset),
+		modelUVMinOffset + v.UvV.Value*(modelUVMaxOffset-modelUVMinOffset),
 	}
 }
 
@@ -603,7 +600,7 @@ func UvScaleValue(v *modelViewer) float32 {
 	if v == nil {
 		return 1
 	}
-	return modelUVMinScale + v.uvScale.Value*(modelUVMaxScale-modelUVMinScale)
+	return modelUVMinScale + v.UvScale.Value*(modelUVMaxScale-modelUVMinScale)
 }
 
 // uvPush fills the sliders from the mapping they are editing. It runs when the
@@ -619,9 +616,9 @@ func UvPush(v *modelViewer) {
 	if scale <= 0 {
 		scale = 1
 	}
-	v.uvU.Value = float32(engine.ClampFloat64(float64((m.Offset[0]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
-	v.uvV.Value = float32(engine.ClampFloat64(float64((m.Offset[1]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
-	v.uvScale.Value = float32(engine.ClampFloat64(float64((scale-modelUVMinScale)/(modelUVMaxScale-modelUVMinScale)), 0, 1))
+	v.UvU.Value = float32(engine.ClampFloat64(float64((m.Offset[0]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
+	v.UvV.Value = float32(engine.ClampFloat64(float64((m.Offset[1]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
+	v.UvScale.Value = float32(engine.ClampFloat64(float64((scale-modelUVMinScale)/(modelUVMaxScale-modelUVMinScale)), 0, 1))
 }
 
 // uvPull writes the sliders back into the mapping they are editing. It runs

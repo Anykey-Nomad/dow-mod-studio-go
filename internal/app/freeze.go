@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -37,48 +38,14 @@ import (
 // nothing is cleared until the record of what to undo has been written.
 
 // freezeFile is one file moved out of the mod.
-type freezeFile struct {
-	// From is the virtual path the file had in the mod.
-	From string `json:"from"`
-	// To is its name inside the project's Units folder.
-	To string `json:"to"`
-}
+type freezeFile = uistate.FreezeFile
 
 // freezeMention is one reference to the frozen entity that was cleared.
-type freezeMention struct {
-	// File is the virtual path of the file that held the reference.
-	File string `json:"file"`
-	// Field is the dotted path of the field, which is how it is found again.
-	Field string `json:"field"`
-	// Slot and Role are kept so the record reads as something a person can
-	// check rather than as a list of offsets.
-	Slot  string `json:"slot"`
-	Role  string `json:"role"`
-	Value string `json:"value"`
-}
+type freezeMention = uistate.FreezeMention
 
-// freezeRecord is one frozen entity and everything that was done to it.
-type freezeRecord struct {
-	Path string `json:"path"`
-	Name string `json:"name"`
-	Kind string `json:"kind"`
-	Race string `json:"race"`
-	// FrozenAt is when, in the project's own terms: the record is read by a
-	// person trying to work out what happened to their mod.
-	FrozenAt string `json:"frozenAt"`
-	// Files are the .rgd files that were moved out, in the order they were
-	// moved: the ebps one first, then the sbps one.
-	Files []freezeFile `json:"files"`
-	// Mentions are the references that were cleared, so they can be put back.
-	Mentions []freezeMention `json:"mentions"`
-}
+type freezeRecord = uistate.FreezeRecord
 
-// freezeBook is the whole of dependencies.json.
-type freezeBook struct {
-	Version int            `json:"version"`
-	Mod     string         `json:"mod"`
-	Frozen  []freezeRecord `json:"frozen"`
-}
+type freezeBook = uistate.FreezeBook
 
 // freezeBookVersion is written into the file so that a later version of the
 // program can tell what it is reading.
@@ -162,34 +129,6 @@ func writeFreezeBook(tree *modtree.ModTree, modulePath string, book *freezeBook)
 	return nil
 }
 
-// record finds the record of a frozen entity.
-func (b *freezeBook) record(path string) *freezeRecord {
-	if b == nil {
-		return nil
-	}
-	for i := range b.Frozen {
-		if strings.EqualFold(b.Frozen[i].Path, path) {
-			return &b.Frozen[i]
-		}
-	}
-	return nil
-}
-
-// isFrozen reports whether an entity has been frozen.
-func (b *freezeBook) isFrozen(path string) bool { return b.record(path) != nil }
-
-// frozenPaths lists every entity that has been frozen.
-func (b *freezeBook) frozenPaths() []string {
-	if b == nil {
-		return nil
-	}
-	out := make([]string, 0, len(b.Frozen))
-	for _, r := range b.Frozen {
-		out = append(out, r.Path)
-	}
-	return out
-}
-
 // ── freezing ────────────────────────────────────────────────────────────────
 
 // freezeEntity moves a unit or a building out of the mod.
@@ -214,7 +153,7 @@ func FreezeEntity(ui *uiState, virtualPath string) (*freezeRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	if book.isFrozen(e.Path) {
+	if book.IsFrozen(e.Path) {
 		return nil, fmt.Errorf("%s is already frozen", e.Name)
 	}
 	// The references are read here, in full, rather than being taken from
@@ -329,14 +268,14 @@ func UnfreezeEntity(ui *uiState, virtualPath string) (*freezeRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	record := book.record(virtualPath)
-	if record == nil {
+	Record := book.Record(virtualPath)
+	if Record == nil {
 		return nil, fmt.Errorf("%s is not frozen", filepath.Base(virtualPath))
 	}
 
-	for _, m := range record.Mentions {
+	for _, m := range Record.Mentions {
 		if err := ClearRgdField(ui, m.File, m.Field, m.Value); err != nil {
-			return nil, fmt.Errorf("the reference to %s could not be put back into %s: %w", record.Name, m.File, err)
+			return nil, fmt.Errorf("the reference to %s could not be put back into %s: %w", Record.Name, m.File, err)
 		}
 	}
 
@@ -344,7 +283,7 @@ func UnfreezeEntity(ui *uiState, virtualPath string) (*freezeRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, f := range record.Files {
+	for _, f := range Record.Files {
 		saved := filepath.Join(unitsDir, f.To)
 		data, err := os.ReadFile(saved)
 		if err != nil {
@@ -360,7 +299,7 @@ func UnfreezeEntity(ui *uiState, virtualPath string) (*freezeRecord, error) {
 
 	kept := make([]freezeRecord, 0, len(book.Frozen))
 	for _, r := range book.Frozen {
-		if !strings.EqualFold(r.Path, record.Path) {
+		if !strings.EqualFold(r.Path, Record.Path) {
 			kept = append(kept, r)
 		}
 	}
@@ -375,7 +314,7 @@ func UnfreezeEntity(ui *uiState, virtualPath string) (*freezeRecord, error) {
 	ui.UnitDetailsPath = ""
 	ForgetFreezeBook(ui)
 	MarkStateDirty(ui)
-	return record, nil
+	return Record, nil
 }
 
 // freezeUnitsDir is the project's Units folder, created if it is not there.
@@ -556,7 +495,7 @@ func IsFrozen(ui *uiState, path string) bool {
 	if ui == nil || ui.ModTree == nil {
 		return false
 	}
-	return FreezeBookFor(ui).isFrozen(path)
+	return FreezeBookFor(ui).IsFrozen(path)
 }
 
 // canFreeze reports whether an object is one this mod owns, which is the only

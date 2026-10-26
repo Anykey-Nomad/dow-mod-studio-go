@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"math"
@@ -347,11 +348,11 @@ const (
 	// editor listed them: the clip names first, then the .whe's own
 	// motion (timeline) and action records, and finally the action
 	// hierarchy built from action-to-subaction links.
-	classicOEFolderAnims = iota
-	classicOEFolderMotions
-	classicOEFolderActions
-	classicOEFolderTree
-	classicOEFolderCount
+	classicOEFolderAnims   = uistate.ClassicOEFolderAnims
+	classicOEFolderMotions = uistate.ClassicOEFolderMotions
+	classicOEFolderActions = uistate.ClassicOEFolderActions
+	classicOEFolderTree    = uistate.ClassicOEFolderTree
+	classicOEFolderCount   = uistate.ClassicOEFolderCount
 )
 
 // classicOETreeMaxDepth caps the nesting of the derived tree so that a .whe
@@ -936,7 +937,7 @@ func OpenClassicOEEventDialog(ui *uiState, kind int, name string, actionIndex in
 		// The same switch the Events section's action rows make: the panel
 		// shows the action's conditions and none of the timeline's events.
 		if !ui.UnitEvtFocusAction {
-			ui.EvtPlayer.stopAll()
+			ui.EvtPlayer.StopAll()
 		}
 		ui.UnitEvtFocusAction = true
 		if ui.UnitEvtDoc != nil {
@@ -2277,7 +2278,7 @@ func HandleClassicOEWheInput(ui *uiState, gtx layout.Context) {
 }
 
 func UpdateClassicOEWheEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, submit func()) {
-	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	for {

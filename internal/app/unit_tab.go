@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uistate"
 	"fmt"
 	"image"
 	"path/filepath"
@@ -279,10 +280,7 @@ func unitTabHasNoFile(t *fileTab) bool {
 // has already been scanned without reading a single .rgd again.
 
 // unitNameBatch is a slice of the scan's results. done marks the last one.
-type unitNameBatch struct {
-	names map[string]string
-	done  bool
-}
+type unitNameBatch = uistate.UnitNameBatch
 
 // unitNameBatchSize is how many units one batch carries. Small enough that the
 // first names appear in tens of milliseconds rather than after a whole race,
@@ -326,7 +324,7 @@ func StartUnitNameScan(ui *uiState, tree *modtree.ModTree, cat *unitCatalog) {
 				out[k] = v
 			}
 			select {
-			case ch <- unitNameBatch{names: out, done: done}:
+			case ch <- unitNameBatch{Names: out, Done: done}:
 				batch = make(map[string]string, unitNameBatchSize)
 				return true
 			case <-stop:
@@ -370,10 +368,10 @@ func PollUnitNames(ui *uiState) bool {
 	for {
 		select {
 		case batch := <-ui.UnitNamesCh:
-			for path, id := range batch.names {
+			for path, id := range batch.Names {
 				ui.UnitNames[path] = id
 			}
-			if batch.done {
+			if batch.Done {
 				ui.UnitNamesDone = true
 				StopUnitNameScan(ui)
 			}
@@ -670,7 +668,7 @@ func UnitSyncValEditor(ui *uiState, gtx layout.Context, f *unitField) {
 	ed.Submit = true
 	// The editor is a one line field, so a press into it has to be given focus
 	// or the reader would type into the window and wonder where it went.
-	if RgdEnsureEditorClick(ui, ed).click.Clicked(gtx) {
+	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
 		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	submit := false
