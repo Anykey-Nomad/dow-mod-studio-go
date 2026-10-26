@@ -39,7 +39,7 @@ const unitViewportSideDp = 300
 // camera and animation panel on the right. It is what layoutUnitBody puts where
 // the middle and right columns would be.
 func (ui *uiState) layoutUnitViewportArea(gtx layout.Context) layout.Dimensions {
-	ui.ensureUnitModel()
+	ui.ensureUnitModel(gtx)
 	sideW := gtx.Dp(unit.Dp(unitViewportSideDp))
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -51,7 +51,11 @@ func (ui *uiState) layoutUnitViewportArea(gtx layout.Context) layout.Dimensions 
 				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
 					func(gtx layout.Context) layout.Dimensions {
 						return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-							layout.Flexed(1, ui.layoutUnitModelCanvas),
+							// The playback row belongs to the canvas rather than to
+							// the section: it drives what is on the view, so it is
+							// as wide as the view and stops where the list panel
+							// begins. The list keeps the full height of the section.
+							layout.Flexed(1, ui.layoutUnitCanvasColumn),
 							layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 							layout.Rigid(ui.fixedPanel(sideW, ui.layoutUnitModelSide)),
 						)
@@ -59,6 +63,21 @@ func (ui *uiState) layoutUnitViewportArea(gtx layout.Context) layout.Dimensions 
 			}),
 		)
 	})
+}
+
+// layoutUnitCanvasColumn is the canvas with its own playback row under it:
+// the two belong together, and the row stops at the canvas's edges rather than
+// running under the list panel beside it. The row keeps the height
+// unitPlaybackStripDp promises, so the canvas above it is the same size in
+// every window — the section's tests work that size out arithmetically.
+func (ui *uiState) layoutUnitCanvasColumn(gtx layout.Context) layout.Dimensions {
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Flexed(1, ui.layoutUnitModelCanvas),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.unitModelTransport(gtx, ui.unitModel)
+		}),
+	)
 }
 
 // layoutUnitModelCanvas is the 3D view itself, or the reason there is not one
@@ -121,7 +140,12 @@ func (ui *uiState) layoutUnitModelSide(gtx layout.Context) layout.Dimensions {
 }
 
 // unitModelSideControls is the part of the side panel that does not scroll:
-// the playback strip, preview toggles, camera list, and model-list tabs.
+// the model-list tabs, then the preview toggles. The playback row is not part
+// of this column — it sits under the canvas, where it belongs — so the tabs
+// take the place the section's header used to, at the top of the column where
+// they cannot scroll away either. The effects and ground switches moved into
+// that row as well; what is left here is the view and the axes of what the
+// preview draws.
 func (ui *uiState) unitModelSideControls(gtx layout.Context) layout.Dimensions {
 	t := ui.unitModel
 	v := ui.unitModelViewer()
@@ -129,14 +153,9 @@ func (ui *uiState) unitModelSideControls(gtx layout.Context) layout.Dimensions {
 		return ui.unitModelSideEmpty(gtx)
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Playback") }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelTransport(gtx, t) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelListTabs(gtx, t) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelToggles(gtx, t) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelSelectionToggle(gtx, v) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitModelListTabs(gtx, t) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.th, "Cameras") }),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.unitCameraList(gtx, v) }),
 	)
 }
 
@@ -223,43 +242,113 @@ func (ui *uiState) unitModelSideBody(gtx layout.Context) layout.Dimensions {
 	)
 }
 
-// unitModelTransport is the playback strip: play and pause, the clip before
-// and after this one, and the two that wind a single frame at a time. The
-// buttons are the ones under a .whm tab; only the shape of the row differs,
-// because this one has three hundred pixels to work in.
+// unitPlaybackStripDp is the height of the playback row: one line of transport
+// buttons, the frame readout and the frames field, plus the row's own padding.
+// It is fixed so the canvas above it can be worked out from the window's size —
+// the viewport's tests do exactly that arithmetic — and so the strip does not
+// grow a line taller when a hint wraps.
+const unitPlaybackStripDp = 38
+
+// unitPlaybackRow gives the strip its height and its padding, whatever is
+// drawn inside it.
+func unitPlaybackRow(gtx layout.Context, content layout.Widget) layout.Dimensions {
+	d := layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, content)
+	if h := gtx.Dp(unit.Dp(unitPlaybackStripDp)); d.Size.Y < h {
+		d.Size.Y = h
+	}
+	return d
+}
+
+// unitModelTransport is the playback row: a single horizontal line under the
+// canvas — Viewport and Classic OE both draw it there, and only there — with
+// the transport, the frame readout, the clip's frame count and the switches
+// for what the canvas shows. Everything on it is drained before it is laid
+// out, in the order the app drains them everywhere else: the switches and the
+// transport's presses, then the frames field's Enter.
 func (ui *uiState) unitModelTransport(gtx layout.Context, t *fileTab) layout.Dimensions {
+	// A unit with no model still gives the row its height: the canvas above is
+	// measured against it, and a strip that came and went would move the view
+	// every time a model finished loading.
+	if t == nil || t.model == nil {
+		return unitPlaybackRow(gtx, func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(9), "No model is loaded.")
+			l.Color = cTextDim
+			return l.Layout(gtx)
+		})
+	}
 	ui.modelControlClicks(gtx, t)
-	return ui.unitModelTransportButtons(gtx, t)
+	// The clip's frame count sits beside the transport: the buttons wind the
+	// playhead through the clip, and this field says how many frames it is cut
+	// into. Its clicks and its Enter are drained here, before the row is laid
+	// out, the way every other button in the app is.
+	framesSetClicked := ui.unitAnimFramesSetClick.Clicked(gtx)
+	framesSubmit := false
+	for {
+		ev, ok := ui.unitAnimFramesEd.Update(gtx)
+		if !ok {
+			break
+		}
+		if _, submit := ev.(widget.SubmitEvent); submit {
+			framesSubmit = true
+			ui.unitAnimFramesEd.Blur(gtx)
+		}
+	}
+	ui.syncAnimFramesField(t.model)
+	dims := unitPlaybackRow(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.unitModelTransportButtons(gtx, t)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.unitModelFrameLabel(gtx, t.model)
+			}),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return ui.unitAnimFramesRow(gtx, t.model)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.unitModelPlaybackToggles(gtx, t)
+			}),
+		)
+	})
+	if framesSetClicked || framesSubmit {
+		LogInfo("bone: frames pressed: %q", ui.unitAnimFramesEd.Text())
+		ui.applyAnimFrameCount(t.model)
+	}
+	return dims
 }
 
 // unitModelTransportButtons draws the viewport's shared playback row after its
-// caller has handled modelControlClicks for this frame.
+// caller has handled modelControlClicks for this frame. It is content only —
+// the strip it sits in gives the row its padding and its height.
 func (ui *uiState) unitModelTransportButtons(gtx layout.Context, t *fileTab) layout.Dimensions {
 	v := t.model
 	none := len(v.model.Animations) == 0
 	gtx = modelRowHeight(gtx)
-	return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
-		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &t.modelPlay, modelPlayLabel(v), none)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &t.modelPrevAnim, "◀", none)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &t.modelNextAnim, "▶", none)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &t.modelStepBack, "|◀", none)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ui.smallButtonDisabled(gtx, &t.modelStepFwd, "▶|", none)
-				}),
-				layout.Flexed(1, rowGap()),
-			)
-		})
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &t.modelPlay, modelPlayLabel(v), none)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &t.modelPrevAnim, "◀", none)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &t.modelNextAnim, "▶", none)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &t.modelStepBack, "|◀", none)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &t.modelStepFwd, "▶|", none)
+		}),
+	)
 }
+
+// unitFrameLabelDp is the width the frame readout is given. The digits of the
+// frame number and the key suffix beside it come and go as the playhead moves,
+// and a label that grew with them shoved the frames field, the Set button and
+// the duration readout sideways every few frames. The box is a fixed width
+// instead, and the text wraps inside it rather than widening it.
+const unitFrameLabelDp = 132
 
 // unitModelFrameLabel is where the play head is: the frame on show out of the
 // frames there are, which is what a single step of the buttons moves. When the
@@ -281,10 +370,18 @@ func (ui *uiState) unitModelFrameLabel(gtx layout.Context, v *modelViewer) layou
 	}
 	l := material.Label(ui.th, unit.Sp(9), text)
 	l.Color = cTextDim
-	return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
+	l.MaxLines = 2
+	w := gtx.Dp(unit.Dp(unitFrameLabelDp))
+	gtx.Constraints.Max.X = w
+	d := layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
+	d.Size.X = w
+	return d
 }
 
-// unitModelToggles holds the viewport reset and effect playback controls.
+// unitModelToggles holds what is left of the preview's controls in this
+// column: how the view is framed, and the axes the effects are drawn against.
+// The effects switch and the ground plane are playback switches and live in
+// the playback row under the canvas — see unitModelPlaybackToggles.
 func (ui *uiState) unitModelToggles(gtx layout.Context, t *fileTab) layout.Dimensions {
 	ui.modelControlClicks(gtx, t)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -293,6 +390,25 @@ func (ui *uiState) unitModelToggles(gtx layout.Context, t *fileTab) layout.Dimen
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return ui.unitModelFXRow(gtx, t)
+		}),
+	)
+}
+
+// unitModelPlaybackToggles are the two switches that change what the canvas is
+// showing rather than how it is looked at — the effects and the ground plane
+// — which is why they sit at the end of the playback row instead of in the
+// list panel. Their presses are already drained by modelControlClicks, which
+// the row's caller runs before laying anything out.
+func (ui *uiState) unitModelPlaybackToggles(gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.model
+	gtx = modelRowHeight(gtx)
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButton(gtx, &t.modelFX, modelFXLabel(v))
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v == nil || v.groundImage == nil)
 		}),
 	)
 }
@@ -311,20 +427,14 @@ func (ui *uiState) unitModelViewButtons(gtx layout.Context, t *fileTab, showList
 		})
 }
 
-// unitModelFXRow holds the effects switch and the model's sound switch, the
-// two that turn what the preview plays on and off.
+// unitModelFXRow is the axes switch: where in the world the effects being
+// shown stand. The switch that turns the effects on is a playback switch and
+// sits in the playback row under the canvas.
 func (ui *uiState) unitModelFXRow(gtx layout.Context, t *fileTab) layout.Dimensions {
 	v := t.model
 	gtx = modelRowHeight(gtx)
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButton(gtx, &t.modelFX, modelFXLabel(v))
-		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAxesButton(gtx, v) }),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v == nil || v.groundImage == nil)
-		}),
 		layout.Flexed(1, rowGap()),
 	)
 }
@@ -381,32 +491,6 @@ func (ui *uiState) modelListTabButtons(gtx layout.Context, labels []string, clic
 // unitModelFileLabel is the model file the viewport is showing.
 func (ui *uiState) unitModelFileLabel() string {
 	return filepath.Base(ui.unitModelPath)
-}
-
-// unitCameraList is the model's own cameras. A model that has none says so,
-// which is the common case and is why the orbit camera is the default.
-func (ui *uiState) unitCameraList(gtx layout.Context, v *modelViewer) layout.Dimensions {
-	cams := v.model.Cameras
-	ui.ensureUnitCameraClicks(len(cams))
-	if len(cams) == 0 {
-		l := material.Label(ui.th, unit.Sp(9), "This model declares no cameras.")
-		l.Color = cTextDim
-		return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
-	}
-	var children []layout.FlexChild
-	for i := range cams {
-		i := i
-		cam := cams[i]
-		c := &ui.unitCamClicks[i]
-		if c.Clicked(gtx) {
-			v.lookThroughCamera(cam)
-		}
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ui.unitViewportRow(gtx, c, v.ActiveCamera == cam.Name, cam.Name,
-				fmt.Sprintf("field of view %.0f°", cam.Fov))
-		}))
-	}
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
 // unitAnimList is every clip the model carries, the one being played marked, so
@@ -1255,45 +1339,35 @@ func (ui *uiState) unitBonePoseBar(gtx layout.Context) layout.Dimensions {
 				})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			// The import button takes its own row above Save: it opens
-			// a dialog rather than editing, and sharing a row with Save
-			// would crowd the note beside it.
-			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx,
+			// Import and Save share one row: they are the two things that
+			// write out of this bar, and one of them opens a dialog rather
+			// than editing. The note beside them is whichever is worth
+			// reading now — a failure first, since it says why nothing was
+			// written, and the imported file otherwise.
+			return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
 				func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return ui.smallButton(gtx, &ui.unitImpClick, "Import frame's timeline")
 						}),
-						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							if ui.unitImpPath == "" {
-								return layout.Dimensions{}
-							}
-							l := material.Label(ui.th, unit.Sp(9), filepath.Base(ui.unitImpPath))
-							l.Color = cTextDim
-							l.MaxLines = 1
-							return l.Layout(gtx)
-						}),
-					)
-				})
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			// Save takes its own row: the note of why the last apply or
-			// save did nothing shares it, so neither has to squeeze past
-			// the Set buttons above.
-			return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
-				func(gtx layout.Context) layout.Dimensions {
-					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return ui.smallButtonDisabled(gtx, &ui.unitBoneKeySaveClick, "Save WHM", !ui.unitModelWhmDirty)
 						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							if ui.unitBoneKeyErr == "" {
+							text, noteColor := ui.unitImpPath, cTextDim
+							if ui.unitBoneKeyErr != "" {
+								text, noteColor = ui.unitBoneKeyErr, rgb(0xB00020)
+							}
+							if text == "" {
 								return layout.Dimensions{}
 							}
-							l := material.Label(ui.th, unit.Sp(9), ui.unitBoneKeyErr)
-							l.Color = rgb(0xB00020)
-							l.MaxLines = 1
+							if text == ui.unitImpPath {
+								text = filepath.Base(text)
+							}
+							l := material.Label(ui.th, unit.Sp(9), text)
+							l.Color = noteColor
+							l.MaxLines = 2
 							return l.Layout(gtx)
 						}),
 					)
@@ -1821,6 +1895,121 @@ func (ui *uiState) fillBoneKeyFields(v *modelViewer, mode int) {
 	}
 }
 
+// maxAnimFrames is the largest frame count the frames field takes. A clip is a
+// few hundred frames long in the shipped models, and a number in the millions
+// only makes every key land on the same frame.
+const maxAnimFrames = 100000
+
+// unitAnimFramesRow is the clip's frame count: the number typed in, the Set
+// button beside it, and on the right what that number is in the file — the
+// clip's length in seconds and the rate the two of them work out to.
+func (ui *uiState) unitAnimFramesRow(gtx layout.Context, v *modelViewer) layout.Dimensions {
+	hint := "no clip on show"
+	canSet := v != nil && v.anim != nil
+	if canSet {
+		hint = fmt.Sprintf("%.2f s · %.1f fps", animClipSeconds(v.anim), animFramesPerSecond(v.anim))
+	}
+	// A count the field would not take says why where the length is shown: it
+	// is the one place the frames row has to report in, and it is on screen in
+	// every list mode.
+	hintColor := cTextDim
+	if ui.unitAnimFramesErr != "" {
+		hint = ui.unitAnimFramesErr
+		hintColor = rgb(0xB00020)
+	}
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(10), "Frames")
+			l.Color = cTextDim
+			return l.Layout(gtx)
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.unitBoneKeyField(gtx, "", &ui.unitAnimFramesEd)
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &ui.unitAnimFramesSetClick, "Set", !canSet)
+		}),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(8), hint)
+			l.Color = hintColor
+			l.MaxLines = 2
+			return l.Layout(gtx)
+		}),
+	)
+}
+
+// syncAnimFramesField keeps the frames field on the clip on show. The field is
+// refilled when the clip or its count changes — another clip, another model, a
+// count just applied — and left alone otherwise, so a number being typed over
+// is not taken away mid-word.
+func (ui *uiState) syncAnimFramesField(v *modelViewer) {
+	key, text := "no clip", ""
+	if v != nil && v.anim != nil {
+		key = fmt.Sprintf("%s|%d", v.anim.Name, v.anim.NumFrames)
+		text = strconv.Itoa(v.anim.NumFrames)
+	}
+	if key == ui.unitAnimFramesSync {
+		return
+	}
+	ui.unitAnimFramesSync = key
+	ui.unitAnimFramesEd.SetText(text)
+}
+
+// applyAnimFrameCount is what Set beside the frames field and Enter in it do:
+// the clip is counted out in the number typed in, and the file is marked dirty
+// for Save WHM.
+//
+// Key times are stored normalised over the clip, so the count is a grid rather
+// than a hand on a clock: the same clip counted in twenty frames and in forty
+// holds the same poses at the same fractions, and the strip, the frame readout
+// and the keyframe rows simply count them out in the new number. The rate is
+// what is held fixed: fps is frames over seconds, so a new count keeps the
+// rate it had only by moving the duration by the same ratio — the clip is
+// counted out at the same rate over a longer or shorter length — and the
+// header keeps showing the rate the clip had before the change.
+func (ui *uiState) applyAnimFrameCount(v *modelViewer) {
+	if v == nil || v.anim == nil {
+		ui.unitAnimFramesErr = "no clip is on show"
+		return
+	}
+	text := strings.TrimSpace(ui.unitAnimFramesEd.Text())
+	n, err := strconv.Atoi(text)
+	if err != nil || n < 1 {
+		ui.unitAnimFramesErr = fmt.Sprintf("%q is not a frame count — a whole number of at least 1", text)
+		return
+	}
+	if n > maxAnimFrames {
+		ui.unitAnimFramesErr = fmt.Sprintf("%d is past the %d frames a clip is given here", n, maxAnimFrames)
+		return
+	}
+	old := v.anim.NumFrames
+	if n == old {
+		ui.unitAnimFramesErr = ""
+		ui.statusText = fmt.Sprintf("Clip %q is already %d frames", v.anim.Name, n)
+		return
+	}
+	// The rate is taken before the count moves and the duration is put back
+	// to match the new count: fps is frames over seconds, so holding the rate
+	// means the length follows the count by the same ratio. A clip with no
+	// duration of its own rates at the 20 fps fallback and is given the
+	// length that goes with it.
+	fps := animFramesPerSecond(v.anim)
+	v.anim.NumFrames = n
+	if fps > 0 {
+		v.anim.Duration = float32(float64(n) / fps)
+	}
+	v.poseValid = false
+	v.invalidate()
+	ui.unitModelWhmDirty = true
+	ui.unitAnimFramesErr = ""
+	ui.statusText = fmt.Sprintf("Clip %q: %d frames (was %d) at %.1f fps — Save WHM writes it",
+		v.anim.Name, n, old, animFramesPerSecond(v.anim))
+	LogInfo("bone: clip %q frames %d -> %d (%.2f s at %.1f fps, dirty=%v)",
+		v.anim.Name, old, n, animClipSeconds(v.anim), animFramesPerSecond(v.anim), ui.unitModelWhmDirty)
+}
+
 // saveUnitModelWhm writes the edited bone keys back into the .whm: the file
 // is read from the mod (overlay first, so an earlier save is included), the
 // current animation's bone keys are rebuilt into that copy — values, times
@@ -1850,7 +2039,7 @@ func (ui *uiState) saveUnitModelWhm() {
 		ui.unitBoneKeyErr = "read failed: " + err.Error()
 		return
 	}
-	patched, err := whm.PatchAnimBoneKeys(data, &v.model.Model, v.animIndex)
+	patched, err := whm.PatchAnimClip(data, &v.model.Model, v.animIndex, v.anim.NumFrames)
 	if err != nil {
 		ui.unitBoneKeyErr = "save failed: " + err.Error()
 		return
@@ -2447,9 +2636,9 @@ func unitViewportRowText(name string) string {
 	return name
 }
 
-// ensureUnitAnimClicks and ensureUnitCameraClicks size the two lists' click
-// targets. They are rebuilt per model, so a slice of the wrong length is
-// replaced rather than grown into.
+// ensureUnitAnimClicks sizes the clip list's click targets. They are rebuilt
+// per model, so a slice of the wrong length is replaced rather than grown
+// into.
 func (ui *uiState) ensureUnitAnimClicks(n int) {
 	if len(ui.unitAnimClicks) != n {
 		ui.unitAnimClicks = make([]widget.Clickable, n)
@@ -2461,12 +2650,6 @@ func (ui *uiState) ensureUnitAnimClicks(n int) {
 func (ui *uiState) ensureUnitMarkerClicks(n int) {
 	if len(ui.unitMarkerClicks) != n {
 		ui.unitMarkerClicks = make([]widget.Clickable, n)
-	}
-}
-
-func (ui *uiState) ensureUnitCameraClicks(n int) {
-	if len(ui.unitCamClicks) != n {
-		ui.unitCamClicks = make([]widget.Clickable, n)
 	}
 }
 
@@ -2501,19 +2684,6 @@ func (ui *uiState) unitModelAnimNames() []string {
 	out := make([]string, len(v.model.Animations))
 	for i := range v.model.Animations {
 		out[i] = v.model.Animations[i].Name
-	}
-	return out
-}
-
-// unitModelCameraNames are the cameras of the model on show.
-func (ui *uiState) unitModelCameraNames() []string {
-	v := ui.unitModelViewer()
-	if v == nil || v.model == nil {
-		return nil
-	}
-	out := make([]string, len(v.model.Cameras))
-	for i := range v.model.Cameras {
-		out[i] = v.model.Cameras[i].Name
 	}
 	return out
 }

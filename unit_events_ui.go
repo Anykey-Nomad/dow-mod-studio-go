@@ -450,13 +450,15 @@ type wheEventClip struct {
 	defs       map[string]whe.FxEvent
 }
 
-// wheActionClip is one copied action of a .whe's DATAACTS section. The action
-// travels on its own: the motions and sub-actions it names are timelines and
-// actions of the file it came from, and whether the target has them — under
-// the same names, guarding the same clips — is the reader's call, not
-// something a paste should decide.
+// wheActionClip is one copied action of a .whe's DATAACTS section, together
+// with what it needs to run: the timelines its motions name — followed through
+// the motions those timelines chain to — and the sub-actions it calls. An
+// action pasted without them would point at motions the target file does not
+// have, which is why the whole reachable set travels in one copy.
 type wheActionClip struct {
-	action whe.FxAction
+	action    whe.FxAction
+	timelines []wheEventClip
+	subacts   []whe.FxAction
 }
 
 // clipEventKey normalizes an event name for the definition snapshot: the keys
@@ -553,6 +555,9 @@ func (ui *uiState) unitEvtFieldFocused(gtx layout.Context) bool {
 			return true
 		}
 	}
+	if ui.unitActNameEd.Focused(gtx) {
+		return true
+	}
 	for i := range ui.unitActCondEds {
 		if ui.unitActCondEds[i].Focused(gtx) {
 			return true
@@ -578,6 +583,7 @@ func (ui *uiState) unitEvtBlurFields(gtx layout.Context) {
 	for i := range ui.unitEvtEntryEds {
 		ui.unitEvtEntryEds[i].Blur(gtx)
 	}
+	ui.unitActNameEd.Blur(gtx)
 	for i := range ui.unitActCondEds {
 		ui.unitActCondEds[i].Blur(gtx)
 	}
@@ -1205,7 +1211,35 @@ func (ui *uiState) copySelectedUnitTimeline() {
 		ui.statusText = "Select a timeline first"
 		return
 	}
-	payload, _ := doc.TimelinePayload(tl.Name)
+	clip, ok := timelineClipFrom(doc, tl.Name)
+	if !ok {
+		ui.statusText = "This timeline could not be read back from the .whe"
+		return
+	}
+	ui.unitClips.push(clipEntry{
+		kind:   clipEvents,
+		label:  fmt.Sprintf("timeline %s (%d event(s))", clip.timeline, len(clip.events)),
+		at:     time.Now(),
+		events: clip,
+	})
+	ui.unitClipCur = len(ui.unitClips.entries) - 1
+	ui.statusText = fmt.Sprintf("Copied timeline %s (%d event(s), %d animation(s)) — Paste in any unit",
+		clip.timeline, len(clip.events), len(clip.animations))
+}
+
+// timelineClipFrom reads one timeline of doc into a clipboard copy: its raw
+// DATAMTON payload, the clips it blends, its events and the definitions behind
+// them. Everything a paste needs travels inside the copy, which is what lets a
+// timeline read here be written into another unit's file.
+func timelineClipFrom(doc *whe.Document, name string) (*wheEventClip, bool) {
+	tl, ok := timelineOf(doc, name)
+	if !ok {
+		return nil, false
+	}
+	payload, ok := doc.TimelinePayload(tl.Name)
+	if !ok {
+		return nil, false
+	}
 	clip := &wheEventClip{
 		timeline:   tl.Name,
 		animations: append([]string(nil), tl.Animations...),
@@ -1219,15 +1253,126 @@ func (ui *uiState) copySelectedUnitTimeline() {
 			clip.defs[clipEventKey(ev.Name)] = d
 		}
 	}
-	ui.unitClips.push(clipEntry{
-		kind:   clipEvents,
-		label:  fmt.Sprintf("timeline %s (%d event(s))", tl.Name, len(clip.events)),
-		at:     time.Now(),
-		events: clip,
-	})
-	ui.unitClipCur = len(ui.unitClips.entries) - 1
-	ui.statusText = fmt.Sprintf("Copied timeline %s (%d event(s), %d animation(s)) — Paste in any unit",
-		tl.Name, len(clip.events), len(clip.animations))
+	return clip, true
+}
+
+// timelineOf finds one timeline of doc by name.
+func timelineOf(doc *whe.Document, name string) (whe.FxTimeline, bool) {
+	if doc == nil {
+		return whe.FxTimeline{}, false
+	}
+	for _, tl := range doc.Timelines() {
+		if strings.EqualFold(strings.TrimSpace(tl.Name), strings.TrimSpace(name)) {
+			return tl, true
+		}
+	}
+	return whe.FxTimeline{}, false
+}
+
+// timelinePaste is what writing one copied timeline into a .whe did: whether the
+// file had to grow it, how many rows landed, and what was left where it was.
+type timelinePaste struct {
+	name      string
+	created   bool
+	events    int
+	present   int
+	anims     int
+	skipped   int
+	firstSkip string
+}
+
+// pasteTimelineClip writes a copied timeline into doc under its own name: it is
+// created from the copied payload when the file has never carried it, and
+// merged into the one it has when it does. Rows the destination already fires
+// at the same moment are left alone, and a definition the file already defines
+// is used as it stands — reconciling two authored effects is the reader's call.
+func pasteTimelineClip(doc *whe.Document, clip *wheEventClip) (timelinePaste, error) {
+	var res timelinePaste
+	if doc == nil || clip == nil || strings.TrimSpace(clip.timeline) == "" {
+		return res, fmt.Errorf("nothing to paste")
+	}
+	res.name = strings.TrimSpace(clip.timeline)
+	if _, exists := doc.TimelinePayload(res.name); !exists {
+		if err := doc.AddTimeline(res.name, clip.payload); err != nil {
+			return res, err
+		}
+		res.created = true
+	}
+	for _, anim := range clip.animations {
+		wrote, err := doc.AddTimelineAnimation(res.name, anim)
+		if err != nil {
+			return res, err
+		}
+		if wrote {
+			res.anims++
+		}
+	}
+	// The definitions this .whe already carries, kept up to date as the paste
+	// writes more of them; only the created path needs the set. An existing
+	// timeline is read by slot, so a paste into one that half carries the copy
+	// cannot double every row.
+	known := map[string]bool{}
+	if res.created {
+		for name := range doc.Events() {
+			known[name] = true
+		}
+	} else if tl, ok := timelineOf(doc, res.name); ok {
+		for _, ev := range tl.Events {
+			known[fxEventSlot(ev)] = true
+		}
+	}
+	for _, ev := range clip.events {
+		if res.created {
+			// The timeline was written from the copied payload, so its events
+			// are already listed; only the definitions behind them still have
+			// to come over. One this .whe already has is left exactly as it is.
+			key := clipEventKey(ev.Name)
+			if d, have := clip.defs[key]; have && !known[key] {
+				if err := doc.AddEventDefinition(d); err != nil {
+					res.skipped++
+					if res.firstSkip == "" {
+						res.firstSkip = err.Error()
+					}
+					continue
+				}
+				known[key] = true
+			}
+			res.events++
+			continue
+		}
+		if known[fxEventSlot(ev)] {
+			res.present++
+			continue
+		}
+		if err := doc.AddTimedEvent(res.name, ev, clipEventDefinition(clip, ev.Name), ""); err != nil {
+			res.skipped++
+			if res.firstSkip == "" {
+				res.firstSkip = err.Error()
+			}
+			continue
+		}
+		known[fxEventSlot(ev)] = true
+		res.events++
+	}
+	return res, nil
+}
+
+// timelinePasteMessage is how writing a timeline back reads in the status line.
+func timelinePasteMessage(res timelinePaste) string {
+	msg := fmt.Sprintf("Pasted %d event(s) into %s", res.events, res.name)
+	if res.created {
+		msg = fmt.Sprintf("Created timeline %s with %d event(s)", res.name, res.events)
+	}
+	if res.anims > 0 {
+		msg += fmt.Sprintf(", %d animation(s)", res.anims)
+	}
+	if res.present > 0 {
+		msg += fmt.Sprintf(", %d already there", res.present)
+	}
+	if res.skipped > 0 {
+		msg += fmt.Sprintf(", %d skipped: %s", res.skipped, res.firstSkip)
+	}
+	return msg + " — Save .whe to write it into the mod"
 }
 
 // pasteUnitEvents writes the buffer's events into a timeline at their original
@@ -1253,79 +1398,50 @@ func (ui *uiState) pasteUnitEvents() {
 		return
 	}
 	clip := entry.events
-	target := ui.unitEvtTimeline
-	created := false
 	if clip.timeline != "" {
-		target = clip.timeline
-		if _, exists := doc.TimelinePayload(target); !exists {
-			if err := doc.AddTimeline(target, clip.payload); err != nil {
-				ui.statusText = "Paste failed: " + err.Error()
-				return
-			}
-			created = true
-		}
-	}
-	if target == "" {
-		ui.statusText = "Select a timeline first"
-		return
-	}
-	addedAnims := 0
-	for _, anim := range clip.animations {
-		wrote, err := doc.AddTimelineAnimation(target, anim)
+		res, err := pasteTimelineClip(doc, clip)
 		if err != nil {
 			ui.statusText = "Paste failed: " + err.Error()
 			return
 		}
-		if wrote {
-			addedAnims++
+		if res.events == 0 && res.present == 0 {
+			if res.firstSkip != "" {
+				ui.statusText = "Paste failed: " + res.firstSkip
+			} else {
+				ui.statusText = fmt.Sprintf("Nothing to paste — %s carries no events", res.name)
+			}
+			return
 		}
+		ui.unitEvtDirty = true
+		ui.unitEvtBound = ""
+		// A .whe read as carrying no timelines may have just gained one.
+		ui.unitEvtErr = ""
+		ui.unitEvtTimeline = res.name
+		ui.unitEvtSel = 0
+		ui.unitEvtSelSet = map[int]bool{0: true}
+		ui.unitEvtSelAnchor = 0
+		ui.reloadUnitModelFx()
+		ui.statusText = timelinePasteMessage(res)
+		return
+	}
+	target := ui.unitEvtTimeline
+	if target == "" {
+		ui.statusText = "Select a timeline first"
+		return
 	}
 	added, skipped, present := 0, 0, 0
 	firstSkip := ""
 	var pasted []whe.FxTimelineEvent
-	// The definitions this .whe already carries, kept up to date as the paste
-	// writes more of them; only the created path needs the set.
+	// An event the destination already fires at the same moment is not a
+	// conflict to report, it is already there: pasting the same rows twice
+	// must not double every row.
 	known := map[string]bool{}
-	if created {
-		for name := range doc.Events() {
-			known[name] = true
-		}
-	} else {
-		// An event the destination already fires at the same moment is not a
-		// conflict to report, it is already there: pasting a copied timeline
-		// into one that half carries it must not double every row. The rows
-		// read are the destination's, which is not always the selected one —
-		// a copied timeline is addressed by its own name.
-		for _, tl := range doc.Timelines() {
-			if !strings.EqualFold(tl.Name, target) {
-				continue
-			}
-			for _, ev := range tl.Events {
-				known[fxEventSlot(ev)] = true
-			}
-			break
+	if tl, ok := timelineOf(doc, target); ok {
+		for _, ev := range tl.Events {
+			known[fxEventSlot(ev)] = true
 		}
 	}
 	for _, ev := range clip.events {
-		if created {
-			// The timeline was written from the copied payload, so its events
-			// are already listed; only the definitions behind them still have
-			// to come over. One this .whe already has is left exactly as it is.
-			key := clipEventKey(ev.Name)
-			if d, have := clip.defs[key]; have && !known[key] {
-				if err := doc.AddEventDefinition(d); err != nil {
-					skipped++
-					if firstSkip == "" {
-						firstSkip = err.Error()
-					}
-					continue
-				}
-				known[key] = true
-			}
-			added++
-			pasted = append(pasted, ev)
-			continue
-		}
 		if known[fxEventSlot(ev)] {
 			present++
 			continue
@@ -1353,12 +1469,6 @@ func (ui *uiState) pasteUnitEvents() {
 	ui.unitEvtBound = ""
 	// A .whe read as carrying no timelines may have just gained one.
 	ui.unitEvtErr = ""
-	if created {
-		ui.unitEvtTimeline = target
-		ui.unitEvtSel = 0
-		ui.unitEvtSelSet = map[int]bool{0: true}
-		ui.unitEvtSelAnchor = 0
-	}
 	// Pasted rows land at the end of the timeline; the selection follows them
 	// so what was just pasted is what the panels below show.
 	ui.unitEvtSelSet = map[int]bool{}
@@ -1375,12 +1485,6 @@ func (ui *uiState) pasteUnitEvents() {
 	}
 	ui.reloadUnitModelFx()
 	msg := fmt.Sprintf("Pasted %d event(s) into %s", added, target)
-	if created {
-		msg = fmt.Sprintf("Created timeline %s with %d event(s)", target, added)
-	}
-	if addedAnims > 0 {
-		msg += fmt.Sprintf(", %d animation(s)", addedAnims)
-	}
 	if present > 0 {
 		msg += fmt.Sprintf(", %d already there", present)
 	}
@@ -1968,10 +2072,12 @@ func (ui *uiState) layoutUnitEvtActionRow(gtx layout.Context, i int, a whe.FxAct
 	})
 }
 
-// copySelectedUnitAction puts the picked action into the shared buffer. It is
-// the action itself that travels — its guarded chain of motions and
-// sub-actions — so a unit's idle / build / death chain can be set up once and
-// pasted onto another unit.
+// copySelectedUnitAction puts the picked action and everything it needs to run
+// into the shared buffer: the action itself, the timelines its motions name —
+// followed through the motions those timelines chain to — and the sub-actions
+// it calls. A unit's idle / build / death chain can then be set up once and
+// pasted onto another unit in one go, instead of reassembling it from the
+// timeline list by hand.
 func (ui *uiState) copySelectedUnitAction() {
 	doc := ui.unitEvtDoc
 	if doc == nil {
@@ -1984,21 +2090,99 @@ func (ui *uiState) copySelectedUnitAction() {
 		ui.statusText = "Select an action to copy"
 		return
 	}
+	clip := &wheActionClip{action: *a}
+	for _, name := range actionMotionNames(doc, *a) {
+		if tl, ok := timelineClipFrom(doc, name); ok {
+			clip.timelines = append(clip.timelines, *tl)
+		}
+	}
+	clip.subacts = actionSubactions(doc, *a)
 	ui.unitClips.push(clipEntry{
-		kind:    clipActions,
-		label:   fmt.Sprintf("action %s (%d choice(s))", a.Name, len(unitActLinks(*a))),
+		kind: clipActions,
+		label: fmt.Sprintf("action %s (%d choice(s), %d timeline(s), %d sub-action(s))",
+			a.Name, len(unitActLinks(*a)), len(clip.timelines), len(clip.subacts)),
 		at:      time.Now(),
-		actions: &wheActionClip{action: *a},
+		actions: clip,
 	})
 	ui.unitClipCur = len(ui.unitClips.entries) - 1
-	ui.statusText = fmt.Sprintf("Copied action %s — Paste in any unit", a.Name)
+	ui.statusText = fmt.Sprintf("Copied action %s with %d timeline(s) and %d sub-action(s) — Paste in any unit",
+		a.Name, len(clip.timelines), len(clip.subacts))
 }
 
-// pasteUnitAction writes the copied action into this unit's .whe, under its own
-// name. An action of that name here is refused rather than merged: an action's
-// choices are an if / else chain in file order, and splicing one into another
-// would change what this unit plays. The motions the action names have to
-// exist in this file, which is what Save .whe writes once they do.
+// actionMotionNames lists every timeline the action can reach: the motions its
+// own choices name first, then the motions those timelines chain to, and so on
+// through the chain — a motion timeline whose payload names another motion is
+// only half copied without the one it points at. Names that this file has no
+// timeline for are dropped, since there is nothing to carry.
+func actionMotionNames(doc *whe.Document, a whe.FxAction) []string {
+	seen := map[string]bool{}
+	var out []string
+	var visit func(name string)
+	visit = func(name string) {
+		key := clipEventKey(name)
+		if key == "" || seen[key] {
+			return
+		}
+		tl, ok := timelineOf(doc, key)
+		if !ok {
+			return
+		}
+		seen[key] = true
+		out = append(out, tl.Name)
+		for _, motion := range tl.Motions {
+			visit(motion)
+		}
+		for _, motion := range tl.RandomMotions {
+			visit(motion.Name)
+		}
+	}
+	for _, link := range a.Motions {
+		visit(link.Name)
+	}
+	return out
+}
+
+// actionSubactions lists the other actions of the file the action calls,
+// followed through their own sub-action links. They travel with the copy for
+// the same reason the timelines do: an action that calls a sub-action the
+// target does not have is a broken chain.
+func actionSubactions(doc *whe.Document, a whe.FxAction) []whe.FxAction {
+	byName := map[string]whe.FxAction{}
+	for _, have := range doc.Actions() {
+		byName[clipEventKey(have.Name)] = have
+	}
+	seen := map[string]bool{clipEventKey(a.Name): true}
+	var out []whe.FxAction
+	var visit func(name string)
+	visit = func(name string) {
+		key := clipEventKey(name)
+		if key == "" || seen[key] {
+			return
+		}
+		sub, ok := byName[key]
+		if !ok {
+			return
+		}
+		seen[key] = true
+		out = append(out, sub)
+		for _, link := range sub.Subactions {
+			visit(link.Name)
+		}
+	}
+	for _, link := range a.Subactions {
+		visit(link.Name)
+	}
+	return out
+}
+
+// pasteUnitAction writes the copied action, its timelines and its sub-actions
+// into this unit's .whe. The timelines go in first — created when this file has
+// never had them, merged into the ones it has — so the action's motions resolve
+// the moment it lands, then the sub-actions, and the action itself last.
+//
+// An action of the same name here is refused before anything is written rather
+// than merged: an action's choices are an if / else chain in file order, and
+// splicing one into another would change what this unit plays.
 func (ui *uiState) pasteUnitAction() {
 	entry, _, ok := ui.unitClips.pick(clipActions, ui.unitClipCur)
 	if !ok || entry.actions == nil {
@@ -2010,7 +2194,53 @@ func (ui *uiState) pasteUnitAction() {
 		ui.statusText = "No .whe is loaded — select a unit whose model has one first"
 		return
 	}
-	if err := doc.AddAction(entry.actions.action); err != nil {
+	clip := entry.actions
+	if actionIndexByName(doc, clip.action.Name) >= 0 {
+		ui.statusText = fmt.Sprintf("action %s already exists in this .whe — reconcile it by hand instead of pasting over it",
+			clip.action.Name)
+		return
+	}
+	createdTl, mergedTl, events, anims := 0, 0, 0, 0
+	firstErr := ""
+	for i := range clip.timelines {
+		res, err := pasteTimelineClip(doc, &clip.timelines[i])
+		if err != nil {
+			if firstErr == "" {
+				firstErr = err.Error()
+			}
+			continue
+		}
+		if res.created {
+			createdTl++
+		} else {
+			mergedTl++
+		}
+		events += res.events
+		anims += res.anims
+	}
+	addedSubs, presentSubs := 0, 0
+	for _, sub := range clip.subacts {
+		if actionIndexByName(doc, sub.Name) >= 0 {
+			// The target has its own version of that action: keep it, and let
+			// the reader settle the two by hand.
+			presentSubs++
+			continue
+		}
+		if err := doc.AddAction(sub); err != nil {
+			if firstErr == "" {
+				firstErr = err.Error()
+			}
+			continue
+		}
+		addedSubs++
+	}
+	if err := doc.AddAction(clip.action); err != nil {
+		// The timelines and sub-actions may already have landed, and Save .whe
+		// has to know the document no longer matches the file.
+		if createdTl+mergedTl+addedSubs > 0 {
+			ui.unitEvtDirty = true
+			ui.unitActCondBound = ""
+		}
 		ui.statusText = "Paste failed: " + err.Error()
 		return
 	}
@@ -2018,16 +2248,43 @@ func (ui *uiState) pasteUnitAction() {
 	ui.unitActCondBound = ""
 	// The pasted action is what the list should show as picked, so the panel
 	// below it describes the thing that just landed.
-	acts := doc.Actions()
-	for i := range acts {
-		if strings.EqualFold(acts[i].Name, entry.actions.action.Name) {
-			ui.unitEvtActionSel = i
-			break
-		}
+	if i := actionIndexByName(doc, clip.action.Name); i >= 0 {
+		ui.unitEvtActionSel = i
 	}
 	ui.reloadUnitModelFx()
-	ui.statusText = fmt.Sprintf("Pasted action %s — its motions and sub-actions must exist here; Save .whe to write it in",
-		entry.actions.action.Name)
+	msg := fmt.Sprintf("Pasted action %s", clip.action.Name)
+	if createdTl+mergedTl > 0 {
+		msg += fmt.Sprintf(" with %d timeline(s) (%d new, %d merged, %d event(s)", createdTl+mergedTl, createdTl, mergedTl, events)
+		if anims > 0 {
+			msg += fmt.Sprintf(", %d animation(s)", anims)
+		}
+		msg += ")"
+	}
+	if addedSubs > 0 {
+		msg += fmt.Sprintf(" and %d sub-action(s)", addedSubs)
+	}
+	if presentSubs > 0 {
+		msg += fmt.Sprintf(", %d sub-action(s) already here", presentSubs)
+	}
+	if firstErr != "" {
+		msg += ", some skipped: " + firstErr
+	}
+	ui.statusText = msg + " — Save .whe to write it in"
+}
+
+// actionIndexByName is the position of an action in the file's DATAACTS list,
+// or -1 when the file has no action of that name.
+func actionIndexByName(doc *whe.Document, name string) int {
+	if doc == nil {
+		return -1
+	}
+	key := clipEventKey(name)
+	for i, a := range doc.Actions() {
+		if clipEventKey(a.Name) == key {
+			return i
+		}
+	}
+	return -1
 }
 
 // unitActLinks is one action's choices in file order: the motions it plays,
@@ -2125,6 +2382,10 @@ func (ui *uiState) ensureUnitActConditions() {
 // and the chain tools add, move and delete choices around the caret.
 func (ui *uiState) unitActConditionsInput(gtx layout.Context) {
 	ui.ensureUnitActConditions()
+	ui.unitActUpdateNameEditor(gtx)
+	if ui.unitActRename.Clicked(gtx) {
+		ui.renameSelectedUnitAction()
+	}
 	for i := range ui.unitActGuardClicks {
 		if i >= len(ui.unitActCondStaged) || !ui.unitActGuardClicks[i].Clicked(gtx) {
 			continue
@@ -2173,6 +2434,91 @@ func (ui *uiState) unitActConditionsInput(gtx layout.Context) {
 	if ui.unitActDelete.Clicked(gtx) {
 		ui.unitActDeleteChoice()
 	}
+}
+
+// unitActUpdateNameEditor owns the action's own name field: a click takes the
+// caret, Enter renames, and the field refills from the picked action whenever
+// the selection moves — but not while it holds the caret, so what is being
+// typed is never overwritten.
+func (ui *uiState) unitActUpdateNameEditor(gtx layout.Context) {
+	ed := &ui.unitActNameEd
+	ed.SingleLine = true
+	ed.Submit = true
+	if ui.rgdEnsureEditorClick(ed).click.Clicked(gtx) {
+		gtx.Execute(key.FocusCmd{Tag: ed})
+	}
+	if !ed.Focused(gtx) {
+		var act whe.FxAction
+		have := false
+		if ui.unitEvtDoc != nil {
+			if a := ui.selectedUnitEvtAction(ui.unitEvtDoc.Actions()); a != nil {
+				act = *a
+				have = true
+			}
+		}
+		bound := strconv.Itoa(ui.unitEvtActionSel) + "|" + act.Name
+		if bound != ui.unitActNameBound {
+			ui.unitActNameBound = bound
+			if have {
+				ed.SetText(act.Name)
+			} else {
+				ed.SetText("")
+			}
+		}
+	}
+	for {
+		ev, ok := ed.Update(gtx)
+		if !ok {
+			break
+		}
+		if _, submit := ev.(widget.SubmitEvent); submit {
+			ui.renameSelectedUnitAction()
+			ed.Blur(gtx)
+		}
+	}
+}
+
+// renameSelectedUnitAction renames the picked action in the in-memory
+// document. The rename also follows the name into every sub-action link of the
+// file that called it, so a chain another action drives keeps working; a name
+// another action already has is refused by the document rather than merged.
+// Save .whe writes it into the mod.
+func (ui *uiState) renameSelectedUnitAction() {
+	doc := ui.unitEvtDoc
+	if doc == nil {
+		ui.unitActErr = "No .whe is loaded."
+		return
+	}
+	acts := doc.Actions()
+	if ui.unitEvtActionSel < 0 || ui.unitEvtActionSel >= len(acts) {
+		ui.unitActErr = "Select an action to rename."
+		return
+	}
+	old := acts[ui.unitEvtActionSel].Name
+	next := strings.TrimSpace(ui.unitActNameEd.Text())
+	if next == "" {
+		ui.unitActErr = "An action needs a name."
+		return
+	}
+	if strings.EqualFold(next, old) {
+		ui.unitActErr = ""
+		ui.statusText = "The action is already called " + old
+		return
+	}
+	if err := doc.RenameAction(old, next); err != nil {
+		ui.unitActErr = err.Error()
+		return
+	}
+	ui.unitActErr = ""
+	ui.unitEvtDirty = true
+	// The conditions and the name field refill from what was just written.
+	ui.unitActCondBound = ""
+	ui.unitActNameBound = ""
+	if i := actionIndexByName(doc, next); i >= 0 {
+		ui.unitEvtActionSel = i
+	}
+	ui.reloadUnitModelFx()
+	ui.statusText = fmt.Sprintf("Renamed action %s to %s — Save .whe to write it into the mod", old, next)
 }
 
 // unitActUpdateEditor processes one field of a choice line: a click takes
@@ -2921,6 +3267,39 @@ func (ui *uiState) unitEvtActionPanelBody(gtx layout.Context) []layout.FlexChild
 			l.Color = cTextDim
 			l.MaxLines = 2
 			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
+		}),
+		// The action's name is its identity across the file, and it is what a
+		// paste from another unit lands on — so it can be changed here, which
+		// is how a name this .whe already uses is settled without editing the
+		// file by hand.
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Max.X = gtx.Dp(112)
+					l := material.Label(ui.th, unit.Sp(9), "Name")
+					l.Color = cTextDim
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.Y = gtx.Dp(20)
+					gtx.Constraints.Max.Y = gtx.Dp(22)
+					b := widget.Border{Color: cBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+					return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							w := material.Editor(ui.th, &ui.unitActNameEd, act.Name)
+							w.TextSize = unit.Sp(10)
+							w.HintColor = cTextDim
+							return w.Layout(gtx)
+						})
+					})
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return ui.smallButton(gtx, &ui.unitActRename, "Rename")
+				}),
+			)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {

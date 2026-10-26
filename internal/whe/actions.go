@@ -209,6 +209,80 @@ func (d *Document) AddAction(a FxAction) error {
 	return nil
 }
 
+// RenameAction renames one action of the DATAACTS section and follows the name
+// through every sub-action link that called it: an action other actions invoke
+// is renamed where it is defined and where it is called, or the chain that
+// names it breaks. The motions are left alone — they name timelines, not
+// actions — and a name another action already answers to is refused before
+// anything is written.
+func (d *Document) RenameAction(oldName, newName string) error {
+	if d == nil {
+		return fmt.Errorf("no .whe document is loaded")
+	}
+	old := strings.TrimSpace(oldName)
+	next := strings.TrimSpace(newName)
+	if old == "" || next == "" {
+		return fmt.Errorf("an action needs a name")
+	}
+	if strings.EqualFold(old, next) {
+		return fmt.Errorf("the action is already called %q", next)
+	}
+	chunks := d.actionsChunks()
+	found := false
+	for _, c := range chunks {
+		acts, err := parseActs(c.Payload)
+		if err != nil {
+			return err
+		}
+		for _, a := range acts {
+			name := strings.TrimSpace(a.Name)
+			if strings.EqualFold(name, next) && !strings.EqualFold(name, old) {
+				return fmt.Errorf("action %q already exists in this .whe", next)
+			}
+			if strings.EqualFold(name, old) {
+				found = true
+			}
+		}
+	}
+	if !found {
+		return fmt.Errorf("no action named %q in this .whe", old)
+	}
+	for _, c := range chunks {
+		acts, err := parseActs(c.Payload)
+		if err != nil {
+			return err
+		}
+		changed := false
+		for i := range acts {
+			if strings.EqualFold(strings.TrimSpace(acts[i].Name), old) {
+				acts[i].Name = next
+				changed = true
+			}
+			for j := range acts[i].Subactions {
+				if strings.EqualFold(strings.TrimSpace(acts[i].Subactions[j].Name), old) {
+					acts[i].Subactions[j].Name = next
+					changed = true
+				}
+			}
+		}
+		if changed {
+			c.Payload = MarshalActs(acts)
+		}
+	}
+	return nil
+}
+
+// actionsChunks is every DATAACTS chunk of the file, in walk order.
+func (d *Document) actionsChunks() []*chunky.Chunk {
+	var out []*chunky.Chunk
+	d.walk(func(c *chunky.Chunk) {
+		if c.TypeID == "DATAACTS" {
+			out = append(out, c)
+		}
+	})
+	return out
+}
+
 // actionsChunk is the DATAACTS chunk the section is read from and written to.
 func (d *Document) actionsChunk() *chunky.Chunk {
 	var found *chunky.Chunk

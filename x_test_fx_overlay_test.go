@@ -558,7 +558,7 @@ func TestLoadModelEffectsForRealModel(t *testing.T) {
 			t.Fatalf("ParseWhmModel(%s): %v", name, err)
 		}
 		file := fxRacesPath(name)
-		res := loadModelEffects(tree, model, file, nil)
+		res := loadModelEffects(tree, model, file, fxLoadOpts{audio: true})
 		if res.err != nil {
 			t.Logf("%s: %v", name, res.err)
 			continue

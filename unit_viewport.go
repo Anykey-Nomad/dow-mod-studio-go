@@ -13,7 +13,10 @@ import (
 	"math/rand"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"gioui.org/layout"
+	"gioui.org/op"
 	"github.com/fogleman/fauxgl"
 )
 
@@ -54,6 +57,7 @@ type unitModelResult struct {
 	path        string
 	model       *WhmModel
 	groundImage image.Image
+	work        time.Duration // reading, parsing and the ground image
 	err         error
 }
 
@@ -161,7 +165,16 @@ func unitModelPath(tree *modtree.ModTree, src unitModelSource) string {
 // ensureUnitModel starts loading the current unit's model if it is not already
 // loaded or on its way. It is called from the Viewport section's layout, so
 // browsing units never pays for a model that is not being looked at.
-func (ui *uiState) ensureUnitModel() {
+//
+// While the read is on a worker the section has no model to animate, and the
+// canvas below has nothing to ask a redraw for — the window repaints on input
+// and on the invalidates a drawn model schedules, neither of which exist here.
+// The poll that would pick the result up runs at the top of the frame loop, so
+// without an invalidate of its own the finished answer waits in its channel
+// until the mouse moves. That is what made a switch on this section look many
+// seconds slower than the same switch done from another one and read afterwards:
+// the read cost the same, but one of them was waiting for input to show it.
+func (ui *uiState) ensureUnitModel(gtx layout.Context) {
 	if ui.modTree == nil {
 		return
 	}
@@ -170,10 +183,12 @@ func (ui *uiState) ensureUnitModel() {
 		ui.resetUnitModel()
 		return
 	}
-	if src.unit == ui.unitModelFor && (ui.unitModel != nil || ui.unitModelCh != nil || ui.unitModelErr != "") {
-		return
+	if src.unit != ui.unitModelFor || (ui.unitModel == nil && ui.unitModelCh == nil && ui.unitModelErr == "") {
+		ui.startUnitModel(src)
 	}
-	ui.startUnitModel(src)
+	if ui.unitModelCh != nil {
+		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(30 * time.Millisecond)})
+	}
 }
 
 // startUnitModel kicks the read and the parse off on a worker. Both are worth
@@ -185,8 +200,10 @@ func (ui *uiState) startUnitModel(src unitModelSource) {
 	tree := ui.modTree
 	ch := make(chan unitModelResult, 1)
 	ui.unitModelCh = ch
+	ui.unitModelStart = time.Now()
 	go func() {
 		res := unitModelResult{unit: src.unit}
+		workStart := time.Now()
 		res.path = unitModelPath(tree, src)
 		if res.path == "" {
 			res.err = errNoUnitModel
@@ -207,6 +224,7 @@ func (ui *uiState) startUnitModel(src unitModelSource) {
 		}
 		res.model = model
 		res.groundImage = loadWhmGroundImage(tree)
+		res.work = time.Since(workStart)
 		ch <- res
 	}()
 }
@@ -229,7 +247,6 @@ func (ui *uiState) resetUnitModel() {
 	ui.unitModelPath = ""
 	ui.unitModelErr = ""
 	ui.unitAnimClicks = nil
-	ui.unitCamClicks = nil
 
 	ui.unitMarkerClicks = nil
 	ui.unitBoneClicks = nil
@@ -242,6 +259,8 @@ func (ui *uiState) resetUnitModel() {
 	ui.unitModelWhmDirty = false
 	ui.unitBoneKeyBound = ""
 	ui.unitBoneKeyErr = ""
+	ui.unitAnimFramesSync = ""
+	ui.unitAnimFramesErr = ""
 }
 
 // pollUnitModel takes a finished decode and builds the viewer from it. The
@@ -340,6 +359,13 @@ func (ui *uiState) pollUnitModel() {
 			ui.unitModelErr = res.err.Error()
 			return
 		}
+		// The gap between what the worker spent and what the reader waited is
+		// the answer arriving without a frame to be picked up in, which is the
+		// whole of the difference between a switch that looked slow and one
+		// that did not.
+		total := time.Since(ui.unitModelStart)
+		LogInfo("3D preview: model of %q on screen after %v (worker %v, waiting for a frame %v)",
+			res.path, total, res.work, total-res.work)
 		tab := &fileTab{path: res.path, kind: "whm"}
 		tab.model = newObjectModelViewer(res.model, res.path, res.groundImage)
 		selectObjectAction(tab.model, ui.modTree, res.path, "idle")

@@ -31,6 +31,21 @@ import (
 // and decodeBoneQuat put them and where the pose panel writes; the file stores
 // the sign-flipped form, so every value is flipped back on the way out.
 func PatchAnimBoneKeys(data []byte, model *Model, animIndex int) ([]byte, error) {
+	return PatchAnimClip(data, model, animIndex, 0)
+}
+
+// PatchAnimClip writes an animation's bone keys and, when frames is a positive
+// count, the clip's frame count with them. Every key time is stored normalised
+// over the clip, so a new count re-grids the clip without moving a single key:
+// ten frames of a clip and twenty of the same clip hold the same poses at the
+// same fractions. The duration is written back as the editor has it: the count
+// and the duration together are the rate the clip plays at, and the frame
+// count field keeps that rate by moving the duration with the count, so
+// writing only the count would put the file back on the rate it had.
+//
+// A frames of zero or less keeps the file's own count, and then the editor's
+// clip has to carry that same count: see PatchAnimBoneKeys.
+func PatchAnimClip(data []byte, model *Model, animIndex, frames int) ([]byte, error) {
 	if model == nil || animIndex < 0 || animIndex >= len(model.Animations) {
 		return nil, fmt.Errorf("animation %d of %d does not exist", animIndex, len(model.Animations))
 	}
@@ -41,7 +56,7 @@ func PatchAnimBoneKeys(data []byte, model *Model, animIndex int) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	payload, err := rebuildAnimBoneKeyPayload(data[loc.start:loc.end], &model.Animations[animIndex])
+	payload, err := rebuildAnimBoneKeyPayload(data[loc.start:loc.end], &model.Animations[animIndex], frames)
 	if err != nil {
 		return nil, fmt.Errorf("animation %q: %w", model.Animations[animIndex].Name, err)
 	}
@@ -127,7 +142,7 @@ func whmAnimDataSplice(data []byte, animIndex int) (animDataLocate, error) {
 // A payload whose bones or frame count disagree with the editor is an error
 // rather than a write: that disagreement means the animation on show was not
 // read from the file being written.
-func rebuildAnimBoneKeyPayload(payload []byte, anim *Animation) ([]byte, error) {
+func rebuildAnimBoneKeyPayload(payload []byte, anim *Animation, frames int) ([]byte, error) {
 	if anim == nil {
 		return nil, fmt.Errorf("no animation to write")
 	}
@@ -135,15 +150,32 @@ func rebuildAnimBoneKeyPayload(payload []byte, anim *Animation) ([]byte, error) 
 		return nil, fmt.Errorf("data chunk is %d bytes, too short for a header", len(payload))
 	}
 	fileFrames := int(int32(binary.LittleEndian.Uint32(payload[:4])))
-	if fileFrames != anim.NumFrames {
-		return nil, fmt.Errorf("the editor's clip has %d frames and the file's has %d — refusing to write one clip over another",
-			anim.NumFrames, fileFrames)
+	if frames <= 0 {
+		if fileFrames != anim.NumFrames {
+			return nil, fmt.Errorf("the editor's clip has %d frames and the file's has %d — refusing to write one clip over another",
+				anim.NumFrames, fileFrames)
+		}
+		frames = fileFrames
+	}
+	if frames < 1 {
+		return nil, fmt.Errorf("a clip needs at least one frame, not %d", frames)
 	}
 	r := &chunky.Reader{Data: payload}
 	var out bytes.Buffer
-	// The frame count and the duration are the file's own: adding a key does
-	// not make the clip longer.
-	out.Write(payload[:8])
+	// The frame count is the one asked for — the editor's own unless a new
+	// count was named — and the duration is the editor's, since the count
+	// field only holds the clip's rate by moving the duration alongside it.
+	// A clip with no duration of its own keeps the file's bytes.
+	var frameField [4]byte
+	binary.LittleEndian.PutUint32(frameField[:], uint32(int32(frames)))
+	out.Write(frameField[:])
+	if anim.Duration > 0 {
+		var durField [4]byte
+		binary.LittleEndian.PutUint32(durField[:], math.Float32bits(anim.Duration))
+		out.Write(durField[:])
+	} else {
+		out.Write(payload[4:8])
+	}
 	r.Skip(8)
 	boneCount := r.Count(4)
 	if r.Err != nil {

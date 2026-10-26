@@ -7,6 +7,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
@@ -43,6 +44,7 @@ func ResolveEventsForModel(tree *modtree.ModTree, modelFile string) ([]FxEventBi
 	// marker appears. The blueprint walk below finds events for a model
 	// without one, so both are read.
 	var out []FxEventBinding
+	resolveStart := time.Now()
 	readWhe := func(virtualPath string) []FxEventBinding {
 		data, err := tree.ReadFile(virtualPath)
 		if err != nil || len(data) == 0 {
@@ -92,6 +94,7 @@ func ResolveEventsForModel(tree *modtree.ModTree, modelFile string) ([]FxEventBi
 	}
 	wheEvents := out
 	var blueprint []FxEventBinding
+	tWhe := time.Since(resolveStart)
 	base := MaterialBaseName(modelFile)
 	base = strings.TrimSuffix(base, path.Ext(base))
 	if base == "" {
@@ -155,6 +158,8 @@ func ResolveEventsForModel(tree *modtree.ModTree, modelFile string) ([]FxEventBi
 	}
 	seenRef := map[string]bool{}
 	var firstErr error
+	tBlueprint := time.Since(resolveStart)
+	refsRead := 0
 	for _, src := range sources {
 		data, _ := read(src)
 		for _, ref := range fxEventRefs(data, strings.HasSuffix(strings.ToLower(src), ".rgd")) {
@@ -163,6 +168,7 @@ func ResolveEventsForModel(tree *modtree.ModTree, modelFile string) ([]FxEventBi
 				continue
 			}
 			seenRef[key] = true
+			refsRead++
 			events, _, err := readFxEvents(tree, ref)
 			if err != nil {
 				if firstErr == nil {
@@ -177,6 +183,13 @@ func ResolveEventsForModel(tree *modtree.ModTree, modelFile string) ([]FxEventBi
 	}
 	if len(blueprint) == 0 && len(wheEvents) == 0 && firstErr != nil {
 		return nil, base, firstErr
+	}
+	// A resolve that takes long enough to notice says which of its three parts
+	// took the time, so a slow model load names its cost instead of leaving the
+	// reader to guess between the walk of the mod and the event files.
+	if d := time.Since(resolveStart); d > 200*time.Millisecond {
+		log.Printf("3D preview: event resolve %v: .whe %v, blueprint search %v, event files %v (%d refs, %d sources)",
+			d, tWhe, tBlueprint-tWhe, d-tBlueprint, refsRead, len(sources))
 	}
 	// The blueprint's events come last: a model with its own .whe has already
 	// been given the definitions that were written for it, and a reference

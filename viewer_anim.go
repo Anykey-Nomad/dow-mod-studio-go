@@ -331,6 +331,10 @@ func (v *modelViewer) stepFrame(delta int) {
 	v.invalidate()
 }
 
+// frameReadTolerance is how close to a frame boundary the playhead has to be
+// for the readout to name that frame, measured in frames. See currentFrame.
+const frameReadTolerance = 1e-3
+
 // currentFrame is which frame of the clip is on show, and how many there are.
 // A clip with no frame count reports none, since there is nothing to count. The
 // play head is rounded rather than cut, so the frame a step lands on and the
@@ -339,7 +343,14 @@ func (v *modelViewer) currentFrame() (int, int) {
 	if v == nil || v.anim == nil || v.anim.NumFrames <= 0 {
 		return 0, 0
 	}
-	frame := int(math.Floor(float64(v.anim.NumFrames) * float64(v.time)))
+	// The playhead is a float32 and the frame count an int, so their product
+	// lands a hair under the boundary it was aimed at often enough to matter:
+	// one step forward on a 301 frame clip computes 301*float32(1/301) as
+	// 0.9999999762, which floors back to frame zero and leaves the readout
+	// saying "frame 1" while the clip sits on the second. The tolerance is a
+	// thousandth of a frame — far finer than anything a scrub can land on —
+	// and it only ever moves a reading that is already at the boundary.
+	frame := int(math.Floor(float64(v.anim.NumFrames)*float64(v.time) + frameReadTolerance))
 	return minInt(maxInt(frame, 0), v.anim.NumFrames-1), v.anim.NumFrames
 }
 

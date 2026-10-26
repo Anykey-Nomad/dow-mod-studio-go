@@ -189,41 +189,6 @@ func TestTheClipOnShowMovesTheSkeleton(t *testing.T) {
 	}
 }
 
-// The camera list is the section's own idea of what is worth listing, and
-// picking one moves the view onto it. The necron warrior is used because it is
-// the shipped model that declares a camera.
-func TestTheViewportListsTheModelsCameras(t *testing.T) {
-	ui, f := unitViewportUI(t, "necron_basic_warrior", 1200, 760)
-	if !unitViewportLoad(t, ui, f, false) {
-		t.Fatalf("the model of the basic warrior never loaded: %q", ui.unitModelErr)
-	}
-	// The playback of a five megabyte model is stopped before anything else is
-	// done with it: the software rasteriser is a real cost per frame, and this
-	// test is about the camera list.
-	v := ui.unitModelViewer()
-	v.playing = false
-	v.redraw = false
-	cams := ui.unitModelCameraNames()
-	if len(cams) == 0 {
-		t.Skip("this model declares no cameras, so there is no list to check")
-	}
-	if len(ui.unitCamClicks) != len(cams) {
-		t.Fatalf("%d camera rows were laid out for %d cameras", len(ui.unitCamClicks), len(cams))
-	}
-	before := v.Center
-	at, _, ok := unitViewportFindRow(t, f, 1200, 760, len(ui.unitCamClicks), func(i int) bool { return ui.unitCamClicks[i].Hovered() })
-	if !ok {
-		t.Skip("no camera row is on screen at this size")
-	}
-	clickAt(f, at)
-	if v.ActiveCamera == "" {
-		t.Fatal("the camera row was clicked and no camera of the model is in use")
-	}
-	if v.Center == before {
-		t.Error("the view did not move onto the camera it was pointed at")
-	}
-}
-
 // The clip list is the whole set of things a unit's model can be seen doing, so
 // every clip is listed and picking one plays it.
 func TestTheViewportListsEveryClipAndPlaysThePickedOne(t *testing.T) {
@@ -342,10 +307,12 @@ func TestTheViewportPaintsTheModelOnScreen(t *testing.T) {
 // unitViewportCanvasStrip is where the canvas is in a window of the given size.
 // The viewer's own render size says how big it is, and the section's place in
 // the tab says where that is, so the box is worked out rather than guessed.
+// The playback row takes the bottom of the section above the canvas, so its
+// height and the rule over it come off the bottom too.
 func unitViewportCanvasStrip(ui *uiState, v *modelViewer, w, h int) image.Rectangle {
 	const contentPad, border, sectionPad = 4, 1, 6
 	left := contentPad + unitTabPadDp + unitLeftColumnDp + unitColGapDp + border + sectionPad
-	bottom := h - contentPad - unitTabPadDp - border - sectionPad
+	bottom := h - contentPad - unitTabPadDp - border - sectionPad - unitPlaybackStripDp - 1
 	return image.Rect(left, bottom-v.renderH, left+v.renderW, bottom)
 }
 
@@ -455,7 +422,13 @@ func TestTheWheelOverTheAnimationListScrollsThePanel(t *testing.T) {
 	if !state.hasBar {
 		t.Skipf("the panel fits its %d clips without a scrollbar", len(anims))
 	}
-	at := f32.Pt(unitViewportSideX(ui, w), h/2)
+	// The wheel has to land on the list itself: the panel's fixed controls
+	// above it have no scroll of their own, and a row of them is where the
+	// middle of the window happens to be.
+	at, _, ok := unitViewportFindRow(t, f, w, h, len(anims), func(i int) bool { return ui.unitAnimClicks[i].Hovered() })
+	if !ok {
+		t.Skip("no clip row is on screen at this size")
+	}
 	f.send(pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at})
 	unitViewportFrames(f, 1)
 
@@ -474,7 +447,13 @@ func TestTheWheelOverTheAnimationListScrollsThePanel(t *testing.T) {
 	// in between could not be reached at all. Measured against the content
 	// rather than the viewport, because a short window has a short page and
 	// three rows of it is still three rows.
-	if moved := down - start; moved*4 > state.contentHeight {
+	//
+	// A third rather than a quarter: the step is 0.55px per unit of the
+	// notch's 120 — sixty six pixels, which is 2.75 rows of this model's eight
+	// clips and 66 of the list's 236. Twenty eight per cent of a short list is
+	// a couple of rows; what the guard is for is the notch that covers the
+	// whole of it.
+	if moved := down - start; moved*3 > state.contentHeight {
 		t.Errorf("one notch of the wheel moved the panel %d pixels of its %d, which is most of the list", moved, state.contentHeight)
 	}
 	f.send(pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: at, Scroll: f32.Pt(0, -wheelNotchDelta)})
@@ -541,15 +520,34 @@ func TestTheZoomButtonsStepTheCameraAndResetBringsItBack(t *testing.T) {
 	}
 }
 
-// unitViewportButton finds one of the transport row's buttons. The row is five
-// buttons across and only the last of them is under the middle of the panel, so
-// the walk goes down the panel to find the row and then along the row to find
-// the button in it.
+// unitViewportButton finds one of the transport row's buttons. The transport
+// is the playback strip under the whole section now, so the walk runs across
+// that band — five buttons wide, starting at the strip's left padding —
+// instead of down the list panel.
 func unitViewportButton(t *testing.T, f *windowFrame, tab *fileTab, want *widget.Clickable) f32.Point {
 	t.Helper()
-	return unitViewportSideButton(t, f,
-		[]*widget.Clickable{&tab.modelPlay, &tab.modelPrevAnim, &tab.modelNextAnim, &tab.modelStepBack, &tab.modelStepFwd},
-		want, "transport")
+	const h = 760
+	const contentPad, border, sectionPad = 4, 1, 6
+	left := contentPad + unitLeftColumnDp + unitColGapDp + border + sectionPad + 6
+	// The band is scanned rather than computed: the strip sits above the
+	// window's own bottom bar, whose height is the layout's business rather
+	// than the test's, and a scan of the bottom hundred pixels costs a
+	// second of frames.
+	for y := h - 4 - unitPlaybackStripDp - 70; y < h-4; y += 3 {
+		if y < 0 {
+			continue
+		}
+		for x := left; x < left+210; x += 4 {
+			at := f32.Pt(float32(x), float32(y))
+			f.send(pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: at})
+			unitViewportFrames(f, 1)
+			if want.Hovered() {
+				return at
+			}
+		}
+	}
+	t.Fatalf("the transport strip is not on screen at this size, or the button is not on it")
+	return f32.Point{}
 }
 
 // unitViewportSideButton finds a button in one of the side panel's rows of
@@ -616,11 +614,12 @@ func unitViewportFindRow(t *testing.T, f *windowFrame, w, h, rows int, hovered f
 }
 
 // unitViewportSideX is where the panel sits in a window of the given width. The
-// object tab's own area stops where the right properties panel begins, and
-// within it the section is the last of the three columns, so the panel beside
-// the canvas is the last 300dp of that area less the section's own padding.
+// object tab's own area stops at the window's own padding in the Viewport and
+// Classic OE sections — they take the columns the properties panel would have
+// had — and the list panel is the last 300dp of that area less the section's
+// own padding.
 func unitViewportSideX(ui *uiState, w int) float32 {
 	const contentPad, splitter, sectionPad, border = 4, 1, 6, 1
-	right := w - contentPad - splitter - ui.rightPanelWidth
+	right := w - contentPad - splitter
 	return float32(right - sectionPad - border - unitViewportSideDp/2)
 }

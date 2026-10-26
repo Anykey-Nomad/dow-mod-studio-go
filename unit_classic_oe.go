@@ -98,13 +98,15 @@ func (ui *uiState) ensureClassicOEClicks() {
 }
 
 // layoutClassicOEArea is the whole section: the panel column, then the
-// preview, then the same Playback side panel the Viewport section draws,
-// on the right — playback, the list tabs and the cameras of the unit's
-// model. The model load is kicked off here the same way the Viewport
-// section kicks it off, so opening the section on a unit that has not been
-// previewed yet still ends with a model on screen.
+// preview with its playback row underneath it, then the same list panel the
+// Viewport section draws, on the right — the list tabs and the preview toggles
+// of the unit's model. The playback row belongs to the preview alone rather
+// than to the three columns, so nothing under the panel column or the list is
+// covered by controls that do not drive it. The model load is kicked off
+// here the same way the Viewport section kicks it off, so opening the section
+// on a unit that has not been previewed yet still ends with a model on screen.
 func (ui *uiState) layoutClassicOEArea(gtx layout.Context) layout.Dimensions {
-	ui.ensureUnitModel()
+	ui.ensureUnitModel(gtx)
 	// The .whe behind the condition, event and modifier panels: the Events
 	// section's loader, which reads the file once per unit and remembers why
 	// there is nothing to read. Calling it here means the panels are filled on
@@ -117,12 +119,15 @@ func (ui *uiState) layoutClassicOEArea(gtx layout.Context) layout.Dimensions {
 			panelW := gtx.Dp(unit.Dp(classicOEPanelDp))
 			sideW := gtx.Dp(unit.Dp(unitViewportSideDp))
 			gap := gtx.Dp(unit.Dp(unitColGapDp))
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-				layout.Rigid(ui.fixedPanel(panelW, ui.layoutClassicOELeftPanel)),
-				layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-				layout.Flexed(1, ui.layoutClassicOEPreview),
-				layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
-				layout.Rigid(ui.fixedPanel(sideW, ui.layoutUnitModelSide)),
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+					layout.Rigid(ui.fixedPanel(panelW, ui.layoutClassicOELeftPanel)),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
+					layout.Flexed(1, ui.layoutClassicOEPreview),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
+					layout.Rigid(ui.fixedPanel(sideW, ui.layoutUnitModelSide)),
+				)
+			}),
 			)
 		}),
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
@@ -1306,6 +1311,10 @@ func (ui *uiState) classicOENamedCountRows(gtx layout.Context, counts map[string
 // layoutClassicOEPreview is the grey area of the classic editor, filled with
 // the unit's model: the same canvas the Viewport section draws, so camera
 // drags, playback and the scrub bar all work here without a second viewer.
+// layoutClassicOEPreview is the middle column: the model, with the playback
+// row under it — the same row the Viewport section draws under its own canvas,
+// and only as wide as the preview above it, so neither the panel column nor
+// the list panel is covered by controls that do not belong to them.
 func (ui *uiState) layoutClassicOEPreview(gtx layout.Context) layout.Dimensions {
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -1314,7 +1323,7 @@ func (ui *uiState) layoutClassicOEPreview(gtx layout.Context) layout.Dimensions 
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, ui.layoutUnitModelCanvas)
+				return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx, ui.layoutUnitCanvasColumn)
 			}),
 		)
 	})

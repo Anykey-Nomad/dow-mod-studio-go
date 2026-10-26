@@ -622,10 +622,12 @@ type uiState struct {
 	unitModelFor  string // the unit .rgd the loaded model belongs to
 	unitModelPath string // the .whm that was found, empty when there is none
 	unitModelErr  string // why no model is on screen
-	// unitAnimClicks and unitCamClicks are the animation and camera rows of
-	// the viewport's side panel.
+	// unitModelStart is when the load in flight was started, so the answer can
+	// say how much of the wait was the read and how much was the window not
+	// repainting to collect it.
+	unitModelStart time.Time
+	// unitAnimClicks are the animation rows of the viewport's side panel.
 	unitAnimClicks []widget.Clickable
-	unitCamClicks  []widget.Clickable
 	// unitMarkerClicks are the rows of the markers list, unitBoneClicks the
 	// rows of the bones list, and unitMarkerListToggle the button that swaps
 	// one list for the next: all three are lists of the same model's
@@ -733,6 +735,15 @@ type uiState struct {
 	// unit viewport because that is where the bone keys can be edited.
 	unitBoneKeySaveClick widget.Clickable
 	unitModelWhmDirty    bool
+	// unitAnimFramesEd is the clip's frame count typed in and
+	// unitAnimFramesSetClick applies it: the count is what the keyframe strip
+	// counts the clip out in and what Save WHM rewrites in the clip's header.
+	// unitAnimFramesSync is the clip and count the field was last filled from,
+	// so a number being typed over is not taken away by the next frame.
+	unitAnimFramesEd       widget.Editor
+	unitAnimFramesSetClick widget.Clickable
+	unitAnimFramesSync     string
+	unitAnimFramesErr      string
 	// unitListMode picks the list on show: 0 animations, 1 markers, 2 bones.
 	unitListMode int
 	// unitViewportScroll is the side panel's scrollbar, and unitOpenModelClick
@@ -794,6 +805,13 @@ type uiState struct {
 	// section between units, the way unitEvtCopyTl moves a whole timeline.
 	unitEvtCopyAct  widget.Clickable
 	unitEvtPasteAct widget.Clickable
+	// unitActNameEd and unitActRename rename the picked action. A copied action
+	// pastes under its own name, so renaming is how a name this .whe already
+	// uses is resolved without hand-editing the file. unitActNameBound is the
+	// action the field was last filled from.
+	unitActNameEd    widget.Editor
+	unitActNameBound string
+	unitActRename    widget.Clickable
 	// unitEvtFocusAction says the reader is working on an action rather than a
 	// timeline: the panel then shows the picked action's conditions and none of
 	// the timeline's events, since the two are one panel and not two stacked.

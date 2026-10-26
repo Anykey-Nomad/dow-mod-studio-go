@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -341,9 +342,16 @@ func (ui *uiState) fxStartLoad(v *modelViewer) bool {
 	tree := ui.modTree
 	// Whatever the sound worker decoded already is handed over, because both
 	// read the same .whe and the samples would otherwise be decoded twice.
-	decoded := v.fxSound.Decoded()
+	// The maps of the last load ride along for the same reason, and the sound
+	// half is left to the worker that is usually decoding these very samples
+	// while the FX button is being pressed.
+	opts := fxLoadOpts{
+		decoded: v.fxSound.Decoded(),
+		prev:    v.fxTextures,
+		audio:   v.fxSound == nil && v.fxSoundCh == nil,
+	}
 	go func() {
-		ch <- loadModelEffects(tree, model, file, decoded)
+		ch <- loadModelEffects(tree, model, file, opts)
 	}()
 	return true
 }
@@ -390,13 +398,10 @@ func (ui *uiState) fxReload(v *modelViewer, doc *whe.Document) {
 	}
 	model, file, tree := v.model, v.modelFile, ui.modTree
 	decoded := v.fxSound.Decoded()
-	if v.fxCh == nil {
-		ch := make(chan fxLoadResult, 1)
-		v.fxCh = ch
-		go func() {
-			ch <- loadModelEffectsWhe(tree, model, file, decoded, doc)
-		}()
-	}
+	// The sound worker is started first, so the effects worker below can see
+	// that somebody is already decoding this document's samples and leave the
+	// sounds to it. Starting the effects worker first would hide the worker
+	// that is about to start and have both of them pay for the same decode.
 	if v.fxSoundCh == nil {
 		if v.fxSound != nil {
 			v.fxSound.Close()
@@ -406,6 +411,18 @@ func (ui *uiState) fxReload(v *modelViewer, doc *whe.Document) {
 		v.fxSoundCh = ch
 		go func() {
 			ch <- loadModelSoundsWhe(tree, file, doc, decoded)
+		}()
+	}
+	if v.fxCh == nil {
+		ch := make(chan fxLoadResult, 1)
+		v.fxCh = ch
+		opts := fxLoadOpts{
+			decoded: decoded,
+			prev:    v.fxTextures,
+			audio:   v.fxSound == nil && v.fxSoundCh == nil,
+		}
+		go func() {
+			ch <- loadModelEffectsWhe(tree, model, file, opts, doc)
 		}()
 	}
 	log.Printf("3D preview: fx reload for an edited .whe (live document=%v)", doc != nil)
@@ -1854,6 +1871,24 @@ func fxTimelineFireTimes(timelines []whe.FxTimeline, clipDurations ...map[string
 	return out
 }
 
+// fxLoadOpts is what a caller already holds when it asks for a load: the
+// samples the sound worker decoded, the maps the previous load decoded, and
+// whether this load is the one that has to do the sound half at all.
+type fxLoadOpts struct {
+	// decoded are samples another worker has already decoded. They are handed
+	// over rather than decoded again, because both workers read the same .whe.
+	decoded map[string]*fx.SoundSample
+	// prev are the maps the last load decoded. An effect's sprites do not
+	// change because an event was edited, so a reload only pays for the maps
+	// it has not seen.
+	prev map[string]*image.RGBA
+	// audio says whether this load resolves and decodes the .whe's sounds.
+	// It is false whenever somebody else is already doing that work: a sound
+	// worker in flight is decoding these very samples, and paying for them
+	// twice is what made an FX load wait seconds for work already underway.
+	audio bool
+}
+
 // loadModelEffects resolves a model's events, parses every effect they name
 // and decodes the sprite maps they use. It is meant to run on a worker
 // goroutine: resolving a blueprint can mean a walk of the whole mod, which is
@@ -1864,15 +1899,15 @@ func fxTimelineFireTimes(timelines []whe.FxTimeline, clipDurations ...map[string
 // skipped, so one broken effect does not cost the reader the other eleven.
 // loadModelEffects is loadModelEffectsWhe with no live document: the .whe on
 // disk is the whole story, which is every caller except an Events edit.
-func loadModelEffects(tree *modtree.ModTree, model *WhmModel, modelFile string, decoded map[string]*fx.SoundSample) fxLoadResult {
-	return loadModelEffectsWhe(tree, model, modelFile, decoded, nil)
+func loadModelEffects(tree *modtree.ModTree, model *WhmModel, modelFile string, opts fxLoadOpts) fxLoadResult {
+	return loadModelEffectsWhe(tree, model, modelFile, opts, nil)
 }
 
 // loadModelEffectsWhe resolves the model's effects with the live .whe
 // document in hand when there is one: its definitions and its timelines are
 // what the effects are built from, so values edited but not yet saved are the
 // ones the preview shows.
-func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile string, decoded map[string]*fx.SoundSample, liveWhe *whe.Document) fxLoadResult {
+func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile string, opts fxLoadOpts, liveWhe *whe.Document) fxLoadResult {
 	res := fxLoadResult{
 		textures:     map[string]*image.RGBA{},
 		sounds:       fx.NewSoundCache(),
@@ -1882,24 +1917,33 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 	// than decoded again. Both workers read the same .whe, so without this the
 	// effect of the FX button would be to pay for every sample of the model a
 	// second time.
-	if len(decoded) > 0 {
-		for k, s := range decoded {
+	if len(opts.decoded) > 0 {
+		for k, s := range opts.decoded {
 			res.sounds.Put(k, s)
 		}
 	}
 	if tree == nil || model == nil {
 		return res
 	}
+	loadStart := time.Now()
 	bindings, _, err := fx.ResolveEventsForModel(tree, modelFile)
 	if err != nil {
 		res.err = err
 		return res
 	}
+	tEvents := time.Since(loadStart)
 	if liveWhe != nil {
 		bindings = fx.WheBindingsOverlay(bindings, liveWhe)
 	}
 	roots := materialSearchRoots(tree)
 	seen := map[string]*image.RGBA{}
+	// The maps the last load already decoded are the starting point, so a
+	// reload after an edit does not decode the same seventy sprites again.
+	for path, img := range opts.prev {
+		if img != nil {
+			seen[path] = img
+		}
+	}
 	// The .whe's timelines say which events belong to which animation, so a
 	// model that has them only plays the ones its clip on screen fires. A
 	// model whose effects all live in its blueprint has none, and then every
@@ -1928,6 +1972,9 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 			durations[strings.ToLower(a.Name)] = duration
 		}
 	}
+	tTimelines := time.Since(loadStart)
+	var tLua, tTex time.Duration
+	var tRead, tParse, tSim time.Duration
 	fires, _ := fxTimelineFires(timelines, durations)
 	tlAnims := map[string][]string{}
 	for ev, list := range fires {
@@ -1939,22 +1986,41 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 	}
 	tlTimes := fxTimelineFireTimes(timelines, durations)
 	timed := len(tlAnims) > 0
+	// One effect file serves several events — the monolith's 189 events name
+	// just 75 files — so each is read and parsed once and every event builds
+	// its own simulation from that shared parse. An FxFile is plain data and
+	// NewFxSim reads it without writing to it, so the parsed copy is safe to
+	// hand to as many simulations as name it.
+	parsedFx := map[string]*fx.FxFile{}
 	for _, b := range bindings {
 		fxPath, ok := b.Event.First("fx")
 		if !ok || fxPath == "" {
 			continue
 		}
-		data, err := readFxLuaFile(tree, roots, fxPath)
-		if err != nil {
-			log.Printf("3D preview: effect %q: %v", fxPath, err)
-			continue
+		luaStart := time.Now()
+		key := strings.ToLower(fxLuaPath(fxPath))
+		file := parsedFx[key]
+		if file == nil {
+			readStart := time.Now()
+			data, err := readFxLuaFile(tree, roots, fxPath)
+			tRead += time.Since(readStart)
+			if err != nil {
+				log.Printf("3D preview: effect %q: %v", fxPath, err)
+				continue
+			}
+			parseStart := time.Now()
+			file, err = fx.ParseFxLua(data)
+			tParse += time.Since(parseStart)
+			if err != nil {
+				log.Printf("3D preview: effect %q: %v", fxPath, err)
+				continue
+			}
+			parsedFx[key] = file
 		}
-		file, err := fx.ParseFxLua(data)
-		if err != nil {
-			log.Printf("3D preview: effect %q: %v", fxPath, err)
-			continue
-		}
+		simStart := time.Now()
 		sim := fx.NewFxSim(file)
+		tSim += time.Since(simStart)
+		tLua += time.Since(luaStart)
 		marker := fxEventMarker(model, b.Event, len(res.effects))
 		other := fxBeamOtherMarker(model, b.Event)
 		e := fxOverlayEffect{
@@ -2030,7 +2096,9 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 			if _, done := seen[path]; done {
 				continue
 			}
+			texStart := time.Now()
 			img, err := decodeFxTexture(tree, roots, path)
+			tTex += time.Since(texStart)
 			if err != nil {
 				log.Printf("3D preview: sprite texture %q: %v", path, err)
 				seen[path] = nil
@@ -2059,7 +2127,9 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 			if _, done := seen[path]; done {
 				continue
 			}
+			texStart := time.Now()
 			img, err := decodeFxTexture(tree, roots, path)
+			tTex += time.Since(texStart)
 			if err != nil {
 				log.Printf("3D preview: effect texture %q: %v", path, err)
 				seen[path] = nil
@@ -2073,7 +2143,18 @@ func loadModelEffectsWhe(tree *modtree.ModTree, model *WhmModel, modelFile strin
 			res.textures[path] = img
 		}
 	}
-	fxLoadWheAudio(tree, modelFile, liveWhe, &res)
+	tEffects := time.Since(loadStart)
+	// The timelines are this loader's own answer either way: the scrub bar
+	// reads them whatever becomes of the sounds, and the sound worker's own
+	// result carries the same ones out of the same file.
+	res.timelines = timelines
+	if opts.audio {
+		fxLoadWheAudio(tree, modelFile, liveWhe, &res)
+	}
+	log.Printf("3D preview: fx load in %v: events %v, timelines %v, effects %v (read %v, parse %v, sim %v, textures %v), sounds %v; %d bindings, %d effects, %d textures from %d fx files",
+		time.Since(loadStart), tEvents, tTimelines-tEvents,
+		tEffects-tTimelines, tRead, tParse, tSim, tTex, time.Since(loadStart)-tEffects,
+		len(bindings), len(res.effects), len(res.textures), len(parsedFx))
 	return res
 }
 
@@ -2135,13 +2216,21 @@ func loadWheSounds(tree *modtree.ModTree, modelFile string, res *fxLoadResult) {
 	if len(data) == 0 {
 		return
 	}
-	loadWheSoundsFrom(tree, data, fx.ReadWheTimelines(tree, modelFile), res)
+	// The bytes are already in hand, so the timelines come out of them: reading
+	// the .whe a second time for this would parse a file of chunks again for
+	// an answer the line above just produced.
+	loadWheSoundsFrom(tree, data, whe.ParseFxTimelines(data), res)
 }
 
 // loadWheSoundsFrom is loadWheSounds with the .whe bytes and the timelines
 // handed in: the live document being edited marshals its own, so an unsaved
 // sound edit is what gets decoded and wired.
 func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTimeline, res *fxLoadResult) {
+	// The timelines come first: they are the scrub bar's own answer and do not
+	// depend on there being any sound to play. Returning below on an empty
+	// sound list without them would hand the caller a set that clears what the
+	// other worker has already put there.
+	res.timelines = timelines
 	// One worker per sound that names a folder of variants, all of them
 	// finished before this returns: the samples are handed to the player as one
 	// set once it does.
@@ -2150,9 +2239,9 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 	if len(declared) == 0 {
 		return
 	}
+	soundStart := time.Now()
 	// Which events the timelines on screen can fire at all, so the samples for
 	// the rest are never decoded.
-	res.timelines = timelines
 	played := map[string]bool{}
 	for _, tl := range timelines {
 		for _, ev := range tl.Events {
@@ -2162,6 +2251,13 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 	roots := materialSearchRoots(tree)
 	// Declared but never fired is normal rather than a failure: the sound
 	// belongs to a state this model is not in.
+	type soundJob struct {
+		name string
+		ev   whe.FxSoundEvent
+		b    fx.SoundBundle
+		err  error
+	}
+	var jobs []*soundJob
 	for name, ev := range declared {
 		if ev.Path == "" || len(played) == 0 && !fxSoundAlwaysPlays(name) {
 			continue
@@ -2169,30 +2265,53 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 		if len(played) > 0 && !played[name] {
 			continue
 		}
-		b, ok := fx.ResolveSound(tree, roots, ev.Path)
-		if !ok {
-			log.Printf("3D preview: sound %q: %v", ev.Path, whe.SoundMissing(ev.Path))
-			continue
-		}
-		// The samples every variant needs are decoded now: the first of a
-		// folder inline and the rest by the fills below, so that nothing is
-		// still being decoded by the time this hands its result over.
-		first := b.Files[0]
-		if _, done := res.sounds.Get(first); !done {
+		jobs = append(jobs, &soundJob{name: name, ev: ev})
+	}
+	// Resolving a bundle and decoding its first sample were paid one sound
+	// after another — sixteen of them in a row is seconds of a worker waiting
+	// on itself, and it is the whole of what this function costs. No two
+	// sounds depend on each other, so they are resolved and decoded at once,
+	// a few at a time per core, and only the wiring below runs serially,
+	// because that is what writes the maps the caller is about to read.
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxInt(2, runtime.GOMAXPROCS(0)))
+	for _, j := range jobs {
+		wg.Add(1)
+		go func(j *soundJob) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			b, ok := fx.ResolveSound(tree, roots, j.ev.Path)
+			if !ok || len(b.Files) == 0 {
+				j.err = whe.SoundMissing(j.ev.Path)
+				return
+			}
+			j.b = b
+			first := b.Files[0]
+			if _, done := res.sounds.Get(first); done {
+				return
+			}
 			s, err := fxSoundDecodeForPlayback(tree, roots, first)
 			if err != nil {
-				log.Printf("3D preview: sound %q: %v", ev.Path, err)
-				continue
+				j.err = err
+				return
 			}
 			res.sounds.Put(first, s)
+		}(j)
+	}
+	wg.Wait()
+	for _, j := range jobs {
+		if j.err != nil {
+			log.Printf("3D preview: sound %q: %v", j.ev.Path, j.err)
+			continue
 		}
-		res.soundBundles[name] = b
-		if len(b.Files) > 1 {
+		res.soundBundles[j.name] = j.b
+		if len(j.b.Files) > 1 {
 			fills.Add(1)
 			go func(b fx.SoundBundle) {
 				defer fills.Done()
 				fxSoundFillVariants(tree, roots, b, res.sounds)
-			}(b)
+			}(j.b)
 		}
 	}
 	// The fills have to be finished before the result is handed on. They write
@@ -2201,7 +2320,12 @@ func loadWheSoundsFrom(tree *modtree.ModTree, data []byte, timelines []whe.FxTim
 	// missing key in it but a crash. The first sample of each sound is already
 	// decoded by now, so this waits for the variants of a footfall folder and
 	// not for the model's audio as a whole.
+	waitStart := time.Now()
 	fills.Wait()
+	variantWait := time.Since(waitStart)
+	log.Printf("3D preview: sounds in %v (resolve + first %v, variants %v): %d bundles",
+		time.Since(soundStart), time.Since(soundStart)-variantWait, variantWait,
+		len(res.soundBundles))
 }
 
 // fxSoundAlwaysPlays says whether a sound the model's timelines never fire is
@@ -2213,6 +2337,10 @@ func fxSoundAlwaysPlays(name string) bool { return false }
 // others, so a footfall folder of seven files is ready by the time the second
 // step lands rather than one step at a time.
 //
+// A variant the outgoing player already holds is left alone: a reload hands
+// the old samples over for exactly this reason, and decoding them again was
+// seconds of work repeated on every edit to the .whe.
+//
 // Every fill for a model runs at once rather than one after another: the files
 // are independent, they are decoded off the frame that asked for them, and a
 // model with three sound folders would otherwise decode them in sequence for
@@ -2220,6 +2348,9 @@ func fxSoundAlwaysPlays(name string) bool { return false }
 // bare map and the caller's Wait is what makes handing it over safe.
 func fxSoundFillVariants(tree *modtree.ModTree, roots []string, b fx.SoundBundle, into *fx.SoundCache) {
 	for _, f := range b.Files[1:] {
+		if _, done := into.Get(f); done {
+			continue
+		}
 		s, err := fxSoundDecodeForPlayback(tree, roots, f)
 		if err != nil {
 			continue

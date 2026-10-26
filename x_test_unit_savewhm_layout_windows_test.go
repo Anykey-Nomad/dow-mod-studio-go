@@ -18,5 +18,9 @@ func TestSaveWHMIsOnScreenInTheBonePanel(t *testing.T) {
 	ui.unitModelWhmDirty = true
 	unitViewportFrames(f, 3)
 	// The walk fails the test when the button is never hovered on screen.
-	unitViewportSideButton(t, f, []*widget.Clickable{&ui.unitBoneKeySaveClick}, &ui.unitBoneKeySaveClick, "Save WHM")
+	// The walk goes down the panel near its left edge, where the first button
+	// of a row sits: Import is that button now, and Save shares its row.
+	unitViewportSideButton(t, f,
+		[]*widget.Clickable{&ui.unitImpClick, &ui.unitBoneKeySaveClick},
+		&ui.unitBoneKeySaveClick, "Save WHM")
 }
