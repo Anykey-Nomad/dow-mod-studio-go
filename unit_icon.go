@@ -38,7 +38,7 @@ type iconCacheEntry struct {
 // unitIcon returns the decoded icon of a unit or building, or nil when the mod
 // has none.
 func (ui *uiState) unitIcon(u unitEntry) image.Image {
-	if ui.modTree == nil || u.path == "" {
+	if ui.modTree == nil || u.Path == "" {
 		return nil
 	}
 	mod := ui.modTree.FileMapName
@@ -46,11 +46,11 @@ func (ui *uiState) unitIcon(u unitEntry) image.Image {
 		ui.unitIcons = make(map[string]iconCacheEntry)
 		ui.unitIconsMod = mod
 	}
-	if e, ok := ui.unitIcons[u.path]; ok {
+	if e, ok := ui.unitIcons[u.Path]; ok {
 		return e.img
 	}
 	img := ui.loadUnitIcon(u)
-	ui.unitIcons[u.path] = iconCacheEntry{img: img, tried: true}
+	ui.unitIcons[u.Path] = iconCacheEntry{img: img, tried: true}
 	return img
 }
 
@@ -62,14 +62,14 @@ func (ui *uiState) loadUnitIcon(u unitEntry) image.Image {
 	if ui.modTree == nil {
 		return nil
 	}
-	stem := unitTemplateIconBase(u.race) + `\` + u.name + "_icon"
+	stem := unitTemplateIconBase(u.Race) + `\` + u.Name + "_icon"
 	if img := ui.readIconAt(`art\ui\ingame\` + stem); img != nil {
 		return img
 	}
-	if img := ui.readIconByName(u.name + "_icon"); img != nil {
+	if img := ui.readIconByName(u.Name + "_icon"); img != nil {
 		return img
 	}
-	data, err := ui.modTree.ReadFile(u.path)
+	data, err := ui.modTree.ReadFile(u.Path)
 	if err != nil {
 		return nil
 	}

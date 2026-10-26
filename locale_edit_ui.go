@@ -54,9 +54,9 @@ func localeFieldForID(d *unitDetails, id string) *rgd.RgdEntry {
 	if d == nil || id == "" {
 		return nil
 	}
-	for _, f := range d.fields {
-		if f.isLocID && f.locID == id && f.entry != nil {
-			return f.entry
+	for _, f := range d.Fields {
+		if f.IsLocID && f.LocID == id && f.Entry != nil {
+			return f.Entry
 		}
 	}
 	return nil
@@ -161,7 +161,7 @@ func (ui *uiState) saveLocaleEdit() (string, error) {
 		// rebuilt from it so the panel shows the new text straight away.
 		ui.localeEditField.WStrVal = "$" + id
 		if d := ui.currentUnitDetails(); d != nil {
-			d.rebuildFromFile()
+			d.RebuildFromFile()
 		}
 		ui.markRgdFieldDirty(ui.localeEditFieldKey)
 		// The same change, seen from the object window: the field that names

@@ -69,7 +69,7 @@ func unitEventsWhePath(tree *modtree.ModTree, d *unitDetails) string {
 			return cand
 		}
 	}
-	if name := strings.TrimSuffix(d.entry.name, path.Ext(d.entry.name)); name != "" {
+	if name := strings.TrimSuffix(d.Entry.Name, path.Ext(d.Entry.Name)); name != "" {
 		if f := tree.FindByName(strings.ToLower(name + ".whe")); f != nil {
 			return f.FullPath
 		}
@@ -104,7 +104,7 @@ func (ui *uiState) ensureUnitEvents() {
 		ui.unitEvtPath, ui.unitEvtErr = "", "No unit selected."
 		return
 	}
-	if ui.unitEvtTree == ui.modTree && ui.unitEvtTried && strings.EqualFold(ui.unitEvtFor, u.path) {
+	if ui.unitEvtTree == ui.modTree && ui.unitEvtTried && strings.EqualFold(ui.unitEvtFor, u.Path) {
 		return
 	}
 	// Only another module invalidates the clipboard. Another unit does not:
@@ -117,7 +117,7 @@ func (ui *uiState) ensureUnitEvents() {
 		ui.unitClipCur = -1
 	}
 	ui.unitEvtTree = ui.modTree
-	ui.unitEvtFor = u.path
+	ui.unitEvtFor = u.Path
 	ui.unitEvtTried = true
 	ui.unitEvtDirty = false
 	ui.unitEvtFormErr = ""

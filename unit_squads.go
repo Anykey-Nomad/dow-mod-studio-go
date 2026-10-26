@@ -338,8 +338,8 @@ func collectSquadRgds(tree *modtree.ModTree) []unitSquadRef {
 // when the catalog is built and finishes seconds later, and during that window
 // every unit would otherwise look like it is in no squad at all.
 func (ui *uiState) squadsOfUnitOf(u unitEntry) []unitSquadRef {
-	if u.path == "" || ui.unitSquads == nil {
+	if u.Path == "" || ui.unitSquads == nil {
 		return nil
 	}
-	return ui.unitSquads[strings.ToLower(u.path)]
+	return ui.unitSquads[strings.ToLower(u.Path)]
 }

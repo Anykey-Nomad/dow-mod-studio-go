@@ -77,18 +77,18 @@ func newUnitModelSource(tree *modtree.ModTree, d *unitDetails) (unitModelSource,
 		return unitModelSource{}, false
 	}
 	src := unitModelSource{
-		unit: d.entry.path,
-		name: d.entry.name,
-		race: d.entry.race,
-		kind: d.entry.kind.folder,
+		unit: d.Entry.Path,
+		name: d.Entry.Name,
+		race: d.Entry.Race,
+		kind: d.Entry.Kind.Folder,
 	}
 	if src.name == "" {
-		if base := d.entry.path; base != "" {
+		if base := d.Entry.Path; base != "" {
 			src.name = strings.TrimSuffix(filepath.Base(base), filepath.Ext(base))
 		}
 	}
-	if d.file != nil {
-		src.animator = unitAnimatorName(d.file)
+	if d.File != nil {
+		src.animator = unitAnimatorName(d.File)
 	}
 	if src.name == "" && src.animator == "" {
 		return unitModelSource{}, false

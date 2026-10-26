@@ -166,19 +166,19 @@ func markerDebugResolve(tree *modtree.ModTree, query string) (modelPath, unitPat
 	}
 
 	entry := unitEntry{
-		path: unitPath,
-		name: unitName,
+		Path: unitPath,
+		Name: unitName,
 	}
 	parts := strings.Split(strings.ReplaceAll(unitPath, "/", "\\"), "\\")
 	for i := range parts {
 		if strings.EqualFold(parts[i], "races") && i+1 < len(parts) {
-			entry.race = parts[i+1]
+			entry.Race = parts[i+1]
 			if i+2 < len(parts) {
 				switch strings.ToLower(parts[i+2]) {
 				case "troops":
-					entry.kind = unitKindTroop
+					entry.Kind = unitKindTroop
 				case "structures":
-					entry.kind = unitKindStructure
+					entry.Kind = unitKindStructure
 				}
 			}
 			break
@@ -192,7 +192,7 @@ func markerDebugResolve(tree *modtree.ModTree, query string) (modelPath, unitPat
 	if parseErr != nil {
 		return "", "", "", fmt.Errorf("parse unit %q: %w", unitPath, parseErr)
 	}
-	source := unitModelSource{unit: unitPath, name: unitName, race: entry.race, kind: entry.kind.folder, animator: unitAnimatorName(rgdFile)}
+	source := unitModelSource{unit: unitPath, name: unitName, race: entry.Race, kind: entry.Kind.Folder, animator: unitAnimatorName(rgdFile)}
 	modelPath = unitModelPath(tree, source)
 	if modelPath == "" {
 		return "", "", "", fmt.Errorf("no .whm model found for unit %q (%s)", unitName, unitPath)

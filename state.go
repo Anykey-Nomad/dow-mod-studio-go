@@ -107,11 +107,11 @@ func savePersistedState(ui *uiState) error {
 	// selected unit would build the whole catalog on a background save, and a
 	// save is not the moment to start reading six hundred files.
 	if ui.unitCatalog != nil {
-		if r := ui.unitCatalog.selectedRace(ui.unitRaceSel); r != nil {
-			state.ObjectRace = r.name
+		if r := ui.unitCatalog.SelectedRace(ui.unitRaceSel); r != nil {
+			state.ObjectRace = r.Name
 		}
-		if u := ui.unitCatalog.selectedUnit(ui.unitRaceSel, ui.unitSel); u != nil {
-			state.ObjectUnit = u.path
+		if u := ui.unitCatalog.SelectedUnit(ui.unitRaceSel, ui.unitSel); u != nil {
+			state.ObjectUnit = u.Path
 		}
 	}
 	for path, expanded := range ui.expanded {

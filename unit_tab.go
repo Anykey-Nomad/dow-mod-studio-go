@@ -203,10 +203,10 @@ func (ui *uiState) unitInfoTable(gtx layout.Context) layout.Dimensions {
 		)
 	}
 	rows := []struct{ label, value string }{
-		{"Name", d.entry.name},
-		{"Race", d.entry.race},
-		{"Kind", d.entry.kind.label},
-		{"File", d.entry.path},
+		{"Name", d.Entry.Name},
+		{"Race", d.Entry.Race},
+		{"Kind", d.Entry.Kind.Label},
+		{"File", d.Entry.Path},
 	}
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
@@ -222,14 +222,14 @@ func (ui *uiState) unitInfoTable(gtx layout.Context) layout.Dimensions {
 	// on hover, and the presses that change it. A unit with no screen name still
 	// gets the row, because "this unit has no name yet" is the thing a reader
 	// most wants to be able to fix from here.
-	screenNameID := d.screenNameID()
+	screenNameID := d.ScreenNameID()
 	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return ui.localePanelRow(gtx, "Screen name", screenNameID, localeFieldForID(d, screenNameID))
 	}))
-	if d.error != "" {
+	if d.Error != "" {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.th, unit.Sp(10), "Could not read this unit:\n"+d.error)
+				l := material.Label(ui.th, unit.Sp(10), "Could not read this unit:\n"+d.Error)
 				l.Color = cTextDim
 				return l.Layout(gtx)
 			})

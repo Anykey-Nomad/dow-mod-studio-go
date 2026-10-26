@@ -86,7 +86,7 @@ func (ui *uiState) openWheViaUnit(path string) {
 	}
 	cat := ui.unitCatalogFor()
 	start := time.Now()
-	units := cat.allUnits()
+	units := cat.AllUnits()
 	for _, u := range units {
 		d := loadUnitDetails(ui.modTree, u)
 		src, ok := newUnitModelSource(ui.modTree, d)
@@ -101,12 +101,12 @@ func (ui *uiState) openWheViaUnit(path string) {
 		if base != name {
 			continue
 		}
-		ui.unitPickRace = u.race
-		ui.unitPickPath = u.path
+		ui.unitPickRace = u.Race
+		ui.unitPickPath = u.Path
 		ui.applyPendingUnitPick()
 		ui.openUnitTab()
-		ui.statusText = fmt.Sprintf("Opened %s as unit %s", filepath.Base(path), u.displayName())
-		log.Printf("openWheViaUnit %q: unit %s after scanning %d units in %v", path, u.path, len(units), time.Since(start))
+		ui.statusText = fmt.Sprintf("Opened %s as unit %s", filepath.Base(path), u.DisplayName())
+		log.Printf("openWheViaUnit %q: unit %s after scanning %d units in %v", path, u.Path, len(units), time.Since(start))
 		return
 	}
 	ui.statusText = fmt.Sprintf("Open %s — no unit references that model", filepath.Base(path))

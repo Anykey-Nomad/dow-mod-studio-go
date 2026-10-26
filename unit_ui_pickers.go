@@ -111,18 +111,18 @@ func (ui *uiState) applyPendingUnitPick() {
 	}
 	race, path := ui.unitPickRace, ui.unitPickPath
 	ui.unitPickRace, ui.unitPickPath = "", ""
-	for i := range ui.unitCatalog.races {
-		r := &ui.unitCatalog.races[i]
-		if race != "" && !strings.EqualFold(r.name, race) {
+	for i := range ui.unitCatalog.Races {
+		r := &ui.unitCatalog.Races[i]
+		if race != "" && !strings.EqualFold(r.Name, race) {
 			continue
 		}
 		ui.unitRaceSel = i
 		if path == "" {
 			return
 		}
-		units := r.unitsOf()
+		units := r.UnitsOf()
 		for j := range units {
-			if strings.EqualFold(units[j].path, path) {
+			if strings.EqualFold(units[j].Path, path) {
 				ui.unitSel = j
 				return
 			}
@@ -157,12 +157,12 @@ func (ui *uiState) graphFor() *modGraph {
 
 // currentUnit is the unit the dialog is showing, or nil when the mod has none.
 func (ui *uiState) currentUnit() *unitEntry {
-	return ui.unitCatalogFor().selectedUnit(ui.unitRaceSel, ui.unitSel)
+	return ui.unitCatalogFor().SelectedUnit(ui.unitRaceSel, ui.unitSel)
 }
 
 // currentRace is the race the dialog is showing, or nil when there is none.
 func (ui *uiState) currentRace() *raceEntry {
-	return ui.unitCatalogFor().selectedRace(ui.unitRaceSel)
+	return ui.unitCatalogFor().SelectedRace(ui.unitRaceSel)
 }
 
 // currentUnitDetails parses the selected unit once and caches it, so switching
@@ -172,12 +172,12 @@ func (ui *uiState) currentUnitDetails() *unitDetails {
 	if u == nil {
 		return nil
 	}
-	if ui.unitDetails != nil && strings.EqualFold(ui.unitDetailsPath, u.path) {
+	if ui.unitDetails != nil && strings.EqualFold(ui.unitDetailsPath, u.Path) {
 		return ui.unitDetails
 	}
 	d := loadUnitDetails(ui.modTree, *u)
 	ui.unitDetails = d
-	ui.unitDetailsPath = u.path
+	ui.unitDetailsPath = u.Path
 	// A different unit means different fields, so the pointer targets of the
 	// previous unit's localised rows are dead weight. Dropping them here keeps
 	// the map the size of one unit's rows rather than one per unit ever opened.
@@ -226,7 +226,7 @@ func (ui *uiState) layoutUnitPickerStrip(gtx layout.Context) layout.Dimensions {
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Right: unit.Dp(unitColGapDp)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return ui.unitRaceTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							return ui.unitPickerField(gtx, "Race", raceLabel, cat != nil && len(cat.races) > 0, ui.unitRaceOpen)
+							return ui.unitPickerField(gtx, "Race", raceLabel, cat != nil && len(cat.Races) > 0, ui.unitRaceOpen)
 						})
 					})
 				}),
@@ -283,7 +283,7 @@ func (ui *uiState) layoutUnitPickerStrip(gtx layout.Context) layout.Dimensions {
 // strip can be measured and drawn from the same value.
 func (ui *uiState) pickerRaceLabel() string {
 	if r := ui.currentRace(); r != nil {
-		return r.name
+		return r.Name
 	}
 	return "No race"
 }
@@ -297,31 +297,14 @@ func (ui *uiState) pickerUnitLabel() string {
 	if u == nil {
 		return "No unit"
 	}
-	return ui.unitLabel(*u) + "  (" + u.kind.label + ")"
+	return ui.unitLabel(*u) + "  (" + u.Kind.Label + ")"
 }
 
 func raceCountLabel(r *raceEntry) string {
 	if r == nil {
 		return ""
 	}
-	return itoaCount(r.unitCount(), "unit", "units")
-}
-
-func itoaCount(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return itoaPlain(n) + " " + many
-}
-
-func itoaPlain(n int) string {
-	if n < 0 {
-		return "-" + itoaPlain(-n)
-	}
-	if n < 10 {
-		return string(rune('0' + n))
-	}
-	return itoaPlain(n/10) + string(rune('0'+n%10))
+	return itoaCount(r.UnitCount(), "unit", "units")
 }
 
 // unitPickerField is one labelled dropdown trigger. The label sits in front of
@@ -375,12 +358,12 @@ func unitPickerBorder(open bool) color.NRGBA {
 // Race field sits, so the list lines up with the field that opened it.
 func (ui *uiState) layoutUnitRaceDropdown(gtx layout.Context, xOffset int) layout.Dimensions {
 	cat := ui.unitCatalogFor()
-	if cat == nil || len(cat.races) == 0 {
+	if cat == nil || len(cat.Races) == 0 {
 		return layout.Dimensions{}
 	}
-	ui.ensureUnitRaceClicks(len(cat.races))
+	ui.ensureUnitRaceClicks(len(cat.Races))
 	rowH := gtx.Dp(unit.Dp(unitRowHeightDp))
-	listH := rowH * len(cat.races)
+	listH := rowH * len(cat.Races)
 	if maxH := gtx.Constraints.Max.Y; listH > maxH && maxH > 0 {
 		listH = maxH
 	}
@@ -403,10 +386,10 @@ func (ui *uiState) layoutUnitRaceDropdown(gtx layout.Context, xOffset int) layou
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				var children []layout.FlexChild
-				for i := range cat.races {
+				for i := range cat.Races {
 					i := i
 					children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						sel := i == cat.clampRaceSel(ui.unitRaceSel)
+						sel := i == cat.ClampRaceSel(ui.unitRaceSel)
 						return ui.unitRaceClicks[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							h := gtx.Dp(unit.Dp(unitRowHeightDp))
 							sz := image.Pt(gtx.Constraints.Max.X, h)
@@ -425,14 +408,14 @@ func (ui *uiState) layoutUnitRaceDropdown(gtx layout.Context, xOffset int) layou
 									return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(11), cat.races[i].name)
+												l := material.Label(ui.th, unit.Sp(11), cat.Races[i].Name)
 												l.Color = cText
 												l.MaxLines = 1
 												return l.Layout(gtx)
 											}),
 											layout.Flexed(1, flexGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.th, unit.Sp(10), itoaPlain(cat.races[i].unitCount()))
+												l := material.Label(ui.th, unit.Sp(10), itoaPlain(cat.Races[i].UnitCount()))
 												l.Color = cTextDim
 												return l.Layout(gtx)
 											}),
@@ -466,7 +449,7 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 	if race == nil {
 		return layout.Dimensions{}
 	}
-	units := race.unitsOf()
+	units := race.UnitsOf()
 	if len(units) == 0 {
 		return layout.Dimensions{}
 	}
@@ -505,7 +488,7 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 						return layout.Dimensions{}
 					}
 					u := units[index]
-					sel := index == race.clampUnitSel(ui.unitSel)
+					sel := index == race.ClampUnitSel(ui.unitSel)
 					return ui.unitClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						// The row's height is rowH, not gtx.Constraints.Min.Y:
 						// inside a layout.List the element is handed its own
@@ -559,7 +542,7 @@ func (ui *uiState) layoutUnitListDropdown(gtx layout.Context, xOffset int) layou
 										}),
 										layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-											l := material.Label(ui.th, unit.Sp(10), u.kind.label)
+											l := material.Label(ui.th, unit.Sp(10), u.Kind.Label)
 											l.Color = cTextDim
 											l.MaxLines = 1
 											return l.Layout(gtx)
@@ -650,8 +633,8 @@ func (ui *uiState) unitColumnBody(gtx layout.Context, hint string) layout.Dimens
 func (ui *uiState) unitEmptyState(gtx layout.Context) layout.Dimensions {
 	d := ui.currentUnitDetails()
 	msg := "No unit selected."
-	if d != nil && d.error != "" {
-		msg = "Could not read this unit:\n" + d.error
+	if d != nil && d.Error != "" {
+		msg = "Could not read this unit:\n" + d.Error
 	}
 	return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(ui.th, unit.Sp(10), msg)
@@ -722,12 +705,12 @@ func (ui *uiState) layoutUnitInfoList(gtx layout.Context) layout.Dimensions {
 	if d == nil {
 		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
 	}
-	if d.error != "" {
+	if d.Error != "" {
 		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 			return ui.unitEmptyState(gtx)
 		})
 	}
-	if len(d.fields) == 0 {
+	if len(d.Fields) == 0 {
 		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.th, unit.Sp(10), "This unit declares no readable properties.")
@@ -736,13 +719,13 @@ func (ui *uiState) layoutUnitInfoList(gtx layout.Context) layout.Dimensions {
 			})
 		})
 	}
-	ui.ensureUnitInfoClicks(len(d.fields))
+	ui.ensureUnitInfoClicks(len(d.Fields))
 	return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(ui.layoutUnitInfoIconHeader),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(10), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.layoutListWithScrollbar(gtx, &ui.unitInfoScroll, &ui.unitInfoList, unitInfoRowHeightDp, len(d.fields), func(gtx layout.Context, index int) layout.Dimensions {
+					return ui.layoutListWithScrollbar(gtx, &ui.unitInfoScroll, &ui.unitInfoList, unitInfoRowHeightDp, len(d.Fields), func(gtx layout.Context, index int) layout.Dimensions {
 						return ui.layoutUnitInfoRow(gtx, index, unitInfoFieldAt(d, index))
 					})
 				})
@@ -774,7 +757,7 @@ func (ui *uiState) layoutUnitInfoIconHeader(gtx layout.Context) layout.Dimension
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.th, unit.Sp(9), unitFileLabel(*u)+"  ·  "+u.kind.label)
+						l := material.Label(ui.th, unit.Sp(9), unitFileLabel(*u)+"  ·  "+u.Kind.Label)
 						l.Color = cTextDim
 						l.MaxLines = 1
 						return l.Layout(gtx)
@@ -795,7 +778,7 @@ const unitInfoRowHeightDp = 17
 // actually hold a weapon, and selecting one is what the right column describes.
 func (ui *uiState) layoutUnitWeaponList(gtx layout.Context) layout.Dimensions {
 	d := ui.currentUnitDetails()
-	if d == nil || d.error != "" || len(d.weapons) == 0 {
+	if d == nil || d.Error != "" || len(d.Weapons) == 0 {
 		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
 	}
 	// One selectable row per weapon slot, so the right column can describe a
@@ -836,9 +819,9 @@ func unitWeaponRows(d *unitDetails) []unitWeaponRow {
 		return nil
 	}
 	var out []unitWeaponRow
-	for _, h := range d.weapons {
-		for _, w := range h.weapons {
-			out = append(out, unitWeaponRow{hardpoint: h.hardpoint, name: w.name, ref: w.ref, path: w.path, found: w.path != ""})
+	for _, h := range d.Weapons {
+		for _, w := range h.Weapons {
+			out = append(out, unitWeaponRow{hardpoint: h.Hardpoint, name: w.Name, ref: w.Ref, path: w.Path, found: w.Path != ""})
 		}
 	}
 	return out
@@ -852,11 +835,11 @@ func unitAbilityRows(d *unitDetails) []unitWeaponRow {
 		return nil
 	}
 	var out []unitWeaponRow
-	for _, a := range d.abilities {
-		if a.ref == "" {
+	for _, a := range d.Abilities {
+		if a.Ref == "" {
 			continue
 		}
-		out = append(out, unitWeaponRow{hardpoint: a.slot, name: a.name(), ref: a.ref, path: a.path, found: a.resolved()})
+		out = append(out, unitWeaponRow{hardpoint: a.Slot, name: a.Name(), ref: a.Ref, path: a.Path, found: a.Resolved()})
 	}
 	return out
 }
@@ -864,7 +847,7 @@ func unitAbilityRows(d *unitDetails) []unitWeaponRow {
 // layoutUnitAbilityList is the "Abilities" column.
 func (ui *uiState) layoutUnitAbilityList(gtx layout.Context) layout.Dimensions {
 	d := ui.currentUnitDetails()
-	if d == nil || d.error != "" {
+	if d == nil || d.Error != "" {
 		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
 	}
 	rows := unitAbilityRows(d)
@@ -972,9 +955,9 @@ func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensio
 				// The weapon's own file is the detail worth showing; the
 				// slot's scalars are only a fallback for a reference that
 				// does not resolve.
-				fields = w.rgdFields
+				fields = w.RgdFields
 				if len(fields) == 0 {
-					fields = w.fields
+					fields = w.Fields
 				}
 			}
 		}
@@ -1043,15 +1026,15 @@ func (ui *uiState) layoutUnitRightColumnBody(gtx layout.Context) layout.Dimensio
 					}
 					for _, f := range fields {
 						f := f
-						if f.startsGroup && f.group != "" {
-							group := f.group
+						if f.StartsGroup && f.Group != "" {
+							group := f.Group
 							children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								return ui.unitGroupHeading(gtx, group)
 							}))
 						}
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, f.label, f.value, false)
+								return ui.unitKeyValueRow(gtx, f.Label, f.Value, false)
 							})
 						}))
 					}
@@ -1091,10 +1074,10 @@ func unitWeaponAt(d *unitDetails, rowIndex int) *weaponSlot {
 		return nil
 	}
 	seen := 0
-	for hi := range d.weapons {
-		for si := range d.weapons[hi].weapons {
+	for hi := range d.Weapons {
+		for si := range d.Weapons[hi].Weapons {
 			if seen == rowIndex {
-				return &d.weapons[hi].weapons[si]
+				return &d.Weapons[hi].Weapons[si]
 			}
 			seen++
 		}
@@ -1106,7 +1089,7 @@ func unitWeaponAt(d *unitDetails, rowIndex int) *weaponSlot {
 // matching the row back to the hardpoint and slot it came from.
 func unitWeaponSlotFields(d *unitDetails, rowIndex int) []unitField {
 	if w := unitWeaponAt(d, rowIndex); w != nil {
-		return w.fields
+		return w.Fields
 	}
 	return nil
 }
@@ -1171,7 +1154,7 @@ func (ui *uiState) handleUnitPickerInput(gtx layout.Context) {
 			ui.unitListOpen = false
 			return
 		}
-		units := race.unitsOf()
+		units := race.UnitsOf()
 		ui.ensureUnitDropdownClicks(len(units))
 		for i := range units {
 			if i < len(ui.unitClicks) && ui.unitClicks[i].Clicked(gtx) {
@@ -1192,8 +1175,8 @@ func (ui *uiState) handleUnitPickerInput(gtx layout.Context) {
 			ui.unitRaceOpen = false
 			return
 		}
-		ui.ensureUnitRaceClicks(len(cat.races))
-		for i := range cat.races {
+		ui.ensureUnitRaceClicks(len(cat.Races))
+		for i := range cat.Races {
 			if i < len(ui.unitRaceClicks) && ui.unitRaceClicks[i].Clicked(gtx) {
 				ui.unitRaceSel = i
 				ui.unitRaceOpen = false
@@ -1201,7 +1184,7 @@ func (ui *uiState) handleUnitPickerInput(gtx layout.Context) {
 				// at its first unit.
 				ui.unitSel = 0
 				ui.unitSelRow = 0
-				ui.statusText = "Race: " + cat.races[i].name
+				ui.statusText = "Race: " + cat.Races[i].Name
 				ui.markStateDirty()
 				return
 			}

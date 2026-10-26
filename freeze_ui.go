@@ -20,12 +20,12 @@ func (ui *uiState) layoutFreezeButtons(gtx layout.Context, sel *unitEntry) layou
 	if sel == nil || ui.modTree == nil {
 		return layout.Dimensions{}
 	}
-	if ui.isFrozen(sel.path) {
+	if ui.isFrozen(sel.Path) {
 		return ui.smallButtonDisabled(gtx, &ui.unitUnfreezeTrigger, "Unfreeze…", false)
 	}
 	// Only a file the mod itself owns can be moved out of it, so a unit that
 	// comes from the base game gets no button rather than one that fails.
-	return ui.smallButtonDisabled(gtx, &ui.unitFreezeTrigger, "Freeze…", !ui.canFreeze(sel.path))
+	return ui.smallButtonDisabled(gtx, &ui.unitFreezeTrigger, "Freeze…", !ui.canFreeze(sel.Path))
 }
 
 // isFrozen reports whether an object has been moved out of the mod.
@@ -130,9 +130,9 @@ func (ui *uiState) handleFreezeInput(gtx layout.Context) {
 		return
 	}
 	if ui.unitFreezeTrigger.Clicked(gtx) {
-		record, err := ui.freezeEntity(sel.path)
+		record, err := ui.freezeEntity(sel.Path)
 		if err != nil {
-			ui.statusText = "Could not freeze " + sel.name + ": " + err.Error()
+			ui.statusText = "Could not freeze " + sel.Name + ": " + err.Error()
 			ui.markStateDirty()
 			return
 		}
@@ -144,9 +144,9 @@ func (ui *uiState) handleFreezeInput(gtx layout.Context) {
 		return
 	}
 	if ui.unitUnfreezeTrigger.Clicked(gtx) {
-		record, err := ui.unfreezeEntity(sel.path)
+		record, err := ui.unfreezeEntity(sel.Path)
 		if err != nil {
-			ui.statusText = "Could not unfreeze " + sel.name + ": " + err.Error()
+			ui.statusText = "Could not unfreeze " + sel.Name + ": " + err.Error()
 			ui.markStateDirty()
 			return
 		}

@@ -526,13 +526,6 @@ func rgdTooltipForValue(e *rgd.RgdEntry) string {
 	return fmt.Sprintf("Source: field name fallback\nAlias: %s", alias)
 }
 
-// rgdLocIDOrEmpty is rgd.LocID with the failure folded into a usable empty id,
-// for the places that only want the lookup and not the ok flag.
-func rgdLocIDOrEmpty(value string) string {
-	id, _ := rgd.LocID(value)
-	return id
-}
-
 // localeRowDisplay is what the row under a DT_WString value says, and the tip
 // that goes with it. There are three cases and each is worth naming: the id
 // resolves, the id is the game's empty marker, or the chosen language has no

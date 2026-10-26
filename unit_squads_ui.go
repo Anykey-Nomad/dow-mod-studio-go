@@ -31,10 +31,10 @@ const squadRowHeightDp = unitRowHeightDp
 // layoutUnitSquadList is the middle column of the Squads section.
 func (ui *uiState) layoutUnitSquadList(gtx layout.Context) layout.Dimensions {
 	d := ui.currentUnitDetails()
-	if d == nil || d.error != "" {
+	if d == nil || d.Error != "" {
 		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
 	}
-	squads := ui.squadsOfUnitOf(d.entry)
+	squads := ui.squadsOfUnitOf(d.Entry)
 	if len(squads) == 0 {
 		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -150,10 +150,10 @@ func squadSizeLabel(s unitSquadRef) string {
 // captures — none of which belongs to an individual trooper.
 func (ui *uiState) layoutUnitSquadRightColumn(gtx layout.Context, sec unitSection) layout.Dimensions {
 	d := ui.currentUnitDetails()
-	if d == nil || d.error != "" {
+	if d == nil || d.Error != "" {
 		return ui.unitColumn(gtx, sec.rightTitle, "No entry is selected.")
 	}
-	squads := ui.squadsOfUnitOf(d.entry)
+	squads := ui.squadsOfUnitOf(d.Entry)
 	if len(squads) == 0 {
 		return ui.unitColumn(gtx, sec.rightTitle, "No entry is selected.")
 	}
@@ -189,7 +189,7 @@ func (ui *uiState) layoutUnitSquadRightColumn(gtx layout.Context, sec unitSectio
 						f := f
 						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-								return ui.unitKeyValueRow(gtx, f.label, f.value, f.isLocID)
+								return ui.unitKeyValueRow(gtx, f.Label, f.Value, f.IsLocID)
 							})
 						}))
 					}
@@ -211,7 +211,7 @@ func (ui *uiState) handleUnitSquadInput(gtx layout.Context) {
 	if d == nil {
 		return
 	}
-	squads := ui.squadsOfUnitOf(d.entry)
+	squads := ui.squadsOfUnitOf(d.Entry)
 	ui.ensureUnitRowClicks(len(squads))
 	for i := range ui.unitRowClicks {
 		if i < len(squads) && ui.unitRowClicks[i].Clicked(gtx) {
@@ -328,8 +328,8 @@ func squadFields(tree *modtree.ModTree, s unitSquadRef) []unitField {
 		if strings.TrimSpace(value) == "" {
 			return
 		}
-		f := unitField{group: group, label: label, value: value}
-		f.startsGroup = group != "" && (len(out) == 0 || out[len(out)-1].group != group)
+		f := unitField{Group: group, Label: label, Value: value}
+		f.StartsGroup = group != "" && (len(out) == 0 || out[len(out)-1].Group != group)
 		out = append(out, f)
 	}
 	// The birth cost is stated first because it is the one number here that is

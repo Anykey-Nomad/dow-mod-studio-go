@@ -36,7 +36,7 @@ import (
 // unit can carry the same label, and an editor bound to the wrong one of them
 // would write a value into the wrong place.
 func unitFieldKey(f unitField) string {
-	return localeRowKey(f.entry, f.label)
+	return localeRowKey(f.Entry, f.Label)
 }
 
 // unitInfoFieldSelected is the row of the info list the right column is
@@ -44,11 +44,11 @@ func unitFieldKey(f unitField) string {
 // that is a count rather than a field.
 func (ui *uiState) unitInfoFieldSelected() *unitField {
 	d := ui.currentUnitDetails()
-	if d == nil || len(d.fields) == 0 {
+	if d == nil || len(d.Fields) == 0 {
 		return nil
 	}
-	idx := clampInt(ui.unitInfoSel, 0, len(d.fields)-1)
-	f := d.fields[idx]
+	idx := clampInt(ui.unitInfoSel, 0, len(d.Fields)-1)
+	f := d.Fields[idx]
 	if !unitInfoRowSelectable(&f) {
 		return nil
 	}
@@ -58,10 +58,10 @@ func (ui *uiState) unitInfoFieldSelected() *unitField {
 // unitInfoFieldAt is the same row by index, which is what laying the list out
 // needs: a row that cannot be edited still has to be drawn.
 func unitInfoFieldAt(d *unitDetails, index int) *unitField {
-	if d == nil || index < 0 || index >= len(d.fields) {
+	if d == nil || index < 0 || index >= len(d.Fields) {
 		return nil
 	}
-	f := d.fields[index]
+	f := d.Fields[index]
 	return &f
 }
 
@@ -75,10 +75,10 @@ func unitInfoFieldAt(d *unitDetails, index int) *unitField {
 // that empties a row drops it from the list, and the row after it would
 // otherwise slide into the selection.
 func (ui *uiState) applyUnitFieldText(f *unitField, text string) error {
-	if f == nil || f.entry == nil {
+	if f == nil || f.Entry == nil {
 		return fmt.Errorf("this row is a count, not a field of the file")
 	}
-	changed, err := rgdApplyScalarText(f.entry, text)
+	changed, err := rgdApplyScalarText(f.Entry, text)
 	if err != nil {
 		return err
 	}
@@ -90,8 +90,8 @@ func (ui *uiState) applyUnitFieldText(f *unitField, text string) error {
 	if d == nil {
 		return nil
 	}
-	d.rebuildFromFile()
-	if i := unitFieldIndex(d.fields, f.entry); i >= 0 {
+	d.RebuildFromFile()
+	if i := unitFieldIndex(d.Fields, f.Entry); i >= 0 {
 		ui.unitInfoSel = i
 	}
 	return nil
@@ -103,7 +103,7 @@ func (ui *uiState) applyUnitFieldText(f *unitField, text string) error {
 // "modified" and a modder's drift apart for no reason.
 func (ui *uiState) saveUnitDetails() (string, error) {
 	d := ui.currentUnitDetails()
-	if d == nil || d.file == nil {
+	if d == nil || d.File == nil {
 		return "", fmt.Errorf("no unit is open")
 	}
 	if !ui.unitInfoDirty {
@@ -112,19 +112,19 @@ func (ui *uiState) saveUnitDetails() (string, error) {
 	if ui.unitValError != "" {
 		return "", fmt.Errorf("correct %s first", ui.unitValError)
 	}
-	data, err := d.file.MarshalBinary()
+	data, err := d.File.MarshalBinary()
 	if err != nil {
 		return "", err
 	}
 	if ui.modTree == nil {
 		return "", fmt.Errorf("no mod is loaded")
 	}
-	disk, err := ui.modTree.WriteOverlayFile(d.entry.path, data)
+	disk, err := ui.modTree.WriteOverlayFile(d.Entry.Path, data)
 	if err != nil {
 		return "", err
 	}
 	ui.unitInfoDirty = false
-	return fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(d.entry.path), disk, len(data)), nil
+	return fmt.Sprintf("Saved %s → %s (%d bytes)", filepath.Base(d.Entry.Path), disk, len(data)), nil
 }
 
 // revertUnitDetails throws the changes away and reads the unit from the file
@@ -154,7 +154,7 @@ func (ui *uiState) markUnitFieldDirty(f *rgd.RgdEntry) {
 		return
 	}
 	d := ui.currentUnitDetails()
-	if d == nil || d.file == nil || rgdPathOf(d.file.Root, f) == "" {
+	if d == nil || d.File == nil || rgdPathOf(d.File.Root, f) == "" {
 		return
 	}
 	ui.unitInfoDirty = true
@@ -202,13 +202,13 @@ func unitBoolText(v bool) string {
 // field sits at moves when the list is rebuilt and a bound-to-index editor
 // would then write into whatever took its place.
 func (ui *uiState) unitSyncValEditor(gtx layout.Context, f *unitField) {
-	if f == nil || f.entry == nil || !rgdIsEditableType(f.entry.Type) || f.entry.Type == rgd.RgdTypeBool {
+	if f == nil || f.Entry == nil || !rgdIsEditableType(f.Entry.Type) || f.Entry.Type == rgd.RgdTypeBool {
 		return
 	}
 	ed := &ui.unitValEditor
 	fieldKey := unitFieldKey(*f)
 	if ui.unitValBound != fieldKey {
-		ed.SetText(f.entry.DisplayValue())
+		ed.SetText(f.Entry.DisplayValue())
 		ui.unitValBound = fieldKey
 		ui.unitValError = ""
 	}
@@ -274,14 +274,14 @@ func (ui *uiState) handleUnitFieldInput(gtx layout.Context) {
 	if d == nil {
 		return
 	}
-	ui.ensureUnitInfoClicks(len(d.fields))
+	ui.ensureUnitInfoClicks(len(d.Fields))
 	for i := range ui.unitInfoClicks {
 		if i < len(ui.unitInfoClicks) && ui.unitInfoClicks[i].Clicked(gtx) {
 			ui.unitInfoSel = i
 		}
 	}
 	if ui.unitOpenRgdClick.Clicked(gtx) {
-		ui.openRgd(d.entry.path)
+		ui.openRgd(d.Entry.Path)
 		return
 	}
 	if ui.unitRevertClick.Clicked(gtx) {
@@ -297,9 +297,9 @@ func (ui *uiState) handleUnitFieldInput(gtx layout.Context) {
 	if f == nil {
 		return
 	}
-	if f.entry.Type == rgd.RgdTypeBool {
+	if f.Entry.Type == rgd.RgdTypeBool {
 		if ui.unitBoolClick.Clicked(gtx) {
-			if err := ui.applyUnitFieldText(f, unitBoolText(f.entry.BoolVal)); err != nil {
+			if err := ui.applyUnitFieldText(f, unitBoolText(f.Entry.BoolVal)); err != nil {
 				ui.unitValError = err.Error()
 			} else {
 				ui.unitValError = ""
@@ -324,7 +324,7 @@ func (ui *uiState) ensureUnitInfoClicks(n int) {
 func (ui *uiState) layoutUnitFieldPanel(gtx layout.Context, sec unitSection) layout.Dimensions {
 	d := ui.currentUnitDetails()
 	body := func(gtx layout.Context) layout.Dimensions {
-		if d == nil || d.error != "" {
+		if d == nil || d.Error != "" {
 			return ui.unitEmptyState(gtx)
 		}
 		f := ui.unitInfoFieldSelected()
@@ -334,17 +334,17 @@ func (ui *uiState) layoutUnitFieldPanel(gtx layout.Context, sec unitSection) lay
 		children := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.unitKeyValueRow(gtx, "Field", f.label, false)
+					return ui.unitKeyValueRow(gtx, "Field", f.Label, false)
 				})
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.unitKeyValueRow(gtx, "In file", rgdPathOf(d.file.Root, f.entry), false)
+					return ui.unitKeyValueRow(gtx, "In file", rgdPathOf(d.File.Root, f.Entry), false)
 				})
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return ui.unitKeyValueRow(gtx, "Type", f.entry.TypeLabel(), false)
+					return ui.unitKeyValueRow(gtx, "Type", f.Entry.TypeLabel(), false)
 				})
 			}),
 		}
@@ -372,14 +372,14 @@ func (ui *uiState) layoutUnitFieldPanel(gtx layout.Context, sec unitSection) lay
 // has to be shown as refused rather than simply not applied.
 func (ui *uiState) unitFieldValueWidget(gtx layout.Context, f *unitField) []layout.FlexChild {
 	out := make([]layout.FlexChild, 0, 3)
-	if f.entry.Type == rgd.RgdTypeBool {
+	if f.Entry.Type == rgd.RgdTypeBool {
 		out = append(out, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			value := "False"
-			if f.entry.BoolVal {
+			if f.Entry.BoolVal {
 				value = "True"
 			}
 			return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.toggleButton(gtx, &ui.unitBoolClick, value, f.entry.BoolVal, cSelectBg)
+				return ui.toggleButton(gtx, &ui.unitBoolClick, value, f.Entry.BoolVal, cSelectBg)
 			})
 		}))
 	} else {
@@ -447,7 +447,7 @@ func unitFieldNote(gtx layout.Context, th *material.Theme, text string) layout.D
 // a counted row is a statement about a list rather than a field, so neither is
 // given a selection click that would sit on top of the other one.
 func unitInfoRowSelectable(f *unitField) bool {
-	return f != nil && f.entry != nil && !f.isLocID
+	return f != nil && f.Entry != nil && !f.IsLocID
 }
 
 // layoutUnitInfoRow is one row of the info list: the section's heading where a
@@ -459,16 +459,16 @@ func (ui *uiState) layoutUnitInfoRow(gtx layout.Context, index int, f *unitField
 		}
 		value := func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return ui.unitKeyValueRowFor(gtx, f.label, f.value, f.isLocID, f.locID, f.entry)
+				return ui.unitKeyValueRowFor(gtx, f.Label, f.Value, f.IsLocID, f.LocID, f.Entry)
 			})
 		}
-		if !f.startsGroup {
+		if !f.StartsGroup {
 			return value(gtx)
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), f.group)
+					l := material.Label(ui.th, unit.Sp(11), f.Group)
 					l.Color = cTextDim
 					l.Font.Weight = font.SemiBold
 					l.MaxLines = 1

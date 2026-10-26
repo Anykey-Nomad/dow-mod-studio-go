@@ -138,15 +138,15 @@ func (ui *uiState) layoutUnitPickerRow(gtx layout.Context) layout.Dimensions {
 // the fallback, since that is the name the game itself uses.
 func (ui *uiState) unitObjectLabel() string {
 	if d := ui.currentUnitDetails(); d != nil {
-		if d.name != "" {
-			return d.name
+		if d.Name != "" {
+			return d.Name
 		}
-		if d.entry.name != "" {
-			return d.entry.name
+		if d.Entry.Name != "" {
+			return d.Entry.Name
 		}
 	}
 	if u := ui.currentUnit(); u != nil {
-		return u.displayName()
+		return u.DisplayName()
 	}
 	return "No unit selected"
 }

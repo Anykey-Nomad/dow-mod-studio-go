@@ -1,4 +1,4 @@
-package main
+package unitdef
 
 import (
 	"dow-mod-studio/internal/modtree"
@@ -20,197 +20,197 @@ import (
 // there is no health_ext.max_health (it is health_ext.hitpoints), no
 // moving_ext.speed (it is moving_ext.speed_max) and no type_ext.template.
 
-// unitField is one label/value line of a unit's info or a weapon's settings.
-type unitField struct {
-	label string
-	value string
+// UnitField is one label/value line of a unit's info or a weapon's settings.
+type UnitField struct {
+	Label string
+	Value string
 	// group is the section of the .rgd the row came from. It is what keeps a
 	// list of a hundred scalars readable: without it the rows run together and
 	// a reader cannot tell which part of the file a value belongs to.
-	group string
+	Group string
 	// startsGroup marks the first row of a group, so the column can draw a
 	// heading above it. It is decided where the list is built rather than in
 	// the layout, because deciding it from the row's position in the list would
 	// need the previous row and so would put list-building knowledge in the
 	// drawing code.
-	startsGroup bool
+	StartsGroup bool
 	// isLocID marks a value that is a DT_WString localisation id, so the column
 	// can present it as an id rather than as literal text.
-	isLocID bool
+	IsLocID bool
 	// locID is that id without the "$", which is what the locale table is keyed
 	// by. It is kept beside the display value because the value has the text
 	// glued to the front of it, and a row that can be clicked has to know which
 	// string it is about rather than re-deriving it from a label.
-	locID string
+	LocID string
 	// entry is the rgd.RgdEntry the value came from. It is what makes the row
 	// editable: the value is only a string cut out of the parsed file, and
 	// without the field behind it there is nowhere to write a change. A
 	// localisation row needs it for the same reason, so every row that was
 	// read from a field has one and the rows that count a list rather than
 	// describe a field do not.
-	entry *rgd.RgdEntry
+	Entry *rgd.RgdEntry
 }
 
-// unitFieldIndex is where a field sits in a unit's rows, or -1. It is how a
+// UnitFieldIndex is where a field sits in a unit's rows, or -1. It is how a
 // selection survives a rebuild of the list: a change to a value rebuilds the
 // rows from the file, and the field is the thing that has to be found again
 // rather than the index, which has moved if the change emptied a row.
-func unitFieldIndex(fields []unitField, e *rgd.RgdEntry) int {
+func UnitFieldIndex(fields []UnitField, e *rgd.RgdEntry) int {
 	if e == nil {
 		return -1
 	}
 	for i := range fields {
-		if fields[i].entry == e {
+		if fields[i].Entry == e {
 			return i
 		}
 	}
 	return -1
 }
 
-// localeRowKey names a localisation row for the pointer target that goes with
+// LocaleRowKey names a localisation row for the pointer target that goes with
 // it. The entry's own address is used rather than its label, because two fields
 // of one unit can share a label — a weapon's "description" and another's — and
 // two rows answering to one target would send both presses to the same field.
 // The addresses are dropped with the parsed unit, which is what the map that
 // holds the targets is cleared alongside.
-func localeRowKey(entry *rgd.RgdEntry, label string) string {
+func LocaleRowKey(entry *rgd.RgdEntry, label string) string {
 	if entry == nil {
 		return label
 	}
 	return fmt.Sprintf("%p\x00%s", entry, label)
 }
 
-// unitWeapon is one weapon of the unit, which the game declares as a hardpoint
+// UnitWeapon is one weapon of the unit, which the game declares as a hardpoint
 // holding a weapon table rather than as a flat weapon list.
-type unitWeapon struct {
+type UnitWeapon struct {
 	// hardpoint is the field name, e.g. "hardpoint_01".
-	hardpoint string
+	Hardpoint string
 	// weapons are the entries of that hardpoint's weapon table, each a slot
 	// with its own reference.
-	weapons []weaponSlot
+	Weapons []WeaponSlot
 }
 
-// weaponSlot is one entry of a hardpoint's weapon table.
-type weaponSlot struct {
+// WeaponSlot is one entry of a hardpoint's weapon table.
+type WeaponSlot struct {
 	// slot is the field name, e.g. "weapon_01".
-	slot string
+	Slot string
 	// ref is the table it points at, e.g. "weapons\necron_dirac_gun.lua".
-	ref string
+	Ref string
 	// name is ref's file name, which is how the game names the weapon.
-	name string
-	// path is the weapon's own .rgd in the tree, resolved from ref: the file
+	Name string
+	// path is the weapon's own .rgd in the tree, Resolved from Ref: the file
 	// writes a .lua because the game converts the .rgd in memory and refers to
 	// the result by that name, so the .rgd of the same name is what is really
 	// on disk. "" means the reference does not resolve.
-	path string
+	Path string
 	// fields are the slot's scalar settings as the unit's own file carries
 	// them — what the hardpoint says about the weapon rather than what the
 	// weapon says about itself.
-	fields []unitField
+	Fields []UnitField
 	// rgdFields are the settings read out of the weapon's own .rgd, grouped by
 	// the section they sit in. This is the detailed information: damage, range,
 	// cooldown and the rest live in the weapon file, not in the unit.
-	rgdFields []unitField
+	RgdFields []UnitField
 	// rgdError says why the weapon file could not be read, when it was found
 	// but would not parse.
-	rgdError string
+	RgdError string
 }
 
-// unitDetails is everything the dialog shows for one unit.
-type unitDetails struct {
-	entry unitEntry
+// UnitDetails is everything the dialog shows for one unit.
+type UnitDetails struct {
+	Entry UnitEntry
 	// fields is the "Unit info" list.
-	fields []unitField
-	// weapons feed the Weapons list; abilities carry their resolved path so a
+	Fields []UnitField
+	// weapons feed the Weapons list; abilities carry their Resolved path so a
 	// row can say whether the file was found.
-	weapons   []unitWeapon
-	abilities []abilityRef
+	Weapons   []UnitWeapon
+	Abilities []AbilityRef
 	// name is the unit's screen_name_id, kept apart because the dialog puts it
 	// in its title. It is a localisation id, so it is usually the id itself.
-	name string
+	Name string
 	// file is the parsed .rgd the rows were read from, kept so a change to one
 	// of its fields can be reflected without reading the file again. Giving a
 	// unit a new localisation id changes a field in here, and the rows are
 	// derived from the same tree.
-	file *rgd.RgdFile
+	File *rgd.RgdFile
 	// tree is the mod tree the details were read from, kept so a rebuild after
 	// an edit can resolve the weapon references again rather than losing the
 	// .rgd paths the first pass found.
-	tree *modtree.ModTree
+	Tree *modtree.ModTree
 	// error is set when the .rgd could not be read or parsed, in which case
 	// everything else is empty.
-	error string
+	Error string
 }
 
-// hasContent reports whether anything could be read, so a column can say the
+// HasContent reports whether anything could be read, so a column can say the
 // unit could not be read instead of showing an empty list.
-func (d *unitDetails) hasContent() bool {
+func (d *UnitDetails) HasContent() bool {
 	if d == nil {
 		return false
 	}
-	return len(d.fields) > 0 || len(d.weapons) > 0 || len(d.abilities) > 0
+	return len(d.Fields) > 0 || len(d.Weapons) > 0 || len(d.Abilities) > 0
 }
 
-// weaponCount is how many weapon slots the unit has in total, used to label the
+// WeaponCount is how many weapon slots the unit has in total, used to label the
 // Weapons section.
-func (d *unitDetails) weaponCount() int {
+func (d *UnitDetails) WeaponCount() int {
 	n := 0
-	for _, w := range d.weapons {
-		n += len(w.weapons)
+	for _, w := range d.Weapons {
+		n += len(w.Weapons)
 	}
 	return n
 }
 
-// loadUnitDetails parses a unit's .rgd and pulls out the parts the dialog
+// LoadUnitDetails parses a unit's .rgd and pulls out the parts the dialog
 // shows. A read or parse failure is reported inside the result rather than as an
 // error return, because the unit is still listed and worth naming.
-func loadUnitDetails(tree *modtree.ModTree, entry unitEntry) *unitDetails {
-	d := &unitDetails{entry: entry}
+func LoadUnitDetails(tree *modtree.ModTree, entry UnitEntry) *UnitDetails {
+	d := &UnitDetails{Entry: entry}
 	if tree == nil {
-		d.error = "no mod loaded"
+		d.Error = "no mod loaded"
 		return d
 	}
-	data, err := tree.ReadFile(entry.path)
+	data, err := tree.ReadFile(entry.Path)
 	if err != nil {
-		d.error = err.Error()
+		d.Error = err.Error()
 		return d
 	}
 	rf, err := rgd.ParseRgd(data)
 	if err != nil {
-		d.error = err.Error()
+		d.Error = err.Error()
 		return d
 	}
-	d.file = rf
-	d.tree = tree
-	d.name = unitScreenName(rf)
-	d.fields = unitInfoFields(rf)
-	d.weapons = unitHardpointWeapons(tree, rf)
-	d.abilities = unitAbilities(tree, rf)
+	d.File = rf
+	d.Tree = tree
+	d.Name = UnitScreenName(rf)
+	d.Fields = UnitInfoFields(rf)
+	d.Weapons = UnitHardpointWeapons(tree, rf)
+	d.Abilities = UnitAbilities(tree, rf)
 	return d
 }
 
-// rebuildFromFile re-reads the rows that are derived from the parsed .rgd, for
+// RebuildFromFile re-reads the rows that are derived from the parsed .rgd, for
 // when one of its fields has just been changed in memory — which is what giving
 // an untranslated field a new localisation id does.
-func (d *unitDetails) rebuildFromFile() {
-	if d == nil || d.file == nil {
+func (d *UnitDetails) RebuildFromFile() {
+	if d == nil || d.File == nil {
 		return
 	}
-	d.name = unitScreenName(d.file)
-	d.fields = unitInfoFields(d.file)
+	d.Name = UnitScreenName(d.File)
+	d.Fields = UnitInfoFields(d.File)
 	// The weapons go with them: a weapon slot's settings are rows of the same
 	// kind, so an edit to one has to show in the right column as well as in the
 	// info list, and both are derived from this one tree.
-	d.weapons = unitHardpointWeapons(d.tree, d.file)
+	d.Weapons = UnitHardpointWeapons(d.Tree, d.File)
 }
 
-// screenNameID is the id of the unit's own display name, or "" when the file
+// ScreenNameID is the id of the unit's own display name, or "" when the file
 // carries none. It is what the object panel's editable row acts on.
-func (d *unitDetails) screenNameID() string {
-	if d == nil || d.file == nil {
+func (d *UnitDetails) ScreenNameID() string {
+	if d == nil || d.File == nil {
 		return ""
 	}
-	e := rgdFindPath(d.file.Root, "ui_ext", "ui_info", "screen_name_id")
+	e := RgdFindPath(d.File.Root, "ui_ext", "ui_info", "screen_name_id")
 	if e == nil {
 		return ""
 	}
@@ -221,11 +221,11 @@ func (d *unitDetails) screenNameID() string {
 	return id
 }
 
-// unitScreenName is the unit's own display name. It is a localisation id in
+// UnitScreenName is the unit's own display name. It is a localisation id in
 // ui_ext\ui_info\screen_name_id, so the id is all the file carries; it is
 // present on all 582 unit .rgds of the DXP3 tree.
-func unitScreenName(rf *rgd.RgdFile) string {
-	e := rgdFindPath(rf.Root, "ui_ext", "ui_info", "screen_name_id")
+func UnitScreenName(rf *rgd.RgdFile) string {
+	e := RgdFindPath(rf.Root, "ui_ext", "ui_info", "screen_name_id")
 	if e == nil {
 		return ""
 	}
@@ -235,7 +235,7 @@ func unitScreenName(rf *rgd.RgdFile) string {
 	return e.DisplayFieldValue()
 }
 
-// unitInfoFields builds the "Unit info" list in a fixed order, so it does not
+// UnitInfoFields builds the "Unit info" list in a fixed order, so it does not
 // jump around as the selection changes. Each entry names the place it was read
 // from, and a value the file does not carry is skipped rather than shown blank.
 //
@@ -249,11 +249,11 @@ func unitScreenName(rf *rgd.RgdFile) string {
 // moving_ext, sight_ext and entity_blueprint_ext. The rest — combat, cover,
 // melee, morale, requirements, modifiers and the like — were invisible in the
 // Object window even though a unit carries them, which is what this table adds.
-func unitInfoFields(rf *rgd.RgdFile) []unitField {
+func UnitInfoFields(rf *rgd.RgdFile) []UnitField {
 	if rf == nil || rf.Root == nil {
 		return nil
 	}
-	var out []unitField
+	var out []UnitField
 	// add and addGrouped take the field the value was read from, so that the row
 	// is editable from the object window rather than only readable. A row that
 	// was counted rather than read has no field and passes nil.
@@ -261,7 +261,7 @@ func unitInfoFields(rf *rgd.RgdFile) []unitField {
 		if strings.TrimSpace(value) == "" {
 			return
 		}
-		out = append(out, unitField{label: label, value: value, entry: e})
+		out = append(out, UnitField{Label: label, Value: value, Entry: e})
 	}
 	// addGrouped appends a row of a named section, marking the first row of each
 	// section so the column knows where to put a heading. The heading is drawn
@@ -271,39 +271,39 @@ func unitInfoFields(rf *rgd.RgdFile) []unitField {
 		if strings.TrimSpace(value) == "" {
 			return
 		}
-		f := unitField{group: group, label: label, value: value, entry: e}
-		f.startsGroup = group != "" && (len(out) == 0 || out[len(out)-1].group != group)
+		f := UnitField{Group: group, Label: label, Value: value, Entry: e}
+		f.StartsGroup = group != "" && (len(out) == 0 || out[len(out)-1].Group != group)
 		out = append(out, f)
 	}
 	addLoc := func(label string, e *rgd.RgdEntry) {
 		if e == nil || rgd.LocIDIsUnset(e.DisplayValue()) {
 			return
 		}
-		out = append(out, unitField{
-			label:   label,
-			value:   e.DisplayFieldValue(),
-			isLocID: true,
-			locID:   rgdLocIDOrEmpty(e.DisplayValue()),
-			entry:   e,
+		out = append(out, UnitField{
+			Label:   label,
+			Value:   e.DisplayFieldValue(),
+			IsLocID: true,
+			LocID:   RgdLocIDOrEmpty(e.DisplayValue()),
+			Entry:   e,
 		})
 	}
 
 	// The name is first and ungrouped: it is the unit's identity, not one
 	// property among many, and it is the row the object panel also edits.
-	addLoc("Name", rgdFindPath(rf.Root, "ui_ext", "ui_info", "screen_name_id"))
-	hotkey := rgdFindPath(rf.Root, "ui_ext", "ui_hotkey_name")
-	add("Hotkey", rgdEntryStr(hotkey), hotkey)
+	addLoc("Name", RgdFindPath(rf.Root, "ui_ext", "ui_info", "screen_name_id"))
+	hotkey := RgdFindPath(rf.Root, "ui_ext", "ui_hotkey_name")
+	add("Hotkey", RgdEntryStr(hotkey), hotkey)
 
 	for _, s := range unitInfoScalars {
-		e := rgdFindPath(rf.Root, s.path...)
-		addGrouped(s.group, s.label, rgdEntryStr(e), e)
+		e := RgdFindPath(rf.Root, s.Path...)
+		addGrouped(s.Group, s.Label, RgdEntryStr(e), e)
 	}
 	for _, c := range unitInfoCounts {
-		n, ok := unitListCount(rf.Root, c.path, c.filled)
+		n, ok := UnitListCount(rf.Root, c.Path, c.Filled)
 		if !ok || n == 0 {
 			continue
 		}
-		addGrouped(c.group, c.label, itoaCount(n, "entry", "entries"), nil)
+		addGrouped(c.Group, c.Label, ItoaCount(n, "entry", "entries"), nil)
 	}
 	// The weapon and ability counts are stated here as well as being listed in
 	// their own columns, because "this unit has no weapons" is a fact a reader
@@ -316,12 +316,12 @@ func unitInfoFields(rf *rgd.RgdFile) []unitField {
 //
 // The names come from the game's own files, and several of them are not what one
 // would guess: there is no health_ext.max_health (it is health_ext.hitpoints),
-// no moving_ext.speed (it is moving_ext.speed_max) and no ui_ext.name (it is
+// no moving_ext.speed (it is moving_ext.speed_max) and no ui_ext.Name (it is
 // ui_ext.ui_info.screen_name_id). The labels are the readable forms.
 var unitInfoScalars = []struct {
-	group string
-	label string
-	path  []string
+	Group string
+	Label string
+	Path  []string
 }{
 	// ── cost ────────────────────────────────────────────────────────────────
 	{"Cost", "Requisition", []string{"cost_ext", "time_cost", "cost", "requisition"}},
@@ -475,32 +475,32 @@ var unitInfoScalars = []struct {
 // therefore states a rule for what counts as a used entry, and the count is only
 // shown when at least one entry passes it.
 var unitInfoCounts = []struct {
-	group string
-	label string
-	path  []string
+	Group string
+	Label string
+	Path  []string
 	// filled reports whether one entry of the list is really in use. A nil
 	// filled means every child counts.
-	filled func(*rgd.RgdEntry) bool
+	Filled func(*rgd.RgdEntry) bool
 }{
-	{"Lists", "Modifiers", []string{"modifier_apply_ext", "modifiers"}, modifierSlotUsed},
-	{"Lists", "In-combat modifiers", []string{"combat_ext", "in_combat_modifiers"}, modifierSlotUsed},
-	{"Lists", "Melee charge modifiers", []string{"melee_ext", "charge_modifiers"}, refSlotUsed},
-	{"Lists", "Melee modifiers", []string{"melee_ext", "in_melee_modifiers"}, modifierSlotUsed},
-	{"Lists", "Light cover modifiers", []string{"cover_ext", "cover_light", "modifiers"}, modifierSlotUsed},
-	{"Lists", "Heavy cover modifiers", []string{"cover_ext", "cover_heavy", "modifiers"}, modifierSlotUsed},
-	{"Lists", "Requirements", []string{"requirement_ext", "requirements"}, requirementSlotUsed},
-	{"Lists", "Abilities", []string{"ability_ext", "abilities"}, refSlotUsed},
-	{"Lists", "Event modifiers", []string{"event_manager_ext"}, eventSlotUsed},
-	{"Lists", "Death explosions", []string{"death_explosion_ext", "death_explosions"}, deathExplosionUsed},
-	{"Lists", "Sync death motions", []string{"syncdeath_ext", "syncdeathinfos"}, motionSlotUsed},
-	{"Lists", "Special attacks", []string{"special_attack_ext", "special_attacks"}, specialAttackUsed},
+	{"Lists", "Modifiers", []string{"modifier_apply_ext", "modifiers"}, ModifierSlotUsed},
+	{"Lists", "In-combat modifiers", []string{"combat_ext", "in_combat_modifiers"}, ModifierSlotUsed},
+	{"Lists", "Melee charge modifiers", []string{"melee_ext", "charge_modifiers"}, RefSlotUsed},
+	{"Lists", "Melee modifiers", []string{"melee_ext", "in_melee_modifiers"}, ModifierSlotUsed},
+	{"Lists", "Light cover modifiers", []string{"cover_ext", "cover_light", "modifiers"}, ModifierSlotUsed},
+	{"Lists", "Heavy cover modifiers", []string{"cover_ext", "cover_heavy", "modifiers"}, ModifierSlotUsed},
+	{"Lists", "Requirements", []string{"requirement_ext", "requirements"}, RequirementSlotUsed},
+	{"Lists", "Abilities", []string{"ability_ext", "abilities"}, RefSlotUsed},
+	{"Lists", "Event modifiers", []string{"event_manager_ext"}, EventSlotUsed},
+	{"Lists", "Death explosions", []string{"death_explosion_ext", "death_explosions"}, DeathExplosionUsed},
+	{"Lists", "Sync death motions", []string{"syncdeath_ext", "syncdeathinfos"}, MotionSlotUsed},
+	{"Lists", "Special attacks", []string{"special_attack_ext", "special_attacks"}, SpecialAttackUsed},
 }
 
-// unitListCount counts the children of a list that are really in use, and reports
+// UnitListCount counts the children of a list that are really in use, and reports
 // whether the list is there at all. A section the unit does not carry reports
 // false rather than zero, so no row is shown for it.
-func unitListCount(root *rgd.RgdEntry, path []string, used func(*rgd.RgdEntry) bool) (int, bool) {
-	table := rgdFindPath(root, path...)
+func UnitListCount(root *rgd.RgdEntry, path []string, used func(*rgd.RgdEntry) bool) (int, bool) {
+	table := RgdFindPath(root, path...)
 	if table == nil {
 		return 0, false
 	}
@@ -516,7 +516,7 @@ func unitListCount(root *rgd.RgdEntry, path []string, used func(*rgd.RgdEntry) b
 	return n, true
 }
 
-// modifierSlotUsed reports whether a modifier entry says anything.
+// ModifierSlotUsed reports whether a modifier entry says anything.
 //
 // This one took measuring. Every modifier table ships all 45 of its slots
 // populated, and modifier_class_name is tp_modifier.lua in all 45 of every unit
@@ -530,21 +530,21 @@ func unitListCount(root *rgd.RgdEntry, path []string, used func(*rgd.RgdEntry) b
 // Measured on the 432 troops, this leaves 119 units with no modifier at all,
 // 60 with one, 9 with two and 2 with twelve, against a raw child count that
 // would have said "45" for every one of the 190 units that has the table.
-func modifierSlotUsed(e *rgd.RgdEntry) bool {
+func ModifierSlotUsed(e *rgd.RgdEntry) bool {
 	if e == nil {
 		return false
 	}
-	if strings.TrimSpace(rgdEntryStr(rgdFindChild(e, "target_type_name"))) != "" {
+	if strings.TrimSpace(RgdEntryStr(RgdFindChild(e, "target_type_name"))) != "" {
 		return true
 	}
-	usage := rgdEntryStr(rgdFindChild(e, "usage_type"))
+	usage := RgdEntryStr(RgdFindChild(e, "usage_type"))
 	return usage != "" && !strings.Contains(strings.ToLower(usage), "multiplication")
 }
 
-// refSlotUsed reports whether a slot's reference names something. The game's
+// RefSlotUsed reports whether a slot's reference names something. The game's
 // "nothing here" placeholder is modifiers\no_modifier.lua, which is named in the
 // list but is not an entry the unit has.
-func refSlotUsed(e *rgd.RgdEntry) bool {
+func RefSlotUsed(e *rgd.RgdEntry) bool {
 	if e == nil {
 		return false
 	}
@@ -557,10 +557,10 @@ func refSlotUsed(e *rgd.RgdEntry) bool {
 	return !strings.Contains(strings.ToLower(ref), "no_modifier")
 }
 
-// requirementSlotUsed reports whether a requirement entry states anything. The
+// RequirementSlotUsed reports whether a requirement entry states anything. The
 // requirements table ships every one of its slots with is_display_requirement
 // set, so that field alone would make all eleven count on every unit.
-func requirementSlotUsed(e *rgd.RgdEntry) bool {
+func RequirementSlotUsed(e *rgd.RgdEntry) bool {
 	for _, c := range e.Children {
 		if c == nil {
 			continue
@@ -577,7 +577,7 @@ func requirementSlotUsed(e *rgd.RgdEntry) bool {
 	return false
 }
 
-// eventSlotUsed reports whether an event_manager_ext slot names a modifier.
+// EventSlotUsed reports whether an event_manager_ext slot names a modifier.
 //
 // This is the weakest of the counters and is kept because it is true rather
 // than because it is sharp. The section ships 36 slots on every unit, and 22 to
@@ -586,16 +586,16 @@ func requirementSlotUsed(e *rgd.RgdEntry) bool {
 // hooks" and only occasionally distinguishes one unit from another. It is worth
 // a row because a unit with 22 events and one with 29 really are different, and
 // because a mod that strips them shows a different figure again.
-func eventSlotUsed(e *rgd.RgdEntry) bool {
-	name := strings.TrimSpace(rgdEntryStr(rgdFindChild(e, "modifier_name")))
+func EventSlotUsed(e *rgd.RgdEntry) bool {
+	name := strings.TrimSpace(RgdEntryStr(RgdFindChild(e, "modifier_name")))
 	return name != "" && name != "$0"
 }
 
-// deathExplosionUsed reports whether a death explosion entry can happen. The
+// DeathExplosionUsed reports whether a death explosion entry can happen. The
 // chance is the whole of it: an entry whose chance is zero never fires, and the
 // table ships eight of them on a unit that has any at all.
-func deathExplosionUsed(e *rgd.RgdEntry) bool {
-	chance := strings.TrimSpace(rgdEntryStr(rgdFindChild(e, "chance")))
+func DeathExplosionUsed(e *rgd.RgdEntry) bool {
+	chance := strings.TrimSpace(RgdEntryStr(RgdFindChild(e, "chance")))
 	switch chance {
 	case "", "0", "0.0":
 		return false
@@ -603,24 +603,24 @@ func deathExplosionUsed(e *rgd.RgdEntry) bool {
 	return true
 }
 
-// motionSlotUsed reports whether a syncdeath slot names a death motion. The table
+// MotionSlotUsed reports whether a syncdeath slot names a death motion. The table
 // ships 18 slots and only a handful carry a motion.
-func motionSlotUsed(e *rgd.RgdEntry) bool {
-	return strings.TrimSpace(rgdEntryStr(rgdFindChild(e, "dead_motion_name"))) != ""
+func MotionSlotUsed(e *rgd.RgdEntry) bool {
+	return strings.TrimSpace(RgdEntryStr(RgdFindChild(e, "dead_motion_name"))) != ""
 }
 
-// specialAttackUsed reports whether a special attack is really declared. A slot
+// SpecialAttackUsed reports whether a special attack is really declared. A slot
 // with no motion and no chance is an empty template, and there are eight of them
 // on a unit that declares six.
-func specialAttackUsed(e *rgd.RgdEntry) bool {
-	if strings.TrimSpace(rgdEntryStr(rgdFindChild(e, "motion_name"))) != "" {
+func SpecialAttackUsed(e *rgd.RgdEntry) bool {
+	if strings.TrimSpace(RgdEntryStr(RgdFindChild(e, "motion_name"))) != "" {
 		return true
 	}
-	chance := strings.TrimSpace(rgdEntryStr(rgdFindChild(e, "chance")))
+	chance := strings.TrimSpace(RgdEntryStr(RgdFindChild(e, "chance")))
 	return chance != "" && chance != "0"
 }
 
-// unitHardpointWeapons reads the weapons a unit carries. Weapons are not a flat
+// UnitHardpointWeapons reads the weapons a unit carries. Weapons are not a flat
 // list on the unit: combat_ext\hardpoints holds up to sixteen hardpoints, each
 // with its own weapon_table of variant slots. Hardpoints whose slots are all
 // empty are left out, so the list holds the weapons that are really there —
@@ -628,71 +628,71 @@ func specialAttackUsed(e *rgd.RgdEntry) bool {
 //
 // Slots that name the game's "no weapon" placeholder are dropped too, since
 // naming the placeholder is not information about the unit.
-func unitHardpointWeapons(tree *modtree.ModTree, rf *rgd.RgdFile) []unitWeapon {
-	hp := rgdFindPath(rf.Root, "combat_ext", "hardpoints")
+func UnitHardpointWeapons(tree *modtree.ModTree, rf *rgd.RgdFile) []UnitWeapon {
+	hp := RgdFindPath(rf.Root, "combat_ext", "hardpoints")
 	if hp == nil {
 		return nil
 	}
-	var out []unitWeapon
+	var out []UnitWeapon
 	for _, h := range hp.Children {
 		if h == nil {
 			continue
 		}
-		table := rgdFindChild(h, "weapon_table")
+		table := RgdFindChild(h, "weapon_table")
 		if table == nil {
 			continue
 		}
-		var slots []weaponSlot
+		var slots []WeaponSlot
 		for _, w := range table.Children {
 			if w == nil {
 				continue
 			}
 			ref := w.RefString()
-			if isEmptyWeaponRef(ref) {
+			if IsEmptyWeaponRef(ref) {
 				continue
 			}
-			slots = append(slots, weaponSlot{
-				slot:   w.Name,
-				ref:    ref,
-				name:   weaponNameFromRef(ref),
-				path:   resolveRgdRef(tree, ref),
-				fields: weaponFields(w),
+			slots = append(slots, WeaponSlot{
+				Slot:   w.Name,
+				Ref:    ref,
+				Name:   WeaponNameFromRef(ref),
+				Path:   ResolveRgdRef(tree, ref),
+				Fields: WeaponFields(w),
 			})
 		}
 		if len(slots) == 0 {
 			continue
 		}
-		out = append(out, unitWeapon{hardpoint: h.Name, weapons: slots})
+		out = append(out, UnitWeapon{Hardpoint: h.Name, Weapons: slots})
 	}
 	// The weapon's own file is where its details are: the unit's hardpoint
-	// only says which weapon is carried and how it is mounted. Each resolved
+	// only says which weapon is carried and how it is mounted. Each Resolved
 	// slot is read here, once per unit load, and a file that will not read is
 	// reported on the slot rather than failing the whole unit.
 	if tree != nil {
 		for hi := range out {
-			for si := range out[hi].weapons {
-				s := &out[hi].weapons[si]
-				if s.path == "" {
+			for si := range out[hi].Weapons {
+				s := &out[hi].Weapons[si]
+				if s.Path == "" {
 					continue
 				}
-				data, err := tree.ReadFile(s.path)
+				data, err := tree.ReadFile(s.Path)
 				if err != nil {
-					s.rgdError = err.Error()
+					s.RgdError = err.Error()
 					continue
 				}
 				wrf, err := rgd.ParseRgd(data)
 				if err != nil {
-					s.rgdError = err.Error()
+					s.RgdError = err.Error()
 					continue
 				}
-				s.rgdFields = weaponRgdFields(wrf)
+				s.RgdFields = WeaponRgdFields(wrf)
 			}
 		}
 	}
 	return out
 }
 
-// weaponRgdFields reads a weapon's own .rgd into rows: every scalar in the
+// WeaponRgdFields reads a weapon's own .rgd into rows: every scalar in the
 // file, grouped by the top-level section it sits in. A weapon file is a stack
 // of sections — damage_ext, range_ext, accuracy_ext and the like — and the
 // properties column reads as sections rather than as one undifferentiated
@@ -701,11 +701,11 @@ func unitHardpointWeapons(tree *modtree.ModTree, rf *rgd.RgdFile) []unitWeapon {
 // Localised strings are shown as the text they resolve to rather than as ids:
 // the rows belong to a file that is not the one the object editor writes, so
 // they are shown, not offered for editing.
-func weaponRgdFields(rf *rgd.RgdFile) []unitField {
+func WeaponRgdFields(rf *rgd.RgdFile) []UnitField {
 	if rf == nil || rf.Root == nil {
 		return nil
 	}
-	var out []unitField
+	var out []UnitField
 	add := func(group, label string, e *rgd.RgdEntry) {
 		if e == nil || e.IsTable() {
 			return
@@ -720,8 +720,8 @@ func weaponRgdFields(rf *rgd.RgdFile) []unitField {
 		if strings.TrimSpace(value) == "" {
 			return
 		}
-		f := unitField{label: label, value: value, group: group, entry: e}
-		f.startsGroup = group != "" && (len(out) == 0 || out[len(out)-1].group != group)
+		f := UnitField{Label: label, Value: value, Group: group, Entry: e}
+		f.StartsGroup = group != "" && (len(out) == 0 || out[len(out)-1].Group != group)
 		out = append(out, f)
 	}
 	var walk func(group, prefix string, e *rgd.RgdEntry)
@@ -758,8 +758,8 @@ func weaponRgdFields(rf *rgd.RgdFile) []unitField {
 // An empty reference is the same thing without a name.
 var emptyWeaponRefs = []string{"no_weapon", "weapon_no", "no_weapon_", "default_no_weapon"}
 
-// isEmptyWeaponRef reports whether a weapon slot reference means "no weapon".
-func isEmptyWeaponRef(ref string) bool {
+// IsEmptyWeaponRef reports whether a weapon slot reference means "no weapon".
+func IsEmptyWeaponRef(ref string) bool {
 	r := strings.ToLower(strings.TrimSpace(ref))
 	if r == "" {
 		return true
@@ -772,8 +772,8 @@ func isEmptyWeaponRef(ref string) bool {
 	return false
 }
 
-// weaponNameFromRef is the weapon's file name, which is how the game names it.
-func weaponNameFromRef(ref string) string {
+// WeaponNameFromRef is the weapon's file name, which is how the game names it.
+func WeaponNameFromRef(ref string) string {
 	base := ref
 	if i := strings.LastIndexAny(base, "\\/"); i >= 0 {
 		base = base[i+1:]
@@ -781,11 +781,11 @@ func weaponNameFromRef(ref string) string {
 	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
-// weaponFields lists a weapon's scalar settings. Only scalars are taken: a
+// WeaponFields lists a weapon's scalar settings. Only scalars are taken: a
 // nested table needs a column of its own, and these are the values one line can
 // state.
-func weaponFields(w *rgd.RgdEntry) []unitField {
-	var out []unitField
+func WeaponFields(w *rgd.RgdEntry) []UnitField {
+	var out []UnitField
 	for _, f := range w.Children {
 		if f == nil || f.IsTable() {
 			continue
@@ -794,21 +794,21 @@ func weaponFields(w *rgd.RgdEntry) []unitField {
 		if strings.TrimSpace(v) == "" {
 			continue
 		}
-		field := unitField{label: f.Name, value: v, isLocID: f.Type == rgd.RgdTypeWString, entry: f}
-		if field.isLocID {
-			field.locID = rgdLocIDOrEmpty(v)
+		field := UnitField{Label: f.Name, Value: v, IsLocID: f.Type == rgd.RgdTypeWString, Entry: f}
+		if field.IsLocID {
+			field.LocID = RgdLocIDOrEmpty(v)
 		}
 		out = append(out, field)
 	}
 	return out
 }
 
-// rgdFindPath walks a chain of child names, returning nil if any step is
+// RgdFindPath walks a chain of child names, returning nil if any step is
 // missing, so a field the file does not have is skipped instead of panicking.
-func rgdFindPath(e *rgd.RgdEntry, path ...string) *rgd.RgdEntry {
+func RgdFindPath(e *rgd.RgdEntry, path ...string) *rgd.RgdEntry {
 	cur := e
 	for _, seg := range path {
-		cur = rgdFindChild(cur, seg)
+		cur = RgdFindChild(cur, seg)
 		if cur == nil {
 			return nil
 		}
@@ -816,16 +816,16 @@ func rgdFindPath(e *rgd.RgdEntry, path ...string) *rgd.RgdEntry {
 	return cur
 }
 
-// rgdEntryStr is a nil-safe accessor for an entry's display value.
-func rgdEntryStr(e *rgd.RgdEntry) string {
+// RgdEntryStr is a nil-safe accessor for an entry's display value.
+func RgdEntryStr(e *rgd.RgdEntry) string {
 	if e == nil {
 		return ""
 	}
 	return e.DisplayValue()
 }
 
-// formatUnitFloat renders a float the way the game writes it: no trailing zeros,
+// FormatUnitFloat renders a float the way the game writes it: no trailing zeros,
 // so 3100 stays "3100" rather than becoming "3100.0000".
-func formatUnitFloat(f float32) string {
+func FormatUnitFloat(f float32) string {
 	return strconv.FormatFloat(float64(f), 'f', -1, 32)
 }

@@ -1,4 +1,4 @@
-package main
+package unitdef
 
 import (
 	"dow-mod-studio/internal/modtree"
@@ -13,7 +13,7 @@ import (
 // The Object dialog browses the active mod's merged units rather than the
 // currently open file. This includes units inherited from required mods and
 // overridden by the active mod. Every unit of every race lives at a fixed place
-// in the tree:
+// in the Tree:
 //
 //	Data\attrib\ebps\races\<race>\troops\*.rgd
 //	Data\attrib\ebps\races\<race>\structures\*.rgd
@@ -22,89 +22,89 @@ import (
 // representations, so only the .rgd is listed: it is the one carrying the
 // stats, the weapon table and the ability references.
 
-// unitKind separates the two folders a unit can come from, so the dialog can
+// UnitKind separates the two folders a unit can come from, so the dialog can
 // label it and the "Unit info" column can say which kind it is showing.
-type unitKind struct {
-	folder string // subfolder under the race, as it appears in the tree
-	label  string // shown in the dialog
+type UnitKind struct {
+	Folder string // subfolder under the race, as it appears in the tree
+	Label  string // shown in the dialog
 }
 
 var (
-	unitKindTroop     = unitKind{folder: "troops", label: "Troop"}
-	unitKindStructure = unitKind{folder: "structures", label: "Structure"}
+	UnitKindTroop     = UnitKind{Folder: "troops", Label: "Troop"}
+	UnitKindStructure = UnitKind{Folder: "structures", Label: "Structure"}
 )
 
-// unitEntry is one browsable unit.
-type unitEntry struct {
+// UnitEntry is one browsable unit.
+type UnitEntry struct {
 	// path is the virtual tree path of the .rgd, e.g.
 	// "Data\attrib\ebps\races\necrons\troops\necron_lord.rgd".
-	path string
+	Path string
 	// name is the file name without its extension.
-	name string
+	Name string
 	// race is the folder name under "races", e.g. "necrons".
-	race string
-	kind unitKind
+	Race string
+	Kind UnitKind
 }
 
-// displayName is what the dialog lists. The file name is the only thing known
+// DisplayName is what the dialog lists. The file name is the only thing known
 // before the file is parsed, and it is what the game itself uses for hotkeys,
 // so it is the label the list shows.
-func (u unitEntry) displayName() string { return u.name }
+func (u UnitEntry) DisplayName() string { return u.Name }
 
-// raceEntry is one race and the units found under it.
-type raceEntry struct {
-	name       string
-	troops     []unitEntry
-	structures []unitEntry
+// RaceEntry is one race and the units found under it.
+type RaceEntry struct {
+	Name       string
+	Troops     []UnitEntry
+	Structures []UnitEntry
 }
 
-// unitCatalog is the whole browsable set, built once per mod.
-type unitCatalog struct {
-	races []raceEntry
+// UnitCatalog is the whole browsable set, built once per mod.
+type UnitCatalog struct {
+	Races []RaceEntry
 	// byPath indexes every unit for lookup by its tree path.
-	byPath map[string]unitEntry
+	ByPath map[string]UnitEntry
 }
 
-// allUnits returns every unit of the catalog, races in name order and within a
+// AllUnits returns every unit of the catalog, races in name order and within a
 // race troops before structures, so the order is stable between builds.
-func (c *unitCatalog) allUnits() []unitEntry {
+func (c *UnitCatalog) AllUnits() []UnitEntry {
 	if c == nil {
 		return nil
 	}
-	var out []unitEntry
-	for _, r := range c.races {
-		out = append(out, r.troops...)
-		out = append(out, r.structures...)
+	var out []UnitEntry
+	for _, r := range c.Races {
+		out = append(out, r.Troops...)
+		out = append(out, r.Structures...)
 	}
 	return out
 }
 
-// findRace returns the race with the given name.
-func (c *unitCatalog) findRace(name string) *raceEntry {
+// FindRace returns the race with the given name.
+func (c *UnitCatalog) FindRace(name string) *RaceEntry {
 	if c == nil {
 		return nil
 	}
-	for i := range c.races {
-		if strings.EqualFold(c.races[i].name, name) {
-			return &c.races[i]
+	for i := range c.Races {
+		if strings.EqualFold(c.Races[i].Name, name) {
+			return &c.Races[i]
 		}
 	}
 	return nil
 }
 
-// unitCount is how many units the race has in total, used to label the race
+// UnitCount is how many units the race has in total, used to label the race
 // picker.
-func (r *raceEntry) unitCount() int { return len(r.troops) + len(r.structures) }
+func (r *RaceEntry) UnitCount() int { return len(r.Troops) + len(r.Structures) }
 
 // racesFolder is the fixed location every race lives under, relative to the
 // tree's "Data" root: Data\attrib\ebps\races\<race>\...
 const racesFolder = "attrib\\ebps\\races"
 
-// buildUnitCatalog walks the races folder and collects every .rgd unit. A race
+// BuildUnitCatalog walks the races folder and collects every .rgd unit. A race
 // folder that fails to read is skipped rather than failing the whole catalog,
 // so one unreadable mod cannot leave the dialog empty.
-func buildUnitCatalog(tree *modtree.ModTree) *unitCatalog {
-	cat := &unitCatalog{byPath: make(map[string]unitEntry)}
+func BuildUnitCatalog(tree *modtree.ModTree) *UnitCatalog {
+	cat := &UnitCatalog{ByPath: make(map[string]UnitEntry)}
 	if tree == nil || tree.Root == nil {
 		return cat
 	}
@@ -116,41 +116,41 @@ func buildUnitCatalog(tree *modtree.ModTree) *unitCatalog {
 		if rf == nil {
 			continue
 		}
-		entry := raceEntry{name: rf.Name}
-		for _, kind := range []unitKind{unitKindTroop, unitKindStructure} {
-			sub := modtree.FindFolderByLower(rf, kind.folder)
+		entry := RaceEntry{Name: rf.Name}
+		for _, kind := range []UnitKind{UnitKindTroop, UnitKindStructure} {
+			sub := modtree.FindFolderByLower(rf, kind.Folder)
 			if sub == nil {
 				continue
 			}
-			units := collectUnitRgds(sub, rf.Name, kind)
-			if kind.folder == unitKindTroop.folder {
-				entry.troops = units
+			units := CollectUnitRgds(sub, rf.Name, kind)
+			if kind.Folder == UnitKindTroop.Folder {
+				entry.Troops = units
 			} else {
-				entry.structures = units
+				entry.Structures = units
 			}
 		}
-		if entry.unitCount() == 0 {
+		if entry.UnitCount() == 0 {
 			continue
 		}
-		cat.races = append(cat.races, entry)
+		cat.Races = append(cat.Races, entry)
 	}
-	sort.Slice(cat.races, func(i, j int) bool {
-		return cat.races[i].name < cat.races[j].name
+	sort.Slice(cat.Races, func(i, j int) bool {
+		return cat.Races[i].Name < cat.Races[j].Name
 	})
-	for _, r := range cat.races {
-		for _, u := range append(append([]unitEntry{}, r.troops...), r.structures...) {
-			cat.byPath[strings.ToLower(u.path)] = u
+	for _, r := range cat.Races {
+		for _, u := range append(append([]UnitEntry{}, r.Troops...), r.Structures...) {
+			cat.ByPath[strings.ToLower(u.Path)] = u
 		}
 	}
 	return cat
 }
 
-// collectUnitRgds lists every visible .rgd unit in one merged folder, sorted
+// CollectUnitRgds lists every visible .rgd unit in one merged folder, sorted
 // by name. A mod commonly inherits its units from DXP3/W40k and overrides only
 // selected files, so filtering to KindThisMod leaves the Object tab empty for
 // those mods even though the merged tree contains the units they edit.
-func collectUnitRgds(folder *modtree.TreeFolder, race string, kind unitKind) []unitEntry {
-	var out []unitEntry
+func CollectUnitRgds(folder *modtree.TreeFolder, race string, kind UnitKind) []UnitEntry {
+	var out []UnitEntry
 	for _, f := range folder.Files {
 		if f == nil || !strings.EqualFold(filepath.Ext(f.Name), ".rgd") {
 			continue
@@ -159,9 +159,9 @@ func collectUnitRgds(folder *modtree.TreeFolder, race string, kind unitKind) []u
 		if name == "" {
 			continue
 		}
-		out = append(out, unitEntry{path: f.FullPath, name: name, race: race, kind: kind})
+		out = append(out, UnitEntry{Path: f.FullPath, Name: name, Race: race, Kind: kind})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
@@ -178,25 +178,25 @@ func collectUnitRgds(folder *modtree.TreeFolder, race string, kind unitKind) []u
 // Data\attrib\abilities\<name>.rgd. Measured on necron_lord.rgd, all ten slots
 // resolve that way.
 
-// abilityRef is one resolved ability slot of a unit.
-type abilityRef struct {
+// AbilityRef is one Resolved ability slot of a unit.
+type AbilityRef struct {
 	// slot is the field name, e.g. "ability_02".
-	slot string
+	Slot string
 	// ref is the path exactly as written in the rgd, e.g.
 	// "abilities\necron_chronometron.lua".
-	ref string
+	Ref string
 	// path is the .rgd that ref points at on disk, or "" when it does not
 	// resolve.
-	path string
+	Path string
 }
 
-// resolved reports whether the reference found a file.
-func (a abilityRef) resolved() bool { return a.path != "" }
+// Resolved reports whether the reference found a file.
+func (a AbilityRef) Resolved() bool { return a.Path != "" }
 
 // name is the ability's file name without extension, which is the game's own
 // name for it.
-func (a abilityRef) name() string {
-	base := a.ref
+func (a AbilityRef) Name() string {
+	base := a.Ref
 	if i := strings.LastIndexAny(base, "\\/"); i >= 0 {
 		base = base[i+1:]
 	}
@@ -210,19 +210,19 @@ var abilitySlots = []string{
 	"ability_06", "ability_07", "ability_08", "ability_09", "ability_10",
 }
 
-// unitAbilities reads ability_ext\abilities out of a parsed unit and resolves
+// UnitAbilities reads ability_ext\abilities out of a parsed unit and resolves
 // every slot against the tree. Slots whose value is empty are kept, because
 // their emptiness is information: 115 of the race unit .rgds ship an empty
 // ability_01, and the trailing slots are usually empty too.
-func unitAbilities(tree *modtree.ModTree, rf *rgd.RgdFile) []abilityRef {
+func UnitAbilities(tree *modtree.ModTree, rf *rgd.RgdFile) []AbilityRef {
 	if tree == nil || rf == nil || rf.Root == nil {
 		return nil
 	}
-	ext := rgdFindChild(rf.Root, "ability_ext")
+	ext := RgdFindChild(rf.Root, "ability_ext")
 	if ext == nil {
 		return nil
 	}
-	table := rgdFindChild(ext, "abilities")
+	table := RgdFindChild(ext, "abilities")
 	if table == nil {
 		return nil
 	}
@@ -230,7 +230,7 @@ func unitAbilities(tree *modtree.ModTree, rf *rgd.RgdFile) []abilityRef {
 	for _, c := range table.Children {
 		byName[strings.ToLower(c.Name)] = c
 	}
-	var out []abilityRef
+	var out []AbilityRef
 	for _, slot := range abilitySlots {
 		e := byName[strings.ToLower(slot)]
 		if e == nil {
@@ -238,15 +238,15 @@ func unitAbilities(tree *modtree.ModTree, rf *rgd.RgdFile) []abilityRef {
 		}
 		ref := e.DisplayValue()
 		if strings.TrimSpace(ref) == "" {
-			out = append(out, abilityRef{slot: slot})
+			out = append(out, AbilityRef{Slot: slot})
 			continue
 		}
-		out = append(out, abilityRef{slot: slot, ref: ref, path: resolveRgdRef(tree, ref)})
+		out = append(out, AbilityRef{Slot: slot, Ref: ref, Path: ResolveRgdRef(tree, ref)})
 	}
 	return out
 }
 
-// resolveRgdRef turns a reference written inside a .rgd into a tree path.
+// ResolveRgdRef turns a reference written inside a .rgd into a tree path.
 //
 // A reference is relative to Data\attrib, uses backslashes, and normally names
 // a .lua — the game converts the .rgd in memory and refers to the result by
@@ -254,7 +254,7 @@ func unitAbilities(tree *modtree.ModTree, rf *rgd.RgdFile) []abilityRef {
 // form is tried as well as the literal one. Both Data\attrib and Data\attrib\ebps
 // are tried as bases, because references are written both ways in the game's
 // own data.
-func resolveRgdRef(tree *modtree.ModTree, ref string) string {
+func ResolveRgdRef(tree *modtree.ModTree, ref string) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return ""
@@ -289,8 +289,8 @@ func resolveRgdRef(tree *modtree.ModTree, ref string) string {
 	return ""
 }
 
-// rgdFindChild looks a child up by name, case-insensitively.
-func rgdFindChild(e *rgd.RgdEntry, name string) *rgd.RgdEntry {
+// RgdFindChild looks a child up by name, case-insensitively.
+func RgdFindChild(e *rgd.RgdEntry, name string) *rgd.RgdEntry {
 	if e == nil {
 		return nil
 	}
@@ -304,34 +304,34 @@ func rgdFindChild(e *rgd.RgdEntry, name string) *rgd.RgdEntry {
 
 // ── selection helpers ───────────────────────────────────────────────────────
 
-// unitsOf returns the race's units as one list, troops before structures, which
+// UnitsOf returns the race's units as one list, troops before structures, which
 // is the order the unit picker lists them in.
-func (r *raceEntry) unitsOf() []unitEntry {
+func (r *RaceEntry) UnitsOf() []UnitEntry {
 	if r == nil {
 		return nil
 	}
-	out := make([]unitEntry, 0, r.unitCount())
-	out = append(out, r.troops...)
-	out = append(out, r.structures...)
+	out := make([]UnitEntry, 0, r.UnitCount())
+	out = append(out, r.Troops...)
+	out = append(out, r.Structures...)
 	return out
 }
 
-// clampRaceSel keeps the race index inside the catalog. An empty catalog, or an
+// ClampRaceSel keeps the race index inside the catalog. An empty catalog, or an
 // index left over from a different mod, yields 0 rather than a panic, and the
 // caller checks for a nil race.
-func (c *unitCatalog) clampRaceSel(i int) int {
-	if c == nil || len(c.races) == 0 {
+func (c *UnitCatalog) ClampRaceSel(i int) int {
+	if c == nil || len(c.Races) == 0 {
 		return 0
 	}
-	if i < 0 || i >= len(c.races) {
+	if i < 0 || i >= len(c.Races) {
 		return 0
 	}
 	return i
 }
 
-// clampUnitSel keeps the unit index inside a race's unit list.
-func (r *raceEntry) clampUnitSel(i int) int {
-	n := r.unitCount()
+// ClampUnitSel keeps the unit index inside a race's unit list.
+func (r *RaceEntry) ClampUnitSel(i int) int {
+	n := r.UnitCount()
 	if n == 0 {
 		return 0
 	}
@@ -341,23 +341,23 @@ func (r *raceEntry) clampUnitSel(i int) int {
 	return i
 }
 
-// selectedRace is the race the dialog is showing, or nil when the catalog is
+// SelectedRace is the race the dialog is showing, or nil when the catalog is
 // empty.
-func (c *unitCatalog) selectedRace(i int) *raceEntry {
-	if c == nil || len(c.races) == 0 {
+func (c *UnitCatalog) SelectedRace(i int) *RaceEntry {
+	if c == nil || len(c.Races) == 0 {
 		return nil
 	}
-	return &c.races[c.clampRaceSel(i)]
+	return &c.Races[c.ClampRaceSel(i)]
 }
 
-// selectedUnit is the unit the dialog is showing, or nil when there is none.
-func (c *unitCatalog) selectedUnit(raceIdx, unitIdx int) *unitEntry {
-	r := c.selectedRace(raceIdx)
+// SelectedUnit is the unit the dialog is showing, or nil when there is none.
+func (c *UnitCatalog) SelectedUnit(raceIdx, unitIdx int) *UnitEntry {
+	r := c.SelectedRace(raceIdx)
 	if r == nil {
 		return nil
 	}
-	units := r.unitsOf()
-	i := r.clampUnitSel(unitIdx)
+	units := r.UnitsOf()
+	i := r.ClampUnitSel(unitIdx)
 	if i >= len(units) {
 		return nil
 	}

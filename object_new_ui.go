@@ -57,7 +57,7 @@ func (ui *uiState) newObjFolderLabel() string {
 	if race == nil {
 		return ""
 	}
-	return ui.newObjKind.newObjPath(race.name, "name")
+	return ui.newObjKind.newObjPath(race.Name, "name")
 }
 
 // layoutNewObjDialog draws the dialog as an overlay over the whole window: a
@@ -209,7 +209,7 @@ func (ui *uiState) handleNewObjDialogInput(gtx layout.Context) {
 		ui.newObjStatus = "No race is selected, so there is nowhere to write the " + ui.newObjKind.newObjNoun()
 		return
 	}
-	virtual, err := ui.createNewObject(ui.newObjKind, race.name, ui.newObjNameEditor.Text())
+	virtual, err := ui.createNewObject(ui.newObjKind, race.Name, ui.newObjNameEditor.Text())
 	if err != nil {
 		// A refused name is said in the dialog and the dialog stays up, so the
 		// name can be corrected instead of retyped.

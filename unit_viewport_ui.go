@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"log"
-	"math"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -110,8 +109,8 @@ func (ui *uiState) layoutUnitModelCanvas(gtx layout.Context) layout.Dimensions {
 // unitEmptyStateText is what the viewport says when the mod has no unit to show
 // a model of.
 func (ui *uiState) unitEmptyStateText() string {
-	if d := ui.currentUnitDetails(); d != nil && d.error != "" {
-		return "Could not read this unit:\n" + d.error
+	if d := ui.currentUnitDetails(); d != nil && d.Error != "" {
+		return "Could not read this unit:\n" + d.Error
 	}
 	return "No unit selected."
 }
@@ -1665,7 +1664,7 @@ func (ui *uiState) parseBoneGroup(mode int) ([3]float64, error) {
 		if mode == 1 {
 			spec = boneRotationField
 		}
-		f, _, err := spec.parse(eds[i].Text())
+		f, _, err := spec.Parse(eds[i].Text())
 		if err != nil {
 			return val, fmt.Errorf("%s %s: %v", kind, boneFieldAxes[i], err)
 		}
@@ -2211,20 +2210,6 @@ func (ui *uiState) addBoneKeysAround(v *modelViewer, dir int) {
 	msg := fmt.Sprintf("Added %d key(s) %s the picked rows", len(added), side)
 	ui.statusText = msg
 	LogInfo("bone: %s (dirty=%v)", msg, ui.unitModelWhmDirty)
-}
-
-// boneAngleDeg maps any angle onto the rotation fields' range of 1..360
-// degrees. A negative angle or one past a full turn is the same turn wrapped
-// into that range, and zero reads as 360, the full turn.
-func boneAngleDeg(d float64) float64 {
-	d = math.Mod(d, 360)
-	if d < 0 {
-		d += 360
-	}
-	if d <= 0 {
-		return 360
-	}
-	return d
 }
 
 // boneAngleDegs applies boneAngleDeg to the three axes of a rotation.

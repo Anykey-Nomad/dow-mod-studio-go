@@ -1,4 +1,4 @@
-package main
+package unitdef
 
 import (
 	"fmt"
@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// fieldKind says what a text field accepts.
-type fieldKind int
+// FieldKind says what a text field accepts.
+type FieldKind int
 
 const (
 	// fieldNumber is any decimal number within its limits.
-	fieldNumber fieldKind = iota
+	fieldNumber FieldKind = iota
 	// fieldInteger is a whole number within its limits.
 	fieldInteger
 	// fieldPositive is a number greater than zero.
@@ -23,12 +23,12 @@ const (
 	fieldChoice
 )
 
-// fieldSpec is the rule a field's text is read by. Bounded limits apply only
+// FieldSpec is the rule a field's text is read by. Bounded limits apply only
 // when Bounded is set. A Wrap function, when set, maps a number onto the
 // field's range instead of rejecting it — the way an angle is kept within a
 // turn.
-type fieldSpec struct {
-	Kind    fieldKind
+type FieldSpec struct {
+	Kind    FieldKind
 	Bounded bool
 	Min     float64
 	Max     float64
@@ -39,7 +39,7 @@ type fieldSpec struct {
 // parse reads a field's text by its rule. A number comes back as a value
 // within the limits, or wrapped into them, and text and choices come back
 // trimmed; anything else is an error naming what the field takes.
-func (s fieldSpec) parse(text string) (float64, string, error) {
+func (s FieldSpec) Parse(text string) (float64, string, error) {
 	text = strings.TrimSpace(text)
 	switch s.Kind {
 	case fieldText:
@@ -79,6 +79,6 @@ func (s fieldSpec) parse(text string) (float64, string, error) {
 // any number, and rotations are degrees kept within 1..360 by wrapping, so a
 // negative angle is the same turn written positively.
 var (
-	bonePositionField = fieldSpec{Kind: fieldNumber}
-	boneRotationField = fieldSpec{Kind: fieldNumber, Wrap: boneAngleDeg}
+	BonePositionField = FieldSpec{Kind: fieldNumber}
+	BoneRotationField = FieldSpec{Kind: fieldNumber, Wrap: BoneAngleDeg}
 )

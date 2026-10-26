@@ -36,9 +36,9 @@ func (k newObjKind) newObjNoun() string {
 // newObjPath is where an object of this kind and name would be written.
 func (k newObjKind) newObjPath(race, name string) string {
 	if k == newObjBuilding {
-		return structureTemplateName{Race: race, Name: name}.structureTemplateVirtualPath()
+		return structureTemplateName{Race: race, Name: name}.StructureTemplateVirtualPath()
 	}
-	return unitTemplateName{Race: race, Name: name}.unitTemplateVirtualPath()
+	return unitTemplateName{Race: race, Name: name}.UnitTemplateVirtualPath()
 }
 
 // newObjTemplateNameError is why a name cannot become an object file, said in
@@ -117,8 +117,8 @@ func (ui *uiState) selectNewObject(race, virtual string) {
 	if cat == nil {
 		return
 	}
-	for ri, r := range cat.races {
-		if !strings.EqualFold(r.name, race) {
+	for ri, r := range cat.Races {
+		if !strings.EqualFold(r.Name, race) {
 			continue
 		}
 		ui.unitRaceSel = ri
@@ -126,8 +126,8 @@ func (ui *uiState) selectNewObject(race, virtual string) {
 		// unitsOf is the list's own order: the race's troops, then its
 		// structures. A new building is picked out of the second half, and a
 		// new unit out of the first, without either case being written twice.
-		for i, e := range r.unitsOf() {
-			if strings.EqualFold(e.path, virtual) {
+		for i, e := range r.UnitsOf() {
+			if strings.EqualFold(e.Path, virtual) {
 				ui.unitSel = i
 				return
 			}

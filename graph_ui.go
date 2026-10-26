@@ -102,7 +102,7 @@ func (ui *uiState) layoutUnitLinksList(gtx layout.Context) layout.Dimensions {
 	if g == nil {
 		return ui.unitSectionFrame(gtx, ui.unitEmptyState)
 	}
-	outgoing, incoming := groupLinkRows(linkRows(g, sel.path))
+	outgoing, incoming := groupLinkRows(linkRows(g, sel.Path))
 	if len(outgoing) == 0 && len(incoming) == 0 {
 		return ui.unitSectionFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Top: unit.Dp(12), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {

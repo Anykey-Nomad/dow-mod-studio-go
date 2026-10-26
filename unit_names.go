@@ -54,9 +54,9 @@ func (ui *uiState) startUnitNameScan(tree *modtree.ModTree, cat *unitCatalog) {
 	// The paths are copied so the goroutine does not walk a catalog the UI
 	// thread is free to replace.
 	paths := make([]string, 0, 64)
-	for _, r := range cat.races {
-		for _, u := range append(append([]unitEntry{}, r.troops...), r.structures...) {
-			paths = append(paths, u.path)
+	for _, r := range cat.Races {
+		for _, u := range append(append([]unitEntry{}, r.Troops...), r.Structures...) {
+			paths = append(paths, u.Path)
 		}
 	}
 	ch := ui.unitNamesCh
@@ -167,10 +167,10 @@ func unitScreenNameIDOf(rf *rgd.RgdFile) (string, bool) {
 // it. The id is only a cache key here; the text is read on the UI thread, so a
 // language change needs no rescan.
 func (ui *uiState) unitLocalisedName(u unitEntry) string {
-	if len(ui.unitNames) == 0 || u.path == "" {
+	if len(ui.unitNames) == 0 || u.Path == "" {
 		return ""
 	}
-	id, ok := ui.unitNames[strings.ToLower(u.path)]
+	id, ok := ui.unitNames[strings.ToLower(u.Path)]
 	if !ok {
 		return ""
 	}
@@ -185,7 +185,7 @@ func (ui *uiState) unitLabel(u unitEntry) string {
 	if text := ui.unitLocalisedName(u); text != "" {
 		return text
 	}
-	return u.name
+	return u.Name
 }
 
 // unitFileLabel is the row's file name, shown dimmed beside the display name.
@@ -197,7 +197,7 @@ func unitFileLabel(u unitEntry) string {
 	// app runs on. filepath.Base only knows the separator of the host OS, so
 	// on Linux it returned the whole path — the row then showed
 	// "Data\attrib\ebps\…" instead of the file name.
-	name := u.path
+	name := u.Path
 	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
 		name = name[i+1:]
 	}
