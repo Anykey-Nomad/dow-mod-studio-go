@@ -400,7 +400,7 @@ func (ui *uiState) layoutAssocRows(gtx layout.Context) layout.Dimensions {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Label(ui.th, unit.Sp(11), t.ext+" — "+t.label)
+					l := material.Label(ui.th, unit.Sp(11), t.Ext+" — "+t.Label)
 					l.Color = cText
 					l.MaxLines = 1
 					return l.Layout(gtx)

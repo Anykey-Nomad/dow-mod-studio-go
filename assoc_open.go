@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"dow-mod-studio/internal/assoc"
 	"dow-mod-studio/internal/sga"
 
 	"gioui.org/layout"
@@ -34,7 +35,7 @@ func findFirstAssocArg() string {
 		if trim == "" {
 			continue
 		}
-		if _, ok := assocTypeFor(pickExt(trim)); ok && !strings.EqualFold(pickExt(trim), moduleAssoc.ext) {
+		if _, ok := assocTypeFor(pickExt(trim)); ok && !strings.EqualFold(pickExt(trim), moduleAssoc.Ext) {
 			return trim
 		}
 	}
@@ -246,3 +247,86 @@ func (ui *uiState) layoutSgaListing(gtx layout.Context, t *fileTab) layout.Dimen
 		})
 	})
 }
+
+// refreshAssocStates re-reads which formats the studio is associated with, so
+// the Settings buttons can say what a click would do. A query that fails is
+// shown as "not associated": the button then offers the safe action.
+func (ui *uiState) refreshAssocStates() {
+	ui.assocOn = make([]bool, len(assocTypes))
+	if !associationsSupported() {
+		return
+	}
+	for i, t := range assocTypes {
+		on, _, _ := isExtAssociated(t)
+		ui.assocOn[i] = on
+	}
+}
+
+// toggleAssociation adds or removes one format's association and re-reads the
+// row's state, so the button reflects the registry at once rather than the
+// next time the dialog is opened.
+func (ui *uiState) toggleAssociation(i int) {
+	if i < 0 || i >= len(assocTypes) {
+		return
+	}
+	t := assocTypes[i]
+	on, _, _ := isExtAssociated(t)
+	var err error
+	if on {
+		err = unregisterExtAssociation(t)
+	} else {
+		err = registerExtAssociation(t)
+	}
+	if err != nil {
+		log.Printf("association %s: %v", t.Ext, err)
+		ui.statusText = fmt.Sprintf("%s association failed: %v", t.Ext, err)
+		ui.refreshAssocStates()
+		return
+	}
+	if on {
+		log.Printf("association %s: removed", t.Ext)
+		ui.statusText = fmt.Sprintf("Removed %s association", t.Ext)
+	} else {
+		log.Printf("association %s: registered for %s", t.Ext, getExePath())
+		ui.statusText = fmt.Sprintf("Associated %s with %s", t.Ext, getExePath())
+	}
+	ui.refreshAssocStates()
+}
+
+// assocTypeFor returns the table row for an extension, ".module" included.
+func assocTypeFor(ext string) (assocType, bool) {
+	ext = strings.ToLower(strings.TrimSpace(ext))
+	if ext == moduleAssoc.Ext {
+		return moduleAssoc, true
+	}
+	for _, t := range assocTypes {
+		if t.Ext == ext {
+			return t, true
+		}
+	}
+	return assocType{}, false
+}
+
+// ── file associations (internal/assoc) ───────────────────────────────────────
+//
+// The registry half of the associations lives in internal/assoc; these are
+// the names the settings dialog and the openers keep using.
+
+type assocType = assoc.AssocType
+
+var (
+	moduleAssoc = assoc.ModuleAssoc
+	assocTypes  = assoc.AssocTypes
+)
+
+func associationsSupported() bool { return assoc.AssociationsSupported() }
+
+func isExtAssociated(t assocType) (bool, string, error) { return assoc.IsExtAssociated(t) }
+func registerExtAssociation(t assocType) error          { return assoc.RegisterExtAssociation(t) }
+func unregisterExtAssociation(t assocType) error        { return assoc.UnregisterExtAssociation(t) }
+
+func isModuleAssociated() (bool, string, error) { return assoc.IsModuleAssociated() }
+func registerModuleAssociation() error          { return assoc.RegisterModuleAssociation() }
+func unregisterModuleAssociation() error        { return assoc.UnregisterModuleAssociation() }
+
+func getExePath() string { return assoc.GetExePath() }

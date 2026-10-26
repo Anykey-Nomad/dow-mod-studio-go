@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package assoc
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ import (
 // .module the File menu registers and the formats the Settings dialog offers.
 
 // getExePath returns the absolute path of current executable.
-func getExePath() string {
+func GetExePath() string {
 	p, err := os.Executable()
 	if err != nil {
 		return ""
@@ -37,9 +37,9 @@ func getExePath() string {
 // associationsSupported reports whether the platform has per-user file
 // associations to manage. Windows does; the stub build does not, and its
 // settings dialog leaves the section out.
-func associationsSupported() bool { return true }
+func AssociationsSupported() bool { return true }
 
-func notifyShellAssocChanged() {
+func NotifyShellAssocChanged() {
 	// SHCNE_ASSOCCHANGED = 0x08000000, SHCNF_IDLIST = 0x0000
 	dll := windows.NewLazySystemDLL("shell32.dll")
 	proc := dll.NewProc("SHChangeNotify")
@@ -49,8 +49,8 @@ func notifyShellAssocChanged() {
 // isExtAssociated checks whether double-clicking the format will launch this
 // exe. On Win10/11 UserChoice overrides HKCU\Software\Classes\<ext>, so we
 // check it first.
-func isExtAssociated(t assocType) (bool, string, error) {
-	exe := getExePath()
+func IsExtAssociated(t AssocType) (bool, string, error) {
+	exe := GetExePath()
 	if exe == "" {
 		return false, "", fmt.Errorf("cannot get exe path")
 	}
@@ -58,16 +58,16 @@ func isExtAssociated(t assocType) (bool, string, error) {
 	base := filepath.Base(exe)
 	appProg := "Applications\\" + base
 	appCmdKey := `Software\Classes\Applications\` + base + `\shell\open\command`
-	extKey := `Software\Classes\` + t.ext
-	progKey := `Software\Classes\` + t.progID
+	extKey := `Software\Classes\` + t.Ext
+	progKey := `Software\Classes\` + t.ProgID
 	commandKey := progKey + `\shell\open\command`
 
 	// 1) If UserChoice exists, it determines what double-click does.
-	if ku, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.ext+`\UserChoice`, registry.QUERY_VALUE); err == nil {
+	if ku, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.Ext+`\UserChoice`, registry.QUERY_VALUE); err == nil {
 		prog, _, _ := ku.GetStringValue("ProgId")
 		ku.Close()
 		if prog != "" {
-			if strings.EqualFold(prog, t.progID) {
+			if strings.EqualFold(prog, t.ProgID) {
 				// UserChoice correctly points to our ProgID — verify command
 				if k2, err := registry.OpenKey(registry.CURRENT_USER, commandKey, registry.QUERY_VALUE); err == nil {
 					cmd, _, _ := k2.GetStringValue("")
@@ -92,7 +92,7 @@ func isExtAssociated(t assocType) (bool, string, error) {
 				return false, fmt.Sprintf("UserChoice=%q (Applications key missing)", prog), nil
 			}
 			// UserChoice points elsewhere → double-click will NOT use us
-			return false, fmt.Sprintf("UserChoice=%q overrides (expected %q)", prog, t.progID), nil
+			return false, fmt.Sprintf("UserChoice=%q overrides (expected %q)", prog, t.ProgID), nil
 		}
 		// empty ProgId → treat as not associated, fall through to HKCU check
 	}
@@ -104,7 +104,7 @@ func isExtAssociated(t assocType) (bool, string, error) {
 	}
 	prog, _, err := k.GetStringValue("")
 	k.Close()
-	if err != nil || !strings.EqualFold(prog, t.progID) {
+	if err != nil || !strings.EqualFold(prog, t.ProgID) {
 		return false, prog, nil
 	}
 	k2, err := registry.OpenKey(registry.CURRENT_USER, commandKey, registry.QUERY_VALUE)
@@ -124,15 +124,15 @@ func isExtAssociated(t assocType) (bool, string, error) {
 
 // registerExtAssociation creates a per-user file association for one format.
 // Uses HKCU\Software\Classes which does NOT require elevation on Windows.
-func registerExtAssociation(t assocType) error {
-	exe := getExePath()
+func RegisterExtAssociation(t AssocType) error {
+	exe := GetExePath()
 	if exe == "" {
 		return fmt.Errorf("cannot determine executable path")
 	}
 	command := `\"` + exe + `\" \"%1\"`
 	base := filepath.Base(exe)
-	extKey := `Software\Classes\` + t.ext
-	progKey := `Software\Classes\` + t.progID
+	extKey := `Software\Classes\` + t.Ext
+	progKey := `Software\Classes\` + t.ProgID
 	commandKey := progKey + `\shell\open\command`
 
 	// <ext> → ProgID
@@ -140,7 +140,7 @@ func registerExtAssociation(t assocType) error {
 	if err != nil {
 		return fmt.Errorf("create %s: %w", extKey, err)
 	}
-	if err := key.SetStringValue("", t.progID); err != nil {
+	if err := key.SetStringValue("", t.ProgID); err != nil {
 		key.Close()
 		return err
 	}
@@ -151,7 +151,7 @@ func registerExtAssociation(t assocType) error {
 	if err != nil {
 		return fmt.Errorf("create %s: %w", progKey, err)
 	}
-	_ = key2.SetStringValue("", t.desc)
+	_ = key2.SetStringValue("", t.Desc)
 	key2.Close()
 
 	// DefaultIcon → "<exe>",0
@@ -181,8 +181,8 @@ func registerExtAssociation(t assocType) error {
 	}
 
 	// Make Explorer offer us in Open With and resolve double-click even if UserChoice is absent
-	if k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.ext+`\OpenWithProgids`, registry.SET_VALUE); err == nil {
-		_ = k.SetStringValue(t.progID, "")
+	if k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.Ext+`\OpenWithProgids`, registry.SET_VALUE); err == nil {
+		_ = k.SetStringValue(t.ProgID, "")
 		k.Close()
 	}
 	// Also register via Applications\<exe> — this is what "Open with → Choose app" creates, and some Windows builds prefer it
@@ -193,42 +193,42 @@ func registerExtAssociation(t assocType) error {
 	}
 	// Optional friendly name for Applications entry
 	if k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\Applications\`+base, registry.SET_VALUE); err == nil {
-		_ = k.SetStringValue("", t.desc)
+		_ = k.SetStringValue("", t.Desc)
 		k.Close()
 	}
 
 	// Remove UserChoice if it does NOT point to us — otherwise HKCU Classes is ignored on Win10/11
 	// We cannot compute the Hash, so we delete the key and let Explorer fall back to the ProgID.
-	if ku, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.ext+`\UserChoice`, registry.QUERY_VALUE); err == nil {
+	if ku, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.Ext+`\UserChoice`, registry.QUERY_VALUE); err == nil {
 		prog, _, _ := ku.GetStringValue("ProgId")
 		ku.Close()
-		if !strings.EqualFold(prog, t.progID) {
-			_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.ext+`\UserChoice`)
+		if !strings.EqualFold(prog, t.ProgID) {
+			_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.Ext+`\UserChoice`)
 		}
 	} else {
 		// No UserChoice or cannot open — still try to delete (may have been stale)
-		_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.ext+`\UserChoice`)
+		_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.Ext+`\UserChoice`)
 	}
 
 	// Notify shell so Explorer picks up immediately without waiting seconds
-	notifyShellAssocChanged()
+	NotifyShellAssocChanged()
 
 	return nil
 }
 
 // unregisterExtAssociation removes a per-user association when it belongs to
 // this app. It is careful not to delete an association that points elsewhere.
-func unregisterExtAssociation(t assocType) error {
-	base := filepath.Base(getExePath())
-	extKey := `Software\Classes\` + t.ext
-	progKey := `Software\Classes\` + t.progID
+func UnregisterExtAssociation(t AssocType) error {
+	base := filepath.Base(GetExePath())
+	extKey := `Software\Classes\` + t.Ext
+	progKey := `Software\Classes\` + t.ProgID
 	commandKey := progKey + `\shell\open\command`
 
 	// Only delete <ext> if it points to us
 	if k, err := registry.OpenKey(registry.CURRENT_USER, extKey, registry.QUERY_VALUE); err == nil {
 		prog, _, _ := k.GetStringValue("")
 		k.Close()
-		if strings.EqualFold(prog, t.progID) {
+		if strings.EqualFold(prog, t.ProgID) {
 			_ = registry.DeleteKey(registry.CURRENT_USER, extKey)
 		}
 	}
@@ -240,7 +240,7 @@ func unregisterExtAssociation(t assocType) error {
 	_ = registry.DeleteKey(registry.CURRENT_USER, progKey)
 	// The Applications\<exe> fallback entry is shared by every format, so it
 	// goes only once no format of ours is left registered.
-	if base != "" && !anyOtherAssocRegistered(t.ext) {
+	if base != "" && !AnyOtherAssocRegistered(t.Ext) {
 		_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Applications\`+base+`\shell\open\command`)
 		_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Applications\`+base+`\shell\open`)
 		_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Applications\`+base+`\shell`)
@@ -248,34 +248,34 @@ func unregisterExtAssociation(t assocType) error {
 	}
 
 	// Remove from OpenWithProgids
-	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.ext+`\OpenWithProgids`, registry.SET_VALUE); err == nil {
-		_ = k.DeleteValue(t.progID)
+	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.Ext+`\OpenWithProgids`, registry.SET_VALUE); err == nil {
+		_ = k.DeleteValue(t.ProgID)
 		k.Close()
 	}
 	// Clean UserChoice if it points to us (or to our Applications entry)
-	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.ext+`\UserChoice`, registry.QUERY_VALUE); err == nil {
+	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.Ext+`\UserChoice`, registry.QUERY_VALUE); err == nil {
 		prog, _, _ := k.GetStringValue("ProgId")
 		k.Close()
-		if strings.EqualFold(prog, t.progID) || strings.EqualFold(prog, "Applications\\"+base) {
-			_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.ext+`\UserChoice`)
+		if strings.EqualFold(prog, t.ProgID) || strings.EqualFold(prog, "Applications\\"+base) {
+			_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\`+t.Ext+`\UserChoice`)
 		}
 	}
 
-	notifyShellAssocChanged()
+	NotifyShellAssocChanged()
 	return nil
 }
 
 // anyOtherAssocRegistered reports whether a format other than excludeExt is
 // still registered to this exe in HKCU\Software\Classes.
-func anyOtherAssocRegistered(excludeExt string) bool {
-	for _, t := range append([]assocType{moduleAssoc}, assocTypes...) {
-		if strings.EqualFold(t.ext, excludeExt) {
+func AnyOtherAssocRegistered(excludeExt string) bool {
+	for _, t := range append([]AssocType{ModuleAssoc}, AssocTypes...) {
+		if strings.EqualFold(t.Ext, excludeExt) {
 			continue
 		}
-		if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Classes\`+t.ext, registry.QUERY_VALUE); err == nil {
+		if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Classes\`+t.Ext, registry.QUERY_VALUE); err == nil {
 			prog, _, _ := k.GetStringValue("")
 			k.Close()
-			if strings.EqualFold(prog, t.progID) {
+			if strings.EqualFold(prog, t.ProgID) {
 				return true
 			}
 		}
