@@ -1,7 +1,6 @@
 package main
 
 import (
-	"dow-mod-studio/internal/rgd"
 	"fmt"
 	"image"
 	"log"
@@ -10,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dow-mod-studio/internal/rgd"
 	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
@@ -762,6 +762,338 @@ func (ui *uiState) tableRowEditor(gtx layout.Context, label string, ed *widget.E
 					})
 				}),
 			)
+		}),
+	)
+}
+
+// ─── merged from rgd_tree.go ───────────────────────────────────────────────
+
+func (ui *uiState) openRgd(virtualPath string) {
+	if ui.modTree == nil {
+		return
+	}
+	if idx := ui.findTabIndex(virtualPath); idx >= 0 {
+		ui.tabSel = idx + 1
+		ui.ensureTabClicks()
+		ui.statusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
+		return
+	}
+	data, err := ui.modTree.ReadFile(virtualPath)
+	if err != nil {
+		t := &fileTab{path: virtualPath, kind: "rgd", rgdError: err.Error(), rgdExpanded: map[string]bool{"GameData": true}, rgdSelected: "GameData"}
+		ui.openTabs = append(ui.openTabs, t)
+		ui.tabSel = len(ui.openTabs)
+		ui.ensureTabClicks()
+		ui.statusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(virtualPath), err)
+		return
+	}
+	rf, err := rgd.ParseRgd(data)
+	if err != nil {
+		t := &fileTab{path: virtualPath, kind: "rgd", rgdError: err.Error(), rgdExpanded: map[string]bool{"GameData": true}, rgdSelected: "GameData"}
+		ui.openTabs = append(ui.openTabs, t)
+		ui.tabSel = len(ui.openTabs)
+		ui.ensureTabClicks()
+		ui.statusText = fmt.Sprintf("Failed to parse %s: %v", filepath.Base(virtualPath), err)
+		return
+	}
+	t := &fileTab{
+		path: virtualPath, kind: "rgd",
+		rgdFile: rf, rgdError: "",
+		rgdExpanded:         map[string]bool{"GameData": true},
+		rgdSelected:         "GameData",
+		rgdValEditors:       make(map[string]*widget.Editor),
+		rgdValErrors:        make(map[string]string),
+		rgdValClicks:        make(map[string]*widget.Clickable),
+		rgdSuggestionClicks: make(map[string][]widget.Clickable),
+	}
+	t.rgdRefEditor.SingleLine = true
+	t.rgdRefEditor.Submit = true
+	ui.openTabs = append(ui.openTabs, t)
+	ui.tabSel = len(ui.openTabs)
+	ui.ensureTabClicks()
+	ui.rebuildRgdMidNodesFor(t)
+	ui.ensureRgdMidClicks(t, len(t.rgdMidNodes))
+	ui.statusText = fmt.Sprintf("Opened %s — %d top-level entries", filepath.Base(virtualPath), len(rf.Root.Children))
+	log.Printf("openRgd %q: %d top entries", virtualPath, len(rf.Root.Children))
+}
+
+func (ui *uiState) ensureRgdMidClicks(t *fileTab, n int) {
+	if len(t.rgdMidClicks) < n {
+		old := t.rgdMidClicks
+		t.rgdMidClicks = make([]widget.Clickable, n)
+		copy(t.rgdMidClicks, old)
+	} else if len(t.rgdMidClicks) > n {
+		t.rgdMidClicks = t.rgdMidClicks[:n]
+	}
+}
+
+func (ui *uiState) rebuildRgdMidNodes() {
+	t := ui.activeTab()
+	if t == nil || t.kind != "rgd" {
+		return
+	}
+	ui.rebuildRgdMidNodesFor(t)
+}
+
+func (ui *uiState) rebuildRgdMidNodesFor(t *fileTab) {
+	if t.rgdFile == nil || t.rgdFile.Root == nil {
+		t.rgdMidNodes = nil
+		return
+	}
+	if t.rgdExpanded == nil {
+		t.rgdExpanded = map[string]bool{"GameData": true}
+	}
+	if t.rgdSelected == "" {
+		t.rgdSelected = "GameData"
+	}
+	var out []rgdVisible
+	root := t.rgdFile.Root
+	out = append(out, rgdVisible{
+		Name:     root.Name,
+		Path:     "GameData",
+		Depth:    0,
+		IsTable:  root.IsTable(),
+		HasKids:  len(root.Children) > 0,
+		Expanded: t.rgdExpanded["GameData"],
+		Selected: t.rgdSelected == "GameData",
+		Type:     root.Type,
+		Ref:      root.RefString(),
+		Entry:    root,
+	})
+	if t.rgdExpanded["GameData"] {
+		ui.rgdFlattenChildrenFor(t, root.Children, "GameData", 1, &out)
+	}
+	t.rgdMidNodes = out
+}
+
+func (ui *uiState) rgdFlattenChildren(children []*rgd.RgdEntry, basePath string, depth int, out *[]rgdVisible) {
+	t := ui.activeTab()
+	if t == nil {
+		return
+	}
+	ui.rgdFlattenChildrenFor(t, children, basePath, depth, out)
+}
+
+func (ui *uiState) rgdFlattenChildrenFor(t *fileTab, children []*rgd.RgdEntry, basePath string, depth int, out *[]rgdVisible) {
+	for _, ch := range children {
+		path := basePath + "/" + ch.Name
+		expanded := t.rgdExpanded[path]
+		*out = append(*out, rgdVisible{
+			Name:     ch.Name,
+			Path:     path,
+			Depth:    depth,
+			IsTable:  ch.IsTable(),
+			HasKids:  len(ch.Children) > 0,
+			Expanded: expanded,
+			Selected: t.rgdSelected == path,
+			Type:     ch.Type,
+			Ref:      ch.RefString(),
+			Entry:    ch,
+		})
+		if ch.IsTable() && len(ch.Children) > 0 && expanded {
+			ui.rgdFlattenChildrenFor(t, ch.Children, path, depth+1, out)
+		}
+	}
+}
+
+func (ui *uiState) rgdFindEntry(path string) *rgd.RgdEntry {
+	t := ui.activeTab()
+	if t == nil || t.kind != "rgd" {
+		return nil
+	}
+	return ui.rgdFindEntryFor(t, path)
+}
+
+func (ui *uiState) rgdFindEntryFor(t *fileTab, path string) *rgd.RgdEntry {
+	if t.rgdFile == nil || t.rgdFile.Root == nil {
+		return nil
+	}
+	if path == "GameData" || path == "" {
+		return t.rgdFile.Root
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] != "GameData" {
+		return nil
+	}
+	cur := t.rgdFile.Root
+	for _, seg := range parts[1:] {
+		found := false
+		for _, ch := range cur.Children {
+			if ch.Name == seg || strings.EqualFold(ch.Name, seg) {
+				cur = ch
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil
+		}
+	}
+	return cur
+}
+
+func (ui *uiState) rgdSelectedEntry() *rgd.RgdEntry {
+	t := ui.activeTab()
+	if t == nil || t.kind != "rgd" {
+		return nil
+	}
+	return ui.rgdSelectedEntryFor(t)
+}
+
+func (ui *uiState) rgdSelectedEntryFor(t *fileTab) *rgd.RgdEntry {
+	if t.rgdFile == nil {
+		return nil
+	}
+	if e := ui.rgdFindEntryFor(t, t.rgdSelected); e != nil {
+		return e
+	}
+	return t.rgdFile.Root
+}
+
+// ─── merged from rgd_view.go ───────────────────────────────────────────────
+
+func (ui *uiState) propertiesTable(gtx layout.Context, t *fileTab) layout.Dimensions {
+	e := ui.rgdSelectedEntryFor(t)
+	var name, typeLabel string
+	if e == nil {
+		name = "—"
+		typeLabel = "—"
+	} else {
+		if t.rgdSelected == "GameData" || t.rgdSelected == "" {
+			name = "GameData"
+		} else if idx := strings.LastIndex(t.rgdSelected, "/"); idx >= 0 {
+			name = t.rgdSelected[idx+1:]
+		} else {
+			name = e.Name
+		}
+		typeLabel = e.TypeLabel()
+	}
+	isTable := e != nil && e.IsTable()
+	editableScalar := e != nil && rgdIsEditableType(e.Type)
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableRow2(gtx, "Name", name, false) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableRow2(gtx, "Data Type", typeLabel, true) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if isTable {
+				return ui.tableRowEditor(gtx, "Reference", &t.rgdRefEditor, false, "")
+			}
+			return ui.tableRow2(gtx, "Reference", e.RefString(), false)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if e != nil && e.Type == rgd.RgdTypeBool {
+				return ui.tableRowBool(gtx, "Value", t, e, t.rgdSelected, true)
+			}
+			if e != nil && (e.Type == rgd.RgdTypeString || e.Type == rgd.RgdTypeWString) {
+				return ui.tableRowStringEditor(gtx, "Value", t, e, t.rgdSelected, true)
+			}
+			if editableScalar {
+				ed := ui.rgdEnsureValEditor(t, t.rgdSelected, e.DisplayValue())
+				return ui.tableRowEditor(gtx, "Value", ed, true, t.rgdValErrors[t.rgdSelected])
+			}
+			if e != nil && !isTable {
+				return ui.tableRow2(gtx, "Value", e.DisplayFieldValue(), true)
+			}
+			return layout.Dimensions{}
+		}),
+	)
+}
+
+var childrenRows = [][]string{
+	{"ability_ext", "ebpextensions\\ability_ext.lua"},
+	{"addon_ext", "ebpextensions\\addon_ext.lua"},
+	{"cost_ext", "ebpextensions\\cost_ext.lua"},
+	{"deep_strike_ext", "ebpextensions\\deep_strike_ext.lua"},
+	{"entity_blueprint_ext", "ebpextensions\\entity_blueprint_ext.lua"},
+	{"event_manager_ext", "ebpextensions\\event_manager_ext.lua"},
+	{"health_ext", "ebpextensions\\health_ext.lua"},
+	{"hq_ext", "ebpextensions\\hq_ext.lua"},
+	{"infiltration_ext", "ebpextensions\\infiltration_ext.lua"},
+	{"modifier_apply_ext", "ebpextensions\\modifier_apply_ext.lua"},
+	{"modifier_ext", "ebpextensions\\modifier_ext.lua"},
+	{"offline_ext", "ebpextensions\\offline_ext.lua"},
+	{"requirement_ext", "ebpextensions\\requirement_ext.lua"},
+	{"research_ext", "ebpextensions\\research_ext.lua"},
+	{"resource_ext", "ebpextensions\\resource_ext.lua"},
+	{"sight_ext", "ebpextensions\\sight_ext.lua"},
+	{"sim_entity_ext", "ebpextensions\\sim_entity_ext.lua"},
+	{"spawner_ext", "ebpextensions\\spawner_ext.lua"},
+	{"squad_hold_ext", "ebpextensions\\squad_hold_ext.lua"},
+	{"structure_buildable_ext", "ebpextensions\\structure_buildable_ext.lua"},
+	{"structure_ext", "ebpextensions\\structure_ext.lua"},
+	{"type_ext", "ebpextensions\\type_ext.lua"},
+	{"ui_ext", "ebpextensions\\ui_ext.lua"},
+}
+
+func (ui *uiState) childrenTable(gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t.rgdFile == nil {
+		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: unit.Dp(12), Bottom: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				l := material.Label(ui.th, unit.Sp(10), "Select a .rgd file, then a node in the middle tree")
+				l.Color = cTextDim
+				return l.Layout(gtx)
+			})
+		})
+	}
+	e := ui.rgdSelectedEntryFor(t)
+	if e == nil {
+		e = t.rgdFile.Root
+	}
+	if !e.IsTable() {
+		return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			val := e.DisplayFieldValue()
+			if val == "" {
+				val = "—"
+			}
+			msg := fmt.Sprintf("%s (%s) = %s — no children", e.Name, e.TypeLabel(), val)
+			l := material.Label(ui.th, unit.Sp(11), msg)
+			l.Color = cTextDim
+			return l.Layout(gtx)
+		})
+	}
+	children := e.Children
+	if len(children) == 0 {
+		if ref := e.RefString(); ref != "" {
+			return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				l := material.Label(ui.th, unit.Sp(10), fmt.Sprintf("Empty table — Reference: %s", ref))
+				l.Color = cTextDim
+				return l.Layout(gtx)
+			})
+		}
+		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(10), "No children")
+			l.Color = cTextDim
+			return l.Layout(gtx)
+		})
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.tableHead(gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, cHeaderLine, 1) }),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return ui.layoutListWithScrollbar(gtx, &t.rgdChildScroll, &t.rgdChildList, 28, len(children), func(gtx layout.Context, index int) layout.Dimensions {
+				ch := children[index]
+				alt := index%2 == 1
+				key := t.rgdSelected + "/" + ch.Name
+				if ch.IsTable() {
+					refEditor := ui.rgdEnsureValEditor(t, key+"/$ref", ch.RefString())
+					return ui.tableRowEditor(gtx, ch.Name, refEditor, alt, "")
+				}
+				if ch.Type == rgd.RgdTypeBool {
+					return ui.tableRowBool(gtx, ch.Name, t, ch, key, alt)
+				}
+				if ch.Type == rgd.RgdTypeString || ch.Type == rgd.RgdTypeWString {
+					return ui.tableRowStringEditor(gtx, ch.Name, t, ch, key, alt)
+				}
+				if rgdIsEditableType(ch.Type) {
+					ed := ui.rgdEnsureValEditor(t, key, ch.DisplayValue())
+					return ui.tableRowEditor(gtx, ch.Name, ed, alt, t.rgdValErrors[key])
+				}
+				val := ch.DisplayFieldValue()
+				if len(val) > 64 {
+					val = val[:61] + "…"
+				}
+				return ui.tableRow2WithTooltip(gtx, ch.Name, val, alt, rgdTooltipForValue(ch))
+			})
 		}),
 	)
 }

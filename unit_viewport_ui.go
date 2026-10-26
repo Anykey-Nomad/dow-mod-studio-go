@@ -1,20 +1,29 @@
 package main
 
 import (
-	"dow-mod-studio/internal/whm"
+	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"log"
+	"math"
+	"math/rand"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"image/color"
-
+	"dow-mod-studio/internal/3d_viewer"
+	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/sgb"
+	"dow-mod-studio/internal/whe"
+	"dow-mod-studio/internal/whm"
 	"gioui.org/io/key"
 	"gioui.org/layout"
+	"gioui.org/op"
+	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
@@ -2685,4 +2694,875 @@ func unitModelClipDuration(v *modelViewer) float64 {
 
 func (ui *uiState) rrect(gtx layout.Context, bg color.NRGBA, sz image.Point, r unit.Dp) {
 	paint.Fill(gtx.Ops, bg)
+}
+
+// ─── merged from unit_viewport.go ───────────────────────────────────────────────
+
+// The object window's Viewport section: the selected unit's own 3D model, with
+// its animations.
+//
+// Dawn of War keeps a unit's geometry out of the .rgd. The .rgd names it in
+// entity_blueprint_ext.animator, a path relative to Data\art\ebps that ends in
+// the model's own name, e.g. "Races/Necrons/Troops/Necron_Basic_Warrior", and
+// the model is the .whm of that name in that folder. Measured over the 582
+// unit .rgds of the DXP3 tree that resolves for 581 of them, so it is the
+// lookup; the rest fall back to a search of the art tree for a .whm of the
+// unit's own name, which is how a mod that renames the model still gets one.
+//
+// The viewer itself is not new. It is the same one a .whm tab uses, driven
+// from a fileTab held here rather than in openTabs, so a unit's model can be
+// orbited, played and inspected without opening it first.
+
+// unitSectionViewport names the section, so the layout does not repeat the
+// string of the menu entry it is keyed on.
+const unitSectionViewport = "Viewport"
+
+// unitModelArtRoot is the folder animator paths are relative to.
+const unitModelArtRoot = "art/ebps"
+
+// unitGroundTexture is the default terrain texture shown beneath unit models.
+const unitGroundTexture = "Data/art/scenarios/textures/detail/jungle_ground_02.tga"
+
+// errNoUnitModel is what a unit whose model cannot be found anywhere reports,
+// as distinct from a model that was found and would not decode.
+var errNoUnitModel = errors.New("no model file for this unit")
+
+// unitModelResult carries a decoded model back to the UI goroutine. The unit it
+// was read for travels with it, since a load started for one unit can finish
+// after the reader has moved on to another.
+type unitModelResult struct {
+	unit        string
+	path        string
+	model       *WhmModel
+	groundImage image.Image
+	work        time.Duration // reading, parsing and the ground image
+	err         error
+}
+
+// unitModelSource is everything about a unit that the loader needs, copied off
+// the UI goroutine before the load starts so the worker touches no UI state.
+type unitModelSource struct {
+	unit     string // the unit .rgd's tree path
+	animator string // entity_blueprint_ext.animator, may be empty
+	name     string // the unit's file name without extension
+	race     string // the folder name under races
+	kind     string // "troops" or "structures"
+}
+
+// newUnitModelSource reads what a unit says about its model.
+func newUnitModelSource(tree *modtree.ModTree, d *unitDetails) (unitModelSource, bool) {
+	if d == nil {
+		return unitModelSource{}, false
+	}
+	src := unitModelSource{
+		unit: d.Entry.Path,
+		name: d.Entry.Name,
+		race: d.Entry.Race,
+		kind: d.Entry.Kind.Folder,
+	}
+	if src.name == "" {
+		if base := d.Entry.Path; base != "" {
+			src.name = strings.TrimSuffix(filepath.Base(base), filepath.Ext(base))
+		}
+	}
+	if d.File != nil {
+		src.animator = unitAnimatorName(d.File)
+	}
+	if src.name == "" && src.animator == "" {
+		return unitModelSource{}, false
+	}
+	return src, true
+}
+
+// unitAnimatorName reads entity_blueprint_ext.animator out of a unit .rgd, or
+// "" when the file does not carry one. The field is a plain string, not a
+// reference: it names a model folder path rather than an asset the .rgd
+// resolves, which is why it is read here rather than through resolveRgdRef.
+func unitAnimatorName(rf *rgd.RgdFile) string {
+	if rf == nil || rf.Root == nil {
+		return ""
+	}
+	ext := rgdFindChild(rf.Root, "entity_blueprint_ext")
+	if ext == nil {
+		return ""
+	}
+	e := rgdFindChild(ext, "animator")
+	if e == nil {
+		return ""
+	}
+	return strings.TrimSpace(e.DisplayValue())
+}
+
+// unitModelPath finds the .whm of a unit, or "" when there is none. The order
+// is the one that works on the shipped data first and the one that rescues a
+// mod's own naming last.
+func unitModelPath(tree *modtree.ModTree, src unitModelSource) string {
+	if tree == nil {
+		return ""
+	}
+	rel := strings.ReplaceAll(strings.TrimSpace(src.animator), "\\", "/")
+	rel = strings.TrimPrefix(rel, "./")
+	if rel != "" {
+		if !strings.Contains(rel, ".") {
+			rel += ".whm"
+		}
+		p := filepath.Join("Data", filepath.FromSlash(unitModelArtRoot), filepath.FromSlash(rel))
+		if tree.FindFile(p) != nil {
+			return p
+		}
+	}
+	// The folder the unit's .rgd itself lives in is where the game keeps the
+	// model of a unit it renamed, so the sibling name is worth a try before
+	// searching the whole tree.
+	if src.race != "" && src.name != "" {
+		dirs := []string{}
+		if src.kind != "" {
+			dirs = append(dirs, src.kind)
+		}
+		dirs = append(dirs, "", "troops", "structures")
+		for _, d := range dirs {
+			parts := []string{"Data", unitModelArtRoot, "races", src.race}
+			if d != "" {
+				parts = append(parts, d)
+			}
+			parts = append(parts, src.name+".whm")
+			p := filepath.Join(parts...)
+			if tree.FindFile(p) != nil {
+				return p
+			}
+		}
+	}
+	if src.name != "" {
+		if f := tree.FindByName(src.name + ".whm"); f != nil {
+			return f.FullPath
+		}
+	}
+	return ""
+}
+
+// ensureUnitModel starts loading the current unit's model if it is not already
+// loaded or on its way. It is called from the Viewport section's layout, so
+// browsing units never pays for a model that is not being looked at.
+//
+// While the read is on a worker the section has no model to animate, and the
+// canvas below has nothing to ask a redraw for — the window repaints on input
+// and on the invalidates a drawn model schedules, neither of which exist here.
+// The poll that would pick the result up runs at the top of the frame loop, so
+// without an invalidate of its own the finished answer waits in its channel
+// until the mouse moves. That is what made a switch on this section look many
+// seconds slower than the same switch done from another one and read afterwards:
+// the read cost the same, but one of them was waiting for input to show it.
+func (ui *uiState) ensureUnitModel(gtx layout.Context) {
+	if ui.modTree == nil {
+		return
+	}
+	src, ok := newUnitModelSource(ui.modTree, ui.currentUnitDetails())
+	if !ok {
+		ui.resetUnitModel()
+		return
+	}
+	if src.unit != ui.unitModelFor || (ui.unitModel == nil && ui.unitModelCh == nil && ui.unitModelErr == "") {
+		ui.startUnitModel(src)
+	}
+	if ui.unitModelCh != nil {
+		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(30 * time.Millisecond)})
+	}
+}
+
+// startUnitModel kicks the read and the parse off on a worker. Both are worth
+// moving off the UI goroutine: a unit model is megabytes, and the necron warrior's
+// alone is five of them.
+func (ui *uiState) startUnitModel(src unitModelSource) {
+	ui.resetUnitModel()
+	ui.unitModelFor = src.unit
+	tree := ui.modTree
+	ch := make(chan unitModelResult, 1)
+	ui.unitModelCh = ch
+	ui.unitModelStart = time.Now()
+	go func() {
+		res := unitModelResult{unit: src.unit}
+		workStart := time.Now()
+		res.path = unitModelPath(tree, src)
+		if res.path == "" {
+			res.err = errNoUnitModel
+			ch <- res
+			return
+		}
+		data, err := tree.ReadFile(res.path)
+		if err != nil {
+			res.err = err
+			ch <- res
+			return
+		}
+		model, err := ParseWhmModel(data)
+		if err != nil {
+			res.err = err
+			ch <- res
+			return
+		}
+		res.model = model
+		res.groundImage = loadWhmGroundImage(tree)
+		res.work = time.Since(workStart)
+		ch <- res
+	}()
+}
+
+// resetUnitModel drops the viewer and forgets which unit it was for, so the
+// next request loads again. The worker is not stopped: it writes into a
+// buffered channel nobody reads, which costs one model parse and no more.
+func (ui *uiState) resetUnitModel() {
+	if ui.unitModel != nil && ui.unitModel.model != nil {
+		// The hardware renderer caches the model's buffers, and the goroutine
+		// that may be mid render holds the same pointer, so both go back.
+		if ui.modelGpu != nil && ui.unitModel.model.model != nil {
+			ui.modelGpu.forget(ui.unitModel.model.model)
+		}
+		ui.unitModel.model.close()
+	}
+	ui.unitModel = nil
+	ui.unitModelCh = nil
+	ui.unitModelFor = ""
+	ui.unitModelPath = ""
+	ui.unitModelErr = ""
+	ui.unitAnimClicks = nil
+
+	ui.unitMarkerClicks = nil
+	ui.unitBoneClicks = nil
+	ui.unitFXListMode = false
+	ui.unitMeshListMode = false
+	ui.unitViewportScroll = panelScrollState{}
+	// The typed bone key fields belong to the model that has gone with it:
+	// their bound key and any pending note are dropped so a later model
+	// cannot be shown with, or written from, this one's values.
+	ui.unitModelWhmDirty = false
+	ui.unitBoneKeyBound = ""
+	ui.unitBoneKeyErr = ""
+	ui.unitAnimFramesSync = ""
+	ui.unitAnimFramesErr = ""
+}
+
+// pollUnitModel takes a finished decode and builds the viewer from it. The
+// frames and the textures it goes on to produce are polled by pollModelJobs,
+// like any other viewer's.
+// selectObjectAction reads the model's WHE graph and plays all clips
+// selected by the named action together. Weighted motion links choose one
+// variant independently for each motion; absent or unresolved WHE data leaves
+// the viewport's ordinary single-clip default in place. The idle action also
+// falls back to the pristine state's idle/stand clips when the graph has no
+// idle action of its own.
+func selectObjectAction(v *modelViewer, tree *modtree.ModTree, modelPath, actionName string) bool {
+	if v == nil || v.model == nil || tree == nil || modelPath == "" || strings.TrimSpace(actionName) == "" {
+		return false
+	}
+	base := strings.TrimSuffix(modelPath, filepath.Ext(modelPath))
+	data, err := tree.ReadFile(base + ".whe")
+	if err != nil {
+		if f := tree.FindByName(strings.ToLower(filepath.Base(base) + ".whe")); f != nil {
+			data, err = tree.ReadTreeFile(f)
+		}
+	}
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	doc, err := whe.ParseDocument(data)
+	if err != nil {
+		return false
+	}
+	seed := rand.Int63()
+	clipNames := doc.ActionAnimationNamesWithSeed(actionName, seed)
+	if len(clipNames) == 0 && strings.EqualFold(strings.TrimSpace(actionName), "idle") {
+		for _, name := range doc.RestClipNamesWithSeed(seed) {
+			lower := strings.ToLower(strings.TrimSpace(name))
+			if strings.HasPrefix(lower, "idle") || strings.HasPrefix(lower, "stand") {
+				clipNames = append(clipNames, name)
+			}
+		}
+	}
+	var clips []*WhmAnimation
+	seen := make(map[string]bool)
+	for _, name := range clipNames {
+		key := strings.ToLower(strings.TrimSpace(name))
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		animation, source := sgb.ResolveLinkedAnimation(tree, modelPath, &v.model.Model, name)
+		if animation == nil || source == nil {
+			continue
+		}
+		if source != &v.model.Model {
+			animation = sgb.BindAnimationToModel(&v.model.Model, animation)
+		}
+		if animation != nil {
+			clips = append(clips, animation)
+		}
+	}
+	if len(clips) == 0 {
+		return false
+	}
+	v.selectAnimations(clips, true)
+	v.playing = true
+	return true
+}
+
+// activateUnitAction plays every clip the named action of the loaded unit
+// model's .whe resolves to, combined in the viewport, and says so in the
+// status bar. It answers false when no model is on screen or the action
+// resolves to nothing, leaving the caller with its own fallback.
+func (ui *uiState) activateUnitAction(actionName string) bool {
+	v := ui.unitModelViewer()
+	if v == nil || v.model == nil {
+		return false
+	}
+	if !selectObjectAction(v, ui.modTree, ui.unitModelPath, actionName) {
+		return false
+	}
+	ui.statusText = fmt.Sprintf("Action %q — playing %d clip(s) together",
+		strings.TrimSpace(actionName), len(v.anims))
+	return true
+}
+
+func (ui *uiState) pollUnitModel() {
+	if ui.unitModelCh == nil {
+		return
+	}
+	select {
+	case res := <-ui.unitModelCh:
+		ui.unitModelCh = nil
+		if res.unit != ui.unitModelFor {
+			// The reader has moved on to another unit while this one loaded.
+			return
+		}
+		if res.err != nil {
+			ui.unitModelErr = res.err.Error()
+			return
+		}
+		// The gap between what the worker spent and what the reader waited is
+		// the answer arriving without a frame to be picked up in, which is the
+		// whole of the difference between a switch that looked slow and one
+		// that did not.
+		total := time.Since(ui.unitModelStart)
+		LogInfo("3D preview: model of %q on screen after %v (worker %v, waiting for a frame %v)",
+			res.path, total, res.work, total-res.work)
+		tab := &fileTab{path: res.path, kind: "whm"}
+		tab.model = newObjectModelViewer(res.model, res.path, res.groundImage)
+		selectObjectAction(tab.model, ui.modTree, res.path, "idle")
+		// The canvas is a third of the window wide here, so the playback strip
+		// is drawn in the panel beside it rather than under it.
+		tab.model.sideControls = true
+		ui.unitModel = tab
+		ui.unitModelPath = res.path
+		// A freshly read model starts clean, and its keys rebind the typed
+		// fields: the previous model's edits are not its edits.
+		ui.unitModelWhmDirty = false
+		ui.unitBoneKeyBound = ""
+		ui.unitBoneKeyErr = ""
+	default:
+	}
+}
+
+// unitDefaultAnim picks the clip the viewport starts on, or -1 when the model
+// has none. The names are the game's own: a unit moves with "move" and "run",
+// stands with "idle_1", and everything else in the list is a one off.
+func unitDefaultAnim(model *WhmModel) int {
+	if model == nil || len(model.Animations) == 0 {
+		return -1
+	}
+	want := []string{"move", "run", "walk", "idle_1", "idle_2", "idle", "idle_firing"}
+	names := make([]string, len(model.Animations))
+	for i := range model.Animations {
+		names[i] = strings.ToLower(model.Animations[i].Name)
+	}
+	for _, w := range want {
+		for i, n := range names {
+			if n == w {
+				return i
+			}
+		}
+	}
+	// A clip whose name starts "vis_" only fades a weapon or a banner in and
+	// out; it moves nothing, so it is a poor thing to open on.
+	for i, n := range names {
+		if !strings.HasPrefix(n, "vis_") {
+			return i
+		}
+	}
+	return 0
+}
+
+// unitModelViewer is the viewport's viewer, or nil when no model is up.
+func (ui *uiState) unitModelViewer() *modelViewer {
+	if ui.unitModel == nil {
+		return nil
+	}
+	return ui.unitModel.model
+}
+
+// lookThroughCamera moves the orbit camera to where one of the model's own
+// cameras is, which is what makes the list of them worth having. A .whm camera
+// is a local transform in the exporter's frame, so it is put into model space
+// by the same rotation the skeleton's root bones get, and it looks down its own
+// -Z at its focus point. The direction is turned into the orbit camera's pair
+// the way buildViewMatrix takes it apart: the yaw around the up axis, which is
+// Z, and the height off the horizon.
+func (v *modelViewer) lookThroughCamera(cam WhmCamera) {
+	if v == nil || v.model == nil {
+		return
+	}
+	eye := boneRootFrame.MulPosition(vec3From(cam.Pos))
+	focus := boneRootFrame.MulPosition(vec3From(cam.FocusPoint))
+	v.CameraState = viewer.LookThroughCamera(v.CameraState, eye, focus, cam.Fov, cam.Name)
+	v.invalidate()
+}
+
+// resetCamera puts the orbit camera back to the framing newModelViewer chose,
+// and forgets any camera of the model's that was being looked through.
+func (v *modelViewer) resetCamera() {
+	if v == nil {
+		return
+	}
+	camera := viewer.ResetCamera(v.CameraState)
+	v.CameraState = camera
+	v.invalidate()
+}
+
+// panCamera shifts the orbit target in the camera's screen plane. Pixel motion
+// is scaled by the world-space width visible at the camera distance, so the
+// drag has consistent sensitivity across zoom levels and viewport sizes.
+func (v *modelViewer) panCamera(dx, dy float64, height int) {
+	if v == nil || height <= 0 || v.Distance <= 0 {
+		return
+	}
+	forward := fauxgl.Vector{
+		X: -math.Cos(v.Yaw) * math.Cos(v.Pitch),
+		Y: -math.Sin(v.Yaw) * math.Cos(v.Pitch),
+		Z: -math.Sin(v.Pitch),
+	}
+	worldUp := fauxgl.Vector{Z: 1}
+	right := forward.Cross(worldUp)
+	if length := right.Length(); length > 1e-9 {
+		right = right.MulScalar(1 / length)
+	} else {
+		right = fauxgl.Vector{X: 1}
+	}
+	up := right.Cross(forward)
+	if length := up.Length(); length > 1e-9 {
+		up = up.MulScalar(1 / length)
+	}
+	worldPerPixel := 2 * v.Distance * math.Tan(v.FOV*math.Pi/360) / float64(height)
+	v.Center = v.Center.Sub(right.MulScalar(dx * worldPerPixel)).Add(up.MulScalar(dy * worldPerPixel))
+	v.ActiveCamera = ""
+	v.invalidate()
+}
+
+// ─── merged from unit_mesh_material_ui.go ───────────────────────────────────────────────
+
+// The material editor a double press on a mesh row raises: every reference the
+// named mesh carries, in an editable field, with the file's own value kept
+// beside it. Preview applies the fields to the model on show — the map
+// appears behind the dim, which is the fast way to try a corrected path —
+// and Save WHM writes them into the file through the .whm material patcher.
+//
+// The references are collected in the order the mesh list holds them, which is
+// the order the file's FOLDMSLC material list holds them, so field i and the
+// i-th material the patcher rewrites are the same one.
+
+// meshMaterialRefs returns the named mesh's material references in order. A
+// mesh with no materials under that name yields nil, which is what stops the
+// dialog opening on a mesh there is nothing to edit.
+func meshMaterialRefs(m *WhmModel, name string) []string {
+	if m == nil {
+		return nil
+	}
+	var out []string
+	for _, mesh := range m.Meshes {
+		if strings.EqualFold(mesh.Name, name) {
+			out = append(out, mesh.Material)
+		}
+	}
+	return out
+}
+
+// applyMeshMaterialRefs writes refs back onto the named mesh's materials, in
+// the order meshMaterialRefs collected them. An empty entry leaves that
+// material as it was, and the shared-shader path is cleared alongside so the
+// renderer keys the texture off the reference it was just given — the shape a
+// model whose material label carries the path already has, and the field the
+// game reads.
+func applyMeshMaterialRefs(m *WhmModel, name string, refs []string) {
+	if m == nil {
+		return
+	}
+	i := 0
+	for j := range m.Meshes {
+		if !strings.EqualFold(m.Meshes[j].Name, name) {
+			continue
+		}
+		if i < len(refs) && refs[i] != "" {
+			m.Meshes[j].Material = refs[i]
+			m.Meshes[j].MaterialPath = ""
+		}
+		i++
+	}
+}
+
+// equalRefs reports whether two reference lists hold the same strings, so a
+// Cancel that would change nothing skips the texture reload it would cost.
+func equalRefs(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// unitMeshMatFieldText reads the editors as they stand, trimmed, in material
+// order. An empty field means "leave this one as it is", the same the patcher
+// takes it to mean.
+func (ui *uiState) unitMeshMatFieldText() []string {
+	out := make([]string, len(ui.unitMeshMatEditors))
+	for i := range ui.unitMeshMatEditors {
+		out[i] = strings.TrimSpace(ui.unitMeshMatEditors[i].Text())
+	}
+	return out
+}
+
+// reloadUnitModelMaterials restarts the texture lookup for the unit's viewer
+// from the material references it now carries — the same step a fresh load
+// takes, so a changed reference is resolved and drawn again.
+func (ui *uiState) reloadUnitModelMaterials(v *modelViewer) {
+	t := ui.unitModel
+	if t == nil || v == nil || v.model == nil || ui.modTree == nil {
+		return
+	}
+	t.modelMaterialCh = make(chan modelMaterialResult, 1)
+	ui.loadModelMaterials(v, t.modelMaterialCh)
+}
+
+// openUnitMeshMaterialDialog fills one field per material of the named mesh
+// with the reference it carries and puts the dialog up. A mesh with no
+// materials leaves it down: there is nothing to edit and nothing to save.
+func (ui *uiState) openUnitMeshMaterialDialog(name string) {
+	v := ui.unitModelViewer()
+	if v == nil || v.model == nil {
+		return
+	}
+	refs := meshMaterialRefs(v.model, name)
+	if len(refs) == 0 {
+		return
+	}
+	ui.unitMeshMatOpen = true
+	ui.unitMeshMatName = name
+	ui.unitMeshMatOrig = refs
+	ui.unitMeshMatErr = ""
+	ui.unitMeshMatScroll = panelScrollState{}
+	ui.unitMeshMatEditors = make([]widget.Editor, len(refs))
+	for i, ref := range refs {
+		ed := widget.Editor{SingleLine: true}
+		ed.SetText(ref)
+		ui.unitMeshMatEditors[i] = ed
+	}
+}
+
+// closeUnitMeshMaterialDialog puts the dialog down. With revert it also puts
+// the model back on the references the file holds: a preview may have moved it,
+// and leaving without saving must not keep the texture of an edit that was
+// never written. A close after a save reverts nothing, because the file says
+// what the model now says.
+func (ui *uiState) closeUnitMeshMaterialDialog(revert bool) {
+	if revert {
+		v := ui.unitModelViewer()
+		if v != nil && v.model != nil && ui.unitMeshMatName != "" {
+			cur := meshMaterialRefs(v.model, ui.unitMeshMatName)
+			if !equalRefs(cur, ui.unitMeshMatOrig) {
+				applyMeshMaterialRefs(v.model, ui.unitMeshMatName, ui.unitMeshMatOrig)
+				ui.reloadUnitModelMaterials(v)
+				v.invalidate()
+			}
+		}
+	}
+	ui.unitMeshMatOpen = false
+	ui.unitMeshMatName = ""
+	ui.unitMeshMatOrig = nil
+	ui.unitMeshMatEditors = nil
+	ui.unitMeshMatErr = ""
+	ui.unitMeshMatScroll = panelScrollState{}
+}
+
+// previewUnitMeshMaterialDialog applies the fields to the model on show and
+// re-resolves its textures, so the map the path names appears behind the dim
+// without touching the file.
+func (ui *uiState) previewUnitMeshMaterialDialog() {
+	v := ui.unitModelViewer()
+	if v == nil || v.model == nil {
+		ui.unitMeshMatErr = "no model is loaded"
+		return
+	}
+	applyMeshMaterialRefs(v.model, ui.unitMeshMatName, ui.unitMeshMatFieldText())
+	ui.reloadUnitModelMaterials(v)
+	v.invalidate()
+	ui.unitMeshMatErr = ""
+}
+
+// saveUnitMeshMaterialDialog writes the fields into the .whm: the references
+// that differ are spliced in, the whole file goes to the overlay, and the
+// model on show is set to the same so the view agrees with what was written.
+// The dialog stays up — a modder correcting a path usually tries another —
+// and Cancel after a save reverts to nothing, because the file now says this.
+func (ui *uiState) saveUnitMeshMaterialDialog() {
+	v := ui.unitModelViewer()
+	if v == nil || v.model == nil {
+		ui.unitMeshMatErr = "no model is loaded"
+		return
+	}
+	if ui.modTree == nil || ui.unitModelPath == "" {
+		ui.unitMeshMatErr = "no module is loaded"
+		return
+	}
+	refs := ui.unitMeshMatFieldText()
+	data, err := ui.modTree.ReadFile(ui.unitModelPath)
+	if err != nil {
+		ui.unitMeshMatErr = "read failed: " + err.Error()
+		return
+	}
+	patched, err := whm.PatchMeshMaterialPaths(data, ui.unitMeshMatName, refs)
+	if err != nil {
+		ui.unitMeshMatErr = "save failed: " + err.Error()
+		return
+	}
+	disk, err := ui.modTree.WriteOverlayFile(ui.unitModelPath, patched)
+	if err != nil {
+		ui.unitMeshMatErr = "save failed: " + err.Error()
+		return
+	}
+	applyMeshMaterialRefs(v.model, ui.unitMeshMatName, refs)
+	ui.reloadUnitModelMaterials(v)
+	v.invalidate()
+	ui.unitMeshMatErr = ""
+	// The file holds these now: Cancel after this point reverts to them.
+	ui.unitMeshMatOrig = refs
+	for i := range ui.unitMeshMatEditors {
+		if i < len(refs) {
+			ui.unitMeshMatEditors[i].SetText(refs[i])
+		}
+	}
+	ui.statusText = fmt.Sprintf("Saved materials → %s", disk)
+	LogInfo("mesh material: Save WHM ok: %s (mesh=%q, %d path(s))",
+		disk, ui.unitMeshMatName, len(refs))
+	ui.markStateDirty()
+}
+
+// layoutUnitMeshMatDialog is the dialog itself: a dimmed card over the unit
+// body with the mesh's references in editable fields and Preview / Save / Cancel
+// beneath. The buttons and the dim were laid out last frame, so a press on any
+// of them is read here, ahead of redrawing what they decided — the order the
+// Classic OE event dialog takes.
+//
+// The card is sized to its content rather than to the window, and it takes
+// every press on its own area, so clicking the card's whitespace neither
+// leaves a dialog that fills the screen nor closes it under the user's hand.
+func (ui *uiState) layoutUnitMeshMatDialog(gtx layout.Context) layout.Dimensions {
+	cancel := ui.unitMeshMatCancel.Clicked(gtx)
+	dim := ui.unitMeshMatDim.Clicked(gtx)
+	if cancel || dim {
+		ui.closeUnitMeshMaterialDialog(true)
+	}
+	if ui.unitMeshMatPreview.Clicked(gtx) {
+		ui.previewUnitMeshMaterialDialog()
+	}
+	if ui.unitMeshMatSave.Clicked(gtx) {
+		ui.saveUnitMeshMaterialDialog()
+	}
+	if !ui.unitMeshMatOpen {
+		return layout.Dimensions{}
+	}
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			return ui.unitMeshMatDim.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				sz := gtx.Constraints.Max
+				st := clip.Rect{Max: sz}.Push(gtx.Ops)
+				paint.ColorOp{Color: rgba(0, 0, 0, 70)}.Add(gtx.Ops)
+				paint.PaintOp{}.Add(gtx.Ops)
+				st.Pop()
+				return layout.Dimensions{Size: sz}
+			})
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				inset := layout.Inset{Top: unit.Dp(12), Bottom: unit.Dp(12), Left: unit.Dp(14), Right: unit.Dp(14)}
+				cardW := minInt(gtx.Dp(unit.Dp(720)), gtx.Constraints.Max.X-gtx.Dp(unit.Dp(30)))
+				contentW := cardW - gtx.Dp(inset.Left+inset.Right)
+				// The card is as tall as what it holds, not as tall as the
+				// window. One material was drawing a 540dp card that was nine
+				// tenths empty; only when the fields run past the room the
+				// window has does the card fill it, and then they scroll.
+				cardH := clampInt(
+					ui.unitMeshMatNaturalHeight(gtx, contentW)+gtx.Dp(inset.Top+inset.Bottom),
+					gtx.Dp(unit.Dp(150)),
+					gtx.Constraints.Max.Y-gtx.Dp(unit.Dp(30)),
+				)
+				gtx.Constraints.Min = image.Pt(cardW, cardH)
+				gtx.Constraints.Max = image.Pt(cardW, cardH)
+				return widget.Border{Color: cBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Stack{}.Layout(gtx,
+						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+							rrect(gtx, cPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
+							return layout.Dimensions{Size: gtx.Constraints.Max}
+						}),
+						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+							// The card takes the press before the dim beneath
+							// can have it: the fields rarely fill the card, and
+							// a click on what is left used to shut the dialog.
+							absorbDialogCardPress(gtx, &ui.unitMeshMatCardTag)
+							return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								return ui.unitMeshMatColumn(gtx, func(gtx layout.Context) layout.Dimensions {
+									return ui.panelScrollView(gtx, &ui.unitMeshMatScroll, ui.unitMeshMatFields)
+								})
+							})
+						}),
+					)
+				})
+			})
+		}),
+	)
+}
+
+// unitMeshMatColumn is the card's whole content — title, the rules, the
+// fields, the note and the buttons — with the fields handed in, so the same
+// body can be laid out for real and laid out again to measure the height the
+// card should be.
+func (ui *uiState) unitMeshMatColumn(gtx layout.Context, fields layout.Widget) layout.Dimensions {
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(ui.unitMeshMatTitle),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return hLine(gtx, cHeaderLine, 1)
+		}),
+		layout.Flexed(1, fields),
+		layout.Rigid(ui.unitMeshMatNote),
+		layout.Rigid(ui.unitMeshMatFooter),
+	)
+}
+
+// unitMeshMatNaturalHeight measures that body at the width the card will give
+// it, with input off and the recorded operations thrown away — the height a
+// card sized to its content needs, taken the way the scroll panel takes the
+// height of its own contents.
+func (ui *uiState) unitMeshMatNaturalHeight(gtx layout.Context, contentW int) int {
+	if contentW <= 0 {
+		return 0
+	}
+	macro := op.Record(gtx.Ops)
+	measureGTX := gtx.Disabled()
+	measureGTX.Constraints.Min = image.Pt(0, 0)
+	measureGTX.Constraints.Max = image.Pt(contentW, panelScrollMeasureHeight)
+	height := ui.unitMeshMatColumn(measureGTX, ui.unitMeshMatFields).Size.Y
+	macro.Stop()
+	return height
+}
+
+// unitMeshMatTitle names the dialog and the mesh it edits.
+func (ui *uiState) unitMeshMatTitle(gtx layout.Context) layout.Dimensions {
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(14), "Mesh materials")
+			l.Color = cText
+			return l.Layout(gtx)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.th, unit.Sp(10), ui.unitMeshMatName)
+			l.Color = cTextDim
+			l.MaxLines = 1
+			return l.Layout(gtx)
+		}),
+	)
+}
+
+// unitMeshMatFields is the scrollable body: one field per material, with the
+// reference the file holds shown dimmed beneath a field that has moved away
+// from it.
+func (ui *uiState) unitMeshMatFields(gtx layout.Context) layout.Dimensions {
+	if len(ui.unitMeshMatEditors) == 0 {
+		l := material.Label(ui.th, unit.Sp(9), "This mesh carries no materials.")
+		l.Color = cTextDim
+		return l.Layout(gtx)
+	}
+	var rc []layout.FlexChild
+	for i := range ui.unitMeshMatEditors {
+		i := i
+		ed := &ui.unitMeshMatEditors[i]
+		rc = append(rc, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							l := material.Label(ui.th, unit.Sp(10), fmt.Sprintf("Material %d", i+1))
+							l.Color = cTextDim
+							return l.Layout(gtx)
+						}),
+						layout.Flexed(1, rowGap()),
+					)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return material.Editor(ui.th, ed, "texture path").Layout(gtx)
+					})
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					// The file's own value, shown only once the field has
+					// drifted from it: that is when a reader needs to see
+					// what is being replaced.
+					if i >= len(ui.unitMeshMatOrig) || strings.TrimSpace(ed.Text()) == ui.unitMeshMatOrig[i] {
+						return layout.Dimensions{}
+					}
+					l := material.Label(ui.th, unit.Sp(9), "file: "+ui.unitMeshMatOrig[i])
+					l.Color = cTextDim
+					l.MaxLines = 1
+					return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return hLine(gtx, cBorder, 1)
+					})
+				}),
+			)
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rc...)
+}
+
+// unitMeshMatNote is the one line under the fields: the reason the dialog
+// exists while there is no error, and the save's complaint when there is one.
+func (ui *uiState) unitMeshMatNote(gtx layout.Context) layout.Dimensions {
+	msg := "Preview draws the map behind this card; Save WHM writes the path into the file."
+	col := cTextDim
+	if ui.unitMeshMatErr != "" {
+		msg = ui.unitMeshMatErr
+		col = cProblem
+	}
+	l := material.Label(ui.th, unit.Sp(9), msg)
+	l.Color = col
+	return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
+}
+
+// unitMeshMatFooter is Preview, Save WHM and Cancel. Save is disabled while
+// there is no file to write to.
+func (ui *uiState) unitMeshMatFooter(gtx layout.Context) layout.Dimensions {
+	noFile := ui.modTree == nil || ui.unitModelPath == ""
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButton(gtx, &ui.unitMeshMatPreview, "Preview")
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButtonDisabled(gtx, &ui.unitMeshMatSave, "Save WHM", noFile)
+		}),
+		layout.Flexed(1, rowGap()),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.smallButton(gtx, &ui.unitMeshMatCancel, "Cancel")
+		}),
+	)
 }

@@ -2,22 +2,27 @@ package main
 
 import (
 	"context"
-	engine "dow-mod-studio/internal/3d_engine"
-	viewer "dow-mod-studio/internal/3d_viewer"
+	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"log"
+	"math"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/3d_viewer"
 	"dow-mod-studio/internal/fx"
 	"dow-mod-studio/internal/sgb"
 	"dow-mod-studio/internal/whe"
 	"dow-mod-studio/internal/whm"
-	"fmt"
-	"image"
-	"image/draw"
-	"log"
-	"strings"
-	"time"
-
 	"gioui.org/io/event"
 	"gioui.org/layout"
+	"gioui.org/unit"
 	"gioui.org/widget"
+	"gioui.org/widget/material"
 )
 
 // modelMaterialResult carries resolved textures back to the UI goroutine.
@@ -740,4 +745,629 @@ func (ui *uiState) pollViewerJobs(t *fileTab) {
 		default:
 		}
 	}
+}
+
+// ─── merged from viewer_controls.go ───────────────────────────────────────────────
+
+// modelControlsWithUV is the strip under a .whm canvas. The mapping controls
+// are a dialog of their own, so there is nothing else to draw under the canvas:
+// the name is kept because the canvas area is the one place that has to decide
+// what goes below itself.
+func (ui *uiState) modelControlsWithUV(gtx layout.Context, t *fileTab) layout.Dimensions {
+	return ui.modelControls(gtx, t)
+}
+
+// modelControls is the strip under the canvas. A viewer whose controls live
+// beside it rather than under it — the object window's viewport, where the
+// canvas is a third of the window wide and the strip does not fit — is laid out
+// without one.
+func (ui *uiState) modelControls(gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.model
+	ui.modelControlClicks(gtx, t)
+	animCount := len(v.model.Animations)
+	// The strip is two rows tall here, so the one-row clamp is applied to
+	// each row below rather than to the whole block: applied outside it
+	// would cap the pair at the height of one and clip the second.
+	return layout.Inset{Top: unit.Dp(4), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(modelRowHeight(gtx),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &t.modelPlay, modelPlayLabel(v), animCount == 0)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &t.modelPrevAnim, "◀", animCount == 0)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							l := material.Label(ui.th, unit.Sp(10), modelClipLabel(v))
+							l.Color = cTextDim
+							l.MaxLines = 1
+							return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, l.Layout)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &t.modelNextAnim, "▶", animCount == 0)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &t.modelStepBack, "|◀", animCount == 0)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &t.modelStepFwd, "▶|", animCount == 0)
+						}),
+						layout.Flexed(1, rowGap()),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &t.modelTexture, "Textures", len(v.materials) == 0)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &t.modelSkeleton, "Skeleton", len(v.model.Bones) == 0)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButton(gtx, &t.modelFX, modelFXLabel(v))
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.fxAxesButton(gtx, v) }),
+						// The ground plane toggle, the same switch the Object
+						// Viewport's side panel carries: disabled when the
+						// mod carries no ground texture to show.
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButtonDisabled(gtx, &t.modelGround, modelGroundLabel(v), v.groundImage == nil)
+						}),
+						// The zoom the wheel does, as two steps of it, so the
+						// distance can be moved by a known amount without a
+						// wheel to hand.
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButton(gtx, &t.modelZoomOut, modelZoomOutLabel)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return ui.smallButton(gtx, &t.modelZoomIn, modelZoomInLabel)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.smallButton(gtx, &t.modelReset, "Reset view") }),
+					)
+				}),
+			)
+		})
+}
+
+// modelInfoTable reports what the 3D preview is showing, which makes it obvious
+// whether a blank canvas is a missing texture or a parse problem.
+func (ui *uiState) modelInfoTable(gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t == nil || t.model == nil || t.model.model == nil {
+		return layout.Dimensions{}
+	}
+	v := t.model
+	tris := 0
+	for _, mesh := range v.model.Meshes {
+		tris += len(mesh.Indices) / 3
+	}
+	frame := "—"
+	if v.frame != nil {
+		b := v.frame.Bounds()
+		frame = fmt.Sprintf("%d × %d", b.Dx(), b.Dy())
+	}
+	state := "idle"
+	switch {
+	case v.loading:
+		state = "loading textures"
+	case v.rendering:
+		state = "rendering"
+	case v.frame != nil:
+		state = "ready"
+	}
+	// Several meshes usually share a map, so the count is over distinct
+	// materials. Comparing against the mesh count made a model with four
+	// textures look like it was missing twenty three of them.
+	unique := map[string]bool{}
+	for _, m := range v.model.Meshes {
+		if m.Material != "" {
+			unique[m.Material] = true
+		}
+	}
+	textures := fmt.Sprintf("%d/%d", len(v.materials), len(unique))
+	if v.missing > 0 {
+		textures += fmt.Sprintf(" (%d missing)", v.missing)
+	}
+	anim := "—"
+	if v.anim != nil {
+		anim = v.anim.Name
+	}
+	rows := [][2]string{
+		{"State", state},
+		{"Frame", frame},
+		{"Triangles", fmt.Sprintf("%d", tris)},
+		{"Animation", anim},
+		{"Textures", textures},
+	}
+	// The camera only gets a row when one of the model's own is in use, since
+	// an orbit camera has no name to report.
+	if v.ActiveCamera != "" {
+		rows = append(rows, [2]string{"Camera", v.ActiveCamera})
+	}
+	children := make([]layout.FlexChild, 0, len(rows))
+	for i, row := range rows {
+		i, row := i, row
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return ui.tableRow2(gtx, row[0], row[1], i%2 == 0)
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+}
+
+// modelMaterialDiagnosticsTable lists each mesh's material reference, source,
+// and decoded image encoding. Repeated materials remain visible per mesh so
+// the reader can identify which geometry uses a missing or unexpected map.
+func (ui *uiState) modelMaterialDiagnosticsTable(gtx layout.Context, t *fileTab) layout.Dimensions {
+	if t == nil || t.model == nil || t.model.model == nil {
+		return layout.Dimensions{}
+	}
+	v := t.model
+	if !v.materialsLoaded && !v.loading {
+		return centeredPanelLabel(gtx, ui.th, "Material lookup has not run", unit.Sp(10), cTextDim)
+	}
+	if v.loading && len(v.materialDiagnostics) == 0 {
+		return centeredPanelLabel(gtx, ui.th, "Resolving materials…", unit.Sp(10), cTextDim)
+	}
+	rows := make([]layout.FlexChild, 0, len(v.model.Meshes)*3)
+	for meshIndex, mesh := range v.model.Meshes {
+		if mesh.Material == "" {
+			continue
+		}
+		diag, ok := v.materialDiagnostics[mesh.Material]
+		if !ok {
+			diag = modelMaterialDiagnostic{Format: "—", Status: "not resolved"}
+		}
+		meshLabel := mesh.Name
+		if meshLabel == "" {
+			meshLabel = fmt.Sprintf("Mesh %d", meshIndex+1)
+		}
+		rows = append(rows,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.tableRow2WithTooltip(gtx, meshLabel, mesh.Material, meshIndex%2 == 0, mesh.Material)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return ui.tableRow2WithTooltip(gtx, "Format", diagnosticValue(diag.Format), meshIndex%2 != 0, diag.Status)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				path := diag.ResolvedPath
+				if path == "" {
+					path = diag.Status
+				}
+				return ui.tableRow2WithTooltip(gtx, "Source", path, meshIndex%2 == 0, diag.ResolvedPath)
+			}),
+		)
+	}
+	if len(rows) == 0 {
+		return centeredPanelLabel(gtx, ui.th, "No meshes reference a material", unit.Sp(10), cTextDim)
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
+}
+
+func diagnosticValue(value string) string {
+	if value == "" {
+		return "—"
+	}
+	return value
+}
+
+// modelPlayLabel is what the play button says: the action it will do.
+func modelPlayLabel(v *modelViewer) string {
+	if v.playing {
+		return "Pause"
+	}
+	return "Play"
+}
+
+// modelClipLabel is the name of the clip on show and where it is in the list.
+func modelClipLabel(v *modelViewer) string {
+	count := len(v.model.Animations)
+	if count == 0 {
+		return "no animations"
+	}
+	name := "—"
+	if v.anim != nil {
+		name = v.anim.Name
+	}
+	return fmt.Sprintf("%s  [%d/%d]", name, v.animIndex+1, count)
+}
+
+// onOff renders a boolean for a log line.
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
+// toggleSound turns the model's own audio on and off. Turning it off stops what
+// is playing at once, because a sound that keeps going after it was turned off
+// is the one case of this that is actually annoying.
+func (v *modelViewer) toggleSound() {
+	if v == nil {
+		return
+	}
+	if v.fxSoundOn {
+		v.fxSoundOn = false
+		if v.fxSound != nil {
+			v.fxSound.StopAll()
+		}
+		log.Printf("3D preview: sound off")
+		return
+	}
+	v.fxSoundOn = true
+	log.Printf("3D preview: sound on")
+}
+
+// modelGroundLabel reports whether the unit viewport's ground plane is shown.
+func modelGroundLabel(v *modelViewer) string {
+	if v == nil || v.groundImage == nil {
+		return "no ground"
+	}
+	if v.showGround {
+		return "Ground on"
+	}
+	return "Ground off"
+}
+
+// modelSFXLabel is what the sound button reads: whether the model has sounds
+// at all, and whether they are playing.
+// modelZoomStep is what one step of the zoom changes the camera distance by:
+// a notch of the wheel, or a press of one of the two zoom buttons.
+//
+// It used to be a two percent step raised to the whole scroll amount, and the
+// scroll amount for one notch is wheelNotchDelta, so a click multiplied the
+// distance by 1.02^120 — a factor of ten. The model went from framed to inside
+// out in one click and back in the next, with nothing in between worth looking
+// at. One step is now one readable move, and the whole range between the
+// closest and furthest the viewer allows is about a dozen steps either way.
+const modelZoomStep = 1.15
+
+// zoomBy multiplies the camera distance, keeping it inside the range the viewer
+// allows. A factor above one moves the camera away from the model.
+func (v *modelViewer) zoomBy(factor float64) {
+	if v == nil || factor <= 0 || factor == 1 {
+		return
+	}
+	v.CameraState = viewer.ZoomBy(v.CameraState, factor)
+	v.invalidate()
+}
+
+// modelZoomByDelta turns a scroll amount into the factor it costs the camera.
+// The amount is in notches rather than pixels, so a Windows wheel and a
+// trackpad — which reports the same gesture in smaller pieces that add up —
+// move the camera by the same amount for the same turn of the wheel.
+func modelZoomByDelta(delta float32) float64 {
+	return math.Pow(modelZoomStep, -float64(delta)/wheelNotchDelta)
+}
+
+// ─── merged from viewer_model_controls.go ───────────────────────────────────────────────
+
+// modelDefaultFov is the vertical field of view the orbit camera opens with.
+// It matches what a .whm camera stores, so a model that has one of its own and
+// is put on it does not jump in size.
+const modelDefaultFov = 45.0
+
+// Interactive 3D preview for a decoded .whm.
+//
+// Rendering is a CPU rasterisation (see model3d.go) and costs real time, so a
+// frame is produced only when the camera or the animation actually changes, and
+// the work happens on a worker goroutine. While the camera is moving the last
+// frame stays on screen; the full quality frame replaces it when the movement
+// stops.
+
+// hiddenMeshes is the set of mesh names the reader has turned off with the
+// eye toggle of the mesh list. It is shared by every viewer so hiding a mesh
+// in the object window's viewport also hides it in a .whm tab showing the
+// same model. The render options are built on the viewer, which has no handle
+// on uiState, so the set lives here rather than on the ui state; names are
+// compared in lower case because a model's mesh casing is not guaranteed
+// consistent between the mesh list and the clips.
+var hiddenMeshes = map[string]bool{}
+
+// setMeshHidden records one mesh as shown or hidden for every viewer.
+func setMeshHidden(name string, hidden bool) {
+	key := strings.ToLower(name)
+	if hidden {
+		hiddenMeshes[key] = true
+	} else {
+		delete(hiddenMeshes, key)
+	}
+}
+
+// meshHidden says whether the reader has turned the named mesh off.
+func meshHidden(name string) bool { return hiddenMeshes[strings.ToLower(name)] }
+
+// modelMeshNames is the model's mesh names, each once, in the order the model
+// declares them. A mesh ships as several sub meshes (one per material) that
+// share a name, so the list de-dupes by name while keeping the first casing
+// — which is the order the eye toggle list wants.
+func modelMeshNames(m *WhmModel) []string {
+	if m == nil {
+		return nil
+	}
+	seen := make(map[string]bool, len(m.Meshes))
+	out := make([]string, 0, len(m.Meshes))
+	for _, mesh := range m.Meshes {
+		key := strings.ToLower(mesh.Name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, mesh.Name)
+	}
+	return out
+}
+
+// meshAlphas is how much of each mesh the clip on show draws at the playhead,
+// for the clips that hide or fade part of a model: the restored monolith
+// holds its pieces back through phase_out, and the Obelisk fades its body in
+// over the first frames of build_phasing.
+//
+// The map is built per frame rather than kept, because a model has a few dozen
+// meshes at most and one that says nothing is the common case: MeshAlphas
+// returns nil for it, and nil means every mesh is drawn whole.
+//
+// A mesh the reader has hidden with the eye toggle is forced to 0 here, on top
+// of whatever the clip says: both the software and the hardware renderer skip
+// a mesh whose alpha is 0, so this is the one place that turns the toggle into
+// a mesh that is not drawn.
+func (v *modelViewer) meshAlphas() map[string]float32 {
+	if v == nil || v.model == nil {
+		return nil
+	}
+	var out map[string]float32
+	if v.anim != nil {
+		// The playhead is normalised over the clip, which is the measure the
+		// visibility keys are written in.
+		out = v.model.MeshAlphas(v.anim.Name, float32(v.time))
+	}
+	if len(hiddenMeshes) == 0 {
+		return out
+	}
+	// Force every hidden mesh of this model to 0 by the mesh's own name,
+	// which is how both renderers look it up. A hidden name that belongs to
+	// another model simply is not in this loop.
+	for i := range v.model.Meshes {
+		name := v.model.Meshes[i].Name
+		if !meshHidden(name) {
+			continue
+		}
+		if out == nil {
+			out = map[string]float32{}
+		}
+		out[name] = 0
+	}
+	return out
+}
+
+// The range the three mapping sliders cover. An offset of a whole tile is
+// already past anything a reader would be looking for, and a scale of a fifth
+// of the map is a quarter of the model repeated five times over.
+const (
+	modelUVMinOffset = -1
+	modelUVMaxOffset = 1
+	modelUVMinScale  = 0.2
+	modelUVMaxScale  = 4
+)
+
+// modelControlClicks applies whichever button of the strip was pressed. It is
+// the one place the presses are read, so a strip laid out in a different shape —
+// the viewport's two narrow rows — does exactly the same as the one under a
+// canvas.
+func (ui *uiState) modelControlClicks(gtx layout.Context, t *fileTab) {
+	v := t.model
+	if t.modelPlay.Clicked(gtx) {
+		if v.anim == nil {
+			v.selectAnim(0)
+		}
+		v.playing = !v.playing
+		v.lastFrame = time.Time{}
+		v.invalidate()
+	}
+	if t.modelPrevAnim.Clicked(gtx) {
+		v.selectAnim(v.animIndex - 1)
+	}
+	if t.modelNextAnim.Clicked(gtx) {
+		v.selectAnim(v.animIndex + 1)
+	}
+	if t.modelStepBack.Clicked(gtx) {
+		v.stepFrame(-1)
+		ui.pickFrameKeyOnTimeline(v)
+	}
+	if t.modelStepFwd.Clicked(gtx) {
+		v.stepFrame(1)
+		ui.pickFrameKeyOnTimeline(v)
+	}
+	if t.modelReset.Clicked(gtx) {
+		v.resetCamera()
+	}
+	if t.modelZoomIn.Clicked(gtx) {
+		v.zoomBy(modelZoomStep)
+	}
+	if t.modelZoomOut.Clicked(gtx) {
+		v.zoomBy(1 / modelZoomStep)
+	}
+	if t.modelSkeleton.Clicked(gtx) {
+		v.showSkeleton = !v.showSkeleton
+		log.Printf("3D preview: skeleton overlay %s", onOff(v.showSkeleton))
+		v.invalidate()
+	}
+	if t.modelFX.Clicked(gtx) {
+		v.toggleFX()
+	}
+	if t.modelGround.Clicked(gtx) {
+		v.showGround = !v.showGround
+		log.Printf("3D preview: ground %s", onOff(v.showGround))
+		v.invalidate()
+	}
+	if t.modelTexture.Clicked(gtx) {
+		v.textured = !v.textured
+		log.Printf("3D preview: textures %s", onOff(v.textured))
+		v.invalidate()
+	}
+}
+
+// modelRowHeight keeps a strip of buttons one row high. A small button fills
+// whatever height it is handed, and a row of them under a canvas would take the
+// canvas's height and leave it nothing.
+func modelRowHeight(gtx layout.Context) layout.Context {
+	if h := gtx.Dp(unit.Dp(unitRowHeightDp)); gtx.Constraints.Max.Y > h {
+		gtx.Constraints.Max.Y = h
+	}
+	gtx.Constraints.Min.Y = 0
+	return gtx
+}
+
+// The two zoom buttons are labelled with the signs rather than with words: the
+// strip they sit in is one row of small buttons, and in the object window's
+// side panel there is no room for "Zoom in". They are pressed one at a time
+// with "Reset view" beside them, which is what says what they are for.
+const (
+	modelZoomInLabel  = "+"
+	modelZoomOutLabel = "−"
+)
+
+// uvTextureLabel is what a texture is called in the list: the shared mapping is
+// named as such, and a material is named by its own base name, which is what
+// the .whm refers to it by.
+func uvTextureLabel(material string) string {
+	if material == "" {
+		return "All textures"
+	}
+	name := strings.TrimSuffix(filepath.Base(material), filepath.Ext(material))
+	if name == "" || name == "." {
+		return material
+	}
+	return name
+}
+
+// uvTextureButton is one entry of the texture list. The pressed look is the one
+// the selected rows use, so the choice reads as a choice without a word saying
+// so.
+func (ui *uiState) uvTextureButton(gtx layout.Context, btn *widget.Clickable, label string, on bool) layout.Dimensions {
+	bg, bd, text := cSaveBg, cSaveBd, cText
+	if on {
+		bg, bd, text = cSelectBg, cSelectBd, rgb(0xFFFFFF)
+	}
+	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return frameMeasured(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Top: unit.Dp(3), Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				l := material.Label(ui.th, unit.Sp(10), label)
+				l.Color = text
+				l.MaxLines = 1
+				return l.Layout(gtx)
+			})
+		}, bg, bd, unit.Dp(3))
+	})
+}
+
+// ensureUVTextureClicks sizes the texture list's click targets. They are
+// rebuilt per model, so a list of the wrong length is replaced rather than
+// grown into.
+func (v *modelViewer) ensureUVTextureClicks(n int) {
+	if len(v.uvTextureClicks) != n {
+		v.uvTextureClicks = make([]widget.Clickable, n)
+	}
+}
+
+// uvWholeTiles reports whether an offset is a whole number of map widths, which
+// the map repeating that often makes indistinguishable from no offset at all.
+func uvWholeTiles(v float32) bool {
+	if v == 0 {
+		return false
+	}
+	n := float64(v)
+	return math.Abs(n-math.Round(n)) < 0.0005
+}
+
+// modelMaterialsNeedLoad reports whether this viewer has never completed its
+// texture lookup and has no worker in progress.
+func modelMaterialsNeedLoad(t *fileTab) bool {
+	return t != nil && t.model != nil && t.model.model != nil &&
+		t.modelMaterialCh == nil && !t.model.loading && !t.model.materialsLoaded
+}
+
+// layoutModelViewer draws the canvas plus the playback controls.
+func (ui *uiState) layoutModelViewer(gtx layout.Context, t *fileTab) layout.Dimensions {
+	v := t.model
+	if v == nil || v.model == nil {
+		return centeredPanelLabel(gtx, ui.th, "No model", unit.Sp(10), cTextDim)
+	}
+	if modelMaterialsNeedLoad(t) {
+		t.modelMaterialCh = make(chan modelMaterialResult, 1)
+		ui.loadModelMaterials(v, t.modelMaterialCh)
+	}
+	// The canvas is always laid out, even before the first frame arrives: it is
+	// the canvas that starts the render, so skipping it here would leave the
+	// tab permanently blank.
+	if v.sideControls {
+		return ui.modelCanvasWithFxList(gtx, t)
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return ui.modelCanvasWithFxList(gtx, t) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ui.modelControlsWithUV(gtx, t) }),
+	)
+}
+
+// fxListLabel lays out one block of the readout, for layout.Rigid.
+func fxListLabel(th *material.Theme, s string, col color.NRGBA) func(gtx layout.Context) layout.Dimensions {
+	return func(gtx layout.Context) layout.Dimensions {
+		l := material.Label(th, unit.Sp(11), s)
+		l.Color = col
+		l.MaxLines = 14
+		return l.Layout(gtx)
+	}
+}
+
+func clampFloat64(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+var _ = widget.Clickable{}
+
+// renderModelOnGpu draws a frame with the hardware renderer, which is a few
+// orders of magnitude cheaper than the software one and can animate. It reports
+// false when there is no hardware renderer, or when the skeleton overlay is
+// asked for, since the bone lines are drawn by the software path.
+//
+// The pass has to run here, on the goroutine that calls Frame and before it, so
+// the device commands are ordered ahead of Gio's own drawing.
+// modelGpuSkipLogged is the reason the software path was last used, so the
+// log records the switch rather than one line per frame.
+var modelGpuSkipLogged string
+
+// modelRenderingLogged throttles the "nothing on screen yet" line to once a
+// second, since a stuck preview asks every frame.
+var modelRenderingLogged time.Time
+
+// modelGPUPaintSkipLogged marks that the DOW_NO_GPU_PAINT diagnostic has been
+// reported once.
+var modelGPUPaintSkipLogged time.Time
+
+// modelGpuUnavailable says why the hardware path will not draw this frame, or
+// "" when it will.
+//
+// It is the decision renderModelOnGpu acts on, factored out because two
+// places now ask it: the renderer itself, and the FX step, which skips
+// building the software picture of the particles when the hardware frame is
+// going to draw them instead. Two copies of this list would drift, and the
+// drift that matters is the one where the picture was not built while the
+// hardware path failed anyway.
+func (ui *uiState) modelGpuUnavailable(v *modelViewer) string {
+	switch {
+	case v == nil || v.model == nil:
+		return "no model"
+	case ui.forceSoftRenderer:
+		// The settings checkbox wins over every hardware path, in the
+		// textured mode as in the skeleton one.
+		return "software rendering enabled in settings"
+	case v.gpuBroken:
+		return "hardware path marked broken"
+	case ui.modelGpuRenderer() == nil:
+		return "no hardware renderer on this window"
+	}
+	return ""
 }

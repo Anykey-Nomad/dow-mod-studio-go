@@ -3,10 +3,14 @@ package main
 import (
 	"image"
 	"image/color"
+	"strings"
 
+	"dow-mod-studio/internal/rgd"
+	"gioui.org/f32"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -516,4 +520,372 @@ func (ui *uiState) layoutUnitMiddleColumn(gtx layout.Context) layout.Dimensions 
 
 func (ui *uiState) layoutUnitRightColumn(gtx layout.Context) layout.Dimensions {
 	return ui.layoutUnitRightColumnBody(gtx)
+}
+
+// ─── merged from unit_action_icons.go ───────────────────────────────────────────────
+
+// ── action icons ────────────────────────────────────────────────────────────
+//
+// The game's own command buttons double as a vocabulary for the Classic
+// Object Editor's action rows: Data\art\ui\ingame\command_icons holds a tga
+// per command (move, melee, capturepoint, stance_*), so an action whose name
+// says what it does can borrow the picture the game itself would draw for
+// that command. actionIconFile works the whole mapping out from the name —
+// nothing here reads the .whe — and an action the vocabulary does not cover
+// simply gets no icon.
+//
+// Icons decode once and stay for as long as the mod is open, keyed by the
+// action's lower-cased name: the tree asks for the icons of its visible rows
+// on every frame, and decoding a .tga per frame is not that.
+
+// actionIconCommandsDir is the tree folder of the game's command icons.
+const actionIconCommandsDir = `art\ui\ingame\command_icons`
+
+// actionIcon returns the decoded command icon of an action or motion, or nil
+// when the game's vocabulary has none for it.
+func (ui *uiState) actionIcon(name string) image.Image {
+	file := actionIconFile(name)
+	if file == "" || ui.modTree == nil {
+		return nil
+	}
+	mod := ui.modTree.FileMapName
+	if ui.actionIcons == nil || ui.actionIconsMod != mod {
+		ui.actionIcons = make(map[string]iconCacheEntry)
+		ui.actionIconsMod = mod
+	}
+	key := strings.ToLower(strings.TrimSpace(name))
+	if e, ok := ui.actionIcons[key]; ok {
+		return e.img
+	}
+	img := ui.readIconAt(actionIconCommandsDir + `\` + file)
+	ui.actionIcons[key] = iconCacheEntry{img: img, tried: true}
+	return img
+}
+
+// actionIconFile maps an action's name to the command icon file (without the
+// extension) that best says what the action is, or "" when nothing in the
+// vocabulary fits. The match is on lower-cased substrings, most specific
+// first: a name that reads "melee" takes the melee icon however the rest of
+// it reads, and only a name no earlier rule claimed reaches the generic
+// movement and stance pictures at the end.
+func actionIconFile(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	switch {
+	case n == "":
+		return ""
+	case strings.Contains(n, "holdfire") || strings.Contains(n, "hold_fire") || strings.Contains(n, "cease"):
+		return "stance_cease"
+	case strings.Contains(n, "melee"):
+		// Before every attack, charge and move rule: a melee
+		// whatever is still a melee whatever.
+		return "melee"
+	case strings.Contains(n, "capture"):
+		return "capturepoint"
+	case strings.Contains(n, "garrison"):
+		return "capturepoint"
+	case strings.Contains(n, "repair"):
+		return "repair"
+	case strings.Contains(n, "rally"):
+		return "rallypoint"
+	case strings.Contains(n, "stop"):
+		return "stop"
+	case strings.Contains(n, "detach"):
+		return "detach"
+	case strings.Contains(n, "attach"):
+		return "attach"
+	case strings.Contains(n, "undeploy"):
+		return "undeploy_weapon"
+	case strings.Contains(n, "deploy"):
+		return "deploy_weapon"
+	case strings.Contains(n, "unload_here"):
+		return "unload_here"
+	case strings.Contains(n, "unload"):
+		return "unloading"
+	case strings.Contains(n, "build"):
+		if strings.Contains(n, "advanced") || strings.Contains(n, "upgrade") {
+			return "build_structure_advanced"
+		}
+		return "build_structure"
+	case strings.Contains(n, "attack_move"):
+		return "attackm"
+	case strings.Contains(n, "attack"):
+		return "attackg"
+	case strings.Contains(n, "infiltrate"):
+		return "infiltrate_on"
+	case strings.Contains(n, "teleport") || strings.Contains(n, "phase"):
+		return "teleport"
+	case strings.Contains(n, "jump") || strings.Contains(n, "leap"):
+		return "jumping"
+	case strings.Contains(n, "entrench"):
+		return "entrench"
+	case strings.Contains(n, "cannibalize"):
+		return "cannibalize"
+	case strings.Contains(n, "possess"):
+		return "possess"
+	case strings.Contains(n, "scuttle"):
+		return "scuttle"
+	case strings.Contains(n, "reinforce"):
+		return "reinforce"
+	case strings.Contains(n, "uproot"):
+		return "uproot"
+	case strings.Contains(n, "deepstrike") || strings.Contains(n, "deep_strike"):
+		return "deepstrike"
+	case strings.Contains(n, "droppod") || strings.Contains(n, "drop_pod"):
+		return "droppod"
+	case strings.Contains(n, "summon"):
+		return "summoning"
+	case strings.Contains(n, "rampage"):
+		return "rampage"
+	case strings.Contains(n, "train"):
+		return "train_units"
+	case strings.Contains(n, "bomb"):
+		return "place_bomb"
+	case strings.Contains(n, "cancel"):
+		return "cancel"
+	case strings.Contains(n, "charge") || strings.Contains(n, "patrol"):
+		return "move"
+	case actionIconHasWord(n, "run"), actionIconHasWord(n, "walk"),
+		actionIconHasWord(n, "chase"), actionIconHasWord(n, "move"):
+		return "move"
+	case strings.Contains(n, "sprint"):
+		return "move"
+	case strings.Contains(n, "stance_"):
+		switch {
+		case strings.Contains(n, "hold"):
+			return "stance_hold"
+		case strings.Contains(n, "assault"):
+			return "stance_assault"
+		case strings.Contains(n, "burn"):
+			return "stance_burn"
+		case strings.Contains(n, "ranged"), strings.Contains(n, "range"):
+			return "stance_ranged"
+		case strings.Contains(n, "attack"), strings.Contains(n, "fire"):
+			return "stance_attack"
+		}
+		return "stance_stand"
+	case actionIconHasWord(n, "hold"):
+		return "stance_hold"
+	case strings.Contains(n, "idle") || strings.Contains(n, "stand"):
+		return "stance_stand"
+	}
+	return ""
+}
+
+// actionIconHasWord reports whether word stands as a whole word inside the
+// lower-cased name — "run", "run_in", "idle_run" — so a rule on plain words
+// cannot catch "thrown" on its way to some other match.
+func actionIconHasWord(n, word string) bool {
+	if n == word || strings.HasPrefix(n, word+"_") || strings.HasSuffix(n, "_"+word) {
+		return true
+	}
+	return strings.Contains(n, "_"+word+"_")
+}
+
+// ─── merged from unit_icon.go ───────────────────────────────────────────────
+
+// ── object icons ────────────────────────────────────────────────────────────
+//
+// The game gives every unit and building an icon: a .tga under
+// Data\art\ui\ingame\<race>_icons, named after the unit's own file
+// (necron_lord → necron_icons/necron_lord_icon.tga). The name the unit's .rgd
+// records in ui_ext\ui_info\icon_name is the same file with the race folder in
+// front of it, so the file-name convention resolves nearly every icon without
+// reading the unit at all, and the recorded name is the fallback for the ones
+// that do not follow it.
+//
+// Icons are decoded once and kept for as long as the mod is open, keyed by the
+// unit's tree path: the dropdown asks for the icons of its visible rows on
+// every frame, and decoding a .tga per frame is not that.
+
+// iconCacheEntry is one unit's icon lookup. A miss is cached as well — img is
+// nil and tried says the lookup was made — so a unit with no icon is not
+// searched for again on every frame.
+type iconCacheEntry struct {
+	img   image.Image
+	tried bool
+}
+
+// unitIcon returns the decoded icon of a unit or building, or nil when the mod
+// has none.
+func (ui *uiState) unitIcon(u unitEntry) image.Image {
+	if ui.modTree == nil || u.Path == "" {
+		return nil
+	}
+	mod := ui.modTree.FileMapName
+	if ui.unitIcons == nil || ui.unitIconsMod != mod {
+		ui.unitIcons = make(map[string]iconCacheEntry)
+		ui.unitIconsMod = mod
+	}
+	if e, ok := ui.unitIcons[u.Path]; ok {
+		return e.img
+	}
+	img := ui.loadUnitIcon(u)
+	ui.unitIcons[u.Path] = iconCacheEntry{img: img, tried: true}
+	return img
+}
+
+// loadUnitIcon resolves and decodes the icon of one unit, cheapest lookup
+// first: the game's naming convention, then the file anywhere in the tree,
+// then the name the unit's own .rgd records — reading the unit is the
+// expensive part, so it is last.
+func (ui *uiState) loadUnitIcon(u unitEntry) image.Image {
+	if ui.modTree == nil {
+		return nil
+	}
+	stem := unitTemplateIconBase(u.Race) + `\` + u.Name + "_icon"
+	if img := ui.readIconAt(`art\ui\ingame\` + stem); img != nil {
+		return img
+	}
+	if img := ui.readIconByName(u.Name + "_icon"); img != nil {
+		return img
+	}
+	data, err := ui.modTree.ReadFile(u.Path)
+	if err != nil {
+		return nil
+	}
+	rf, err := rgd.ParseRgd(data)
+	if err != nil {
+		return nil
+	}
+	icon := rgdEntryStr(rgdFindPath(rf.Root, "ui_ext", "ui_info", "icon_name"))
+	icon = strings.TrimSpace(icon)
+	if icon == "" {
+		return nil
+	}
+	icon = strings.ReplaceAll(icon, "/", `\`)
+	if img := ui.readIconAt(`art\ui\ingame\` + icon); img != nil {
+		return img
+	}
+	// icon_name carries the race folder in front ("necrons/necron_icons/...")
+	// while the file sits directly under the icons folder.
+	if i := strings.Index(icon, `\`); i >= 0 {
+		if img := ui.readIconAt(`art\ui\ingame\` + icon[i+1:]); img != nil {
+			return img
+		}
+	}
+	if i := strings.LastIndex(icon, `\`); i >= 0 {
+		icon = icon[i+1:]
+	}
+	return ui.readIconByName(icon)
+}
+
+// readIconAt looks for the given tree path without an extension, trying the
+// two forms an icon ships in.
+func (ui *uiState) readIconAt(virtualPathNoExt string) image.Image {
+	for _, ext := range []string{".tga", ".rsh"} {
+		data, err := ui.modTree.ReadFile(virtualPathNoExt + ext)
+		if err != nil {
+			continue
+		}
+		if img := decodeIconData(ext, data); img != nil {
+			return img
+		}
+	}
+	return nil
+}
+
+// readIconByName finds an icon file by its base name anywhere in the tree,
+// which covers a mod that filed its icons somewhere of its own.
+func (ui *uiState) readIconByName(stem string) image.Image {
+	for _, ext := range []string{".tga", ".rsh"} {
+		f := ui.modTree.FindByName(stem + ext)
+		if f == nil {
+			continue
+		}
+		data, err := ui.modTree.ReadFile(f.FullPath)
+		if err != nil {
+			continue
+		}
+		if img := decodeIconData(ext, data); img != nil {
+			return img
+		}
+	}
+	return nil
+}
+
+// decodeIconData decodes one icon file. Both forms are ordinary images; a file
+// that will not decode simply yields no icon rather than an error line in a
+// list that is about names.
+func decodeIconData(ext string, data []byte) image.Image {
+	switch ext {
+	case ".tga":
+		if img, err := decodeTGA(data); err == nil {
+			return img
+		}
+	case ".rsh":
+		if img, _, err := decodeRshImage(data, 0); err == nil {
+			return img
+		}
+	}
+	return nil
+}
+
+// unitIconLayout paints img fitted inside a w×h box, preserving its aspect and
+// centring it, and reserves the box even when there is no icon — a column of
+// rows keeps its text aligned whether or not the mod ships pictures.
+func unitIconLayout(gtx layout.Context, img image.Image, w, h unit.Dp) layout.Dimensions {
+	boxW, boxH := gtx.Dp(w), gtx.Dp(h)
+	if boxW < 1 || boxH < 1 {
+		return layout.Dimensions{}
+	}
+	size := image.Pt(boxW, boxH)
+	if img == nil {
+		return layout.Dimensions{Size: size}
+	}
+	b := img.Bounds()
+	if b.Dx() < 1 || b.Dy() < 1 {
+		return layout.Dimensions{Size: size}
+	}
+	scale := float32(boxW) / float32(b.Dx())
+	if s := float32(boxH) / float32(b.Dy()); s < scale {
+		scale = s
+	}
+	dw := int(float32(b.Dx())*scale + 0.5)
+	dh := int(float32(b.Dy())*scale + 0.5)
+	x := (boxW - dw) / 2
+	y := (boxH - dh) / 2
+	st := clip.Rect{Max: size}.Push(gtx.Ops)
+	aff := op.Affine(f32.AffineId().Scale(f32.Pt(0, 0), f32.Pt(scale, scale)).Offset(f32.Pt(
+		float32(x)-float32(b.Min.X)*scale,
+		float32(y)-float32(b.Min.Y)*scale,
+	)))
+	tr := aff.Push(gtx.Ops)
+	paint.NewImageOp(img).Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+	tr.Pop()
+	st.Pop()
+	return layout.Dimensions{Size: size}
+}
+
+// folderIconLayout paints a folder silhouette — a tab raised on the left of a
+// wider body — fitted in a w×h box, and reserves the box even when it is
+// tiny, so a column of tree rows stays aligned. It marks a row that opens
+// into a list, drawn rather than set in type so it looks the same on every
+// platform.
+func folderIconLayout(gtx layout.Context, w, h unit.Dp) layout.Dimensions {
+	bw, bh := gtx.Dp(w), gtx.Dp(h)
+	if bw < 3 || bh < 3 {
+		return layout.Dimensions{}
+	}
+	col := rgb(0xE8C14A)
+	fill := func(r image.Rectangle) {
+		st := clip.Rect(r).Push(gtx.Ops)
+		paint.ColorOp{Color: col}.Add(gtx.Ops)
+		paint.PaintOp{}.Add(gtx.Ops)
+		st.Pop()
+	}
+	tabW := (bw*2 + 2) / 5  // the tab runs about two fifths across
+	tabH := (bh*3 + 5) / 10 // and about a third of the height
+	if tabW < 2 {
+		tabW = 2
+	}
+	if tabH < 1 {
+		tabH = 1
+	}
+	// The body spans the full width below the tab; the tab sits above it on
+	// the left and overlaps by a pixel so the two read as one silhouette
+	// with no hairline between them.
+	fill(image.Rect(0, tabH, bw, bh))
+	fill(image.Rect(0, 0, tabW, tabH+1))
+	return layout.Dimensions{Size: image.Pt(bw, bh)}
 }
