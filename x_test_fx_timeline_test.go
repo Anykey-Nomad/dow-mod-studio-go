@@ -265,7 +265,7 @@ type fakeModelGpu struct{}
 func (fakeModelGpu) Render(*WhmModel, WhmPose, RenderOptions, map[string]WhmMaterial, func(string) ([]byte, bool)) (modelGpuFrame, error) {
 	return nil, nil
 }
-func (fakeModelGpu) forget(*WhmModel)         {}
+func (fakeModelGpu) forget(*WhmModel)          {}
 func (fakeModelGpu) geometryChanged(*WhmModel) {}
 func (fakeModelGpu) release()                  {}
 

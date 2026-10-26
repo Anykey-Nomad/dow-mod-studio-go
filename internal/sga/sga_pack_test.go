@@ -1,7 +1,8 @@
-package main
+package sga_test
 
 import (
 	"dow-mod-studio/internal/sga"
+	"dow-mod-studio/internal/sgapack"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func TestWriteSGA2RoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	archive := filepath.Join(dir, "test.sga")
-	if err := writeSGA2(archive, map[string]string{
+	if err := sgapack.WriteSGA2(archive, map[string]string{
 		`Data\first.txt`:              first,
 		`Data\second.lua`:             second,
 		`Data\nested\deep\nested.txt`: nested,

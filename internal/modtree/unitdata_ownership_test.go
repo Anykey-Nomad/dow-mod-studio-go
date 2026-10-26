@@ -1,6 +1,7 @@
-package main
+package modtree_test
 
 import (
+	"dow-mod-studio/internal/unitdef"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,25 +32,25 @@ func TestUnitCatalogListsInheritedAndOverriddenUnits(t *testing.T) {
 	add(required, modtree.KindReqMod)
 	add(`Data\attrib\ebps\races\space_marines\structures\engine_unit.rgd`, modtree.KindEngine)
 
-	cat := buildUnitCatalog(tree)
-	units := cat.allUnits()
+	cat := unitdef.BuildUnitCatalog(tree)
+	units := cat.AllUnits()
 	if len(units) != 3 {
 		t.Fatalf("unit catalog has %d entries, want current-mod, required-mod and engine units: %+v", len(units), units)
 	}
 	got := map[string]modtree.SourceKind{}
 	for _, u := range units {
-		f := tree.FindFile(u.path)
+		f := tree.FindFile(u.Path)
 		if f == nil || f.Source == nil {
-			t.Fatalf("catalog path %q has no source in tree", u.path)
+			t.Fatalf("catalog Path %q has no source in tree", u.Path)
 		}
-		got[u.path] = f.Source.Kind
+		got[u.Path] = f.Source.Kind
 	}
 	engine := `Data\attrib\ebps\races\space_marines\structures\engine_unit.rgd`
 	if got[own] != modtree.KindThisMod || got[required] != modtree.KindReqMod || got[engine] != modtree.KindEngine {
 		t.Fatalf("catalog ownership = %+v, want current mod %q, required mod %q and engine %q", got, own, required, engine)
 	}
-	necrons := cat.findRace("necrons")
-	if necrons == nil || necrons.unitCount() != 2 {
+	necrons := cat.FindRace("necrons")
+	if necrons == nil || necrons.UnitCount() != 2 {
 		t.Fatalf("necrons race = %+v, want own and inherited units", necrons)
 	}
 }
@@ -92,22 +93,22 @@ func TestUADECatalogFindsInheritedAndModOwnedUnitsInLowercaseDataFolder(t *testi
 	if f == nil || f.Source == nil || f.Source.Kind != modtree.KindThisMod {
 		t.Fatalf("own unit lookup = %#v, want file from UA_DE", f)
 	}
-	cat := buildUnitCatalog(tree)
-	units := cat.allUnits()
+	cat := unitdef.BuildUnitCatalog(tree)
+	units := cat.AllUnits()
 	if len(units) != 2 {
 		t.Fatalf("UA_DE catalog = %+v, want the mod-owned unit and inherited vanilla unit", units)
 	}
 	foundOwn, foundVanilla := false, false
 	for _, u := range units {
-		f := tree.FindFile(u.path)
+		f := tree.FindFile(u.Path)
 		if f == nil || f.Source == nil {
-			t.Fatalf("catalog path %q has no source", u.path)
+			t.Fatalf("catalog Path %q has no source", u.Path)
 		}
 		switch f.Source.Kind {
 		case modtree.KindThisMod:
-			foundOwn = foundOwn || u.path == own
+			foundOwn = foundOwn || u.Path == own
 		case modtree.KindReqMod:
-			foundVanilla = foundVanilla || u.name == "vanilla_unit"
+			foundVanilla = foundVanilla || u.Name == "vanilla_unit"
 		}
 	}
 	if !foundOwn || !foundVanilla {

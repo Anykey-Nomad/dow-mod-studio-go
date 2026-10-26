@@ -44,7 +44,7 @@ func (n UnitTemplateName) UnitTemplateVirtualPath() string {
 // display one. These are the spellings the installed game uses, read off its own
 // unit files; a race that is not listed here gets the folder name, which is
 // right often enough to start from and wrong in a way the RGD editor shows.
-var unitTemplateRaceDisplay = map[string]string{
+var UnitTemplateRaceDisplay = map[string]string{
 	"chaos":         "Chaos",
 	"dark_eldar":    "Dark_Eldar",
 	"eldar":         "Eldar",
@@ -60,7 +60,7 @@ var unitTemplateRaceDisplay = map[string]string{
 // UnitTemplateRaceDisplayName is the folder name as the game spells it in model
 // and sound paths.
 func UnitTemplateRaceDisplayName(race string) string {
-	if display, ok := unitTemplateRaceDisplay[race]; ok {
+	if display, ok := UnitTemplateRaceDisplay[race]; ok {
 		return display
 	}
 	return UnitTemplateTitleCase(race)
@@ -97,44 +97,44 @@ func UnitTemplateTitleCase(s string) string {
 // game's own files, and a new unit that points at one inherits everything that
 // file defines, which is why a generated unit is small.
 const (
-	refCostExt         = `ebpextensions\cost_ext.lua`
-	refCoverExt        = `ebpextensions\cover_ext.lua`
-	refBlueprintExt    = `ebpextensions\entity_blueprint_ext.lua`
-	refEventManager    = `ebpextensions\event_manager_ext.lua`
-	refHealthExt       = `ebpextensions\health_ext.lua`
-	refModifierExt     = `ebpextensions\modifier_ext.lua`
-	refMovingExt       = `ebpextensions\moving_ext.lua`
-	refSightExt        = `ebpextensions\sight_ext.lua`
-	refSimEntityExt    = `ebpextensions\sim_entity_ext.lua`
-	refSpecialAttack   = `ebpextensions\special_attack_physics_ext.lua`
-	refTypeExt         = `ebpextensions\type_ext.lua`
-	refUIExt           = `ebpextensions\ui_ext.lua`
-	refTimeCostTable   = `tables\time_cost_table.lua`
-	refCostTable       = `tables\cost_table.lua`
-	refCoverTable      = `tables\cover_table.lua`
-	refModifierTable   = `tables\modifier_table.lua`
-	refNoModifier      = `modifiers\no_modifier.lua`
-	refEventTable      = `tables\modifier_event_table.lua`
-	refEventEntry      = `tables\modifier_event_entry.lua`
-	refResourceTable   = `tables\resource_table.lua`
-	refUIInfoTable     = `tables\ui_info_table.lua`
-	refTextTable       = `tables\text_table.lua`
-	refIndicatorTable  = `tables\terrain_footfall_based_event_table.lua`
-	refTypeEnvironment = `type_environment\tp_environment.lua`
-	refTypeSurface     = `type_surface\tp_light_metal_armour.lua`
-	refTypeSpeech      = `type_speech\speech_normal.lua`
-	refTypeArmour      = `type_armour\tp_armour.lua`
-	refTypeArmourMain  = `type_armour\tp_infantry_heavy_med.lua`
+	RefCostExt         = `ebpextensions\cost_ext.lua`
+	RefCoverExt        = `ebpextensions\cover_ext.lua`
+	RefBlueprintExt    = `ebpextensions\entity_blueprint_ext.lua`
+	RefEventManager    = `ebpextensions\event_manager_ext.lua`
+	RefHealthExt       = `ebpextensions\health_ext.lua`
+	RefModifierExt     = `ebpextensions\modifier_ext.lua`
+	RefMovingExt       = `ebpextensions\moving_ext.lua`
+	RefSightExt        = `ebpextensions\sight_ext.lua`
+	RefSimEntityExt    = `ebpextensions\sim_entity_ext.lua`
+	RefSpecialAttack   = `ebpextensions\special_attack_physics_ext.lua`
+	RefTypeExt         = `ebpextensions\type_ext.lua`
+	RefUIExt           = `ebpextensions\ui_ext.lua`
+	RefTimeCostTable   = `tables\time_cost_table.lua`
+	RefCostTable       = `tables\cost_table.lua`
+	RefCoverTable      = `tables\cover_table.lua`
+	RefModifierTable   = `tables\modifier_table.lua`
+	RefNoModifier      = `modifiers\no_modifier.lua`
+	RefEventTable      = `tables\modifier_event_table.lua`
+	RefEventEntry      = `tables\modifier_event_entry.lua`
+	RefResourceTable   = `tables\resource_table.lua`
+	RefUIInfoTable     = `tables\ui_info_table.lua`
+	RefTextTable       = `tables\text_table.lua`
+	RefIndicatorTable  = `tables\terrain_footfall_based_event_table.lua`
+	RefTypeEnvironment = `type_environment\tp_environment.lua`
+	RefTypeSurface     = `type_surface\tp_light_metal_armour.lua`
+	RefTypeSpeech      = `type_speech\speech_normal.lua`
+	RefTypeArmour      = `type_armour\tp_armour.lua`
+	RefTypeArmourMain  = `type_armour\tp_infantry_heavy_med.lua`
 ) // The numbered slots the game gives a unit. They are empty in a new unit and
 // filled by the abilities and events the unit is given later, but the game reads
 // the whole set, so they are written out.
 const (
-	unitTemplateEventSlots   = 36
-	unitTemplateEventEntries = 4
-	unitTemplateTextSlots    = 8
+	UnitTemplateEventSlots   = 36
+	UnitTemplateEventEntries = 4
+	UnitTemplateTextSlots    = 8
 	// rgdTemplateMovementDisabledHash names an attribute of moving_ext that the
 	// game stores under a hash its dictionary does not know. Every unit has it.
-	rgdTemplateMovementDisabledHash = 0x6F9C32B9
+	RgdTemplateMovementDisabledHash = 0x6F9C32B9
 )
 
 // RgdTemplateEntry is one entry of a generated unit.
@@ -220,7 +220,7 @@ func RgdTemplateTextSlots() []*rgd.RgdEntry {
 // carry. Both are honest, and neither is the other's, so the value is a
 // parameter rather than a guess.
 func RgdTemplateTextSlotsOf(value string) []*rgd.RgdEntry {
-	return RgdTemplateSlots("text", unitTemplateTextSlots, func(i int) *rgd.RgdEntry {
+	return RgdTemplateSlots("text", UnitTemplateTextSlots, func(i int) *rgd.RgdEntry {
 		return RgdTemplateWString(RgdTemplateSlotName("text", i), value)
 	})
 }
@@ -233,11 +233,11 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 	raceDisplay := UnitTemplateRaceDisplayName(n.Race)
 	// Thirty six event slots, each with four entries, all empty. The game reads
 	// the whole set, so a new unit is written with all of it.
-	eventSlots := RgdTemplateSlots("event", unitTemplateEventSlots, func(i int) *rgd.RgdEntry {
-		entries := make([]*rgd.RgdEntry, 0, unitTemplateEventEntries+2)
-		for e := 1; e <= unitTemplateEventEntries; e++ {
+	eventSlots := RgdTemplateSlots("event", UnitTemplateEventSlots, func(i int) *rgd.RgdEntry {
+		entries := make([]*rgd.RgdEntry, 0, UnitTemplateEventEntries+2)
+		for e := 1; e <= UnitTemplateEventEntries; e++ {
 			entries = append(entries, RgdTemplateTable(
-				RgdTemplateSlotName("event_entry", e), refEventEntry,
+				RgdTemplateSlotName("event_entry", e), RefEventEntry,
 				RgdTemplateFloat("active_range_max", 0),
 				RgdTemplateFloat("active_range_min", 0),
 				RgdTemplateString("event_end_name", ""),
@@ -248,7 +248,7 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 			RgdTemplateBool("has_active_range", false),
 			RgdTemplateString("modifier_name", ""),
 		)
-		return RgdTemplateTable(RgdTemplateSlotName("event", i), refEventTable, entries...)
+		return RgdTemplateTable(RgdTemplateSlotName("event", i), RefEventTable, entries...)
 	})
 	root := &rgd.RgdEntry{
 		Hash: rgd.Hash("GameData"),
@@ -257,9 +257,9 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 		Children: []*rgd.RgdEntry{
 			// What it costs and how long it takes: the two numbers a new unit
 			// is always asked for first.
-			RgdTemplateTable("cost_ext", refCostExt,
-				RgdTemplateTable("time_cost", refTimeCostTable,
-					RgdTemplateTable("cost", refCostTable,
+			RgdTemplateTable("cost_ext", RefCostExt,
+				RgdTemplateTable("time_cost", RefTimeCostTable,
+					RgdTemplateTable("cost", RefCostTable,
 						RgdTemplateFloat("faith", 0),
 						RgdTemplateFloat("population", 0),
 						RgdTemplateFloat("power", 0),
@@ -271,7 +271,7 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 			),
 			// The five cover types, each a cover table with an empty modifier
 			// list. The priority of 0 is the value all 432 units agree on.
-			RgdTemplateTable("cover_ext", refCoverExt,
+			RgdTemplateTable("cover_ext", RefCoverExt,
 				RgdTemplateCover("cover_blocking"),
 				RgdTemplateCover("cover_heavy"),
 				RgdTemplateCover("cover_light"),
@@ -280,7 +280,7 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 			),
 			// The model, and how big it is. The path is a starting point: a
 			// model is not always named after the unit that uses it.
-			RgdTemplateTable("entity_blueprint_ext", refBlueprintExt,
+			RgdTemplateTable("entity_blueprint_ext", RefBlueprintExt,
 				RgdTemplateString("animator", fmt.Sprintf("Races/%s/Troops/%s", raceDisplay, model)),
 				RgdTemplateFloat("minimum_update_radius", 5),
 				RgdTemplateFloat("scale_x", 1),
@@ -288,14 +288,14 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 				RgdTemplateFloat("scale_z", 1),
 			),
 			// Thirty six event slots, each with four entries, all empty.
-			RgdTemplateTable("event_manager_ext", refEventManager, eventSlots...),
-			RgdTemplateTable("health_ext", refHealthExt,
+			RgdTemplateTable("event_manager_ext", RefEventManager, eventSlots...),
+			RgdTemplateTable("health_ext", RefHealthExt,
 				RgdTemplateFloat("armour", 100),
 				RgdTemplateFloat("armour_minimum", 0),
 				RgdTemplateBool("can_be_repaired", true),
 				RgdTemplateFloat("damage_dealt_regeneration_factor", 0),
 				RgdTemplateString("death_event", ""),
-				RgdTemplateTable("death_resource", refResourceTable,
+				RgdTemplateTable("death_resource", RefResourceTable,
 					RgdTemplateFloat("faith", 0),
 					RgdTemplateFloat("pop", 0),
 					RgdTemplateFloat("power", 0),
@@ -332,9 +332,9 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 				RgdTemplateIndicatorEvent("usable_body_indicator_pre_event"),
 			),
 			// The game leaves this one empty in every unit it ships.
-			RgdTemplateTable("modifier_ext", refModifierExt),
-			RgdTemplateTable("moving_ext", refMovingExt,
-				RgdTemplateHashedString(rgdTemplateMovementDisabledHash, "movement_disabled"),
+			RgdTemplateTable("modifier_ext", RefModifierExt),
+			RgdTemplateTable("moving_ext", RefMovingExt,
+				RgdTemplateHashedString(RgdTemplateMovementDisabledHash, "movement_disabled"),
 				RgdTemplateFloat("acceleration_time", 2),
 				RgdTemplateBool("air_unit", false),
 				RgdTemplateFloat("air_unit_float_height", 9),
@@ -345,16 +345,16 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 				RgdTemplateFloat("speed_max", 4),
 				RgdTemplateString("turning_behavior_template", "default"),
 			),
-			RgdTemplateTable("sight_ext", refSightExt,
+			RgdTemplateTable("sight_ext", RefSightExt,
 				RgdTemplateFloat("keen_sight_radius", 0),
 				RgdTemplateFloat("sight_radius", 25),
 			),
-			RgdTemplateTable("sim_entity_ext", refSimEntityExt,
+			RgdTemplateTable("sim_entity_ext", RefSimEntityExt,
 				RgdTemplateBool("is_collide", true),
 				RgdTemplateBool("is_in_spatial_bucket", true),
 				RgdTemplateBool("no_rotate", false),
 			),
-			RgdTemplateTable("special_attack_physics_ext", refSpecialAttack,
+			RgdTemplateTable("special_attack_physics_ext", RefSpecialAttack,
 				RgdTemplateBool("disable_special_attack", true),
 				RgdTemplateBool("face_backwards_when_flying", true),
 				RgdTemplateFloat("get_up_time", 0),
@@ -362,24 +362,24 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 			),
 			// What the unit is: the surface it stands on, the armour type that
 			// decides what can hurt it, and how it speaks.
-			RgdTemplateTable("type_ext", refTypeExt,
+			RgdTemplateTable("type_ext", RefTypeExt,
 				RgdTemplateBool("can_be_possessed_by_enemy", false),
 				RgdTemplateBool("reanimate", false),
 				RgdTemplateBool("single_player_only", false),
 				RgdTemplateBool("summon_teleport_building_check_override", false),
 				RgdTemplateBool("summon_teleport_destination", true),
-				RgdTemplateTable("type_armour", refTypeArmourMain,
+				RgdTemplateTable("type_armour", RefTypeArmourMain,
 					RgdTemplateWString("screen_name_id", "$90105"),
 				),
-				RgdTemplateTable("type_armour_2", refTypeArmour,
+				RgdTemplateTable("type_armour_2", RefTypeArmour,
 					RgdTemplateWString("screen_name_id", "$90100"),
 				),
-				RgdTemplateTable("type_environment", refTypeEnvironment),
-				RgdTemplateTable("type_speech", refTypeSpeech),
-				RgdTemplateTable("type_surface", refTypeSurface),
+				RgdTemplateTable("type_environment", RefTypeEnvironment),
+				RgdTemplateTable("type_speech", RefTypeSpeech),
+				RgdTemplateTable("type_surface", RefTypeSurface),
 			),
 			// What the player sees: the name, the icon, the build button.
-			RgdTemplateTable("ui_ext", refUIExt,
+			RgdTemplateTable("ui_ext", RefUIExt,
 				RgdTemplateBool("ghost_auto_enable", false),
 				RgdTemplateBool("ghost_enable", false),
 				RgdTemplateBool("ghost_hidden_until_seen", false),
@@ -394,12 +394,12 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 				RgdTemplateBool("ui_hide_button_when_unable_to_build", false),
 				RgdTemplateString("ui_hotkey_name", n.Name),
 				RgdTemplateFloat("ui_index_hint", 1),
-				RgdTemplateTable("ui_info", refUIInfoTable,
+				RgdTemplateTable("ui_info", RefUIInfoTable,
 					RgdTemplateWString("help_text_id", "$0"),
-					RgdTemplateTable("help_text_list", refTextTable, RgdTemplateTextSlots()...),
+					RgdTemplateTable("help_text_list", RefTextTable, RgdTemplateTextSlots()...),
 					RgdTemplateString("icon_name", fmt.Sprintf("%s/%s_icon", UnitTemplateIconBase(n.Race), n.Name)),
 					RgdTemplateBool("no_button", false),
-					RgdTemplateTable("override_help_text_list", refTextTable, RgdTemplateTextSlots()...),
+					RgdTemplateTable("override_help_text_list", RefTextTable, RgdTemplateTextSlots()...),
 					RgdTemplateBool("pseudo_leader", false),
 					// The name the game shows. A real unit points at an entry of
 					// the string table, which a mod has to add; $0 is what an
@@ -423,8 +423,8 @@ func NewUnitRgd(n UnitTemplateName) *rgd.RgdFile {
 // so there is no honest one to write down. A unit that needs a cover modifier
 // gets it in the RGD editor.
 func RgdTemplateCover(name string) *rgd.RgdEntry {
-	return RgdTemplateTable(name, refCoverTable,
-		RgdTemplateTable("modifiers", refModifierTable),
+	return RgdTemplateTable(name, RefCoverTable,
+		RgdTemplateTable("modifiers", RefModifierTable),
 		RgdTemplateFloat("priority", 0),
 	)
 }
@@ -432,7 +432,7 @@ func RgdTemplateCover(name string) *rgd.RgdEntry {
 // RgdTemplateIndicatorEvent is the table that says which sound a corpse makes on
 // each kind of ground.
 func RgdTemplateIndicatorEvent(name string) *rgd.RgdEntry {
-	return RgdTemplateTable(name, refIndicatorTable,
+	return RgdTemplateTable(name, RefIndicatorTable,
 		RgdTemplateString("dirtsand", ""),
 		RgdTemplateString("grass", ""),
 		RgdTemplateString("rock", ""),
@@ -443,7 +443,7 @@ func RgdTemplateIndicatorEvent(name string) *rgd.RgdEntry {
 // The twelve sections a generated unit always has, in the order the game writes
 // them. A test reads this, so that a section cannot be dropped from the template
 // without the test saying so.
-var unitTemplateSections = []string{
+var UnitTemplateSections = []string{
 	"cost_ext",
 	"cover_ext",
 	"entity_blueprint_ext",
@@ -463,9 +463,9 @@ var unitTemplateSections = []string{
 // section points at the extension, the list of slots at one table, and every
 // slot at the same one whatever it requires.
 const (
-	refRequirementExt   = `ebpextensions\requirement_ext.lua`
-	refRequirementsList = `tables\requirements.lua`
-	refRequirementSlot  = `requirements\required_cap.lua`
+	RefRequirementExt   = `ebpextensions\requirement_ext.lua`
+	RefRequirementsList = `tables\requirements.lua`
+	RefRequirementSlot  = `requirements\required_cap.lua`
 )
 
 // The combat section and the four tables a weapon slot is written on, read off
@@ -473,19 +473,19 @@ const (
 // hardpoints, a hardpoint holds a table of weapon slots, and a slot holds a
 // position, a choice name, a position and the weapon itself.
 const (
-	refCombatExt        = `ebpextensions\combat_ext.lua`
-	refHardpointTable   = `tables\hardpoint_table.lua`
-	refHardpointDetails = `tables\hardpoint_details.lua`
-	refWeaponTable      = `tables\weapon_table.lua`
-	refWeaponDetails    = `tables\weapon_details.lua`
-	refPosition         = `tables\position.lua`
+	RefCombatExt        = `ebpextensions\combat_ext.lua`
+	RefHardpointTable   = `tables\hardpoint_table.lua`
+	RefHardpointDetails = `tables\hardpoint_details.lua`
+	RefWeaponTable      = `tables\weapon_table.lua`
+	RefWeaponDetails    = `tables\weapon_details.lua`
+	RefPosition         = `tables\position.lua`
 )
 
 // RgdTemplatePosition is a position table at the origin, which is where a
 // weapon's origin and muzzle sit unless a weapon says otherwise. Every
 // position in the game has exactly these three.
 func RgdTemplatePosition(name string) *rgd.RgdEntry {
-	return RgdTemplateTable(name, refPosition,
+	return RgdTemplateTable(name, RefPosition,
 		RgdTemplateFloat("x", 0),
 		RgdTemplateFloat("y", 0),
 		RgdTemplateFloat("z", 0),

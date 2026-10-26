@@ -12,15 +12,15 @@ type FieldKind int
 
 const (
 	// fieldNumber is any decimal number within its limits.
-	fieldNumber FieldKind = iota
+	FieldNumber FieldKind = iota
 	// fieldInteger is a whole number within its limits.
-	fieldInteger
+	FieldInteger
 	// fieldPositive is a number greater than zero.
-	fieldPositive
+	FieldPositive
 	// fieldText is any text, trimmed.
-	fieldText
+	FieldText
 	// fieldChoice is one of Choices, matched without regard to case.
-	fieldChoice
+	FieldChoice
 )
 
 // FieldSpec is the rule a field's text is read by. Bounded limits apply only
@@ -42,9 +42,9 @@ type FieldSpec struct {
 func (s FieldSpec) Parse(text string) (float64, string, error) {
 	text = strings.TrimSpace(text)
 	switch s.Kind {
-	case fieldText:
+	case FieldText:
 		return 0, text, nil
-	case fieldChoice:
+	case FieldChoice:
 		for _, c := range s.Choices {
 			if strings.EqualFold(c, text) {
 				return 0, c, nil
@@ -57,11 +57,11 @@ func (s FieldSpec) Parse(text string) (float64, string, error) {
 		return 0, "", fmt.Errorf("%q is not a number", text)
 	}
 	switch s.Kind {
-	case fieldInteger:
+	case FieldInteger:
 		if f != math.Trunc(f) {
 			return 0, "", fmt.Errorf("%q is not a whole number", text)
 		}
-	case fieldPositive:
+	case FieldPositive:
 		if f <= 0 {
 			return 0, "", fmt.Errorf("%q must be greater than zero", text)
 		}
@@ -79,6 +79,6 @@ func (s FieldSpec) Parse(text string) (float64, string, error) {
 // any number, and rotations are degrees kept within 1..360 by wrapping, so a
 // negative angle is the same turn written positively.
 var (
-	BonePositionField = FieldSpec{Kind: fieldNumber}
-	BoneRotationField = FieldSpec{Kind: fieldNumber, Wrap: BoneAngleDeg}
+	BonePositionField = FieldSpec{Kind: FieldNumber}
+	BoneRotationField = FieldSpec{Kind: FieldNumber, Wrap: BoneAngleDeg}
 )

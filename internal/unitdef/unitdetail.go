@@ -294,11 +294,11 @@ func UnitInfoFields(rf *rgd.RgdFile) []UnitField {
 	hotkey := RgdFindPath(rf.Root, "ui_ext", "ui_hotkey_name")
 	add("Hotkey", RgdEntryStr(hotkey), hotkey)
 
-	for _, s := range unitInfoScalars {
+	for _, s := range UnitInfoScalars {
 		e := RgdFindPath(rf.Root, s.Path...)
 		addGrouped(s.Group, s.Label, RgdEntryStr(e), e)
 	}
-	for _, c := range unitInfoCounts {
+	for _, c := range UnitInfoCounts {
 		n, ok := UnitListCount(rf.Root, c.Path, c.Filled)
 		if !ok || n == 0 {
 			continue
@@ -318,7 +318,7 @@ func UnitInfoFields(rf *rgd.RgdFile) []UnitField {
 // would guess: there is no health_ext.max_health (it is health_ext.hitpoints),
 // no moving_ext.speed (it is moving_ext.speed_max) and no ui_ext.Name (it is
 // ui_ext.ui_info.screen_name_id). The labels are the readable forms.
-var unitInfoScalars = []struct {
+var UnitInfoScalars = []struct {
 	Group string
 	Label string
 	Path  []string
@@ -474,7 +474,7 @@ var unitInfoScalars = []struct {
 // would say the same thing about every unit and say nothing. Each of these
 // therefore states a rule for what counts as a used entry, and the count is only
 // shown when at least one entry passes it.
-var unitInfoCounts = []struct {
+var UnitInfoCounts = []struct {
 	Group string
 	Label string
 	Path  []string
@@ -756,7 +756,7 @@ func WeaponRgdFields(rf *rgd.RgdFile) []UnitField {
 
 // emptyWeaponRefs are the placeholders the game puts in an unused weapon slot.
 // An empty reference is the same thing without a name.
-var emptyWeaponRefs = []string{"no_weapon", "weapon_no", "no_weapon_", "default_no_weapon"}
+var EmptyWeaponRefs = []string{"no_weapon", "weapon_no", "no_weapon_", "default_no_weapon"}
 
 // IsEmptyWeaponRef reports whether a weapon slot reference means "no weapon".
 func IsEmptyWeaponRef(ref string) bool {
@@ -764,7 +764,7 @@ func IsEmptyWeaponRef(ref string) bool {
 	if r == "" {
 		return true
 	}
-	for _, e := range emptyWeaponRefs {
+	for _, e := range EmptyWeaponRefs {
 		if strings.Contains(r, e) {
 			return true
 		}

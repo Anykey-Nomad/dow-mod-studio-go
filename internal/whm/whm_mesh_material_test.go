@@ -1,4 +1,4 @@
-package main
+package whm_test
 
 import (
 	"bytes"

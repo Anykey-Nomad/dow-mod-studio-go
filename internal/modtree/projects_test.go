@@ -1,7 +1,8 @@
-package main
+package modtree_test
 
 import (
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/projects"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,8 +37,8 @@ func TestSanitizeFolderName(t *testing.T) {
 		{`..\..\escape`, "escape"},
 	}
 	for _, c := range cases {
-		if got := sanitizeFolderName(c.in); got != c.want {
-			t.Errorf("sanitizeFolderName(%q) = %q, want %q", c.in, got, c.want)
+		if got := projects.SanitizeFolderName(c.in); got != c.want {
+			t.Errorf("projects.SanitizeFolderName(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -46,7 +47,7 @@ func TestSanitizeFolderName(t *testing.T) {
 // whatever the mod is called, the resulting folder has to sit directly under
 // the projects root.
 func TestSanitizeFolderNameStaysInsideProjects(t *testing.T) {
-	root := filepath.Join("C:", "appdata", "DoW Mod Studio", projectsDirName)
+	root := filepath.Join("C:", "appdata", "DoW Mod Studio", projects.ProjectsDirName)
 	hostile := []string{
 		`..\..\..\Windows\System32`,
 		`/etc/passwd`,
@@ -57,7 +58,7 @@ func TestSanitizeFolderNameStaysInsideProjects(t *testing.T) {
 		".",
 	}
 	for _, name := range hostile {
-		got := sanitizeFolderName(name)
+		got := projects.SanitizeFolderName(name)
 		full := filepath.Join(root, got)
 		if filepath.Dir(full) != root {
 			t.Errorf("name %q produced %q, which escapes %q", name, full, root)
@@ -77,15 +78,15 @@ func TestEnsureProjectDirsCreatesModAndUnits(t *testing.T) {
 	t.Setenv("APPDATA", data)
 	t.Setenv("XDG_CONFIG_HOME", data)
 
-	dir, err := ensureProjectDirs(&modtree.ModTree{FileMapName: "DXP3"}, `C:/games/DXP3.module`)
+	dir, err := projects.EnsureProjectDirs(&modtree.ModTree{FileMapName: "DXP3"}, `C:/games/DXP3.module`)
 	if err != nil {
-		t.Fatalf("ensureProjectDirs: %v", err)
+		t.Fatalf("projects.EnsureProjectDirs: %v", err)
 	}
-	wantRoot := filepath.Join(data, "DoW Mod Studio", projectsDirName, "DXP3")
+	wantRoot := filepath.Join(data, "DoW Mod Studio", projects.ProjectsDirName, "DXP3")
 	if dir != wantRoot {
 		t.Errorf("project dir = %q, want %q", dir, wantRoot)
 	}
-	units := filepath.Join(dir, unitsDirName)
+	units := filepath.Join(dir, projects.UnitsDirName)
 	info, err := os.Stat(units)
 	if err != nil {
 		t.Fatalf("Units folder missing: %v", err)
@@ -95,14 +96,14 @@ func TestEnsureProjectDirsCreatesModAndUnits(t *testing.T) {
 	}
 	// The Units folder is also the mod's folder, and the tree below it is the
 	// project's own, next to the recycle bin.
-	if filepath.Dir(filepath.Dir(units)) != filepath.Join(data, "DoW Mod Studio", projectsDirName) {
+	if filepath.Dir(filepath.Dir(units)) != filepath.Join(data, "DoW Mod Studio", projects.ProjectsDirName) {
 		t.Errorf("Units is nested too deeply: %s", units)
 	}
 
 	// Opening the same module again must not fail or nest a second time.
-	again, err := ensureProjectDirs(&modtree.ModTree{FileMapName: "DXP3"}, `C:/games/DXP3.module`)
+	again, err := projects.EnsureProjectDirs(&modtree.ModTree{FileMapName: "DXP3"}, `C:/games/DXP3.module`)
 	if err != nil {
-		t.Fatalf("second ensureProjectDirs: %v", err)
+		t.Fatalf("second projects.EnsureProjectDirs: %v", err)
 	}
 	if again != dir {
 		t.Errorf("second call gave %q, want the same %q", again, dir)
@@ -116,11 +117,11 @@ func TestEnsureProjectDirsPerModFolders(t *testing.T) {
 	t.Setenv("APPDATA", data)
 	t.Setenv("XDG_CONFIG_HOME", data)
 
-	first, err := ensureProjectDirs(&modtree.ModTree{FileMapName: "DXP3"}, "")
+	first, err := projects.EnsureProjectDirs(&modtree.ModTree{FileMapName: "DXP3"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := ensureProjectDirs(&modtree.ModTree{FileMapName: "MyMod"}, "")
+	second, err := projects.EnsureProjectDirs(&modtree.ModTree{FileMapName: "MyMod"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestEnsureProjectDirsPerModFolders(t *testing.T) {
 		t.Fatalf("two mods share the folder %q", first)
 	}
 	for _, dir := range []string{first, second} {
-		if _, err := os.Stat(filepath.Join(dir, unitsDirName)); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, projects.UnitsDirName)); err != nil {
 			t.Errorf("Units missing under %s: %v", dir, err)
 		}
 	}
@@ -137,16 +138,16 @@ func TestEnsureProjectDirsPerModFolders(t *testing.T) {
 // TestModProjectNameFallsBack covers a tree that never got a name, which
 // happens if the .module file is unusual.
 func TestModProjectNameFallsBack(t *testing.T) {
-	if got := modProjectName(&modtree.ModTree{FileMapName: "DXP3"}, "C:/games/Other.module"); got != "DXP3" {
+	if got := projects.ModProjectName(&modtree.ModTree{FileMapName: "DXP3"}, "C:/games/Other.module"); got != "DXP3" {
 		t.Errorf("with a tree name the project is %q, want DXP3", got)
 	}
-	if got := modProjectName(&modtree.ModTree{}, `C:/games/Other.module`); got != "Other.module" {
+	if got := projects.ModProjectName(&modtree.ModTree{}, `C:/games/Other.module`); got != "Other.module" {
 		t.Errorf("without a tree name the project is %q, want the module's base name", got)
 	}
-	if got := sanitizeFolderName(modProjectName(&modtree.ModTree{}, `C:/games/Other.module`)); got != "Other" {
+	if got := projects.SanitizeFolderName(projects.ModProjectName(&modtree.ModTree{}, `C:/games/Other.module`)); got != "Other" {
 		t.Errorf("sanitized fallback = %q, want Other", got)
 	}
-	if got := modProjectName(&modtree.ModTree{}, ""); got != "" {
+	if got := projects.ModProjectName(&modtree.ModTree{}, ""); got != "" {
 		t.Errorf("with nothing to go on the project name is %q, want empty", got)
 	}
 }

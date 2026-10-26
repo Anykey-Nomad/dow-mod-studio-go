@@ -39,19 +39,19 @@ func (n StructureTemplateName) StructureTemplateVirtualPath() string {
 // inherits everything that file defines, which is why a generated building is
 // small.
 const (
-	refStructureExt       = `ebpextensions\structure_ext.lua`
-	refStructureBuild     = `ebpextensions\structure_buildable_ext.lua`
-	refInfiltrationExt    = `ebpextensions\infiltration_ext.lua`
-	refModifierApplyExt   = `ebpextensions\modifier_apply_ext.lua`
-	refAttachToTable      = `tables\attachto_table.lua`
-	refModApplyToEntity   = `type_modifierapplicationtype\tp_mod_apply_to_entity.lua`
-	refModClassName       = `type_modifier\tp_modifier.lua`
-	refModUsageEnable     = `type_modifierusagetype\tp_mod_usage_enable.lua`
-	refModUsageMultiply   = `type_modifierusagetype\tp_mod_usage_multiplication.lua`
-	refEnableInfiltration = `modifiers\enable_infiltration.lua`
-	refBuildingArmour     = `type_armour\tp_building_med.lua`
-	refHeavyMetalSurface  = `type_surface\tp_heavy_metal_armour.lua`
-	refNoSpeech           = `type_speech\speech_none.lua`
+	RefStructureExt       = `ebpextensions\structure_ext.lua`
+	RefStructureBuild     = `ebpextensions\structure_buildable_ext.lua`
+	RefInfiltrationExt    = `ebpextensions\infiltration_ext.lua`
+	RefModifierApplyExt   = `ebpextensions\modifier_apply_ext.lua`
+	RefAttachToTable      = `tables\attachto_table.lua`
+	RefModApplyToEntity   = `type_modifierapplicationtype\tp_mod_apply_to_entity.lua`
+	RefModClassName       = `type_modifier\tp_modifier.lua`
+	RefModUsageEnable     = `type_modifierusagetype\tp_mod_usage_enable.lua`
+	RefModUsageMultiply   = `type_modifierusagetype\tp_mod_usage_multiplication.lua`
+	RefEnableInfiltration = `modifiers\enable_infiltration.lua`
+	RefBuildingArmour     = `type_armour\tp_building_med.lua`
+	RefHeavyMetalSurface  = `type_surface\tp_heavy_metal_armour.lua`
+	RefNoSpeech           = `type_speech\speech_none.lua`
 )
 
 // The numbered slots the game gives a building. They are empty in a new
@@ -60,12 +60,12 @@ const (
 const (
 	// structureTemplateEventSlots is the event manager's slots, the same
 	// thirty six a unit has.
-	structureTemplateEventSlots = 36
+	StructureTemplateEventSlots = 36
 	// structureTemplateEventEntries is the entries inside one event slot.
-	structureTemplateEventEntries = 4
+	StructureTemplateEventEntries = 4
 	// structureTemplateModifierSlots is the length of each of the three
 	// modifier tables under modifier_apply_ext.
-	structureTemplateModifierSlots = 45
+	StructureTemplateModifierSlots = 45
 )
 
 // NewStructureRgd builds the file of a new building: the thirteen sections the
@@ -75,11 +75,11 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 	model := UnitTemplateTitleCase(n.Name)
 	raceDisplay := UnitTemplateRaceDisplayName(n.Race)
 	// Thirty six event slots, each with four entries, all empty.
-	eventSlots := RgdTemplateSlots("event", structureTemplateEventSlots, func(i int) *rgd.RgdEntry {
-		entries := make([]*rgd.RgdEntry, 0, structureTemplateEventEntries+2)
-		for e := 1; e <= structureTemplateEventEntries; e++ {
+	eventSlots := RgdTemplateSlots("event", StructureTemplateEventSlots, func(i int) *rgd.RgdEntry {
+		entries := make([]*rgd.RgdEntry, 0, StructureTemplateEventEntries+2)
+		for e := 1; e <= StructureTemplateEventEntries; e++ {
 			entries = append(entries, RgdTemplateTable(
-				RgdTemplateSlotName("event_entry", e), refEventEntry,
+				RgdTemplateSlotName("event_entry", e), RefEventEntry,
 				RgdTemplateFloat("active_range_max", 0),
 				RgdTemplateFloat("active_range_min", 0),
 				RgdTemplateString("event_end_name", ""),
@@ -90,7 +90,7 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 			RgdTemplateBool("has_active_range", false),
 			RgdTemplateString("modifier_name", ""),
 		)
-		return RgdTemplateTable(RgdTemplateSlotName("event", i), refEventTable, entries...)
+		return RgdTemplateTable(RgdTemplateSlotName("event", i), RefEventTable, entries...)
 	})
 	root := &rgd.RgdEntry{
 		Hash: rgd.Hash("GameData"),
@@ -101,9 +101,9 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 			// is the price of an ordinary building rather than the zero most
 			// of the game's cost tables settle at, because a free building
 			// is not one anybody asked for.
-			RgdTemplateTable("cost_ext", refCostExt,
-				RgdTemplateTable("time_cost", refTimeCostTable,
-					RgdTemplateTable("cost", refCostTable,
+			RgdTemplateTable("cost_ext", RefCostExt,
+				RgdTemplateTable("time_cost", RefTimeCostTable,
+					RgdTemplateTable("cost", RefCostTable,
 						RgdTemplateFloat("faith", 0),
 						RgdTemplateFloat("population", 0),
 						RgdTemplateFloat("power", 0),
@@ -116,22 +116,22 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 			// The model, and how big it is. A building is wider than it is
 			// deep, which is what the 2/1/2 scale of the game's own
 			// structures says.
-			RgdTemplateTable("entity_blueprint_ext", refBlueprintExt,
+			RgdTemplateTable("entity_blueprint_ext", RefBlueprintExt,
 				RgdTemplateString("animator", fmt.Sprintf("Races/%s/Structures/%s", raceDisplay, model)),
 				RgdTemplateFloat("minimum_update_radius", 5),
 				RgdTemplateFloat("scale_x", 2),
 				RgdTemplateFloat("scale_y", 1),
 				RgdTemplateFloat("scale_z", 2),
 			),
-			RgdTemplateTable("event_manager_ext", refEventManager, eventSlots...),
+			RgdTemplateTable("event_manager_ext", RefEventManager, eventSlots...),
 			// A building is tougher than a man and does not get back up.
-			RgdTemplateTable("health_ext", refHealthExt,
+			RgdTemplateTable("health_ext", RefHealthExt,
 				RgdTemplateFloat("armour", 100),
 				RgdTemplateFloat("armour_minimum", 0),
 				RgdTemplateBool("can_be_repaired", true),
 				RgdTemplateFloat("damage_dealt_regeneration_factor", 0),
 				RgdTemplateString("death_event", "unit_death_events/building_death"),
-				RgdTemplateTable("death_resource", refResourceTable,
+				RgdTemplateTable("death_resource", RefResourceTable,
 					RgdTemplateFloat("faith", 0),
 					RgdTemplateFloat("pop", 0),
 					RgdTemplateFloat("power", 0),
@@ -173,7 +173,7 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 			// Whether troops can walk into it, and how visible they are while
 			// they do. The three numbers are the same in all 145 structures
 			// that have this section.
-			RgdTemplateTable("infiltration_ext", refInfiltrationExt,
+			RgdTemplateTable("infiltration_ext", RefInfiltrationExt,
 				RgdTemplateFloat("enemy_infiltrate_opacity", 0.1),
 				RgdTemplateFloat("friendly_infiltrate_opacity", 0.6),
 				RgdTemplateFloat("initial_delay_time", 0),
@@ -183,26 +183,26 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 			// first table is the infiltration the section above describes, and
 			// the rest are no_modifier, which is what they are in 120 of the
 			// 150 structures.
-			RgdTemplateTable("modifier_apply_ext", refModifierApplyExt,
+			RgdTemplateTable("modifier_apply_ext", RefModifierApplyExt,
 				RgdTemplateModifierTable("modifiers", true),
 				RgdTemplateModifierTable("modifiers_idle", false),
 				RgdTemplateModifierTable("modifiers_immediate", false),
 			),
 			// The game leaves this one empty in every structure it ships.
-			RgdTemplateTable("modifier_ext", refModifierExt),
-			RgdTemplateTable("sim_entity_ext", refSimEntityExt,
+			RgdTemplateTable("modifier_ext", RefModifierExt),
+			RgdTemplateTable("sim_entity_ext", RefSimEntityExt,
 				RgdTemplateBool("is_collide", true),
 				RgdTemplateBool("is_in_spatial_bucket", true),
 				RgdTemplateBool("no_rotate", false),
 			),
-			RgdTemplateTable("sight_ext", refSightExt,
+			RgdTemplateTable("sight_ext", RefSightExt,
 				RgdTemplateFloat("keen_sight_radius", 0),
 				RgdTemplateFloat("sight_radius", 15),
 			),
 			// What makes it a building rather than a prop: the section the
 			// game reads to put it in the build menu, to decide what a player
 			// gets back when it is destroyed, and what a refund is worth.
-			RgdTemplateTable("structure_buildable_ext", refStructureBuild,
+			RgdTemplateTable("structure_buildable_ext", RefStructureBuild,
 				RgdTemplateBool("advanced_build_option", false),
 				RgdTemplateFloat("build_menu_priority", 1),
 				RgdTemplateFloat("power_gift", 0),
@@ -215,10 +215,10 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 			// What the structure itself is: how it sits on the ground, and
 			// what it turns into when a player captures it. The orientation of
 			// 0 and the radius of 0 are the values every structure has.
-			RgdTemplateTable("structure_ext", refStructureExt,
-				RgdTemplateTable("attach_to", refAttachToTable,
+			RgdTemplateTable("structure_ext", RefStructureExt,
+				RgdTemplateTable("attach_to", RefAttachToTable,
 					RgdTemplateBool("active", false),
-					RgdTemplateTable("attach_to_tp", refTypeEnvironment),
+					RgdTemplateTable("attach_to_tp", RefTypeEnvironment),
 				),
 				RgdTemplateBool("control_structure_is", false),
 				RgdTemplateFloat("control_structure_radius", 0),
@@ -230,26 +230,26 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 			// A building is a mid armour structure on heavy metal, and it
 			// does not speak: all 150 structures agree on the armour type and
 			// the surface, and 145 of them on there being no voice.
-			RgdTemplateTable("type_ext", refTypeExt,
+			RgdTemplateTable("type_ext", RefTypeExt,
 				RgdTemplateBool("can_be_possessed_by_enemy", true),
 				RgdTemplateBool("reanimate", false),
 				RgdTemplateBool("single_player_only", false),
 				RgdTemplateBool("summon_teleport_building_check_override", false),
 				RgdTemplateBool("summon_teleport_destination", true),
-				RgdTemplateTable("type_armour", refBuildingArmour,
+				RgdTemplateTable("type_armour", RefBuildingArmour,
 					RgdTemplateWString("screen_name_id", "$90102"),
 				),
-				RgdTemplateTable("type_armour_2", refTypeArmour,
+				RgdTemplateTable("type_armour_2", RefTypeArmour,
 					RgdTemplateWString("screen_name_id", "$90100"),
 				),
-				RgdTemplateTable("type_environment", refTypeEnvironment),
-				RgdTemplateTable("type_speech", refNoSpeech),
-				RgdTemplateTable("type_surface", refHeavyMetalSurface),
+				RgdTemplateTable("type_environment", RefTypeEnvironment),
+				RgdTemplateTable("type_speech", RefNoSpeech),
+				RgdTemplateTable("type_surface", RefHeavyMetalSurface),
 			),
 			// What the player sees: the name, the icon, the build button.
 			// The ghost of a building is on by default, which is what lets a
 			// player place one before they can pay for it.
-			RgdTemplateTable("ui_ext", refUIExt,
+			RgdTemplateTable("ui_ext", RefUIExt,
 				RgdTemplateBool("ghost_auto_enable", false),
 				RgdTemplateBool("ghost_enable", true),
 				RgdTemplateBool("ghost_hidden_until_seen", true),
@@ -264,12 +264,12 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 				RgdTemplateBool("ui_hide_button_when_unable_to_build", false),
 				RgdTemplateString("ui_hotkey_name", n.Name),
 				RgdTemplateFloat("ui_index_hint", 1),
-				RgdTemplateTable("ui_info", refUIInfoTable,
+				RgdTemplateTable("ui_info", RefUIInfoTable,
 					RgdTemplateWString("help_text_id", "$0"),
-					RgdTemplateTable("help_text_list", refTextTable, RgdTemplateTextSlotsOf("$0")...),
+					RgdTemplateTable("help_text_list", RefTextTable, RgdTemplateTextSlotsOf("$0")...),
 					RgdTemplateString("icon_name", fmt.Sprintf("%s/%s_icon", UnitTemplateIconBase(n.Race), n.Name)),
 					RgdTemplateBool("no_button", false),
-					RgdTemplateTable("override_help_text_list", refTextTable, RgdTemplateTextSlotsOf("$0")...),
+					RgdTemplateTable("override_help_text_list", RefTextTable, RgdTemplateTextSlotsOf("$0")...),
 					RgdTemplateBool("pseudo_leader", false),
 					// The name the game shows. A real building points at an
 					// entry of the string table, which a mod has to add; $0 is
@@ -294,22 +294,22 @@ func NewStructureRgd(n StructureTemplateName) *rgd.RgdFile {
 // That is the difference the game reads, so it is written out rather than
 // left to the lua.
 func RgdTemplateModifierTable(name string, firstEnablesInfiltration bool) *rgd.RgdEntry {
-	children := make([]*rgd.RgdEntry, 0, structureTemplateModifierSlots)
-	for i := 1; i <= structureTemplateModifierSlots; i++ {
+	children := make([]*rgd.RgdEntry, 0, StructureTemplateModifierSlots)
+	for i := 1; i <= StructureTemplateModifierSlots; i++ {
 		enable := firstEnablesInfiltration && i == 1
-		ref := refNoModifier
-		usage := refModUsageMultiply
+		ref := RefNoModifier
+		usage := RefModUsageMultiply
 		value := float32(1)
 		if enable {
-			ref = refEnableInfiltration
-			usage = refModUsageEnable
+			ref = RefEnableInfiltration
+			usage = RefModUsageEnable
 			value = -1
 		}
 		children = append(children, RgdTemplateTable(
 			RgdTemplateSlotName("modifier", i), ref,
-			RgdTemplateTable("application_type", refModApplyToEntity),
+			RgdTemplateTable("application_type", RefModApplyToEntity),
 			RgdTemplateBool("exclusive", false),
-			RgdTemplateTable("modifier_class_name", refModClassName),
+			RgdTemplateTable("modifier_class_name", RefModClassName),
 			RgdTemplateFloat("probability_of_applying", 1),
 			RgdTemplateBool("shield_of_faith", false),
 			RgdTemplateString("target_type_name", ""),
@@ -317,13 +317,13 @@ func RgdTemplateModifierTable(name string, firstEnablesInfiltration bool) *rgd.R
 			RgdTemplateFloat("value", value),
 		))
 	}
-	return RgdTemplateTable(name, refModifierTable, children...)
+	return RgdTemplateTable(name, RefModifierTable, children...)
 }
 
 // The thirteen sections a generated building always has, in the order the game
 // writes them. A test reads this, so that a section cannot be dropped from the
 // template without the test saying so.
-var structureTemplateSections = []string{
+var StructureTemplateSections = []string{
 	"cost_ext",
 	"entity_blueprint_ext",
 	"event_manager_ext",

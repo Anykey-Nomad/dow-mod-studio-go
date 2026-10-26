@@ -1,4 +1,4 @@
-package main
+package fx_test
 
 import (
 	"dow-mod-studio/internal/fx"

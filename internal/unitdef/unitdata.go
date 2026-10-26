@@ -98,7 +98,7 @@ func (r *RaceEntry) UnitCount() int { return len(r.Troops) + len(r.Structures) }
 
 // racesFolder is the fixed location every race lives under, relative to the
 // tree's "Data" root: Data\attrib\ebps\races\<race>\...
-const racesFolder = "attrib\\ebps\\races"
+const RacesFolder = "attrib\\ebps\\races"
 
 // BuildUnitCatalog walks the races folder and collects every .rgd unit. A race
 // folder that fails to read is skipped rather than failing the whole catalog,
@@ -108,7 +108,7 @@ func BuildUnitCatalog(tree *modtree.ModTree) *UnitCatalog {
 	if tree == nil || tree.Root == nil {
 		return cat
 	}
-	races := modtree.FindFolderByPath(tree.Root, racesFolder)
+	races := modtree.FindFolderByPath(tree.Root, RacesFolder)
 	if races == nil {
 		return cat
 	}
@@ -205,7 +205,7 @@ func (a AbilityRef) Name() string {
 
 // abilitySlots is the field name pattern of the ability table, in the order the
 // game numbers them.
-var abilitySlots = []string{
+var AbilitySlots = []string{
 	"ability_01", "ability_02", "ability_03", "ability_04", "ability_05",
 	"ability_06", "ability_07", "ability_08", "ability_09", "ability_10",
 }
@@ -231,7 +231,7 @@ func UnitAbilities(tree *modtree.ModTree, rf *rgd.RgdFile) []AbilityRef {
 		byName[strings.ToLower(c.Name)] = c
 	}
 	var out []AbilityRef
-	for _, slot := range abilitySlots {
+	for _, slot := range AbilitySlots {
 		e := byName[strings.ToLower(slot)]
 		if e == nil {
 			continue

@@ -42,13 +42,21 @@ func TestDebugSlagDepositMaterials(t *testing.T) {
 			}
 		}
 	}
-	resolved := resolveModelMaterials(tree, materialSearchRoots(tree), modelPath, func() []string { var n []string; for name := range seen { n = append(n, name) }; return n }())
+	resolved := resolveModelMaterials(tree, materialSearchRoots(tree), modelPath, func() []string {
+		var n []string
+		for name := range seen {
+			n = append(n, name)
+		}
+		return n
+	}())
 	fmt.Printf("RSH resolver returned %d of %d\n", len(resolved), len(seen))
 }
 
 func fxMaterialBaseForDebug(name string) string {
-	for i := len(name)-1; i >= 0; i-- {
-		if name[i] == '/' || name[i] == '\\' { return name[i+1:] }
+	for i := len(name) - 1; i >= 0; i-- {
+		if name[i] == '/' || name[i] == '\\' {
+			return name[i+1:]
+		}
 	}
 	return name
 }

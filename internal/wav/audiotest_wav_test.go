@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package wav_test
 
 import (
 	"dow-mod-studio/internal/wav"
