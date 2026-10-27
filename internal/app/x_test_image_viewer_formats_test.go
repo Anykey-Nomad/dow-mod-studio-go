@@ -10,6 +10,7 @@ import (
 	"gioui.org/widget/material"
 
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/testutil"
 )
 
 // The viewer's list of formats and the decoder's list of formats were two
@@ -89,7 +90,7 @@ func probeTabKind(t *fileTab) string {
 // each kind.
 func probeTestTree(t *testing.T) *modtree.ModTree {
 	t.Helper()
-	tree, err := modtree.BuildModTree(testDXP3Module, "English")
+	tree, err := modtree.BuildModTree(testutil.DXP3Module, "English")
 	if err != nil {
 		t.Skipf("BuildModTree: %v", err)
 	}

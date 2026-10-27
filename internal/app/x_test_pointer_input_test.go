@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"image"
 	"strings"
 	"testing"
@@ -64,8 +65,8 @@ func (f *pointerFrame) send(evs ...pointer.Event) {
 func treePointerUI(t *testing.T) (*uiState, *pointerFrame, int) {
 	t.Helper()
 	const target = `Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`
-	ui := newUI(unitTestTheme())
-	ui.ModTree = openTestDXP3(t)
+	ui := newUI(testutil.UnitTestTheme())
+	ui.ModTree = testutil.OpenDXP3(t)
 	ui.Expanded = map[string]bool{"Data": true}
 	segs := strings.Split(target, `\`)
 	for i := 2; i < len(segs); i++ {
@@ -223,7 +224,7 @@ func TestTreeWheelScrollsUnderTheRows(t *testing.T) {
 // and a pointer frame over the bar alone.
 func tabBarPointerUI(t *testing.T) (*uiState, *pointerFrame) {
 	t.Helper()
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.OpenTabs = append(ui.OpenTabs,
 		&fileTab{Kind: "rgd", Path: `Data\attrib\ebps\races\space_marines\space_marine_orbital_relay.rgd`},
 		&fileTab{Kind: "rgd", Path: `Data\attrib\ebps\races\space_marines\space_marine_turret_bolter.rgd`},

@@ -3,6 +3,7 @@ package app
 import (
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/unitdef"
 	"image"
 	"os"
@@ -50,7 +51,7 @@ func newUnitTestMod(t *testing.T) (*uiState, string) {
 		Source: &modtree.FileSource{Kind: modtree.KindThisMod, DiskRoot: modRoot}, DiskPath: existing}
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
 	ui.ModulePath = filepath.Join(appPath, "NewUnitMod")
 	ui.Expanded = map[string]bool{"Data": true}

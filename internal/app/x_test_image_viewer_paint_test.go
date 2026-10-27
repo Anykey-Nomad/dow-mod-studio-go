@@ -29,7 +29,7 @@ func TestImageViewerPaintsTheImage(t *testing.T) {
 		}
 	}
 
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	tab := &fileTab{
 		Path:        `Data\test\pink.png`,
 		Kind:        "image",

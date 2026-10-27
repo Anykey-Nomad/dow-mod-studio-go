@@ -2,6 +2,7 @@ package app
 
 import (
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/unitdef"
 	"strings"
 	"testing"
@@ -122,7 +123,7 @@ func TestTheSectionsTheUserNamedAreThere(t *testing.T) {
 // every attribute of a building that all 150 structures carry with one value,
 // the template has to have written that value.
 func TestTheValuesTheStructuresAgreeOnAreTheValuesWritten(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	var structures []unitEntry
 	for _, r := range cat.Races {
@@ -178,7 +179,7 @@ func TestTheValuesTheStructuresAgreeOnAreTheValuesWritten(t *testing.T) {
 // attribute the template writes that no structure of the game has is a name the
 // game has never heard of, and one that cannot be right.
 func TestANewBuildingInventsNothingTheGameDoesNotAskFor(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	var structures []unitEntry
 	for _, r := range cat.Races {
@@ -194,7 +195,7 @@ func TestANewBuildingInventsNothingTheGameDoesNotAskFor(t *testing.T) {
 		known[collapseRgdIndices(p)] = true
 	}
 	wrong := 0
-	for path := range templateEntries(rf) {
+	for path := range testutil.TemplateEntries(rf) {
 		key := collapseRgdIndices(path)
 		if known[key] {
 			continue

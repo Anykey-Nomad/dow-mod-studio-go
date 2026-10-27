@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"strings"
 	"testing"
 )
@@ -187,11 +188,11 @@ func TestTheBackgroundScanFindsWhatTheBlockingReadFinds(t *testing.T) {
 	// The window reads the links off the UI thread, so the two paths have to
 	// agree: a list that filled in differently from the report would be worse
 	// than either.
-	blocking := newModGraph(openTestDXP3(t))
+	blocking := newModGraph(testutil.OpenDXP3(t))
 	blocking.EnsureLinks()
 
-	ui := newUI(unitTestTheme())
-	ui.ModTree = openTestDXP3(t)
+	ui := newUI(testutil.UnitTestTheme())
+	ui.ModTree = testutil.OpenDXP3(t)
 	ui.ModulePath = ""
 	t.Setenv("AppData", t.TempDir())
 	t.Setenv("LOCALAPPDATA", t.TempDir())
@@ -221,7 +222,7 @@ func TestTheBackgroundScanFindsWhatTheBlockingReadFinds(t *testing.T) {
 }
 
 func TestStartingAScanTwiceDoesNotReadTheModTwice(t *testing.T) {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = newGraphTestMod(t)
 	g := StartGraphLinkScan(ui)
 	if again := StartGraphLinkScan(ui); again != g {

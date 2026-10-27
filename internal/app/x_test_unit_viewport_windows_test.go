@@ -23,8 +23,8 @@ import (
 
 func unitViewportUI(t *testing.T, unitName string, w, h int) (*uiState, *windowFrame) {
 	t.Helper()
-	ui := newUI(unitTestTheme())
-	ui.ModTree = openTestDXP3(t)
+	ui := newUI(testutil.UnitTestTheme())
+	ui.ModTree = testutil.OpenDXP3(t)
 	OpenUnitTab(ui)
 	raceSel, unitSel := unitViewportPicker(t, ui, unitName)
 	ui.UnitRaceSel, ui.UnitSel = raceSel, unitSel
@@ -231,7 +231,7 @@ func TestTheViewportListsEveryClipAndPlaysThePickedOne(t *testing.T) {
 // A unit that names no model is a state the section has to draw, not a crash:
 // the canvas says so and the panel says there is nothing loaded.
 func TestTheViewportSaysWhenAUnitHasNoModel(t *testing.T) {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = unitViewportMod(t)
 	unitViewportWriteUnit(t, ui.ModTree, unitTemplateName{Race: "necrons", Name: "necron_wraith"}, "")
 	OpenUnitTab(ui)
@@ -635,7 +635,7 @@ func renderUnitSection(t *testing.T, ui *uiState, section, raceSel, unitSel, w, 
 		t.Skipf("no GPU backend: %v", err)
 	}
 	defer win.Release()
-	ui.Th = unitTestTheme()
+	ui.Th = testutil.UnitTestTheme()
 	OpenUnitTab(ui)
 	ui.UnitSection = section
 	ui.UnitRaceSel = raceSel
@@ -671,7 +671,7 @@ func findUnitSection(t *testing.T, label string) int {
 // content too, so the check is that the column is on screen either way and that
 // nothing about the scan's absence is a blank frame.
 func TestSquadColumnRendersAfterTheScan(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	section := findUnitSection(t, "Squads")
 
 	// Before the scan: still something on screen, not a crash and not a blank.
@@ -725,7 +725,7 @@ func firstUnitInASquad(t *testing.T, ui *uiState) (raceIdx, unitIdx int) {
 // in three squads does not fill the column, so this uses a small window where
 // even a handful of rows do.
 func TestSquadColumnScrolls(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	ui := &uiState{ModTree: tree}
 	StartUnitSquadScan(ui, tree)
 	defer StopUnitSquadScan(ui)
@@ -756,7 +756,7 @@ func TestSquadColumnScrolls(t *testing.T) {
 // second is checked by laying the same unit out and comparing against a frame
 // where the headings are suppressed.
 func TestInfoColumnScrollsAndGroups(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	section := findUnitSection(t, "Unit info")
 	ui := &uiState{ModTree: tree}
 	// A necrons unit, which is the race with the most sections carried.
@@ -793,7 +793,7 @@ func TestInfoColumnScrollsAndGroups(t *testing.T) {
 // without being added to the two column dispatchers, and the symptom would be a
 // menu entry that opens onto an empty window.
 func TestEverySectionHasBothColumns(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	// Every section, laid out with a real mod behind it, has to put something
 	// on screen in both of its columns.
 	for i := range unitSections {
@@ -847,7 +847,7 @@ func TestEverySectionHasBothColumns(t *testing.T) {
 // ─── merged from x_test_unit_ui_layout_windows_test.go ────────────────────────────────────────
 
 func TestUnitTabRendersWithRealMod(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 
 	sizes := []image.Point{
 		{X: 1600, Y: 900},
@@ -864,7 +864,7 @@ func TestUnitTabRendersWithRealMod(t *testing.T) {
 		// quietly stopped covering the last one.
 		for _, section := range allUnitSectionIndexes() {
 			for _, raceSel := range []int{0, 3, 99} {
-				ui := &uiState{Th: unitTestTheme(), ModTree: tree}
+				ui := &uiState{Th: testutil.UnitTestTheme(), ModTree: tree}
 				OpenUnitTab(ui)
 				ui.UnitSection = section
 				ui.UnitRaceSel = raceSel
@@ -900,8 +900,8 @@ func TestUnitTabRendersWithRealMod(t *testing.T) {
 // The content area must show the file tree and the middle panel again once the
 // object tab is left, or the tab would take the window over permanently.
 func TestContentAreaRestoresWhenTabIsNotActive(t *testing.T) {
-	tree := openTestDXP3(t)
-	ui := &uiState{Th: unitTestTheme(), ModTree: tree}
+	tree := testutil.OpenDXP3(t)
+	ui := &uiState{Th: testutil.UnitTestTheme(), ModTree: tree}
 	OpenUnitTab(ui)
 	if !UnitTabOwnsLeftPanel(ui) || !UnitTabOwnsMiddlePanel(ui) {
 		t.Fatal("the object tab should own the left and middle panels while it is active")
@@ -1041,7 +1041,7 @@ func TestDropdownHelpers(t *testing.T) {
 // ─── merged from x_test_unit_dropdown_windows_test.go ────────────────────────────────────────
 
 func TestUnitDropdownRendersItsRows(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	necrons := cat.FindRace("necrons")
 	if necrons == nil || len(necrons.UnitsOf()) < 3 {
@@ -1055,7 +1055,7 @@ func TestUnitDropdownRendersItsRows(t *testing.T) {
 	}
 	defer win.Release()
 
-	ui := &uiState{Th: unitTestTheme(), ModTree: tree}
+	ui := &uiState{Th: testutil.UnitTestTheme(), ModTree: tree}
 	OpenUnitTab(ui)
 	ui.UnitListOpen = true
 

@@ -9,16 +9,17 @@ import (
 
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/unitdef"
 )
 
 func graphOf(t *testing.T) *modGraph {
 	t.Helper()
-	return newModGraph(openTestDXP3(t))
+	return newModGraph(testutil.OpenDXP3(t))
 }
 
 func TestTheGraphKnowsEveryKindOfThingTheGameShips(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	g := newModGraph(tree)
 	g.EnsureLinks()
 
@@ -58,7 +59,7 @@ func TestTheGraphKnowsEveryKindOfThingTheGameShips(t *testing.T) {
 }
 
 func TestEveryUnitAndBuildingIsFoundAndKnowsItsRace(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	g := newModGraph(tree)
 	cat := buildUnitCatalog(tree)
 
@@ -152,7 +153,7 @@ func TestEveryReferenceInTheGamesOwnDataResolves(t *testing.T) {
 // A reference the game writes as a bare name is found by name, and the
 // referring entity's own race is what disambiguates it.
 func TestABareNameReferenceIsResolvedWithinTheReferringRace(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	g := newModGraph(tree)
 
 	// The eldar HQ leaves a dummy building behind when it relocates, and that
@@ -171,7 +172,7 @@ func TestABareNameReferenceIsResolvedWithinTheReferringRace(t *testing.T) {
 }
 
 func TestTheWeaponsOfAUnitResolveToTheWeaponLibrary(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	g := newModGraph(tree)
 
 	// necron_lord is a unit of the game with weapons, abilities and a
@@ -194,7 +195,7 @@ func TestTheWeaponsOfAUnitResolveToTheWeaponLibrary(t *testing.T) {
 }
 
 func TestABuildingIsWhatBuildsTheUnitsThatRequireIt(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	g := newModGraph(tree)
 
 	// Every unit of the game says, in its requirement table, which structure

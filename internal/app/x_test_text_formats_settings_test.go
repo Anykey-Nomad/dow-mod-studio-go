@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"encoding/json"
 	"testing"
 )
@@ -68,7 +69,7 @@ func TestApplyingPersistedSettingsInstallsTheFormats(t *testing.T) {
 // A uiState that never saw a state file still opens the built-in formats, so
 // the editor works before any settings have been loaded.
 func TestTheDefaultFormatsApplyToAFreshWindow(t *testing.T) {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	if !IsEditorFile(ui, "script.lua") {
 		t.Error("a fresh window does not open .lua")
 	}

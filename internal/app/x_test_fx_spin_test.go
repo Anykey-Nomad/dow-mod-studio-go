@@ -492,10 +492,10 @@ func TestFxSoundDecodeForPlaybackProducesRightDuration(t *testing.T) {
 // ─── merged from x_test_fx_sound_model_load_test.go ────────────────────────────────────────
 
 func TestLoadModelSoundsNeedsNoEffects(t *testing.T) {
-	if testDXP3Module == "" {
+	if testutil.DXP3Module == "" {
 		t.Skip("no module path")
 	}
-	tree, err := modtree.BuildModTree(testDXP3Module, "English")
+	tree, err := modtree.BuildModTree(testutil.DXP3Module, "English")
 	if err != nil {
 		t.Skipf("BuildModTree: %v", err)
 	}

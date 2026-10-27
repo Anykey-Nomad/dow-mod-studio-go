@@ -11,6 +11,7 @@ import (
 
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 )
 
 type rgdAttrStat struct {
@@ -98,7 +99,7 @@ func collectRgdAttrs(prefix string, children []*rgd.RgdEntry, into map[string]*r
 }
 
 func TestRealCommonRgdAttributes(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	var troops, structures []unitEntry
 	for _, r := range cat.Races {

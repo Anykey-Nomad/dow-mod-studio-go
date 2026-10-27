@@ -13,6 +13,7 @@ import (
 	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/unitdef"
 	"dow-mod-studio/internal/whm"
 	"gioui.org/io/key"
@@ -94,7 +95,7 @@ func unitEditUI(t *testing.T) (*uiState, *modtree.ModTree) {
 		ModName: "(Engine)", SourceName: "Data", Kind: modtree.KindEngine, DiskRoot: filepath.Join(engineRoot, "Data"),
 	})
 	tree.SortAll(tree.Root)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
 	ui.ModulePath = filepath.Join(tree.AppPath, "GraphTestMod")
 	selectUnit(t, ui, unitEditTroop)
@@ -556,7 +557,7 @@ func parseCountValue(s string) (n int, noun string) {
 // than merely present: a row that rendered an empty or a placeholder would look
 // the same in the window.
 func TestUnitInfoReadsThePreviouslyHiddenSections(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	race := cat.FindRace("necrons")
 	if race == nil {
@@ -627,7 +628,7 @@ func unitFieldMust(t *testing.T, fields []unitField, label string) string {
 // would leave the reader with a wall of values. This is the invariant that
 // makes a hundred rows navigable, so it is checked rather than eyeballed.
 func TestUnitInfoGroupsAreMarkedOnce(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	race := cat.FindRace("necrons")
 	if race == nil {
@@ -678,7 +679,7 @@ func TestUnitInfoGroupsAreMarkedOnce(t *testing.T) {
 // the absence of the section is the fact, and the window states it by leaving
 // the row out.
 func TestUnitInfoCountsSkipEmptySections(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	shown := 0
 	for _, u := range cat.AllUnits() {
@@ -721,7 +722,7 @@ func TestUnitInfoCountsSkipEmptySections(t *testing.T) {
 // every unit that has the table and say nothing at all. The count has to
 // distinguish the template, and it has to actually differ between units.
 func TestUnitInfoModifierCountIsNotTheTemplate(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	counts := map[string]int{}
 	distinct := 0
@@ -762,7 +763,7 @@ func TestUnitInfoModifierCountIsNotTheTemplate(t *testing.T) {
 // squad_hold_ext, and no single unit of the DXP3 tree carries all of them. A path
 // that no unit anywhere resolves is a typo, which is what this catches.
 func TestUnitInfoScalarsAreRealPaths(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	// seen counts, per row of the table, how many units carry the field. A row
 	// that no unit carries is either a typo or a field the game has since
@@ -837,7 +838,7 @@ func TestUnitInfoListsAreDistinctGroups(t *testing.T) {
 // section the file does not have has to report that it is missing, not that it
 // is empty, because the two produce different rows.
 func TestUnitListCountOnAMissingSection(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	race := cat.FindRace("necrons")
 	if race == nil {
@@ -956,7 +957,7 @@ func keySelViewer() *modelViewer {
 // selection bound to the bone it belongs to, which is where every row click
 // starts from.
 func keySelUI(v *modelViewer) *uiState {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	BindBoneKeySelection(ui, v)
 	return ui
 }
@@ -1678,7 +1679,7 @@ func runSquadScanToCompletion(t *testing.T, ui *uiState) {
 // unit: the game fields exactly one of it, so its squad is the easiest link in
 // the tree to be wrong about.
 func TestRealSquadScanFindsTheLinkage(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	necrons := cat.FindRace("necrons")
 	if necrons == nil {
@@ -1722,7 +1723,7 @@ func TestRealSquadScanFindsTheLinkage(t *testing.T) {
 // unit the game fields a variable number of, so the index has to carry a range
 // rather than a single figure.
 func TestRealSquadScanFindsAScaledSquad(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	warrior, ok := cat.ByPath[strings.ToLower(`Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`)]
 	if !ok {
@@ -1754,7 +1755,7 @@ func TestRealSquadScanFindsAScaledSquad(t *testing.T) {
 // the clearest statement of what the scan is for: a unit is in a handful of
 // squads at most, and most troops are in at least one.
 func TestRealSquadScanCoversTheTree(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	ui := &uiState{}
 	StartUnitSquadScan(ui, tree)
@@ -1877,7 +1878,7 @@ func TestSquadSizeLabel(t *testing.T) {
 // stopped scan must leave nothing running, and starting one again must not leave
 // the first one's goroutine writing into the index.
 func TestSquadScanStopsCleanly(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	ui := &uiState{}
 	StartUnitSquadScan(ui, tree)
 	if !ui.UnitSquadsRunning {
@@ -1939,7 +1940,7 @@ func TestSquadsOfUnitBeforeScan(t *testing.T) {
 // squads of the base game leaves birth_resource at zero, so the rows are only
 // drawn for a mod that actually charges.
 func TestBirthCostSkipsZero(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	lord, ok := cat.ByPath[strings.ToLower(`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`)]
 	if !ok {
@@ -1967,7 +1968,7 @@ func TestBirthCostSkipsZero(t *testing.T) {
 // any field for, so they are what proves the column is reading a second file
 // rather than re-reading the unit.
 func TestSquadFieldsCarrySquadOnlyValues(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	s := unitSquadRef{
 		Path: `Data\attrib\sbps\races\necrons\necron_lord_squad.rgd`,
 		Name: "necron_lord_squad",
@@ -2070,7 +2071,7 @@ func testUnitEntry(name string) unitEntry {
 // and the string table holding it, the list shows the text and not the id.
 func TestUnitLabelUsesTheLocalisedText(t *testing.T) {
 	lord := testUnitEntry("necron_lord")
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.UnitNames = map[string]string{strings.ToLower(lord.Path): "705754"}
 	installLocaleTableForTest(ui, t, "705754", "Necron Lord")
 
@@ -2097,7 +2098,7 @@ func TestUnitLabelFallsBackToTheFileName(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			lord := testUnitEntry("necron_lord")
-			ui := newUI(unitTestTheme())
+			ui := newUI(testutil.UnitTestTheme())
 			ui.UnitNames = tc.ids
 			// A table that knows nothing, so the third case is a real miss
 			// rather than a missing table.
@@ -2134,7 +2135,7 @@ func TestUnitNameScanIsNotRestartedForTheSameTree(t *testing.T) {
 		`Data\attrib\ebps\races\necron\troops\necron_lord.rgd`: "not a real rgd",
 	})
 	cat := buildUnitCatalog(tree)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 
 	StartUnitNameScan(ui, tree, cat)
 	first := ui.UnitNamesCh
@@ -2156,7 +2157,7 @@ func TestUnitNameScanStopsWhenTheModGoesAway(t *testing.T) {
 		`Data\attrib\ebps\races\necron\troops\necron_lord.rgd`: "not a real rgd",
 	})
 	cat := buildUnitCatalog(tree)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
 	ui.UnitCatalog = cat
 	ui.UnitCatalogMod = tree.FileMapName
@@ -2178,7 +2179,7 @@ func TestUnitNameScanStopsWhenTheModGoesAway(t *testing.T) {
 // TestPollUnitNamesIsQuietWithNothingToSay: a finished scan, or no scan at all,
 // must not report work, or every frame would ask for a redraw it does not need.
 func TestPollUnitNamesIsQuietWithNothingToSay(t *testing.T) {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	if PollUnitNames(ui) {
 		t.Error("pollUnitNames reported work before any scan was started")
 	}
@@ -2234,20 +2235,6 @@ func installLocaleTableForTest(ui *uiState, t *testing.T, entries ...string) {
 
 // ─── merged from x_test_unit_template_test.go ────────────────────────────────────────
 
-func templateEntries(rf *rgd.RgdFile) map[string]*rgd.RgdEntry {
-	out := map[string]*rgd.RgdEntry{}
-	var walk func(prefix string, children []*rgd.RgdEntry)
-	walk = func(prefix string, children []*rgd.RgdEntry) {
-		for _, ch := range children {
-			path := prefix + "/" + ch.Name
-			out[path] = ch
-			walk(path, ch.Children)
-		}
-	}
-	walk(rf.Root.Name, rf.Root.Children)
-	return out
-}
-
 func TestNewUnitRgdHasTheTwelveSections(t *testing.T) {
 	rf := newUnitRgd(unitTemplateName{Race: "necrons", Name: "necron_wraith"})
 	var names []string
@@ -2291,8 +2278,8 @@ func TestNewUnitRgdRoundTrips(t *testing.T) {
 	if back.Descriptor != rf.Descriptor {
 		t.Errorf("descriptor is %q, want %q", back.Descriptor, rf.Descriptor)
 	}
-	want := templateEntries(rf)
-	got := templateEntries(back)
+	want := testutil.TemplateEntries(rf)
+	got := testutil.TemplateEntries(back)
 	if len(got) != len(want) {
 		t.Fatalf("the file read back has %d entries, want %d", len(got), len(want))
 	}
@@ -2319,7 +2306,7 @@ func TestNewUnitRgdRoundTrips(t *testing.T) {
 // race the unit was created under.
 func TestNewUnitRgdCarriesTheGivenName(t *testing.T) {
 	rf := newUnitRgd(unitTemplateName{Race: "space_marines", Name: "marine_veteran"})
-	entries := templateEntries(rf)
+	entries := testutil.TemplateEntries(rf)
 	want := map[string]string{
 		"GameData/entity_blueprint_ext/animator":                     "Races/Space_Marines/Troops/Marine_Veteran",
 		"GameData/ui_ext/ui_hotkey_name":                             "marine_veteran",
@@ -2359,7 +2346,7 @@ func TestNewUnitRgdCarriesTheGivenName(t *testing.T) {
 // else: a name the game does not use, a type it does not use, or a section that
 // is not one of the twelve would all be caught here.
 func TestNewUnitRgdInventsNothingTheGameDoesNotAskFor(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	var troops []unitEntry
 	for _, r := range cat.Races {
@@ -2385,7 +2372,7 @@ func TestNewUnitRgdInventsNothingTheGameDoesNotAskFor(t *testing.T) {
 		}
 	}
 	rf := newUnitRgd(unitTemplateName{Race: "necrons", Name: "necron_wraith"})
-	entries := templateEntries(rf)
+	entries := testutil.TemplateEntries(rf)
 	missing := 0
 	for path, e := range entries {
 		c, ok := common[path]
@@ -2471,7 +2458,7 @@ func TestUADEDiagnoseUnitPipeline(t *testing.T) {
 	}
 	t.Logf("catalog: %d races, %d units", len(cat.Races), total)
 
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
 	ui.ModulePath = testUADEModule
 	ui.GamePath = tree.AppPath
@@ -2821,7 +2808,7 @@ func TestUnitTabSurvivesModReloadAndIsNotPersisted(t *testing.T) {
 // not touched.
 func TestObjectTabNotWrittenToSession(t *testing.T) {
 	t.Setenv("AppData", t.TempDir())
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = testModTreeWithFiles(t, map[string]string{
 		`Data\attrib\ebps\races\necrons\troops\necron_lord.rgd`: "",
 	})

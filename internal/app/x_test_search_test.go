@@ -2,6 +2,7 @@ package app
 
 import (
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/testutil"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -269,7 +270,7 @@ func TestSearchRealModule(t *testing.T) {
 // the panel is the field's text, so a dismissed panel has to stay down while
 // the text is the same — and must come back the moment the text differs.
 func TestSearchPanelStaysDownUntilTheQueryChanges(t *testing.T) {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 
 	if SearchPanelWanted(ui, "") {
 		t.Fatal("an empty field should not want the panel")
@@ -303,7 +304,7 @@ func TestSearchPanelStaysDownUntilTheQueryChanges(t *testing.T) {
 // drop the hold, or retyping the very same text would leave the panel down and
 // look like the search had stopped working.
 func TestEmptyingTheSearchReleasesTheHold(t *testing.T) {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.SearchEditor.SetText("necron")
 	SearchPanelWanted(ui, "necron")
 	CloseSearch(ui)
@@ -321,7 +322,7 @@ func TestEmptyingTheSearchReleasesTheHold(t *testing.T) {
 // so if that did not hold the panel down it would spring back on the very next
 // frame and quietly cover the content again.
 func TestEveryPathThatHidesThePanelHoldsItDown(t *testing.T) {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.SearchEditor.SetText("necron")
 	SearchPanelWanted(ui, "necron")
 	ui.SearchVisible = true

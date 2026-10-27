@@ -9,6 +9,7 @@ import (
 
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 	"gioui.org/f32"
 	"gioui.org/io/pointer"
 )
@@ -49,7 +50,7 @@ func freezeTestUI(t *testing.T) (*uiState, *modtree.ModTree) {
 	t.Helper()
 	tree := newGraphTestMod(t)
 	freezeTestMod(t, tree)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
 	ui.ModulePath = filepath.Join(tree.AppPath, "GraphTestMod")
 	return ui, tree

@@ -63,7 +63,7 @@ func localeTestUI(t *testing.T) *uiState {
 		"Engine/Locale/Russian/Engine.ucs": encodeUCS(t, "90100\tБроня"),
 		"Engine/Locale/German/Engine.ucs":  encodeUCS(t, "90100\tRüstung"),
 	})
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.GamePath = gamePath
 	ui.ModulePath = moduleDir
 	RefreshLocales(ui)
@@ -421,7 +421,7 @@ func TestRealUnitsScreenNamesResolve(t *testing.T) {
 	gamePath := testGameFolder(t)
 	setLocale(gamePath, "", "English")
 
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	necrons := cat.FindRace("necrons")
 	if necrons == nil {

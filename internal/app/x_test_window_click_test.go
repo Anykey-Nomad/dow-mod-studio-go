@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"image"
 	"strings"
 	"testing"
@@ -67,8 +68,8 @@ func newWindowFrame(ui *uiState, w, h int) *windowFrame {
 func treeWindow(t *testing.T) (*windowFrame, int) {
 	t.Helper()
 	const target = `Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`
-	ui := newUI(unitTestTheme())
-	ui.ModTree = openTestDXP3(t)
+	ui := newUI(testutil.UnitTestTheme())
+	ui.ModTree = testutil.OpenDXP3(t)
 	ui.Expanded = map[string]bool{"Data": true}
 	segs := strings.Split(target, `\`)
 	for i := 2; i < len(segs); i++ {
@@ -188,7 +189,7 @@ func TestRightPressOnATreeRowOpensTheFilesMenu(t *testing.T) {
 // a zero sized allocation is the same pointer every time, so two tags made that
 // way are one tag, and two targets that share a tag share one queue of events.
 func TestEveryPointerTagOfTheAppIsItsOwn(t *testing.T) {
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	if ui.LeftTreePointerTag == ui.TabBarPointerTag {
 		t.Fatalf("the file tree and the tab bar share the pointer tag %v, so they share one queue of events", ui.TabBarPointerTag)
 	}

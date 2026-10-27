@@ -550,7 +550,7 @@ func TestCamRightStandsUpOnTheUpAxis(t *testing.T) {
 // real files: a blueprint naming an event, an event naming an effect, and the
 // markers the effect plays at.
 func TestLoadModelEffectsForRealModel(t *testing.T) {
-	tree, err := modtree.BuildModTree(testDXP3Module, "English")
+	tree, err := modtree.BuildModTree(testutil.DXP3Module, "English")
 	if err != nil {
 		t.Skipf("no test module: %v", err)
 	}

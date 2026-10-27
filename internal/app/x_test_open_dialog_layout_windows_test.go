@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,7 +21,7 @@ func TestOpenModuleListRowsAreOnScreen(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	OpenModulePicker(ui)
 	FpBrowse(ui, dir)
 	f := newWindowFrame(ui, w, h)

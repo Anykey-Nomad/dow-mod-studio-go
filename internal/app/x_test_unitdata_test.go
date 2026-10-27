@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/unitdef"
@@ -271,21 +272,9 @@ func TestWeaponNameFromRef(t *testing.T) {
 
 // ── against the real mod ────────────────────────────────────────────────────
 
-const testDXP3Module = `C:/Program Files/Steam/steamapps/common/Dawn of War Definitive Edition/DXP3.module`
-
-func openTestDXP3(t *testing.T) *modtree.ModTree {
-	t.Helper()
-	tree, err := modtree.BuildModTree(testDXP3Module, "English")
-	if err != nil {
-		t.Skipf("DXP3 module not available: %v", err)
-	}
-	t.Cleanup(tree.Close)
-	return tree
-}
-
 // Every unit of every race is listed, in the two folders the game keeps them in.
 func TestRealCatalogListsRacesAndUnits(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	if len(cat.Races) < 5 {
 		t.Fatalf("only %d races found, expected the full set", len(cat.Races))
@@ -320,7 +309,7 @@ func TestRealCatalogListsRacesAndUnits(t *testing.T) {
 // The real check of the .lua -> .rgd mapping: every ability slot of a real unit
 // that names a file must resolve to that file.
 func TestRealUnitAbilitiesResolve(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 
 	named, resolved := 0, 0
@@ -360,7 +349,7 @@ func TestRealUnitAbilitiesResolve(t *testing.T) {
 // The "Unit info" list must only state things the file actually says, so every
 // field it shows has to be present on the unit it was read from.
 func TestRealUnitDetailsArePopulated(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	necrons := cat.FindRace("necrons")
 	if necrons == nil {
@@ -403,7 +392,7 @@ func TestRealUnitDetailsArePopulated(t *testing.T) {
 // A unit's details must survive the selection dance the dialog performs, and a
 // repeated request must not re-read the file.
 func TestUnitDetailsCacheFollowsSelection(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	ui := &uiState{ModTree: tree}
 	if got := UnitCatalogFor(ui); got == nil {

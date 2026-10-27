@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/testutil"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 )
@@ -134,7 +135,7 @@ func managedModWindow(t *testing.T) (*windowFrame, int, int, string) {
 	for _, file := range folder.Files {
 		folder.FileByLower[file.Name] = file
 	}
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
 	ui.Expanded = map[string]bool{"Data": true, `Data\files`: true}
 	ui.VisibleNodes = GetVisibleNodes(ui)
@@ -240,7 +241,7 @@ func TestEscapeClosesTheDeleteConfirmation(t *testing.T) {
 
 func treeKeyboardUI(t *testing.T) *uiState {
 	t.Helper()
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	ui := &uiState{ModTree: tree, KeyboardArea: "files", Expanded: map[string]bool{"Data": true}}
 	target := `Data\attrib\ebps\races\necrons\troops\necron_basic_warrior.rgd`
 	segs := strings.Split(target, `\`)
@@ -325,7 +326,7 @@ func TestArrowKeysStillMoveTheSelection(t *testing.T) {
 // TestEnterOnAFolderOpensNothing pins the other half of the report: Enter on a
 // folder is not an open, and must not fall through to opening something else.
 func TestEnterOnAFolderOpensNothing(t *testing.T) {
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	ui := &uiState{ModTree: tree, KeyboardArea: "files", Expanded: map[string]bool{"Data": true}}
 	ui.VisibleNodes = GetVisibleNodes(ui)
 	ui.SelectedTreePath = `Data`

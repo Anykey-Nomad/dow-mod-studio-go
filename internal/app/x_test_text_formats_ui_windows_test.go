@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/testutil"
 	"gioui.org/f32"
 	"gioui.org/io/pointer"
 	"gioui.org/widget"
@@ -20,7 +21,7 @@ import (
 // of it.
 func settingsWindow(t *testing.T) *windowFrame {
 	t.Helper()
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	OpenSettingsDialog(ui)
 	f := newWindowFrame(ui, 1000, 700)
 	if !ui.SettingsDialog {
@@ -166,7 +167,7 @@ func formatTestMod(t *testing.T, name string) (*uiState, string) {
 		Source: &modtree.FileSource{Kind: modtree.KindThisMod, DiskRoot: dir}, DiskPath: disk}
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
 	t.Cleanup(tree.Close)
 	ui.ModulePath = filepath.Join(appPath, "FormatMod")

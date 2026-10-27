@@ -20,7 +20,7 @@ import (
 func TestSaveLocaleEditCreatesAStringAndPointsTheFieldAtIt(t *testing.T) {
 	resetLocales(t)
 	project := t.TempDir()
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ProjectDir = project
 	ui.Locale = "English"
 	// An engine table with the id the field already points at, so the "before"
@@ -103,7 +103,7 @@ func TestSaveLocaleEditOverridesAnEngineString(t *testing.T) {
 	writeUCSFixture(t, filepath.Join(gamePath, "Engine", "Locale", "English"), "Engine.ucs",
 		map[string]string{"705754": "Necron Lord"})
 
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ProjectDir = project
 	ui.Locale = "English"
 	ui.GamePath = gamePath
@@ -147,7 +147,7 @@ func TestSaveLocaleEditOverridesAnEngineString(t *testing.T) {
 func TestSaveLocaleEditRefusesAnEmptyString(t *testing.T) {
 	resetLocales(t)
 	project := t.TempDir()
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ProjectDir = project
 	ui.Locale = "English"
 	setLocaleOverrideDir(project)
@@ -171,7 +171,7 @@ func TestSaveLocaleEditRefusesAnEmptyString(t *testing.T) {
 // write somewhere arbitrary.
 func TestSaveLocaleEditSaysWhereThereIsNowhereToWrite(t *testing.T) {
 	resetLocales(t)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ProjectDir = ""
 	ui.Locale = "English"
 
@@ -241,7 +241,7 @@ const localeRowTextPixels = 200
 // the text together would be unreadable, and the id has the tooltip to go in.
 func TestLocaleRowShowsTheTextNotTheId(t *testing.T) {
 	resetLocales(t)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.Locale = "English"
 	installLocaleTableForTest(ui, t, "705754", "Necron Lord")
 
@@ -271,7 +271,7 @@ func TestLocaleRowShowsTheTextNotTheId(t *testing.T) {
 // about, because the row itself deliberately does not.
 func TestLocaleRowTooltipCarriesTheId(t *testing.T) {
 	resetLocales(t)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.Locale = "English"
 	installLocaleTableForTest(ui, t, "705754", "Necron Lord")
 
@@ -300,7 +300,7 @@ func TestLocaleRowTooltipCarriesTheId(t *testing.T) {
 // and the id it is about.
 func TestLocaleEditDialogDrawsItsText(t *testing.T) {
 	resetLocales(t)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.Locale = "English"
 	installLocaleTableForTest(ui, t, "705754", "Necron Lord")
 	ui.ProjectDir = t.TempDir()

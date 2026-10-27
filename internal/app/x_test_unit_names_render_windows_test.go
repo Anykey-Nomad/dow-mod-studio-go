@@ -68,7 +68,7 @@ type unitRowFixture struct {
 
 func newUnitRowFixture(t *testing.T) unitRowFixture {
 	t.Helper()
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	if cat == nil || len(cat.Races) == 0 {
 		t.Skip("the module has no races")
@@ -78,7 +78,7 @@ func newUnitRowFixture(t *testing.T) unitRowFixture {
 	if len(units) == 0 {
 		t.Skipf("race %q has no units", shown.Name)
 	}
-	ui := &uiState{Th: unitTestTheme(), ModTree: tree}
+	ui := &uiState{Th: testutil.UnitTestTheme(), ModTree: tree}
 	OpenUnitTab(ui)
 	ui.UnitListOpen = true
 	return unitRowFixture{ui: ui, unit: units[0]}
@@ -182,7 +182,7 @@ func TestUnitNamesOnTheRealModule(t *testing.T) {
 	gamePath := testGameFolder(t)
 	setLocale(gamePath, "", "English")
 
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
 	if cat == nil || len(cat.Races) == 0 {
 		t.Skip("no races in the module")
@@ -192,7 +192,7 @@ func TestUnitNamesOnTheRealModule(t *testing.T) {
 		total += len(r.Troops) + len(r.Structures)
 	}
 
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	// setLocaleLanguage finds the .ucs files through the game folder, so the
 	// state needs one, not just the table the test installed by hand.
 	ui.GamePath = gamePath
@@ -272,9 +272,9 @@ func TestUnitNamesOnTheRealModule(t *testing.T) {
 func TestRealUnitsShareNamesWithinARace(t *testing.T) {
 	resetLocales(t)
 	setLocale(testGameFolder(t), "", "English")
-	tree := openTestDXP3(t)
+	tree := testutil.OpenDXP3(t)
 	cat := buildUnitCatalog(tree)
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
 	ui.UnitCatalog = cat
 	ui.UnitCatalogMod = tree.FileMapName

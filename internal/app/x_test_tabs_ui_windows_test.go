@@ -50,7 +50,7 @@ func manyTabs(ui *uiState, n int) {
 
 func tabBarTestUI(t *testing.T, tabs int) *uiState {
 	t.Helper()
-	ui := newUI(unitTestTheme())
+	ui := newUI(testutil.UnitTestTheme())
 	manyTabs(ui, tabs)
 	return ui
 }
