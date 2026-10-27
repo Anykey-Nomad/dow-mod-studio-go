@@ -1,22 +1,21 @@
-package app
+package editors
 
 import (
 	"dow-mod-studio/internal/app/uikit"
+	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/highlight"
 	"fmt"
-	"log"
-	"path/filepath"
-	"strings"
-
-	"image/color"
-
 	"gioui.org/layout"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"image/color"
+	"log"
+	"path/filepath"
+	"strings"
 )
 
-func isTextExtension(ext string) bool {
+func IsTextExtension(ext string) bool {
 	switch strings.ToLower(ext) {
 	case ".rat", ".con", ".lua", ".ai", ".txt":
 		return true
@@ -25,32 +24,27 @@ func isTextExtension(ext string) bool {
 	}
 }
 
-func TextActive(ui *uiState) bool {
-	t := ActiveTab(ui)
-	return t != nil && t.Kind == "text" && t.TextError == ""
-}
-
-func OpenTextFile(ui *uiState, virtualPath string) {
+func OpenTextFile(ui *uistate.State, virtualPath string) {
 	if ui.ModTree == nil {
 		return
 	}
-	if idx := FindTabIndex(ui, virtualPath); idx >= 0 {
+	if idx := uikit.FindTabIndex(ui, virtualPath); idx >= 0 {
 		ui.TabSel = idx + 1
-		EnsureTabClicks(ui)
+		uikit.EnsureTabClicks(ui)
 		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
 	data, err := ui.ModTree.ReadFile(virtualPath)
 	if err != nil {
-		t := &fileTab{Path: virtualPath, Kind: "text", TextError: err.Error()}
+		t := &uistate.Tab{Path: virtualPath, Kind: "text", TextError: err.Error()}
 		ui.OpenTabs = append(ui.OpenTabs, t)
 		ui.TabSel = len(ui.OpenTabs)
-		EnsureTabClicks(ui)
+		uikit.EnsureTabClicks(ui)
 		ui.StatusText = fmt.Sprintf("Failed to read %s: %v", filepath.Base(virtualPath), err)
 		return
 	}
 	text := string(data)
-	t := &fileTab{
+	t := &uistate.Tab{
 		Path:         virtualPath,
 		Kind:         "text",
 		TextOriginal: text,
@@ -61,25 +55,12 @@ func OpenTextFile(ui *uiState, virtualPath string) {
 	t.TextEditor.SetText(text)
 	ui.OpenTabs = append(ui.OpenTabs, t)
 	ui.TabSel = len(ui.OpenTabs)
-	EnsureTabClicks(ui)
+	uikit.EnsureTabClicks(ui)
 	ui.StatusText = fmt.Sprintf("Opened %s — %d bytes", filepath.Base(virtualPath), len(data))
 	log.Printf("openText %q: %d bytes", virtualPath, len(data))
 }
 
-func TextSyncAndApply(ui *uiState, gtx layout.Context) {
-	t := ActiveTab(ui)
-	if t == nil || t.Kind != "text" || t.TextError != "" {
-		return
-	}
-	for {
-		if _, ok := t.TextEditor.Update(gtx); !ok {
-			break
-		}
-	}
-	t.TextDirty = t.TextEditor.Text() != t.TextOriginal
-}
-
-func HandleTextSave(ui *uiState, t *fileTab) {
+func HandleTextSave(ui *uistate.State, t *uistate.Tab) {
 	if t == nil || t.Kind != "text" {
 		ui.StatusText = "Nothing to save"
 		return
@@ -117,19 +98,19 @@ func HandleTextSave(ui *uiState, t *fileTab) {
 	log.Printf("saved text %q -> %q (%d bytes)", t.Path, diskPath, len(text))
 }
 
-func LayoutTextEditor(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+func LayoutTextEditor(ui *uistate.State, gtx layout.Context, t *uistate.Tab) layout.Dimensions {
 	// Keep this central panel useful for both short scripts and large Lua files.
 	// Gio's multiline editor is constrained by the available center-panel space.
 	if t.TextError != "" {
 		return layout.Inset{Top: unit.Dp(16), Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "Failed: "+t.TextError)
-			l.Color = rgb(0xB00020)
+			l.Color = uikit.Rgb(0xB00020)
 			return l.Layout(gtx)
 		})
 	}
 	editor := func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return widgetBorderTextEditor(gtx, ui.Th, &t.TextEditor, t.TextDirty, strings.ToLower(filepath.Ext(t.Path)))
+			return WidgetBorderTextEditor(gtx, ui.Th, &t.TextEditor, t.TextDirty, strings.ToLower(filepath.Ext(t.Path)))
 		})
 	}
 	if !t.TextLocale {
@@ -152,10 +133,10 @@ func LayoutTextEditor(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimens
 }
 
 // Kept separate to make the central editor reusable by future script formats.
-func widgetBorderTextEditor(gtx layout.Context, th *material.Theme, editor *widget.Editor, dirty bool, ext string) layout.Dimensions {
+func WidgetBorderTextEditor(gtx layout.Context, th *material.Theme, editor *widget.Editor, dirty bool, ext string) layout.Dimensions {
 	borderColor := uikit.CBorderLight
 	if dirty {
-		borderColor = rgb(0x0078D4)
+		borderColor = uikit.Rgb(0x0078D4)
 	}
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	gtx.Constraints.Min.Y = gtx.Constraints.Max.Y
@@ -169,26 +150,21 @@ func widgetBorderTextEditor(gtx layout.Context, th *material.Theme, editor *widg
 			ed.Color = color.NRGBA{}
 			return layout.Stack{}.Layout(gtx,
 				layout.Expanded(func(hgtx layout.Context) layout.Dimensions {
-					paintSyntaxHighlight(hgtx, th, editor, editor.Text(), ext)
+					PaintSyntaxHighlight(hgtx, th, editor, editor.Text(), ext)
 					return layout.Dimensions{Size: hgtx.Constraints.Max}
 				}),
 				layout.Stacked(func(egt layout.Context) layout.Dimensions {
-					return layout.Inset{Left: unit.Dp(syntaxGutterDp)}.Layout(egt, ed.Layout)
+					return layout.Inset{Left: unit.Dp(SyntaxGutterDp)}.Layout(egt, ed.Layout)
 				}),
 			)
 		})
 	})
 }
 
-// ── syntax highlighting (internal/highlight) ─────────────────────────────────
-//
-// The tokenizer and the painter live in internal/highlight; the editors call
-// them through these names, and the dim gutter colour stays this program's.
+const SyntaxGutterDp = highlight.SyntaxGutterDp
 
-const syntaxGutterDp = highlight.SyntaxGutterDp
-
-func paintSyntaxHighlight(gtx layout.Context, th *material.Theme, editor *widget.Editor, source, ext string) {
+func PaintSyntaxHighlight(gtx layout.Context, th *material.Theme, editor *widget.Editor, source, ext string) {
 	highlight.PaintSyntaxHighlight(gtx, th, editor, source, ext, uikit.CTextDim)
 }
 
-func itoa(v int) string { return highlight.Itoa(v) }
+func Itoa(v int) string { return highlight.Itoa(v) }

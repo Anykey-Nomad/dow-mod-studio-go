@@ -1,22 +1,16 @@
-package app
+package editors
 
 import (
 	"context"
 	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
-	"encoding/binary"
-	"fmt"
-	"image"
-	"io"
-	"path/filepath"
-	"strings"
-	"time"
-
 	"dow-mod-studio/internal/audioplayer"
 	"dow-mod-studio/internal/fda"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/raster"
 	"dow-mod-studio/internal/wav"
+	"encoding/binary"
+	"fmt"
 	"gioui.org/f32"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -25,29 +19,34 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"image"
+	"io"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
-type imageDecodeResult = uistate.ImageDecodeResult
+type ImageDecodeResult = uistate.ImageDecodeResult
 
 const (
-	imageCacheMaxBytes   int64 = 256 << 20
-	imageCacheMaxEntries       = 16
+	ImageCacheMaxBytes   int64 = 256 << 20
+	ImageCacheMaxEntries       = 16
 )
 
-type imageCacheEntry = uistate.ImageCacheEntry
+type ImageCacheEntry = uistate.ImageCacheEntry
 
-func imageCacheKey(path string) string {
+func ImageCacheKey(path string) string {
 	return strings.ToLower(filepath.Clean(path))
 }
 
-func CachedImage(ui *uiState, path string) (imageCacheEntry, bool) {
+func CachedImage(ui *uistate.State, path string) (ImageCacheEntry, bool) {
 	if ui.ImageCache == nil {
-		return imageCacheEntry{}, false
+		return ImageCacheEntry{}, false
 	}
-	key := imageCacheKey(path)
+	key := ImageCacheKey(path)
 	entry, ok := ui.ImageCache[key]
 	if !ok {
-		return imageCacheEntry{}, false
+		return ImageCacheEntry{}, false
 	}
 	ui.ImageCacheSeq++
 	entry.CachedAt = ui.ImageCacheSeq
@@ -55,27 +54,27 @@ func CachedImage(ui *uiState, path string) (imageCacheEntry, bool) {
 	return entry, true
 }
 
-func CacheDecodedImage(ui *uiState, path string, data image.Image, mipmaps []image.Image, format string, bytes int) {
+func CacheDecodedImage(ui *uistate.State, path string, data image.Image, mipmaps []image.Image, format string, bytes int) {
 	if data == nil {
 		return
 	}
 	if ui.ImageCache == nil {
-		ui.ImageCache = make(map[string]imageCacheEntry)
+		ui.ImageCache = make(map[string]ImageCacheEntry)
 	}
 	cacheImages := mipmaps
 	if len(cacheImages) == 0 {
 		cacheImages = []image.Image{data}
 	}
-	cost := imageImagesCost(cacheImages)
-	if cost > imageCacheMaxBytes {
+	cost := ImageImagesCost(cacheImages)
+	if cost > ImageCacheMaxBytes {
 		return
 	}
-	key := imageCacheKey(path)
+	key := ImageCacheKey(path)
 	if old, ok := ui.ImageCache[key]; ok {
-		ui.ImageCacheBytes -= imageCacheEntryCost(old)
+		ui.ImageCacheBytes -= ImageCacheEntryCost(old)
 	}
 	ui.ImageCacheSeq++
-	ui.ImageCache[key] = imageCacheEntry{
+	ui.ImageCache[key] = ImageCacheEntry{
 		Data:     data,
 		Mipmaps:  append([]image.Image(nil), mipmaps...),
 		Format:   strings.ToUpper(format),
@@ -83,7 +82,7 @@ func CacheDecodedImage(ui *uiState, path string, data image.Image, mipmaps []ima
 		CachedAt: ui.ImageCacheSeq,
 	}
 	ui.ImageCacheBytes += cost
-	for len(ui.ImageCache) > imageCacheMaxEntries || ui.ImageCacheBytes > imageCacheMaxBytes {
+	for len(ui.ImageCache) > ImageCacheMaxEntries || ui.ImageCacheBytes > ImageCacheMaxBytes {
 		var oldestKey string
 		var oldestAt uint64
 		for k, entry := range ui.ImageCache {
@@ -94,19 +93,19 @@ func CacheDecodedImage(ui *uiState, path string, data image.Image, mipmaps []ima
 		if oldestKey == "" {
 			break
 		}
-		ui.ImageCacheBytes -= imageCacheEntryCost(ui.ImageCache[oldestKey])
+		ui.ImageCacheBytes -= ImageCacheEntryCost(ui.ImageCache[oldestKey])
 		delete(ui.ImageCache, oldestKey)
 	}
 }
 
-func imageCacheEntryCost(entry imageCacheEntry) int64 {
+func ImageCacheEntryCost(entry ImageCacheEntry) int64 {
 	if len(entry.Mipmaps) > 0 {
-		return imageImagesCost(entry.Mipmaps)
+		return ImageImagesCost(entry.Mipmaps)
 	}
-	return imageImagesCost([]image.Image{entry.Data})
+	return ImageImagesCost([]image.Image{entry.Data})
 }
 
-func imageImagesCost(images []image.Image) int64 {
+func ImageImagesCost(images []image.Image) int64 {
 	var total int64
 	for _, img := range images {
 		if img == nil {
@@ -118,25 +117,25 @@ func imageImagesCost(images []image.Image) int64 {
 	return total
 }
 
-func ClearImageCache(ui *uiState) {
+func ClearImageCache(ui *uistate.State) {
 	ui.ImageCache = nil
 	ui.ImageCacheBytes = 0
 	ui.ImageCacheSeq = 0
 }
 
-func OpenImage(ui *uiState, virtualPath string) {
+func OpenImage(ui *uistate.State, virtualPath string) {
 	if ui.ModTree == nil {
 		return
 	}
-	if idx := FindTabIndex(ui, virtualPath); idx >= 0 {
+	if idx := uikit.FindTabIndex(ui, virtualPath); idx >= 0 {
 		ui.TabSel = idx + 1
-		EnsureTabClicks(ui)
+		uikit.EnsureTabClicks(ui)
 		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(virtualPath)), ".")
 	if entry, ok := CachedImage(ui, virtualPath); ok {
-		t := &fileTab{
+		t := &uistate.Tab{
 			Path:          virtualPath,
 			Kind:          "image",
 			ImageData:     entry.Data,
@@ -149,11 +148,11 @@ func OpenImage(ui *uiState, virtualPath string) {
 		}
 		ui.OpenTabs = append(ui.OpenTabs, t)
 		ui.TabSel = len(ui.OpenTabs)
-		EnsureTabClicks(ui)
+		uikit.EnsureTabClicks(ui)
 		ui.StatusText = fmt.Sprintf("Opened %s — cached", filepath.Base(virtualPath))
 		return
 	}
-	t := &fileTab{
+	t := &uistate.Tab{
 		Path:         virtualPath,
 		Kind:         "image",
 		ImageFormat:  strings.ToUpper(format),
@@ -163,24 +162,24 @@ func OpenImage(ui *uiState, virtualPath string) {
 	}
 	ui.OpenTabs = append(ui.OpenTabs, t)
 	ui.TabSel = len(ui.OpenTabs)
-	EnsureTabClicks(ui)
+	uikit.EnsureTabClicks(ui)
 	StartImageDecode(ui, t, ui.ModTree)
 	ui.StatusText = fmt.Sprintf("Loading %s…", filepath.Base(virtualPath))
 }
 
-func StartImageDecode(ui *uiState, t *fileTab, tree *modtree.ModTree) {
+func StartImageDecode(ui *uistate.State, t *uistate.Tab, tree *modtree.ModTree) {
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := make(chan imageDecodeResult, 1)
+	ch := make(chan ImageDecodeResult, 1)
 	t.ImageDecodeStop = cancel
 	t.ImageDecodeCh = ch
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(t.Path)), ".")
 	path := t.Path
 	go func() {
-		result := imageDecodeResult{Format: strings.ToUpper(format)}
+		result := ImageDecodeResult{Format: strings.ToUpper(format)}
 		data, err := tree.ReadFile(path)
 		result.Bytes = len(data)
 		if err == nil {
-			result.Data, result.Mipmaps, result.Format, err = decodeImageDataWithMips(data, format)
+			result.Data, result.Mipmaps, result.Format, err = DecodeImageDataWithMips(data, format)
 		}
 		result.Err = err
 		select {
@@ -190,44 +189,7 @@ func StartImageDecode(ui *uiState, t *fileTab, tree *modtree.ModTree) {
 	}()
 }
 
-// pollImageDecodes is called on the UI goroutine. Workers only send results;
-// all tab state is changed here, avoiding races with Gio layout code.
-func PollImageDecodes(ui *uiState) {
-	for _, t := range ui.OpenTabs {
-		if t.ImageDecodeCh == nil {
-			continue
-		}
-		select {
-		case result := <-t.ImageDecodeCh:
-			t.ImageDecodeCh = nil
-			if t.ImageDecodeStop != nil {
-				t.ImageDecodeStop()
-				t.ImageDecodeStop = nil
-			}
-			t.ImageLoading = false
-			t.ImageBytes = result.Bytes
-			t.ImageFormat = strings.ToUpper(result.Format)
-			t.ImageData = result.Data
-			t.ImageMipmaps = result.Mipmaps
-			t.ImageMipLevel = 0
-			if result.Err != nil {
-				t.ImageError = result.Err.Error()
-				if ActiveTab(ui) == t {
-					ui.StatusText = fmt.Sprintf("Failed to open %s: %s", filepath.Base(t.Path), t.ImageError)
-				}
-			} else {
-				CacheDecodedImage(ui, t.Path, t.ImageData, t.ImageMipmaps, t.ImageFormat, t.ImageBytes)
-				if ActiveTab(ui) == t {
-					b := t.ImageData.Bounds()
-					ui.StatusText = fmt.Sprintf("Opened %s — %s %dx%d", filepath.Base(t.Path), t.ImageFormat, b.Dx(), b.Dy())
-				}
-			}
-		default:
-		}
-	}
-}
-
-func SelectImageMip(ui *uiState, t *fileTab, delta int) {
+func SelectImageMip(ui *uistate.State, t *uistate.Tab, delta int) {
 	if t == nil || len(t.ImageMipmaps) < 2 {
 		return
 	}
@@ -241,7 +203,7 @@ func SelectImageMip(ui *uiState, t *fileTab, delta int) {
 	t.ImageData = t.ImageMipmaps[t.ImageMipLevel]
 }
 
-func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+func LayoutImageViewer(ui *uistate.State, gtx layout.Context, t *uistate.Tab) layout.Dimensions {
 	if t == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "No image selected")
@@ -274,7 +236,7 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 		}
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(ui.Th, unit.Sp(11), "Failed: "+msg)
-			l.Color = rgb(0xB00020)
+			l.Color = uikit.Rgb(0xB00020)
 			return l.Layout(gtx)
 		})
 	}
@@ -303,7 +265,7 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ImageZoomOut, "−") }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.SmallButton(ui, gtx, &t.ImageZoomOut, "−") }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						zoom := fmt.Sprintf("%.0f%%", t.ImageZoom*100)
 						if t.ImageFit {
@@ -313,23 +275,23 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 						l.Color = uikit.CTextDim
 						return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
 					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ImageZoomIn, "+") }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ImageFitClick, "Fit") }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.SmallButton(ui, gtx, &t.ImageZoomIn, "+") }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.SmallButton(ui, gtx, &t.ImageFitClick, "Fit") }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						if len(t.ImageMipmaps) < 2 {
 							return layout.Dimensions{}
 						}
 						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ImageMipPrev, "◀") }),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.SmallButton(ui, gtx, &t.ImageMipPrev, "◀") }),
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(10), fmt.Sprintf("Mip %d/%d", t.ImageMipLevel+1, len(t.ImageMipmaps)))
 								l.Color = uikit.CTextDim
 								return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, l.Layout)
 							}),
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.ImageMipNext, "▶") }),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.SmallButton(ui, gtx, &t.ImageMipNext, "▶") }),
 						)
 					}),
-					layout.Flexed(1, rowGap()), // takes the leftover width and none of the height, or the row would eat the canvas below it
+					layout.Flexed(1, uikit.RowGap()), // takes the leftover width and none of the height, or the row would eat the canvas below it
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						b := t.ImageData.Bounds()
 						l := material.Label(ui.Th, unit.Sp(10), fmt.Sprintf("%s  %d × %d", t.ImageFormat, b.Dx(), b.Dy()))
@@ -343,7 +305,7 @@ func LayoutImageViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	)
 }
 
-func DrawImageCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+func DrawImageCanvas(ui *uistate.State, gtx layout.Context, t *uistate.Tab) layout.Dimensions {
 	area := gtx.Constraints.Max
 	if area.X < 1 || area.Y < 1 {
 		return layout.Dimensions{}
@@ -368,7 +330,7 @@ func DrawImageCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			st := clip.Rect{Max: area}.Push(gtx.Ops)
-			paint.ColorOp{Color: rgb(0x303030)}.Add(gtx.Ops)
+			paint.ColorOp{Color: uikit.Rgb(0x303030)}.Add(gtx.Ops)
 			paint.PaintOp{}.Add(gtx.Ops)
 			st.Pop()
 			return layout.Dimensions{Size: area}
@@ -386,7 +348,7 @@ func DrawImageCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensi
 	)
 }
 
-func ImageInfoTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+func ImageInfoTable(ui *uistate.State, gtx layout.Context, t *uistate.Tab) layout.Dimensions {
 	if t == nil {
 		return layout.Dimensions{}
 	}
@@ -409,37 +371,33 @@ func ImageInfoTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensio
 		rows = append(rows, [2]string{"Mip level", fmt.Sprintf("%d / %d", t.ImageMipLevel+1, len(t.ImageMipmaps))})
 	}
 	children := make([]layout.FlexChild, 0, len(rows)+1)
-	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }))
+	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.TableHead(ui, gtx, "Name", "Value") }))
 	for i, row := range rows {
 		i, row := i, row
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableRow2(ui, gtx, row[0], row[1], i%2 == 1) }))
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.TableRow2(ui, gtx, row[0], row[1], i%2 == 1) }))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
-// The image decoders (.tga, .dds, .rtx, .rsh and the BC7/DXT block codecs)
-// live in internal/raster. This file keeps the names the app was calling,
-// so the viewer, the FX overlay and the GPU renderers read the same calls
-// they did before the move.
-
 type RshImage = raster.RshImage
+
 type RshMip = raster.RshMip
 
-var imageViewerExtensions = raster.ImageViewerExtensions
+var ImageViewerExtensions = raster.ImageViewerExtensions
 
-func isImageViewerFile(virtualPath string) bool { return raster.IsImageViewerFile(virtualPath) }
+func IsImageViewerFile(virtualPath string) bool { return raster.IsImageViewerFile(virtualPath) }
 
-func decodeImageData(data []byte, format string) (image.Image, string, error) {
+func DecodeImageData(data []byte, format string) (image.Image, string, error) {
 	return raster.DecodeImageData(data, format)
 }
 
-func decodeImageDataWithMips(data []byte, format string) (image.Image, []image.Image, string, error) {
+func DecodeImageDataWithMips(data []byte, format string) (image.Image, []image.Image, string, error) {
 	return raster.DecodeImageDataWithMips(data, format)
 }
 
-func decodeTGA(data []byte) (image.Image, error) { return raster.DecodeTGA(data) }
+func DecodeTGA(data []byte) (image.Image, error) { return raster.DecodeTGA(data) }
 
-func decodeRshImage(data []byte, index int) (image.Image, []image.Image, error) {
+func DecodeRshImage(data []byte, index int) (image.Image, []image.Image, error) {
 	return raster.DecodeRshImage(data, index)
 }
 
@@ -450,25 +408,23 @@ func RshRawImage(data []byte, index int) (RshImage, []RshMip, error) {
 }
 
 // MinInt lives in uikit; the alias keeps every call site as it was.
-var minInt = uikit.MinInt
+var MinInt = uikit.MinInt
 
 // MaxInt lives in uikit; the alias keeps every call site as it was.
-var maxInt = uikit.MaxInt
+var MaxInt = uikit.MaxInt
 
-// ─── merged from wav_view.go ───────────────────────────────────────────────
-
-func OpenWav(ui *uiState, virtualPath string) {
+func OpenWav(ui *uistate.State, virtualPath string) {
 	if ui.ModTree == nil {
 		return
 	}
-	if idx := FindTabIndex(ui, virtualPath); idx >= 0 {
+	if idx := uikit.FindTabIndex(ui, virtualPath); idx >= 0 {
 		ui.TabSel = idx + 1
-		EnsureTabClicks(ui)
+		uikit.EnsureTabClicks(ui)
 		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
 	data, err := ui.ModTree.ReadFile(virtualPath)
-	t := &fileTab{Path: virtualPath, Kind: "wav", WavVolumePct: 100}
+	t := &uistate.Tab{Path: virtualPath, Kind: "wav", WavVolumePct: 100}
 	if err != nil {
 		t.WavError = err.Error()
 	} else {
@@ -481,7 +437,7 @@ func OpenWav(ui *uiState, virtualPath string) {
 	}
 	ui.OpenTabs = append(ui.OpenTabs, t)
 	ui.TabSel = len(ui.OpenTabs)
-	EnsureTabClicks(ui)
+	uikit.EnsureTabClicks(ui)
 	if t.WavError != "" {
 		ui.StatusText = "WAV open failed: " + t.WavError
 	} else {
@@ -489,7 +445,7 @@ func OpenWav(ui *uiState, virtualPath string) {
 	}
 }
 
-func wavPCM16(data []byte) []int16 {
+func WavPCM16(data []byte) []int16 {
 	samples := make([]int16, len(data)/2)
 	for i := range samples {
 		samples[i] = int16(binary.LittleEndian.Uint16(data[i*2 : i*2+2]))
@@ -497,7 +453,7 @@ func wavPCM16(data []byte) []int16 {
 	return samples
 }
 
-func PauseOtherWavPlayers(ui *uiState, keep *fileTab) {
+func PauseOtherWavPlayers(ui *uistate.State, keep *uistate.Tab) {
 	for _, other := range ui.OpenTabs {
 		if other != keep && other.Kind == "wav" && other.WavPlayer != nil {
 			other.WavPlayer.PauseAndStopReading()
@@ -506,7 +462,7 @@ func PauseOtherWavPlayers(ui *uiState, keep *fileTab) {
 	}
 }
 
-func StartWavPlayback(ui *uiState, t *fileTab) error {
+func StartWavPlayback(ui *uistate.State, t *uistate.Tab) error {
 	if t == nil || t.WavData == nil {
 		return fmt.Errorf("no WAV data")
 	}
@@ -515,7 +471,7 @@ func StartWavPlayback(ui *uiState, t *fileTab) error {
 	if err != nil {
 		return fmt.Errorf("audio init: %w", err)
 	}
-	pcm := wavPCM16(t.WavData.PCMData)
+	pcm := WavPCM16(t.WavData.PCMData)
 	if sr != audioplayer.SampleRate || ch != audioplayer.Channels {
 		var err error
 		pcm, err = fda.ResamplePCM16(pcm, sr, ch, audioplayer.SampleRate, audioplayer.Channels)
@@ -540,7 +496,7 @@ func StartWavPlayback(ui *uiState, t *fileTab) error {
 	return nil
 }
 
-func WavPosFor(ui *uiState, t *fileTab) time.Duration {
+func WavPosFor(ui *uistate.State, t *uistate.Tab) time.Duration {
 	if t == nil || t.WavPlayer == nil || t.WavSrc == nil || t.WavBytesPerSec == 0 {
 		return 0
 	}
@@ -554,7 +510,7 @@ func WavPosFor(ui *uiState, t *fileTab) time.Duration {
 	return time.Duration(float64(heard) / float64(t.WavBytesPerSec) * float64(time.Second))
 }
 
-func WavSetVolume(ui *uiState, t *fileTab, pct int) {
+func WavSetVolume(ui *uistate.State, t *uistate.Tab, pct int) {
 	if t == nil {
 		return
 	}
@@ -570,7 +526,7 @@ func WavSetVolume(ui *uiState, t *fileTab, pct int) {
 	}
 }
 
-func WavUpdateSliders(ui *uiState, t *fileTab) {
+func WavUpdateSliders(ui *uistate.State, t *uistate.Tab) {
 	if t == nil {
 		return
 	}
@@ -598,7 +554,7 @@ func WavUpdateSliders(ui *uiState, t *fileTab) {
 	}
 }
 
-func WavHandleSliderSeek(ui *uiState, t *fileTab) {
+func WavHandleSliderSeek(ui *uistate.State, t *uistate.Tab) {
 	if t == nil || t.WavTotal == 0 || t.WavSrc == nil || t.WavPlayer == nil || !t.WavSeekFloat.Dragging() {
 		return
 	}
@@ -613,85 +569,20 @@ func WavHandleSliderSeek(ui *uiState, t *fileTab) {
 	}
 }
 
-func WavHandleVolumeSlider(ui *uiState, t *fileTab) {
+func WavHandleVolumeSlider(ui *uistate.State, t *uistate.Tab) {
 	if t != nil && t.WavVolFloat.Dragging() {
 		WavSetVolume(ui, t, int(t.WavVolFloat.Value*200+0.5))
 	}
 }
 
-func WavTogglePlayPause(ui *uiState) {
-	t := ActiveTab(ui)
-	if t == nil || t.Kind != "wav" || t.WavPlayer == nil {
-		return
-	}
-	if t.WavPaused {
-		FdaPauseAllOthers(ui, nil)
-		PauseOtherWavPlayers(ui, t)
-		if t.WavSrc.Remaining() <= 0 {
-			if _, err := t.WavPlayer.Seek(0, io.SeekStart); err != nil {
-				ui.StatusText = fmt.Sprintf("WAV replay seek failed: %v", err)
-				return
-			}
-		}
-		t.WavPlayer.Play()
-		t.WavPaused = false
-		t.WavSeekFloat.Value = 0
-		ui.StatusText = "Playing " + filepath.Base(t.Path)
-	} else {
-		t.WavPlayer.PauseAndStopReading()
-		t.WavPaused = true
-		ui.StatusText = "Paused " + filepath.Base(t.Path)
-	}
-}
-
-func WavStop(ui *uiState) {
-	t := ActiveTab(ui)
-	if t == nil || t.Kind != "wav" || t.WavPlayer == nil {
-		return
-	}
-	t.WavPlayer.PauseAndStopReading()
-	_, _ = t.WavPlayer.Seek(0, io.SeekStart)
-	t.WavPaused = true
-	t.WavSeekFloat.Value = 0
-	ui.StatusText = "Stopped " + filepath.Base(t.Path)
-}
-
-func CheckWavAutoRepeat(ui *uiState) {
-	t := ActiveTab(ui)
-	if t == nil || t.Kind != "wav" || t.WavPlayer == nil || t.WavSrc == nil || t.WavPaused {
-		return
-	}
-	if !t.WavPlayer.IsPlaying() {
-		if err := t.WavPlayer.Err(); err != nil {
-			t.WavPaused = true
-			ui.StatusText = fmt.Sprintf("WAV audio error: %v", err)
-		} else if t.WavSrc.Remaining() <= 0 {
-			if t.WavRepeat {
-				if _, err := t.WavPlayer.Seek(0, io.SeekStart); err == nil {
-					t.WavPlayer.Play()
-					t.WavPaused = false
-					t.WavSeekFloat.Value = 0
-					ui.StatusText = "Repeating " + filepath.Base(t.Path)
-					return
-				}
-			}
-			t.WavPaused = true
-			t.WavSeekFloat.Value = 1
-			ui.StatusText = "WAV playback finished"
-		} else {
-			t.WavPlayer.Play()
-		}
-	}
-}
-
-func wavDuration(t *fileTab) time.Duration {
+func WavDuration(t *uistate.Tab) time.Duration {
 	if t == nil || t.WavData == nil || t.WavData.SampleRate <= 0 || t.WavData.Channels <= 0 {
 		return 0
 	}
 	return time.Duration(float64(len(t.WavData.PCMData)) / float64(t.WavData.SampleRate*t.WavData.Channels*2) * float64(time.Second))
 }
 
-func ConvertWavToFDA(ui *uiState, t *fileTab) {
+func ConvertWavToFDA(ui *uistate.State, t *uistate.Tab) {
 	if t == nil || t.Kind != "wav" || t.WavData == nil || t.WavError != "" || t.WavExporting {
 		return
 	}
@@ -704,8 +595,8 @@ func ConvertWavToFDA(ui *uiState, t *fileTab) {
 		ui.StatusText = "WAV → FDA failed: " + err.Error()
 		return
 	}
-	target := wavTargetFDA(t.Path)
-	diskPath, err := writeFDAOverlay(ui.ModTree, target, fdaData)
+	target := WavTargetFDA(t.Path)
+	diskPath, err := WriteFDAOverlay(ui.ModTree, target, fdaData)
 	if err != nil {
 		t.WavExporting = false
 		t.WavError = err.Error()
@@ -717,126 +608,7 @@ func ConvertWavToFDA(ui *uiState, t *fileTab) {
 	ui.StatusText = fmt.Sprintf("Converted %s → %s (%d bytes)", filepath.Base(t.Path), diskPath, len(fdaData))
 }
 
-func LayoutWavViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
-	if t == nil {
-		return layout.Dimensions{}
-	}
-	if t.WavError != "" {
-		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.Th, unit.Sp(11), "Failed: "+t.WavError)
-			l.Color = rgb(0xB00020)
-			return l.Layout(gtx)
-		})
-	}
-	if t.WavData == nil {
-		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			l := material.Label(ui.Th, unit.Sp(11), "No WAV data")
-			l.Color = uikit.CTextDim
-			return l.Layout(gtx)
-		})
-	}
-	WavUpdateSliders(ui, t)
-	if t.WavPlayer != nil && !t.WavPaused {
-		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(100 * time.Millisecond)})
-	}
-	if t.WavConvertClick.Clicked(gtx) {
-		ConvertWavToFDA(ui, t)
-	}
-	pos := WavPosFor(ui, t)
-	playLabel := "Play"
-	if !t.WavPaused {
-		playLabel = "Pause"
-	}
-	exportLabel := "Convert to FDA"
-	if t.WavExporting {
-		exportLabel = "Converting…"
-	} else if t.WavExportDone != "" {
-		exportLabel = "FDA created"
-	}
-	return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						if !t.WavPaused {
-							return PrimaryButton(ui, gtx, &t.WavPlayClick, playLabel)
-						}
-						return SmallButton(ui, gtx, &t.WavPlayClick, playLabel)
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SmallButton(ui, gtx, &t.WavStopClick, "Stop") }),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						bg := uikit.CSaveBg
-						if t.WavRepeat {
-							bg = uikit.CMenuOpen
-						}
-						return ToggleButton(ui, gtx, &t.WavRepeatClick, "Repeat", t.WavRepeat, bg)
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return SmallButtonDisabled(ui, gtx, &t.WavConvertClick, exportLabel, t.WavExporting)
-					}),
-					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{} }),
-				)
-			}),
-			layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						lbl := "Vol"
-						if t.WavVolumePct == 0 {
-							lbl = "Mute"
-						}
-						l := material.Label(ui.Th, unit.Sp(9), lbl)
-						l.Color = uikit.CTextDim
-						return l.Layout(gtx)
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						gtx.Constraints.Min.X = gtx.Dp(unit.Dp(70))
-						gtx.Constraints.Max.X = gtx.Dp(unit.Dp(110))
-						slider := material.Slider(ui.Th, &t.WavVolFloat)
-						slider.Color = rgb(0x6B6B6B)
-						dims := slider.Layout(gtx)
-						WavHandleVolumeSlider(ui, t)
-						return dims
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("%d%%", t.WavVolumePct))
-						l.Color = uikit.CTextDim
-						return l.Layout(gtx)
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(9), fmtDuration(pos))
-						l.Color = uikit.CTextDim
-						return l.Layout(gtx)
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutWavWaveform(ui, gtx, t) }),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(9), fmtDuration(t.WavTotal))
-						l.Color = uikit.CTextDim
-						return l.Layout(gtx)
-					}),
-				)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if t.WavExportDone == "" {
-					return layout.Dimensions{}
-				}
-				l := material.Label(ui.Th, unit.Sp(9), fmt.Sprintf("FDA: %s", filepath.Base(t.WavExportDone)))
-				l.Color = rgb(0x2E7D32)
-				return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, l.Layout)
-			}),
-		)
-	})
-}
-
-func LayoutWavWaveform(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+func LayoutWavWaveform(ui *uistate.State, gtx layout.Context, t *uistate.Tab) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(28))
 	w := gtx.Constraints.Max.X
 	if w < gtx.Dp(unit.Dp(80)) {
@@ -848,7 +620,7 @@ func LayoutWavWaveform(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	dims := t.WavSeekFloat.Layout(gtx, layout.Horizontal, unit.Dp(4))
 	WavHandleSliderSeek(ui, t)
 	if len(t.WavWavePeaks) != w || t.WavWaveW != w {
-		t.WavWavePeaks = buildWavePeaks(fda.PCM16Bytes(wavPCM16(t.WavData.PCMData)), w)
+		t.WavWavePeaks = BuildWavePeaks(fda.PCM16Bytes(WavPCM16(t.WavData.PCMData)), w)
 		t.WavWaveW = w
 	}
 	peaks := t.WavWavePeaks
@@ -859,7 +631,7 @@ func LayoutWavWaveform(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	if frac > 1 {
 		frac = 1
 	}
-	playX := clampInt(int(float32(w)*frac), 0, w)
+	playX := uikit.ClampInt(int(float32(w)*frac), 0, w)
 
 	st := clip.Rect{Max: sz}.Push(gtx.Ops)
 	paint.ColorOp{Color: uikit.CContentBg}.Add(gtx.Ops)
@@ -870,8 +642,8 @@ func LayoutWavWaveform(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	gtx.Constraints.Max = sz
 	_ = b.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: sz} })
 
-	colPlayed := rgb(0x0078D4)
-	colUnplayed := rgb(0x9EA8B3)
+	colPlayed := uikit.Rgb(0x0078D4)
+	colUnplayed := uikit.Rgb(0x9EA8B3)
 	for x := 0; x < w; x++ {
 		p := 0
 		if x < len(peaks) {
@@ -906,47 +678,47 @@ func LayoutWavWaveform(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	}
 	if playX >= 1 && playX < w-1 {
 		st := clip.Rect(image.Rect(playX, 1, playX+1, h-1)).Push(gtx.Ops)
-		paint.ColorOp{Color: rgb(0xE81123)}.Add(gtx.Ops)
+		paint.ColorOp{Color: uikit.Rgb(0xE81123)}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 		st.Pop()
 		knobR := gtx.Dp(unit.Dp(3))
 		knobRect := image.Rect(playX-knobR, h/2-knobR, playX+knobR, h/2+knobR)
-		paint.FillShape(gtx.Ops, rgb(0xE81123), clip.Ellipse(knobRect).Op(gtx.Ops))
+		paint.FillShape(gtx.Ops, uikit.Rgb(0xE81123), clip.Ellipse(knobRect).Op(gtx.Ops))
 	}
 	return dims
 }
 
-func WavInfoTable(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
+func WavInfoTable(ui *uistate.State, gtx layout.Context, t *uistate.Tab) layout.Dimensions {
 	if t == nil || t.WavData == nil {
 		return layout.Dimensions{}
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableHead(ui, gtx, "Name", "Value") }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.TableHead(ui, gtx, "Name", "Value") }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return TableRow2(ui, gtx, "Name", filepath.Base(t.Path), false)
+			return uikit.TableRow2(ui, gtx, "Name", filepath.Base(t.Path), false)
 		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return TableRow2(ui, gtx, "Format", "WAV PCM", true) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return uikit.TableRow2(ui, gtx, "Format", "WAV PCM", true) }),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return TableRow2(ui, gtx, "Sample rate", fmt.Sprintf("%d Hz", t.WavData.SampleRate), false)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return TableRow2(ui, gtx, "Channels", fmt.Sprintf("%d", t.WavData.Channels), true)
+			return uikit.TableRow2(ui, gtx, "Sample rate", fmt.Sprintf("%d Hz", t.WavData.SampleRate), false)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return TableRow2(ui, gtx, "Duration", fmtDuration(wavDuration(t)), false)
+			return uikit.TableRow2(ui, gtx, "Channels", fmt.Sprintf("%d", t.WavData.Channels), true)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return uikit.TableRow2(ui, gtx, "Duration", FmtDuration(WavDuration(t)), false)
 		}),
 	)
 }
 
-// wavTargetFDA is the .fda a .wav converts to, at the same place in the mod.
-func wavTargetFDA(virtualPath string) string {
+// WavTargetFDA is the .fda a .wav converts to, at the same place in the mod.
+func WavTargetFDA(virtualPath string) string {
 	ext := filepath.Ext(virtualPath)
 	return strings.TrimSuffix(virtualPath, ext) + ".fda"
 }
 
-// writeFDAOverlay writes converted audio into the mod folder, so ModFolder/Data
+// WriteFDAOverlay writes converted audio into the mod folder, so ModFolder/Data
 // resolution stays in one place.
-func writeFDAOverlay(tree *modtree.ModTree, virtualPath string, data []byte) (string, error) {
+func WriteFDAOverlay(tree *modtree.ModTree, virtualPath string, data []byte) (string, error) {
 	if tree == nil {
 		return "", fmt.Errorf("no mod loaded")
 	}
