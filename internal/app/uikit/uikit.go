@@ -679,3 +679,8 @@ const (
 func NewPointerTag(name string) event.Tag {
 	return &struct{ name string }{name: name}
 }
+
+// UnitRowHeightDp is one row of a list or a button strip, in device-independent
+// pixels. Panels that lay out rows of equal height share it so a row reads the
+// same wherever it appears.
+const UnitRowHeightDp = 26

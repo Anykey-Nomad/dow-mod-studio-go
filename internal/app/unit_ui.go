@@ -122,7 +122,6 @@ func unitSectionNamed(label string) int {
 // takes whatever is left.
 const (
 	unitLeftColumnDp    = 132
-	unitRowHeightDp     = 26
 	unitColHeaderHeight = 26
 	unitColGapDp        = 8
 	unitColMinWidthDp   = 140

@@ -231,10 +231,9 @@ func modelFXLabel(v *modelViewer) string {
 // the range the control is bounded to. FX dimensions are already interpreted
 // in the model's coordinate units; this control is a uniform preview adjustment.
 const (
-	modelFXScaleStep    = 1.25
-	modelFXScaleMin     = 0.02
-	modelFXScaleMax     = 4
-	fxScaleDefaultValue = 1.0
+	modelFXScaleStep = 1.25
+	modelFXScaleMin  = 0.02
+	modelFXScaleMax  = 4
 )
 
 // scaleFX multiplies the effect scale, keeping it inside its range. It is

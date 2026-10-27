@@ -1,9 +1,18 @@
-package app
+package viewer
 
 import (
+	engine "dow-mod-studio/internal/3d_engine"
+	"dow-mod-studio/internal/app/render"
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
+	"dow-mod-studio/internal/chunky"
+	"dow-mod-studio/internal/fx"
+	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/raster"
+	"dow-mod-studio/internal/whm"
 	"encoding/binary"
 	"fmt"
+	"github.com/fogleman/fauxgl"
 	"image"
 	"io/fs"
 	"math"
@@ -12,26 +21,17 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	engine "dow-mod-studio/internal/3d_engine"
-	"dow-mod-studio/internal/app/render"
-	"dow-mod-studio/internal/chunky"
-	"dow-mod-studio/internal/fx"
-	"dow-mod-studio/internal/modtree"
-	"dow-mod-studio/internal/raster"
-	"dow-mod-studio/internal/whm"
-	"github.com/fogleman/fauxgl"
 )
 
-// modelMaterialDiagnostic is what the material inspector can tell about a
+// ModelMaterialDiagnostic is what the material inspector can tell about a
 // material reference, whether resolution and decoding succeeded or not.
-type modelMaterialDiagnostic = uistate.ModelMaterialDiagnostic
+type ModelMaterialDiagnostic = uistate.ModelMaterialDiagnostic
 
 // loadModelMaterials resolves every mesh material of a model to its diffuse
 // map. A .whm may name a .rsh, a compiled .rtx, or a bare base name; the
 // texture is often in a different mod than the model, so shared game art and
 // files beside the model are both part of the lookup.
-func LoadModelMaterials(ui *uiState, v *modelViewer, result chan<- modelMaterialResult) {
+func LoadModelMaterials(ui *uistate.State, v *ModelViewer, result chan<- ModelMaterialResult) {
 	if v == nil || v.Model == nil || ui.ModTree == nil {
 		return
 	}
@@ -51,47 +51,47 @@ func LoadModelMaterials(ui *uiState, v *modelViewer, result chan<- modelMaterial
 	}
 	tree := ui.ModTree
 	model := v.ModelFile
-	roots := materialSearchRoots(tree)
+	roots := MaterialSearchRoots(tree)
 	// Vulkan uploads block-compressed RSH mip chains directly. RTX is
 	// decoded as a compiled image instead, preserving the GPU preview by
 	// uploading it as an in-memory diffuse texture.
 	raw := true
 	go func() {
-		files, paths := resolveModelMaterialsWithPaths(tree, roots, model, names)
-		decoded := decodeModelMaterials(files, raw)
-		attachMaterialSourcePaths(decoded.Diagnostics, paths)
+		files, paths := ResolveModelMaterialsWithPaths(tree, roots, model, names)
+		decoded := DecodeModelMaterials(files, raw)
+		AttachMaterialSourcePaths(decoded.Diagnostics, paths)
 		for _, name := range names {
 			if _, ok := decoded.Diagnostics[name]; !ok {
-				decoded.Diagnostics[name] = modelMaterialDiagnostic{Format: "—", Status: "not found"}
+				decoded.Diagnostics[name] = ModelMaterialDiagnostic{Format: "—", Status: "not found"}
 			}
 		}
 		result <- decoded
 	}()
 }
 
-// resolveModelMaterials first checks authored paths, then searches the merged
+// ResolveModelMaterials first checks authored paths, then searches the merged
 // virtual tree (including parent-mod and game SGA archives), and finally disk.
-func resolveModelMaterials(tree *modtree.ModTree, roots []string, modelFile string, names []string) map[string][]byte {
-	files, _ := resolveModelMaterialsWithPaths(tree, roots, modelFile, names)
+func ResolveModelMaterials(tree *modtree.ModTree, roots []string, modelFile string, names []string) map[string][]byte {
+	files, _ := ResolveModelMaterialsWithPaths(tree, roots, modelFile, names)
 	return files
 }
 
-// resolveModelMaterialsWithPaths resolves each material once and keeps the
+// ResolveModelMaterialsWithPaths resolves each material once and keeps the
 // actual source path alongside the bytes, including the archive/container
 // boundary for assets read from SGA files.
-func resolveModelMaterialsWithPaths(tree *modtree.ModTree, roots []string, modelFile string, names []string) (map[string][]byte, map[string]string) {
+func ResolveModelMaterialsWithPaths(tree *modtree.ModTree, roots []string, modelFile string, names []string) (map[string][]byte, map[string]string) {
 	files := map[string][]byte{}
 	paths := map[string]string{}
 	var missing []string
 	for _, name := range names {
-		reference := modelMaterialReference(tree, modelFile, name)
-		data, path, ok := readModelMaterialWithPath(tree, roots, modelFile, name)
+		reference := ModelMaterialReference(tree, modelFile, name)
+		data, path, ok := ReadModelMaterialWithPath(tree, roots, modelFile, name)
 		if reference != "" && !strings.EqualFold(reference, name) {
 			// The display/material label is not necessarily a real path or
 			// filename (for example, "necron warrior"). Try the shared
 			// shader's diffuse reference first, then retain the label as the
 			// returned key so the draw can find it.
-			data, path, ok = readModelMaterialWithPath(tree, roots, modelFile, reference)
+			data, path, ok = ReadModelMaterialWithPath(tree, roots, modelFile, reference)
 		}
 		if !ok {
 			missing = append(missing, name)
@@ -99,12 +99,12 @@ func resolveModelMaterialsWithPaths(tree *modtree.ModTree, roots []string, model
 		}
 		files[name], paths[name] = data, path
 	}
-	for name, file := range findMaterialsInTree(tree, missing) {
+	for name, file := range FindMaterialsInTree(tree, missing) {
 		if data, err := tree.ReadTreeFile(file); err == nil {
-			files[name], paths[name] = data, materialTreePath(file)
+			files[name], paths[name] = data, MaterialTreePath(file)
 		}
 	}
-	for name, path := range findMaterialsOnDisk(roots, missing) {
+	for name, path := range FindMaterialsOnDisk(roots, missing) {
 		if _, alreadyFound := files[name]; alreadyFound {
 			continue
 		}
@@ -115,7 +115,7 @@ func resolveModelMaterialsWithPaths(tree *modtree.ModTree, roots []string, model
 	return files, paths
 }
 
-func modelMaterialReference(tree *modtree.ModTree, modelFile, material string) string {
+func ModelMaterialReference(tree *modtree.ModTree, modelFile, material string) string {
 	if tree == nil || modelFile == "" {
 		return ""
 	}
@@ -142,16 +142,16 @@ func modelMaterialReference(tree *modtree.ModTree, modelFile, material string) s
 	return ""
 }
 
-// attachMaterialSourcePaths pairs decoder results with resolved source paths
+// AttachMaterialSourcePaths pairs decoder results with resolved source paths
 // without decoding large files a second time.
-func attachMaterialSourcePaths(diagnostics map[string]modelMaterialDiagnostic, paths map[string]string) {
+func AttachMaterialSourcePaths(diagnostics map[string]ModelMaterialDiagnostic, paths map[string]string) {
 	for name, diag := range diagnostics {
 		diag.ResolvedPath = paths[name]
 		diagnostics[name] = diag
 	}
 }
 
-func rshMaterialFormat(format int32) string {
+func RshMaterialFormat(format int32) string {
 	switch format {
 	case 8:
 		return "RSH / DXT1 (BC1)"
@@ -164,12 +164,12 @@ func rshMaterialFormat(format int32) string {
 	}
 }
 
-func decodedMaterialFormat(format string, data []byte) string {
+func DecodedMaterialFormat(format string, data []byte) string {
 	format = strings.ToLower(format)
 	if format != "rtx" {
 		return strings.ToUpper(format)
 	}
-	chunks, _ := chunky.Parse(data[minInt(chunky.PreambleSize, len(data)):], 0)
+	chunks, _ := chunky.Parse(data[uikit.MinInt(chunky.PreambleSize, len(data)):], 0)
 	var find func([]*chunky.Chunk) string
 	find = func(chunks []*chunky.Chunk) string {
 		for _, chunk := range chunks {
@@ -197,25 +197,25 @@ func decodedMaterialFormat(format string, data []byte) string {
 	return find(chunks)
 }
 
-// decodeModelMaterials retains compressed bytes for Vulkan and decoded images
+// DecodeModelMaterials retains compressed bytes for Vulkan and decoded images
 // for the software renderer used by diagnostic/fallback paths.
-func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult {
-	res := modelMaterialResult{
+func DecodeModelMaterials(files map[string][]byte, raw bool) ModelMaterialResult {
+	res := ModelMaterialResult{
 		Materials:   map[string]render.WhmMaterial{},
 		Rsh:         map[string][]byte{},
-		Diagnostics: map[string]modelMaterialDiagnostic{},
+		Diagnostics: map[string]ModelMaterialDiagnostic{},
 	}
 	for name, data := range files {
-		diag := modelMaterialDiagnostic{Status: "unrecognized image data"}
+		diag := ModelMaterialDiagnostic{Status: "unrecognized image data"}
 		rshInfo, _, rshErr := raster.RshRawImage(data, 0)
 		var img image.Image
 		var err error
 		if rshErr == nil {
-			diag.Format = rshMaterialFormat(rshInfo.Format)
+			diag.Format = RshMaterialFormat(rshInfo.Format)
 			if raw {
 				res.Rsh[name] = data
 			}
-			img, _, err = decodeRshImage(data, 0)
+			img, _, err = raster.DecodeRshImage(data, 0)
 		} else {
 			// Texture references in WHM files often omit an extension. The
 			// resolved file may therefore be RTX even though the reference key
@@ -223,7 +223,7 @@ func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult
 			for _, ext := range []string{"rtx", "dds", "tga"} {
 				img, _, err = raster.DecodeImageData(data, ext)
 				if err == nil && img != nil {
-					diag.Format = decodedMaterialFormat(ext, data)
+					diag.Format = DecodedMaterialFormat(ext, data)
 					break
 				}
 			}
@@ -244,12 +244,12 @@ func decodeModelMaterials(files map[string][]byte, raw bool) modelMaterialResult
 	return res
 }
 
-// materialTextureExtensions are tried in the game's effective order: the
+// MaterialTextureExtensions are tried in the game's effective order: the
 // shared material format first, then compiled textures (which some models name
 // implicitly) and the source-friendly interchange formats.
-var materialTextureExtensions = []string{".rsh", ".rtx", ".dds", ".tga"}
+var MaterialTextureExtensions = []string{".rsh", ".rtx", ".dds", ".tga"}
 
-func materialCandidatePaths(name string) []string {
+func MaterialCandidatePaths(name string) []string {
 	name = strings.TrimSpace(strings.ReplaceAll(name, "\\", "/"))
 	if name == "" {
 		return nil
@@ -258,15 +258,15 @@ func materialCandidatePaths(name string) []string {
 	if ext != "" {
 		return []string{name}
 	}
-	out := make([]string, 0, len(materialTextureExtensions))
-	for _, suffix := range materialTextureExtensions {
+	out := make([]string, 0, len(MaterialTextureExtensions))
+	for _, suffix := range MaterialTextureExtensions {
 		out = append(out, name+suffix)
 	}
 	return out
 }
 
-func materialCandidateNames(name string) []string {
-	paths := materialCandidatePaths(name)
+func MaterialCandidateNames(name string) []string {
+	paths := MaterialCandidatePaths(name)
 	out := make([]string, 0, len(paths))
 	for _, candidate := range paths {
 		out = append(out, fx.MaterialBaseName(candidate))
@@ -274,10 +274,10 @@ func materialCandidateNames(name string) []string {
 	return out
 }
 
-// materialDiskPaths returns both useful interpretations of a virtual path:
+// MaterialDiskPaths returns both useful interpretations of a virtual path:
 // roots may be the mod root (which needs the Data prefix) or the Data folder
 // itself (which does not).
-func materialDiskPaths(root, candidate string) []string {
+func MaterialDiskPaths(root, candidate string) []string {
 	rel := filepath.FromSlash(strings.ReplaceAll(candidate, "\\", "/"))
 	paths := []string{filepath.Join(root, rel)}
 	parts := strings.Split(rel, string(filepath.Separator))
@@ -287,23 +287,23 @@ func materialDiskPaths(root, candidate string) []string {
 	return paths
 }
 
-// findMaterialsInTree returns the best merged-tree file for each requested
+// FindMaterialsInTree returns the best merged-tree file for each requested
 // material base name. Current-mod files win within texture_share; texture_share
 // files win over same-named files elsewhere.
-func findMaterialsInTree(tree *modtree.ModTree, names []string) map[string]*modtree.TreeFile {
+func FindMaterialsInTree(tree *modtree.ModTree, names []string) map[string]*modtree.TreeFile {
 	if tree == nil || tree.Root == nil || len(names) == 0 {
 		return nil
 	}
 	want := make(map[string]bool, len(names))
 	for _, name := range names {
-		for _, fileName := range materialCandidateNames(name) {
+		for _, fileName := range MaterialCandidateNames(name) {
 			want[strings.ToLower(fileName)] = true
 		}
 	}
-	found := findMaterialFilesInTree(tree, want)
+	found := FindMaterialFilesInTree(tree, want)
 	out := make(map[string]*modtree.TreeFile, len(found))
 	for _, name := range names {
-		for _, candidate := range materialCandidateNames(name) {
+		for _, candidate := range MaterialCandidateNames(name) {
 			if file := found[strings.ToLower(candidate)]; file != nil {
 				out[name] = file
 				break
@@ -313,14 +313,14 @@ func findMaterialsInTree(tree *modtree.ModTree, names []string) map[string]*modt
 	return out
 }
 
-func findMaterialInTree(tree *modtree.ModTree, fileName string) *modtree.TreeFile {
+func FindMaterialInTree(tree *modtree.ModTree, fileName string) *modtree.TreeFile {
 	if tree == nil || tree.Root == nil || fileName == "" {
 		return nil
 	}
-	return findMaterialFilesInTree(tree, map[string]bool{strings.ToLower(fileName): true})[strings.ToLower(fileName)]
+	return FindMaterialFilesInTree(tree, map[string]bool{strings.ToLower(fileName): true})[strings.ToLower(fileName)]
 }
 
-func findMaterialFilesInTree(tree *modtree.ModTree, want map[string]bool) map[string]*modtree.TreeFile {
+func FindMaterialFilesInTree(tree *modtree.ModTree, want map[string]bool) map[string]*modtree.TreeFile {
 	found := make(map[string]*modtree.TreeFile, len(want))
 	var walk func(*modtree.TreeFolder, bool)
 	walk = func(folder *modtree.TreeFolder, textureShare bool) {
@@ -331,8 +331,8 @@ func findMaterialFilesInTree(tree *modtree.ModTree, want map[string]bool) map[st
 				continue
 			}
 			old, exists := found[key]
-			oldTexture := exists && treePathInFolder(old.FullPath, "texture_share")
-			if !exists || (textureShare && !oldTexture) || (textureShare == oldTexture && sourceMoreSpecific(file, old)) {
+			oldTexture := exists && TreePathInFolder(old.FullPath, "texture_share")
+			if !exists || (textureShare && !oldTexture) || (textureShare == oldTexture && SourceMoreSpecific(file, old)) {
 				found[key] = file
 			}
 		}
@@ -344,7 +344,7 @@ func findMaterialFilesInTree(tree *modtree.ModTree, want map[string]bool) map[st
 	return found
 }
 
-func sourceMoreSpecific(candidate, current *modtree.TreeFile) bool {
+func SourceMoreSpecific(candidate, current *modtree.TreeFile) bool {
 	if candidate == nil || candidate.Source == nil {
 		return false
 	}
@@ -354,7 +354,7 @@ func sourceMoreSpecific(candidate, current *modtree.TreeFile) bool {
 	return candidate.Source.Priority < current.Source.Priority
 }
 
-func treePathInFolder(path, folder string) bool {
+func TreePathInFolder(path, folder string) bool {
 	for _, part := range strings.Split(strings.ToLower(strings.ReplaceAll(path, "/", "\\")), `\`) {
 		if part == folder {
 			return true
@@ -363,8 +363,8 @@ func treePathInFolder(path, folder string) bool {
 	return false
 }
 
-// materialSearchRoots lists on-disk data folders, most specific first.
-func materialSearchRoots(tree *modtree.ModTree) []string {
+// MaterialSearchRoots lists on-disk data folders, most specific first.
+func MaterialSearchRoots(tree *modtree.ModTree) []string {
 	if tree == nil {
 		return nil
 	}
@@ -392,25 +392,25 @@ func materialSearchRoots(tree *modtree.ModTree) []string {
 	return roots
 }
 
-// readModelMaterial resolves one .whm material reference to image bytes.
-func readModelMaterial(tree *modtree.ModTree, roots []string, modelFile, name string) ([]byte, bool) {
-	data, _, ok := readModelMaterialWithPath(tree, roots, modelFile, name)
+// ReadModelMaterial resolves one .whm material reference to image bytes.
+func ReadModelMaterial(tree *modtree.ModTree, roots []string, modelFile, name string) ([]byte, bool) {
+	data, _, ok := ReadModelMaterialWithPath(tree, roots, modelFile, name)
 	return data, ok
 }
 
-func readModelMaterialWithPath(tree *modtree.ModTree, roots []string, modelFile, name string) ([]byte, string, bool) {
+func ReadModelMaterialWithPath(tree *modtree.ModTree, roots []string, modelFile, name string) ([]byte, string, bool) {
 	if tree != nil {
-		for _, candidate := range materialCandidatePaths(name) {
+		for _, candidate := range MaterialCandidatePaths(name) {
 			if file := tree.FindFile(candidate); file != nil {
 				if data, err := tree.ReadTreeFile(file); err == nil {
-					return data, materialTreePath(file), true
+					return data, MaterialTreePath(file), true
 				}
 			}
 		}
 	}
 	for _, root := range roots {
-		for _, candidate := range materialCandidatePaths(name) {
-			for _, path := range materialDiskPaths(root, candidate) {
+		for _, candidate := range MaterialCandidatePaths(name) {
+			for _, path := range MaterialDiskPaths(root, candidate) {
 				if data, err := os.ReadFile(path); err == nil {
 					return data, path, true
 				}
@@ -424,16 +424,16 @@ func readModelMaterialWithPath(tree *modtree.ModTree, roots []string, modelFile,
 	}
 	modelPath := strings.ReplaceAll(modelFile, "\\", "/")
 	if dir := filepath.Dir(modelPath); dir != "" && dir != "." {
-		for _, candidate := range materialCandidatePaths(filepath.ToSlash(filepath.Join(dir, base))) {
+		for _, candidate := range MaterialCandidatePaths(filepath.ToSlash(filepath.Join(dir, base))) {
 			if tree != nil {
 				if file := tree.FindFile(candidate); file != nil {
 					if data, err := tree.ReadTreeFile(file); err == nil {
-						return data, materialTreePath(file), true
+						return data, MaterialTreePath(file), true
 					}
 				}
 			}
 			for _, root := range roots {
-				for _, path := range materialDiskPaths(root, candidate) {
+				for _, path := range MaterialDiskPaths(root, candidate) {
 					if data, err := os.ReadFile(path); err == nil {
 						return data, path, true
 					}
@@ -442,16 +442,16 @@ func readModelMaterialWithPath(tree *modtree.ModTree, roots []string, modelFile,
 		}
 	}
 	if tree != nil {
-		for _, ext := range materialTextureExtensions {
+		for _, ext := range MaterialTextureExtensions {
 			fileName := base + ext
 			if file := tree.FindMaterialByName(fileName); file != nil {
 				if data, err := tree.ReadTreeFile(file); err == nil {
-					return data, materialTreePath(file), true
+					return data, MaterialTreePath(file), true
 				}
 			}
-			if file := findMaterialInTree(tree, fileName); file != nil {
+			if file := FindMaterialInTree(tree, fileName); file != nil {
 				if data, err := tree.ReadTreeFile(file); err == nil {
-					return data, materialTreePath(file), true
+					return data, MaterialTreePath(file), true
 				}
 			}
 		}
@@ -459,7 +459,7 @@ func readModelMaterialWithPath(tree *modtree.ModTree, roots []string, modelFile,
 	return nil, "", false
 }
 
-func materialTreePath(file *modtree.TreeFile) string {
+func MaterialTreePath(file *modtree.TreeFile) string {
 	if file == nil {
 		return ""
 	}
@@ -472,14 +472,14 @@ func materialTreePath(file *modtree.TreeFile) string {
 	return file.FullPath
 }
 
-// findMaterialsOnDisk answers remaining references with one walk per root.
-func findMaterialsOnDisk(roots []string, names []string) map[string]string {
+// FindMaterialsOnDisk answers remaining references with one walk per root.
+func FindMaterialsOnDisk(roots []string, names []string) map[string]string {
 	if len(names) == 0 {
 		return nil
 	}
 	want := map[string][]string{}
 	for _, name := range names {
-		for _, fileName := range materialCandidateNames(name) {
+		for _, fileName := range MaterialCandidateNames(name) {
 			key := strings.ToLower(fileName)
 			want[key] = append(want[key], name)
 		}
@@ -508,13 +508,11 @@ func findMaterialsOnDisk(roots []string, names []string) map[string]string {
 	return found
 }
 
-// ─── merged from viewer_uv.go ───────────────────────────────────────────────
-
-// uvNet is the texture mapping as two linear expressions: each output
+// UvNet is the texture mapping as two linear expressions: each output
 // coordinate is a combination of the two input coordinates plus the offset.
 // The coefficients are the mapping after the mirror, the scale and the turn
 // have been multiplied together, which is the only form worth printing.
-type uvNet struct {
+type UvNet struct {
 	u   [2]float32 // coefficients of (u, v) for the new u
 	v   [2]float32 // coefficients of (u, v) for the new v
 	off [2]float32
@@ -525,7 +523,7 @@ type uvNet struct {
 // empty name. The empty one is first because it is what a model with a single
 // map, or a reader who has not yet found out that it has two, wants to be
 // editing.
-func UvSelectionList(v *modelViewer) []string {
+func UvSelectionList(v *ModelViewer) []string {
 	out := []string{""}
 	if v == nil || v.Model == nil {
 		return out
@@ -546,7 +544,7 @@ func UvSelectionList(v *modelViewer) []string {
 // material's own, or the one they all share. The pointer is what lets a
 // button change the mapping without every reader of it having to know which
 // one is selected.
-func UvCurrent(v *modelViewer) *render.UVMapping {
+func UvCurrent(v *ModelViewer) *render.UVMapping {
 	if v == nil {
 		return nil
 	}
@@ -572,7 +570,7 @@ func UvCurrent(v *modelViewer) *render.UVMapping {
 // refilled from the new choice the next time the panel is laid out, not here,
 // so that a button press does not move the numbers under a pointer that is
 // still over the old ones.
-func SelectUVMapping(v *modelViewer, material string) {
+func SelectUVMapping(v *ModelViewer, material string) {
 	if v == nil || v.UvSelection == material {
 		return
 	}
@@ -584,29 +582,29 @@ func SelectUVMapping(v *modelViewer, material string) {
 
 // uvOffset reads the two offset sliders as the shift of the map over the model,
 // in units of the map itself.
-func UvOffset(v *modelViewer) [2]float32 {
+func UvOffset(v *ModelViewer) [2]float32 {
 	if v == nil {
 		return [2]float32{}
 	}
 	return [2]float32{
-		modelUVMinOffset + v.UvU.Value*(modelUVMaxOffset-modelUVMinOffset),
-		modelUVMinOffset + v.UvV.Value*(modelUVMaxOffset-modelUVMinOffset),
+		ModelUVMinOffset + v.UvU.Value*(ModelUVMaxOffset-ModelUVMinOffset),
+		ModelUVMinOffset + v.UvV.Value*(ModelUVMaxOffset-ModelUVMinOffset),
 	}
 }
 
 // uvScaleValue reads the scale slider. One is the middle of its travel and is
 // what an untouched model is drawn with.
-func UvScaleValue(v *modelViewer) float32 {
+func UvScaleValue(v *ModelViewer) float32 {
 	if v == nil {
 		return 1
 	}
-	return modelUVMinScale + v.UvScale.Value*(modelUVMaxScale-modelUVMinScale)
+	return ModelUVMinScale + v.UvScale.Value*(ModelUVMaxScale-ModelUVMinScale)
 }
 
 // uvPush fills the sliders from the mapping they are editing. It runs when the
 // selection changes, and once at the start, so that the controls always show
 // the numbers of the mapping the frame is actually being drawn with.
-func UvPush(v *modelViewer) {
+func UvPush(v *ModelViewer) {
 	m := UvCurrent(v)
 	if m == nil {
 		return
@@ -616,14 +614,14 @@ func UvPush(v *modelViewer) {
 	if scale <= 0 {
 		scale = 1
 	}
-	v.UvU.Value = float32(engine.ClampFloat64(float64((m.Offset[0]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
-	v.UvV.Value = float32(engine.ClampFloat64(float64((m.Offset[1]-modelUVMinOffset)/float32(modelUVMaxOffset-modelUVMinOffset)), 0, 1))
-	v.UvScale.Value = float32(engine.ClampFloat64(float64((scale-modelUVMinScale)/(modelUVMaxScale-modelUVMinScale)), 0, 1))
+	v.UvU.Value = float32(engine.ClampFloat64(float64((m.Offset[0]-ModelUVMinOffset)/float32(ModelUVMaxOffset-ModelUVMinOffset)), 0, 1))
+	v.UvV.Value = float32(engine.ClampFloat64(float64((m.Offset[1]-ModelUVMinOffset)/float32(ModelUVMaxOffset-ModelUVMinOffset)), 0, 1))
+	v.UvScale.Value = float32(engine.ClampFloat64(float64((scale-ModelUVMinScale)/(ModelUVMaxScale-ModelUVMinScale)), 0, 1))
 }
 
 // uvPull writes the sliders back into the mapping they are editing. It runs
 // after the sliders are laid out, because that is when a drag has been read.
-func UvPull(v *modelViewer) {
+func UvPull(v *ModelViewer) {
 	m := UvCurrent(v)
 	if m == nil {
 		return
@@ -636,7 +634,7 @@ func UvPull(v *modelViewer) {
 // is its own button because a reader who has been dragging the sliders needs
 // one, and because "Reset view" only moves the camera. With one texture
 // selected out of several it is that one and not the model that goes back.
-func ResetUVMapping(v *modelViewer) {
+func ResetUVMapping(v *ModelViewer) {
 	if v == nil {
 		return
 	}
@@ -647,7 +645,7 @@ func ResetUVMapping(v *modelViewer) {
 	Invalidate(v)
 }
 
-// uvMappingNet multiplies the four operations together into uvNet.
+// UvMappingNet multiplies the four operations together into UvNet.
 //
 // Multiplying them out is not tidiness, it is the whole point. The operations
 // do not commute and they do not all cancel in the same places: mirroring U
@@ -655,7 +653,7 @@ func ResetUVMapping(v *modelViewer) {
 // the file had it and flips V instead. A panel that printed the operations
 // would say the model is mirrored when it is not, and a reader writing those
 // numbers into a model would get something that looks almost right.
-func uvMappingNet(mirror bool, turns int, scale float32, off [2]float32) uvNet {
+func UvMappingNet(mirror bool, turns int, scale float32, off [2]float32) UvNet {
 	a, b, c, d := float32(1), float32(0), float32(0), float32(1)
 	if mirror {
 		a = -a
@@ -669,36 +667,36 @@ func uvMappingNet(mirror bool, turns int, scale float32, off [2]float32) uvNet {
 	case 3: // (u, v) → (−v, u)
 		a, b, c, d = -c, -d, a, b
 	}
-	return uvNet{u: [2]float32{a, b}, v: [2]float32{c, d}, off: off}
+	return UvNet{u: [2]float32{a, b}, v: [2]float32{c, d}, off: off}
 }
 
 // net is the viewer's own mapping in that form.
-func Net(v *modelViewer) uvNet {
+func Net(v *ModelViewer) UvNet {
 	m := render.UVMapping{}
 	if cur := UvCurrent(v); cur != nil {
 		m = *cur
 	}
-	return uvMappingNet(m.Mirror, m.Rotate, m.Scale, m.Offset)
+	return UvMappingNet(m.Mirror, m.Rotate, m.Scale, m.Offset)
 }
 
 // uvMappingSummary writes the mapping as the two expressions it works out to,
 // which is the form it can be written back down in: a line of this program's
 // own code, or the pair of numbers a model would carry in two more UV channels.
-func UvMappingSummary(v *modelViewer) string {
+func UvMappingSummary(v *ModelViewer) string {
 	n := Net(v)
-	return uvNetTerm(n.u, n.off[0]) + ", " + uvNetTerm(n.v, n.off[1])
+	return UvNetTerm(n.u, n.off[0]) + ", " + UvNetTerm(n.v, n.off[1])
 }
 
-// uvNetTerm is one of those two expressions: whichever of u and v the mapping
+// UvNetTerm is one of those two expressions: whichever of u and v the mapping
 // actually uses, multiplied, and then the shift added to it.
-func uvNetTerm(coef [2]float32, off float32) string {
+func UvNetTerm(coef [2]float32, off float32) string {
 	var parts []string
 	for i, axis := range [2]string{"u", "v"} {
 		switch c := coef[i]; {
 		case c > 0:
-			parts = append(parts, axis+"×"+modelUVFixed(c, 3))
+			parts = append(parts, axis+"×"+ModelUVFixed(c, 3))
 		case c < 0:
-			parts = append(parts, "-"+axis+"×"+modelUVFixed(-c, 3))
+			parts = append(parts, "-"+axis+"×"+ModelUVFixed(-c, 3))
 		}
 	}
 	if len(parts) == 0 {
@@ -706,7 +704,7 @@ func uvNetTerm(coef [2]float32, off float32) string {
 	}
 	s := strings.Join(parts, "+")
 	if off != 0 {
-		s += modelUVAdd(off)
+		s += ModelUVAdd(off)
 	}
 	return s
 }
@@ -716,7 +714,7 @@ func uvNetTerm(coef [2]float32, off float32) string {
 // enough to be worth showing: a mirror and a half turn cancel on one axis and
 // swap to the other, and seeing the steps beside the result is what makes that
 // obvious rather than surprising.
-func UvMappingSequence(v *modelViewer) string {
+func UvMappingSequence(v *ModelViewer) string {
 	m := render.UVMapping{}
 	if cur := UvCurrent(v); cur != nil {
 		m = *cur
@@ -729,13 +727,13 @@ func UvMappingSequence(v *modelViewer) string {
 	if scale <= 0 {
 		scale = 1
 	}
-	parts = append(parts, "×"+modelUVFixed(scale, 3))
+	parts = append(parts, "×"+ModelUVFixed(scale, 3))
 	if turns := ((m.Rotate % 4) + 4) % 4; turns != 0 {
-		parts = append(parts, "turn "+itoaPlain(turns*90)+"°")
+		parts = append(parts, "turn "+uikit.ItoaPlain(turns*90)+"°")
 	}
 	off := m.Offset
 	if off[0] != 0 || off[1] != 0 {
-		parts = append(parts, "shift "+modelUVFixed(off[0], 3)+", "+modelUVFixed(off[1], 3))
+		parts = append(parts, "shift "+ModelUVFixed(off[0], 3)+", "+ModelUVFixed(off[1], 3))
 	}
 	return strings.Join(parts, " → ")
 }
@@ -745,18 +743,18 @@ func UvMappingSequence(v *modelViewer) string {
 // offset, because the map repeats exactly that often: a reader who has just
 // dragged one to the far end of its travel and seen nothing happen is looking
 // at a bug in the model, not at their own mistake.
-func UvMappingNote(v *modelViewer) string {
+func UvMappingNote(v *ModelViewer) string {
 	off := [2]float32{}
 	if cur := UvCurrent(v); cur != nil {
 		off = cur.Offset
 	}
-	if uvWholeTiles(off[0]) && uvWholeTiles(off[1]) {
+	if UvWholeTiles(off[0]) && UvWholeTiles(off[1]) {
 		return "A whole number of tiles either way: the same as no offset."
 	}
-	if uvWholeTiles(off[0]) {
+	if UvWholeTiles(off[0]) {
 		return "U is a whole number of tiles, so only V is moving the map."
 	}
-	if uvWholeTiles(off[1]) {
+	if UvWholeTiles(off[1]) {
 		return "V is a whole number of tiles, so only U is moving the map."
 	}
 	return ""
@@ -767,7 +765,7 @@ func UvMappingNote(v *modelViewer) string {
 // with the UVs at all: such a mesh is drawn from a one by one white map, so it
 // comes out as an untextured part of an otherwise textured model, and moving
 // the sliders will not change it.
-func UvUnmappedMeshes(v *modelViewer) string {
+func UvUnmappedMeshes(v *ModelViewer) string {
 	if v == nil || v.Model == nil || len(v.Materials) == 0 {
 		return ""
 	}
@@ -789,7 +787,7 @@ func UvUnmappedMeshes(v *modelViewer) string {
 	if len(names) > show {
 		names = names[:show]
 	}
-	out := itoaPlain(len(missing)) + " of " + itoaPlain(len(v.Model.Meshes)) + " meshes: "
+	out := uikit.ItoaPlain(len(missing)) + " of " + uikit.ItoaPlain(len(v.Model.Meshes)) + " meshes: "
 	for i, n := range names {
 		if i > 0 {
 			out += ", "
@@ -797,15 +795,15 @@ func UvUnmappedMeshes(v *modelViewer) string {
 		out += n
 	}
 	if len(missing) > show {
-		out += " and " + itoaPlain(len(missing)-show) + " more"
+		out += " and " + uikit.ItoaPlain(len(missing)-show) + " more"
 	}
 	return out
 }
 
-// modelUVFixed is a decimal with a fixed number of places, always with a point
+// ModelUVFixed is a decimal with a fixed number of places, always with a point
 // and an ASCII minus, so that a value copied out of the panel is a value that
 // can be pasted into a model or a line of code without being tidied up first.
-func modelUVFixed(v float32, places int) string {
+func ModelUVFixed(v float32, places int) string {
 	neg := v < 0
 	if neg {
 		v = -v
@@ -815,16 +813,16 @@ func modelUVFixed(v float32, places int) string {
 		scale *= 10
 	}
 	n := int(float64(v)*float64(scale) + 0.5)
-	s := itoaPlain(n/scale) + "." + padZeroes(n%scale, places)
+	s := uikit.ItoaPlain(n/scale) + "." + PadZeroes(n%scale, places)
 	if neg {
 		s = "-" + s
 	}
 	return s
 }
 
-// padZeroes writes a small number with leading zeroes, so that a value reads
+// PadZeroes writes a small number with leading zeroes, so that a value reads
 // the same width whichever it happens to be.
-func padZeroes(n, places int) string {
+func PadZeroes(n, places int) string {
 	out := make([]byte, places)
 	for i := places - 1; i >= 0; i-- {
 		out[i] = byte('0' + n%10)
@@ -833,23 +831,19 @@ func padZeroes(n, places int) string {
 	return string(out)
 }
 
-// modelUVAdd is an offset written as it would be added, with the sign that
+// ModelUVAdd is an offset written as it would be added, with the sign that
 // makes it an addition either way, so that the summary reads as arithmetic
 // rather than as a list of magnitudes.
-func modelUVAdd(v float32) string {
+func ModelUVAdd(v float32) string {
 	if v < 0 {
-		return "-" + modelUVFixed(-v, 3)
+		return "-" + ModelUVFixed(-v, 3)
 	}
-	return "+" + modelUVFixed(v, 3)
+	return "+" + ModelUVFixed(v, 3)
 }
-
-// ─── merged from viewer_anim.go ───────────────────────────────────────────────
-
-// absInt moved to internal/3d_engine as engine.AbsInt.
 
 // boneTrack returns the animation track that belongs to the picked bone, or nil
 // when the picked bone has no track in the current clip.
-func BoneTrack(v *modelViewer) *WhmTrack {
+func BoneTrack(v *ModelViewer) *whm.Track {
 	if v.Anim == nil || v.BoneIndex < 0 || v.BoneIndex >= len(v.Model.Bones) {
 		return nil
 	}
@@ -863,14 +857,14 @@ func BoneTrack(v *modelViewer) *WhmTrack {
 
 // boneKeyFrames is the set of frames on which the picked bone has a key, or nil
 // when there is nothing to snap to.
-func BoneKeyFrames(v *modelViewer) []int {
+func BoneKeyFrames(v *ModelViewer) []int {
 	t := BoneTrack(v)
 	if t == nil || v.Anim.NumFrames < 1 {
 		return nil
 	}
 	seen := make(map[int]bool)
 	add := func(t float32) {
-		seen[frameAt(float64(t), v.Anim.NumFrames)] = true
+		seen[FrameAt(float64(t), v.Anim.NumFrames)] = true
 	}
 	for i := range t.PosKey {
 		add(t.PosKey[i].Time)
@@ -891,7 +885,7 @@ func BoneKeyFrames(v *modelViewer) []int {
 
 // boneKeyCount is how many keyframes the picked bone has in the current clip,
 // counting position and rotation keys together.
-func BoneKeyCount(v *modelViewer) int {
+func BoneKeyCount(v *ModelViewer) int {
 	t := BoneTrack(v)
 	if t == nil {
 		return 0
@@ -902,7 +896,7 @@ func BoneKeyCount(v *modelViewer) int {
 // boneKeySelect picks the bone keyframe closest to the current playhead, and
 // seeks so that frame is on show. When there is no key near the playhead the
 // picked key is cleared instead.
-func BoneKeySelect(v *modelViewer) {
+func BoneKeySelect(v *ModelViewer) {
 	if v.BoneIndex < 0 {
 		v.BoneKeyIndex = -1
 		v.BoneKeyMode = -1
@@ -924,7 +918,7 @@ func BoneKeySelect(v *modelViewer) {
 // setBoneKeyPositionFromPose writes the picked bone's pose position at the
 // current playhead into the picked position key, which is what the "Set pos
 // from pose" button in the bone parameters panel does.
-func SetBoneKeyPositionFromPose(v *modelViewer) {
+func SetBoneKeyPositionFromPose(v *ModelViewer) {
 	if v.BoneKeyMode != 0 || v.BoneKeyIndex < 0 || v.BoneIndex < 0 || v.Anim == nil {
 		return
 	}
@@ -942,9 +936,9 @@ func SetBoneKeyPositionFromPose(v *modelViewer) {
 	if bone.Parent >= 0 && bone.Parent < len(pose.Bones) {
 		worldParent = pose.Bones[bone.Parent]
 	} else {
-		worldParent = boneRootFrame
+		worldParent = whm.RootFrame
 	}
-	local := worldParent.Inverse().MulPosition(boneAtPose(worldBone))
+	local := worldParent.Inverse().MulPosition(BoneAtPose(worldBone))
 	t.PosKey[v.BoneKeyIndex].V = [3]float32{float32(local.X), float32(local.Y), float32(local.Z)}
 	Invalidate(v)
 }
@@ -952,7 +946,7 @@ func SetBoneKeyPositionFromPose(v *modelViewer) {
 // setBoneKeyRotationFromPose writes the picked bone's pose rotation at the
 // current playhead into the picked rotation key, which is what the "Set rot
 // from pose" button in the bone parameters panel does.
-func SetBoneKeyRotationFromPose(v *modelViewer) {
+func SetBoneKeyRotationFromPose(v *ModelViewer) {
 	if v.BoneKeyMode != 1 || v.BoneKeyIndex < 0 || v.BoneIndex < 0 || v.Anim == nil {
 		return
 	}
@@ -970,21 +964,21 @@ func SetBoneKeyRotationFromPose(v *modelViewer) {
 	if bone.Parent >= 0 && bone.Parent < len(pose.Bones) {
 		worldParent = pose.Bones[bone.Parent]
 	} else {
-		worldParent = boneRootFrame
+		worldParent = whm.RootFrame
 	}
 	localMat := worldParent.Inverse().Mul(worldBone)
-	track.RotKey[v.BoneKeyIndex].V = matrixQuat(localMat)
+	track.RotKey[v.BoneKeyIndex].V = MatrixQuat(localMat)
 	Invalidate(v)
 }
 
-// matrixQuat extracts a quaternion (x, y, z, w) from the rotation part of a
+// MatrixQuat extracts a quaternion (x, y, z, w) from the rotation part of a
 // 4x4 matrix. It is the inverse of render.QuatMatrix, which builds the matrix from
 // that same [4]float32 layout, so a "Set rot from pose" write round-trips
 // through the pose unchanged.
 //
 // fauxgl ships no quaternion type, so the standard Shepperd branches are
 // written out against the matrix's named fields.
-func matrixQuat(m fauxgl.Matrix) [4]float32 {
+func MatrixQuat(m fauxgl.Matrix) [4]float32 {
 	tr := m.X00 + m.X11 + m.X22
 	var q [4]float32
 	if tr > 0 {
@@ -1019,16 +1013,16 @@ func matrixQuat(m fauxgl.Matrix) [4]float32 {
 	return q
 }
 
-// boneAtPose returns the world-space origin of a bone's pose matrix, which is
+// BoneAtPose returns the world-space origin of a bone's pose matrix, which is
 // the bone's position under the pose on show. MulPosition on the zero vector
 // reads the translation column, the same idiom model3d_overlay.go uses for
 // bone origins.
-func boneAtPose(worldBone fauxgl.Matrix) fauxgl.Vector {
+func BoneAtPose(worldBone fauxgl.Matrix) fauxgl.Vector {
 	return worldBone.MulPosition(fauxgl.Vector{})
 }
 
 // boneKeyFrame picks the bone keyframe index and mode closest to the given frame.
-func BoneKeyFrame(v *modelViewer, frame int) (int, int, bool) {
+func BoneKeyFrame(v *ModelViewer, frame int) (int, int, bool) {
 	t := BoneTrack(v)
 	if t == nil {
 		return -1, -1, false
@@ -1037,7 +1031,7 @@ func BoneKeyFrame(v *modelViewer, frame int) (int, int, bool) {
 	bestMode := 0
 	bestDist := int(1e9)
 	for i := range t.PosKey {
-		f := frameAt(float64(t.PosKey[i].Time), v.Anim.NumFrames)
+		f := FrameAt(float64(t.PosKey[i].Time), v.Anim.NumFrames)
 		d := engine.AbsInt(f - frame)
 		if d < bestDist {
 			bestDist = d
@@ -1046,7 +1040,7 @@ func BoneKeyFrame(v *modelViewer, frame int) (int, int, bool) {
 		}
 	}
 	for i := range t.RotKey {
-		f := frameAt(float64(t.RotKey[i].Time), v.Anim.NumFrames)
+		f := FrameAt(float64(t.RotKey[i].Time), v.Anim.NumFrames)
 		d := engine.AbsInt(f - frame)
 		if d < bestDist {
 			bestDist = d
@@ -1062,7 +1056,7 @@ func BoneKeyFrame(v *modelViewer, frame int) (int, int, bool) {
 
 // boneKeyFrameAt returns the frame a bone keyframe sits on, and whether it has
 // one to sit on. This is the frame the scrub bar can snap to for this bone key.
-func BoneKeyFrameAt(v *modelViewer) (int, bool) {
+func BoneKeyFrameAt(v *ModelViewer) (int, bool) {
 	if v.BoneKeyIndex < 0 || v.BoneKeyMode < 0 || v.Anim == nil || BoneTrack(v) == nil {
 		return 0, false
 	}
@@ -1081,7 +1075,7 @@ func BoneKeyFrameAt(v *modelViewer) (int, bool) {
 	if keyTime <= 0 {
 		return 0, false
 	}
-	return frameAt(float64(keyTime), v.Anim.NumFrames), true
+	return FrameAt(float64(keyTime), v.Anim.NumFrames), true
 }
 
 // pose evaluates the current animation time, or the bind pose when stopped.
@@ -1092,9 +1086,9 @@ func BoneKeyFrameAt(v *modelViewer) (int, bool) {
 // bone and writes two matrices per bone into fresh slices. During playback
 // that is the largest thing the preview allocates, and it is the same answer
 // every time.
-func Pose(v *modelViewer) WhmPose {
+func Pose(v *ModelViewer) uistate.WhmPose {
 	if v == nil || v.Model == nil {
-		return WhmPose{}
+		return uistate.WhmPose{}
 	}
 	if len(v.Anims) > 0 {
 		if v.PoseValid && v.PoseAnim == v.Anim && v.PoseTime == v.Time {
@@ -1102,7 +1096,7 @@ func Pose(v *modelViewer) WhmPose {
 		}
 		times := make([]float32, len(v.Anims))
 		for i, anim := range v.Anims {
-			duration := animClipSeconds(anim)
+			duration := AnimClipSeconds(anim)
 			if duration > 0 && v.AnimPlaybackDuration > 0 {
 				clipTime := math.Mod(float64(v.Time)*v.AnimPlaybackDuration, duration) / duration
 				if !v.Playing && v.AnimPlaybackDuration > duration {
@@ -1135,7 +1129,7 @@ func Pose(v *modelViewer) WhmPose {
 // the button down walks to the first frame and stays there, which is what
 // winding a tape by hand does. The last frame is the same as the first, so
 // stepping past it lands on the start rather than on a frame that is not there.
-func StepFrame(v *modelViewer, delta int) {
+func StepFrame(v *ModelViewer, delta int) {
 	if v == nil || v.Model == nil || v.Anim == nil || delta == 0 {
 		return
 	}
@@ -1162,15 +1156,15 @@ func StepFrame(v *modelViewer, delta int) {
 	Invalidate(v)
 }
 
-// frameReadTolerance is how close to a frame boundary the playhead has to be
+// FrameReadTolerance is how close to a frame boundary the playhead has to be
 // for the readout to name that frame, measured in frames. See currentFrame.
-const frameReadTolerance = 1e-3
+const FrameReadTolerance = 1e-3
 
 // currentFrame is which frame of the clip is on show, and how many there are.
 // A clip with no frame count reports none, since there is nothing to count. The
 // play head is rounded rather than cut, so the frame a step lands on and the
 // frame the readout names are the same one.
-func CurrentFrame(v *modelViewer) (int, int) {
+func CurrentFrame(v *ModelViewer) (int, int) {
 	if v == nil || v.Anim == nil || v.Anim.NumFrames <= 0 {
 		return 0, 0
 	}
@@ -1181,12 +1175,12 @@ func CurrentFrame(v *modelViewer) (int, int) {
 	// saying "frame 1" while the clip sits on the second. The tolerance is a
 	// thousandth of a frame — far finer than anything a scrub can land on —
 	// and it only ever moves a reading that is already at the boundary.
-	frame := int(math.Floor(float64(v.Anim.NumFrames)*float64(v.Time) + frameReadTolerance))
-	return minInt(maxInt(frame, 0), v.Anim.NumFrames-1), v.Anim.NumFrames
+	frame := int(math.Floor(float64(v.Anim.NumFrames)*float64(v.Time) + FrameReadTolerance))
+	return uikit.MinInt(uikit.MaxInt(frame, 0), v.Anim.NumFrames-1), v.Anim.NumFrames
 }
 
 // selectAnim switches the playing clip, wrapping around the list.
-func SelectAnim(v *modelViewer, index int) {
+func SelectAnim(v *ModelViewer, index int) {
 	if v == nil {
 		return
 	}
@@ -1216,12 +1210,12 @@ func SelectAnim(v *modelViewer, index int) {
 // selectAnimations plays clips belonging to one action together on one model.
 // It uses the longest selected clip as the shared playback clock; individual
 // clip times are sampled against their own durations.
-func SelectAnimations(v *modelViewer, anims []*WhmAnimation, playback bool) {
+func SelectAnimations(v *ModelViewer, anims []*uistate.WhmAnimation, playback bool) {
 	if v == nil {
 		return
 	}
 	v.Anims = nil
-	v.Anims = make([]*WhmAnimation, 0, len(anims))
+	v.Anims = make([]*uistate.WhmAnimation, 0, len(anims))
 	for _, anim := range anims {
 		if anim != nil {
 			v.Anims = append(v.Anims, anim)
@@ -1234,9 +1228,9 @@ func SelectAnimations(v *modelViewer, anims []*WhmAnimation, playback bool) {
 		Invalidate(v)
 		return
 	}
-	v.Anim = longestAnimation(v.Anims)
-	v.AnimIndex = animationIndex(v.Model, v.Anim)
-	v.AnimPlaybackDuration = animClipSeconds(v.Anim)
+	v.Anim = LongestAnimation(v.Anims)
+	v.AnimIndex = AnimationIndex(v.Model, v.Anim)
+	v.AnimPlaybackDuration = AnimClipSeconds(v.Anim)
 	if !playback {
 		v.Playing = false
 	}
@@ -1246,7 +1240,7 @@ func SelectAnimations(v *modelViewer, anims []*WhmAnimation, playback bool) {
 	Invalidate(v)
 }
 
-func animationIndex(model *WhmModel, anim *WhmAnimation) int {
+func AnimationIndex(model *uistate.WhmModel, anim *uistate.WhmAnimation) int {
 	if model != nil && anim != nil {
 		for i := range model.Animations {
 			if &model.Animations[i] == anim {
@@ -1257,20 +1251,20 @@ func animationIndex(model *WhmModel, anim *WhmAnimation) int {
 	return 0
 }
 
-func longestAnimation(anims []*WhmAnimation) *WhmAnimation {
-	var longest *WhmAnimation
+func LongestAnimation(anims []*uistate.WhmAnimation) *uistate.WhmAnimation {
+	var longest *uistate.WhmAnimation
 	for _, anim := range anims {
-		if anim != nil && (longest == nil || animClipSeconds(anim) > animClipSeconds(longest)) {
+		if anim != nil && (longest == nil || AnimClipSeconds(anim) > AnimClipSeconds(longest)) {
 			longest = anim
 		}
 	}
 	return longest
 }
 
-// animFramesPerSecond derives a playback rate from a clip. Dawn of War stores a
+// AnimFramesPerSecond derives a playback rate from a clip. Dawn of War stores a
 // frame count and a duration but no explicit rate, so the duration wins and a
 // game-like 20 fps is the fallback.
-func animFramesPerSecond(anim *WhmAnimation) float64 {
+func AnimFramesPerSecond(anim *uistate.WhmAnimation) float64 {
 	if anim == nil || anim.NumFrames <= 0 {
 		return 20
 	}
@@ -1280,15 +1274,15 @@ func animFramesPerSecond(anim *WhmAnimation) float64 {
 	return 20
 }
 
-// animClipSeconds is how long one pass of a clip takes, which is what the .whe
+// AnimClipSeconds is how long one pass of a clip takes, which is what the .whe
 // timelines count their event moments in: necron_monolith's add_on_3 is 3513
 // frames long and its events are written at 43 to 51, so they only mean
 // anything against the 58.5 seconds the clip takes to play.
-func animClipSeconds(anim *WhmAnimation) float64 {
+func AnimClipSeconds(anim *uistate.WhmAnimation) float64 {
 	if anim == nil || anim.NumFrames <= 0 {
 		return 1
 	}
-	if s := float64(anim.NumFrames) / animFramesPerSecond(anim); s > 0 {
+	if s := float64(anim.NumFrames) / AnimFramesPerSecond(anim); s > 0 {
 		return s
 	}
 	return 1

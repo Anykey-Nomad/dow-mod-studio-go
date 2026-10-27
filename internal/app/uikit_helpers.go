@@ -17,3 +17,6 @@ const panelSplitterMinDp = uikit.PanelSplitterMinDp
 
 // PanelSplitterMinMidDp lives in uikit; the alias keeps the call sites.
 const panelSplitterMinMidDp = uikit.PanelSplitterMinMidDp
+
+// unitRowHeightDp lives in uikit; the alias keeps the call sites.
+const unitRowHeightDp = uikit.UnitRowHeightDp

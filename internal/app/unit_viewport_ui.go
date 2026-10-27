@@ -1483,15 +1483,6 @@ func UnitBonePoseBar(ui *uiState, gtx layout.Context) layout.Dimensions {
 // out, so an error can point at the axis that would not parse.
 var boneFieldAxes = [3]string{"X", "Y", "Z"}
 
-// boneGroupLog names a group for the log: 0 is the position row, 1 the
-// rotation row.
-func boneGroupLog(mode int) string {
-	if mode == 1 {
-		return "Rot"
-	}
-	return "Pos"
-}
-
 // boneFieldTexts is one group's three fields as a single loggable line.
 func boneFieldTexts(eds *[3]widget.Editor) string {
 	return strings.TrimSpace(eds[0].Text()) + " " +
@@ -3055,35 +3046,6 @@ func PollUnitModel(ui *uiState) {
 		ui.UnitBoneKeyErr = ""
 	default:
 	}
-}
-
-// unitDefaultAnim picks the clip the viewport starts on, or -1 when the model
-// has none. The names are the game's own: a unit moves with "move" and "run",
-// stands with "idle_1", and everything else in the list is a one off.
-func unitDefaultAnim(model *WhmModel) int {
-	if model == nil || len(model.Animations) == 0 {
-		return -1
-	}
-	want := []string{"move", "run", "walk", "idle_1", "idle_2", "idle", "idle_firing"}
-	names := make([]string, len(model.Animations))
-	for i := range model.Animations {
-		names[i] = strings.ToLower(model.Animations[i].Name)
-	}
-	for _, w := range want {
-		for i, n := range names {
-			if n == w {
-				return i
-			}
-		}
-	}
-	// A clip whose name starts "vis_" only fades a weapon or a banner in and
-	// out; it moves nothing, so it is a poor thing to open on.
-	for i, n := range names {
-		if !strings.HasPrefix(n, "vis_") {
-			return i
-		}
-	}
-	return 0
 }
 
 // unitModelViewer is the viewport's viewer, or nil when no model is up.
