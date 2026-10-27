@@ -461,7 +461,7 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 	for {
 		ev, ok := gtx.Event(pointer.Filter{
 			Target:  &v.Tag,
-			Kinds:   pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Scroll,
+			Kinds:   pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Scroll | pointer.Move | pointer.Enter | pointer.Leave,
 			ScrollX: pointer.ScrollRange{Min: math.MinInt, Max: math.MaxInt},
 			ScrollY: pointer.ScrollRange{Min: math.MinInt, Max: math.MaxInt},
 		})
@@ -473,6 +473,17 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 			continue
 		}
 		switch e.Kind {
+		case pointer.Move, pointer.Enter, pointer.Leave:
+			// The frame strip's readout hangs off this stream rather than off a
+			// pointer area of its own: such an area would be registered after
+			// the canvas's clip has been popped, and in Gio's hit tree that
+			// starts a chain which, while the pointer is inside its rectangle,
+			// hides everything below it — the canvas included, taking the press
+			// that seeks down with it. See UpdateScrubHover.
+			if UpdateScrubHover(v, e) {
+				gtx.Execute(op.InvalidateCmd{})
+			}
+			continue
 		case pointer.Press:
 			if e.Buttons.Contain(pointer.ButtonPrimary) && t.Kind == "sgb" && t.SgbView3D {
 				if scrubHit(v.ScrubRect, e.Position) {

@@ -316,6 +316,8 @@ var ClipScrubEvents = viewer.ClipScrubEvents
 
 var scrubHit = viewer.ScrubHit
 
+var UpdateScrubHover = viewer.UpdateScrubHover
+
 var ScrubGeometry = viewer.ScrubGeometry
 
 var MovePickedBoneKeyToX = viewer.MovePickedBoneKeyToX

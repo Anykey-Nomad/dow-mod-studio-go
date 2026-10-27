@@ -5,8 +5,10 @@ import (
 	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/whe"
+	"fmt"
 	"gioui.org/f32"
 	"gioui.org/io/key"
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -369,6 +371,11 @@ func AbsF32(v float32) float32 {
 func ModelAnimScrubOverlay(ui *uistate.State, gtx layout.Context, t *uistate.Tab) layout.Dimensions {
 	v := t.Model
 	if v == nil || v.Model == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
+		if v != nil {
+			// Nothing to hover: an empty strip must not leave a readout behind
+			// it for the next clip that does have one.
+			v.ScrubHover = false
+		}
 		return layout.Dimensions{}
 	}
 	w, h := gtx.Constraints.Max.X, gtx.Constraints.Max.Y
@@ -381,6 +388,7 @@ func ModelAnimScrubOverlay(ui *uistate.State, gtx layout.Context, t *uistate.Tab
 	// Room for the bar and a number on each side of it.
 	if width < 60 || h < int(ScrubBarThickness)+2*int(ScrubLabelHeight)+4*int(ScrubBarMargin) {
 		v.ScrubRect = image.Rectangle{}
+		v.ScrubHover = false
 		return layout.Dimensions{}
 	}
 	barY := h - ScrubBarMargin - ScrubLabelHeight
@@ -507,7 +515,132 @@ func ModelAnimScrubOverlay(ui *uistate.State, gtx layout.Context, t *uistate.Tab
 	}
 
 	at.Pop()
+
+	// The readout over the cursor, in canvas coordinates now that the bar's
+	// own offset is behind us. Within a few pixels of the playhead it gives up
+	// the pointer's reading and reports where playback actually is: a time and
+	// a frame one apart read as a wrong number rather than as a near miss. A
+	// strip being dragged reports from the playhead as well — while the press
+	// owns the pointer the cursor's own position is no longer delivered, so a
+	// readout pinned to it would freeze where the press landed while the
+	// playhead went on moving.
+	if v.ScrubHover || v.Seeking {
+		clipSecs := AnimClipSeconds(v.Anim)
+		frac := float64((v.ScrubHoverX - left) / width)
+		if frac < 0 {
+			frac = 0
+		}
+		if frac > 1 {
+			frac = 1
+		}
+		frame := ScrubBarAt(v.ScrubHoverX, left, width, n)
+		if frame < 0 {
+			frame = 0
+		}
+		secs := frac * clipSecs
+		hoverX := v.ScrubHoverX
+		playheadX := left + FrameX(cur, n, width)
+		if v.Seeking || math.Abs(float64(v.ScrubHoverX-playheadX)) <= scrubPlayheadSnapPx {
+			frame, secs, hoverX = cur, float64(v.Time)*clipSecs, playheadX
+		}
+		scrubTooltip(ui, gtx, w, hoverX, v.ScrubHoverY,
+			fmt.Sprintf("%.2f s · frame %d", secs, frame+1))
+	}
+
 	return layout.Dimensions{Size: gtx.Constraints.Max}
+}
+
+// scrubPlayheadSnapPx is how close the pointer has to come to the playhead
+// before the readout reports the playhead instead of the pointer. It is a
+// handful of pixels rather than a frame's worth of them: the point is to stop
+// two readings a frame apart from disagreeing, not to make a magnet of it.
+const scrubPlayheadSnapPx = 5.0
+
+// UpdateScrubHover keeps the strip's readout under the cursor from the canvas's
+// own pointer stream, and reports whether a redraw is owed to keep it there.
+//
+// It is fed by the canvas rather than by a target of the strip's own on
+// purpose: a target registered after the canvas's clip has been popped starts a
+// chain of its own in Gio's hit tree, and while the pointer is inside its
+// rectangle nothing below that chain is reached — which, the rectangle being
+// the strip, would be the canvas itself, so the press that seeks would never
+// arrive. The strip's rectangle is answered by the one area that already owns
+// the whole canvas instead.
+func UpdateScrubHover(v *ModelViewer, e pointer.Event) bool {
+	if v == nil {
+		return false
+	}
+	hover := e.Kind == pointer.Move || e.Kind == pointer.Enter
+	if hover && !ScrubHit(v.ScrubRect, e.Position) {
+		hover = false
+	}
+	if hover {
+		if v.ScrubHover && v.ScrubHoverX == e.Position.X && v.ScrubHoverY == e.Position.Y {
+			return false
+		}
+		v.ScrubHover, v.ScrubHoverX, v.ScrubHoverY = true, e.Position.X, e.Position.Y
+		return true
+	}
+	if e.Kind != pointer.Leave && e.Kind != pointer.Move && e.Kind != pointer.Enter {
+		// Presses, drags and releases leave the readout where it is: a drag
+		// carries it along with the playhead rather than under a cursor the
+		// pointer no longer reports.
+		return false
+	}
+	if !v.ScrubHover {
+		return false
+	}
+	v.ScrubHover = false
+	return true
+}
+
+// scrubTooltip draws one readout line over the cursor: a rounded box, sized by
+// a label laid out first. Gio paints in the order the ops were added, so the
+// label is recorded, measured, and only then replayed over the box painted
+// behind it — laid out in place, the fill would land on top of the writing.
+func scrubTooltip(ui *uistate.State, gtx layout.Context, canvasW int, x, y float32, text string) {
+	if text == "" || canvasW < 48 {
+		return
+	}
+	macro := op.Record(gtx.Ops)
+	m := gtx
+	m.Constraints.Min = image.Point{}
+	m.Constraints.Max = image.Pt(canvasW-16, 64)
+	d := layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(3), Bottom: unit.Dp(3)}.Layout(m, func(gtx layout.Context) layout.Dimensions {
+		l := material.Label(ui.Th, unit.Sp(10), text)
+		l.Color = uikit.CText
+		l.MaxLines = 1
+		return l.Layout(gtx)
+	})
+	call := macro.Stop()
+
+	sz := d.Size
+	if sz.X < 1 || sz.Y < 1 {
+		return
+	}
+	x0 := int(x) - sz.X/2
+	if x0 < 4 {
+		x0 = 4
+	}
+	if x0+sz.X > canvasW-4 {
+		x0 = canvasW - 4 - sz.X
+	}
+	// Above the cursor. The strip sits at the bottom of the canvas, so there is
+	// always room above it; the flip below is for a cursor at the very top edge.
+	y0 := int(y) - sz.Y - 8
+	if y0 < 2 {
+		y0 = int(y) + 16
+	}
+	at := op.Offset(image.Pt(x0, y0)).Push(gtx.Ops)
+	// The outline is a slightly larger box behind the fill, which gives the
+	// same ring a border stroke would and keeps it readable over a bright part
+	// of the model.
+	edge := op.Offset(image.Pt(-1, -1)).Push(gtx.Ops)
+	uikit.Rrect(gtx, uikit.CBorder, sz.Add(image.Pt(2, 2)), gtx.Dp(unit.Dp(4)))
+	edge.Pop()
+	uikit.Rrect(gtx, uikit.CContentBg, sz, gtx.Dp(unit.Dp(3)))
+	call.Add(gtx.Ops)
+	at.Pop()
 }
 
 // ScrubFill paints one rectangle at an offset from the bar's own origin.

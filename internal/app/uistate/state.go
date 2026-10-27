@@ -1276,6 +1276,14 @@ type Viewer struct {
 	// it winds the playhead instead of starting a camera drag. It is empty when
 	// there is nothing to draw.
 	ScrubRect image.Rectangle
+	// scrubHover says the pointer is over the strip, and where it is in canvas
+	// coordinates, which is where the time-and-frame readout is drawn. It is
+	// kept by UpdateScrubHover from the canvas's own pointer stream rather than
+	// by an area of the strip's own — an area of its own would hide the canvas
+	// beneath it while the pointer was over the strip.
+	ScrubHover  bool
+	ScrubHoverX float32
+	ScrubHoverY float32
 
 	// markerIndex is the marker the markers list has picked, or -1 for none.
 	// The reader uses it to find one attachment point on a model that
