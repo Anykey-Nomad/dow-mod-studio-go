@@ -1,8 +1,11 @@
-package app
+package shell
 
 import (
+	"dow-mod-studio/internal/app/editors"
+	"dow-mod-studio/internal/app/fileops"
 	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/app/uistate"
+	appunit "dow-mod-studio/internal/app/unit"
 	"dow-mod-studio/internal/cliphist"
 	"encoding/json"
 	"fmt"
@@ -13,13 +16,13 @@ import (
 	"time"
 )
 
-type persistedTab struct {
+type PersistedTab struct {
 	Path        string `json:"path"`
 	Kind        string `json:"kind,omitempty"`
 	RGDSelected string `json:"rgdSelected,omitempty"`
 }
 
-type persistedState struct {
+type PersistedState struct {
 	Version   int    `json:"version"`
 	DarkTheme bool   `json:"darkTheme"`
 	GPUAPI    string `json:"gpuAPI"`
@@ -40,7 +43,7 @@ type persistedState struct {
 	// same reader always shows the same text, whichever module is open.
 	Locale    string         `json:"locale,omitempty"`
 	ActiveTab int            `json:"activeTab,omitempty"`
-	Tabs      []persistedTab `json:"tabs,omitempty"`
+	Tabs      []PersistedTab `json:"tabs,omitempty"`
 	// ObjectRace, ObjectUnit and ObjectSection are the Object window's own
 	// pickers as they were when the session ended. The race and the unit are
 	// named rather than numbered, because the catalog is rebuilt from whatever
@@ -51,7 +54,7 @@ type persistedState struct {
 	ObjectSection int    `json:"objectSection,omitempty"`
 }
 
-func stateFilePath() (string, error) {
+func StateFilePath() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -59,21 +62,21 @@ func stateFilePath() (string, error) {
 	return filepath.Join(dir, "DoW Mod Studio", "state.conf"), nil
 }
 
-func loadPersistedState() (persistedState, bool, error) {
-	path, err := stateFilePath()
+func LoadPersistedState() (PersistedState, bool, error) {
+	path, err := StateFilePath()
 	if err != nil {
-		return persistedState{}, false, err
+		return PersistedState{}, false, err
 	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return persistedState{}, false, nil
+		return PersistedState{}, false, nil
 	}
 	if err != nil {
-		return persistedState{}, false, err
+		return PersistedState{}, false, err
 	}
-	var state persistedState
+	var state PersistedState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return persistedState{}, true, fmt.Errorf("parse %s: %w", path, err)
+		return PersistedState{}, true, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if state.Version == 0 {
 		state.Version = 1
@@ -81,19 +84,19 @@ func loadPersistedState() (persistedState, bool, error) {
 	return state, true, nil
 }
 
-func savePersistedState(ui *uiState) error {
-	path, err := stateFilePath()
+func SavePersistedState(ui *UiState) error {
+	path, err := StateFilePath()
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	state := persistedState{
+	state := PersistedState{
 		Version:          1,
 		DarkTheme:        ui.DarkTheme,
 		GPUAPI:           render.NormalizeGPUAPI(ui.GpuAPI),
-		TextFormats:      formatTextFormats(ui.TextEditorFormats),
+		TextFormats:      fileops.FormatTextFormats(ui.TextEditorFormats),
 		GamePath:         ui.GamePath,
 		ModulePath:       ui.ModulePath,
 		RecentFolders:    append([]string(nil), ui.RecentFolders...),
@@ -123,7 +126,7 @@ func savePersistedState(ui *uiState) error {
 	for _, tab := range ui.OpenTabs {
 		// The object tab has no file behind it, so there is no path to
 		// remember; it is reopened from the menu bar instead.
-		if tab == nil || unitTabHasNoFile(tab) {
+		if tab == nil || appunit.UnitTabHasNoFile(tab) {
 			continue
 		}
 		// A .ucs belongs to the game and sits outside the mod tree, so the
@@ -132,7 +135,7 @@ func savePersistedState(ui *uiState) error {
 		if tab.TextLocale {
 			continue
 		}
-		state.Tabs = append(state.Tabs, persistedTab{Path: tab.Path, Kind: tab.Kind, RGDSelected: tab.RgdSelected})
+		state.Tabs = append(state.Tabs, PersistedTab{Path: tab.Path, Kind: tab.Kind, RGDSelected: tab.RgdSelected})
 	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
@@ -147,26 +150,26 @@ func savePersistedState(ui *uiState) error {
 	return nil
 }
 
-func MarkStateDirty(ui *uiState) {
+func MarkStateDirty(ui *UiState) {
 	ui.StateDirty = true
 }
 
-func MaybeSaveState(ui *uiState) {
+func MaybeSaveState(ui *UiState) {
 	if !ui.StateDirty || time.Since(ui.LastStateSave) < 2*time.Second {
 		return
 	}
-	if err := savePersistedState(ui); err != nil {
+	if err := SavePersistedState(ui); err != nil {
 		log.Printf("save state: %v", err)
 	}
 }
 
-func ApplyPersistedSettings(ui *uiState, state persistedState) {
+func ApplyPersistedSettings(ui *UiState, state PersistedState) {
 	ui.DarkTheme = state.DarkTheme
 	ui.GpuAPI = render.NormalizeGPUAPI(state.GPUAPI)
 	// A state file from before the setting existed has no list, and so does
 	// one whose field was cleared: both mean the built-in default, which is
-	// what parseTextFormats answers for an empty string.
-	ui.TextEditorFormats = parseTextFormats(state.TextFormats)
+	// what fileops.ParseTextFormats answers for an empty string.
+	ui.TextEditorFormats = fileops.ParseTextFormats(state.TextFormats)
 	ui.GamePath = state.GamePath
 	ui.RecentFolders = append([]string(nil), state.RecentFolders...)
 	ui.RecentModules = append([]string(nil), state.RecentModules...)
@@ -175,14 +178,14 @@ func ApplyPersistedSettings(ui *uiState, state persistedState) {
 	// to English on an empty setting, so the default is filled in here.
 	ui.Locale = strings.TrimSpace(state.Locale)
 	if ui.Locale == "" {
-		ui.Locale = localeDefault
+		ui.Locale = editors.LocaleDefault
 	}
-	applyMaterialTheme(ui.Th, ui.DarkTheme)
-	RefreshLocales(ui)
+	ApplyMaterialTheme(ui.Th, ui.DarkTheme)
+	editors.RefreshLocales(ui)
 	MarkStateDirty(ui)
 }
 
-func RememberRecentModule(ui *uiState, modulePath string) {
+func RememberRecentModule(ui *UiState, modulePath string) {
 	modulePath = strings.TrimSpace(modulePath)
 	if modulePath == "" {
 		return
@@ -204,7 +207,7 @@ func RememberRecentModule(ui *uiState, modulePath string) {
 	MarkStateDirty(ui)
 }
 
-func RememberRecentFolder(ui *uiState, folder string) {
+func RememberRecentFolder(ui *UiState, folder string) {
 	folder = strings.TrimSpace(folder)
 	if folder == "" {
 		return
@@ -226,99 +229,25 @@ func RememberRecentFolder(ui *uiState, folder string) {
 	MarkStateDirty(ui)
 }
 
-func RestorePersistedState(ui *uiState, state persistedState) bool {
-	if strings.TrimSpace(state.ModulePath) == "" {
-		return false
-	}
-	if _, err := os.Stat(state.ModulePath); err != nil {
-		return false
-	}
-	LoadModule(ui, state.ModulePath)
-	if ui.ModTree == nil || !samePath(ui.ModulePath, state.ModulePath) {
-		return false
-	}
-	if len(state.Expanded) > 0 {
-		ui.Expanded = make(map[string]bool, len(state.Expanded))
-		for path, expanded := range state.Expanded {
-			ui.Expanded[path] = expanded
-		}
-	}
-	ui.SelectedTreePath = state.SelectedTreePath
-	if ui.SelectedTreePath == "" {
-		ui.SelectedTreePath = "Data"
-	}
-	ui.SelectedPath = state.SelectedPath
-	// The Object window's pickers are restored by name once the catalog
-	// exists, which is the first frame something asks it for. The section is
-	// an index into a fixed list, so it can be put back straight away.
-	ui.UnitPickRace = state.ObjectRace
-	ui.UnitPickPath = state.ObjectUnit
-	if state.ObjectSection > 0 && state.ObjectSection < len(unitSections) {
-		ui.UnitSection = state.ObjectSection
-	}
-	for _, savedTab := range state.Tabs {
-		if ui.ModTree.FindFile(savedTab.Path) == nil {
-			continue
-		}
-		before := len(ui.OpenTabs)
-		RestoreSavedTab(ui, savedTab)
-		if len(ui.OpenTabs) > before && savedTab.RGDSelected != "" {
-			ui.OpenTabs[len(ui.OpenTabs)-1].RgdSelected = savedTab.RGDSelected
-			RebuildRgdMidNodesFor(ui, ui.OpenTabs[len(ui.OpenTabs)-1])
-		}
-	}
-	ui.TabSel = state.ActiveTab
-	EnsureTabClicks(ui)
-	MarkStateDirty(ui)
-	return true
-}
-
-func samePath(a, b string) bool {
+func SamePath(a, b string) bool {
 	aa, err1 := filepath.Abs(a)
 	bb, err2 := filepath.Abs(b)
 	return err1 == nil && err2 == nil && strings.EqualFold(filepath.Clean(aa), filepath.Clean(bb))
 }
 
-func RestoreSavedTab(ui *uiState, saved persistedTab) {
-	switch strings.ToLower(saved.Kind) {
-	case "rgd":
-		OpenRgd(ui, saved.Path)
-	case "fda":
-		OpenFda(ui, saved.Path)
-	case "wav":
-		OpenWav(ui, saved.Path)
-	case "image":
-		OpenImage(ui, saved.Path)
-	case "whm":
-		// A model tab has to go back through the model viewer, otherwise the
-		// 3D preview is lost on every restart and the file opens as text.
-		OpenWhm(ui, saved.Path)
-	case "sgb":
-		OpenSgb(ui, saved.Path)
-	default:
-		OpenTextFile(ui, saved.Path)
-	}
-}
-
-// ── clipboard history (internal/cliphist) ────────────────────────────────────
-//
-// What the copy buffers of the timeline, the keyframe tracks and the action
-// list remember lives in internal/cliphist; the editors keep the names they
-// paste and pick with.
-
 type (
-	clipKind      = cliphist.ClipKind
-	clipEntry     = cliphist.ClipEntry
-	clipHistory   = uistate.ClipHistory
-	boneKeyClip   = cliphist.BoneKeyClip
-	wheEventClip  = cliphist.WheEventClip
-	wheActionClip = cliphist.WheActionClip
+	ClipKind      = cliphist.ClipKind
+	ClipEntry     = cliphist.ClipEntry
+	ClipHistory   = uistate.ClipHistory
+	BoneKeyClip   = cliphist.BoneKeyClip
+	WheEventClip  = cliphist.WheEventClip
+	WheActionClip = cliphist.WheActionClip
 )
 
 const (
-	clipEvents       = cliphist.ClipEvents
-	clipBoneKeys     = cliphist.ClipBoneKeys
-	clipImportKeys   = cliphist.ClipImportKeys
-	clipActions      = cliphist.ClipActions
-	clipHistoryLimit = cliphist.ClipHistoryLimit
+	ClipEvents       = cliphist.ClipEvents
+	ClipBoneKeys     = cliphist.ClipBoneKeys
+	ClipImportKeys   = cliphist.ClipImportKeys
+	ClipActions      = cliphist.ClipActions
+	ClipHistoryLimit = cliphist.ClipHistoryLimit
 )
