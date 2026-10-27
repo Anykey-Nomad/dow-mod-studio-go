@@ -1,121 +1,30 @@
-package app
+package sgb
 
 import (
-	"dow-mod-studio/internal/app/uikit"
-	"dow-mod-studio/internal/app/uistate"
-	"fmt"
-	"image"
-	"log"
-	"math"
-	"path/filepath"
-	"sort"
-	"strings"
-	"time"
-
-	"dow-mod-studio/internal/3d_engine"
+	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/app/render"
+	"dow-mod-studio/internal/app/uistate"
+	"dow-mod-studio/internal/app/viewer"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/sgb"
+	"dow-mod-studio/internal/unitdef"
 	"dow-mod-studio/internal/whm"
+	"fmt"
 	"gioui.org/f32"
-	"gioui.org/io/pointer"
 	"gioui.org/layout"
-	"gioui.org/op"
-	"gioui.org/op/clip"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"github.com/fogleman/fauxgl"
+	"image"
+	"math"
+	"path/filepath"
+	"sort"
+	"strings"
 )
 
-// The 3D map view's scene: terrain with placed entities merged into the same
-// model-viewer pipeline, with renderer mesh names mapped back to SGB entity IDs.
-func sgbBuildSceneModel(tree *modtree.ModTree, m *sgb.Map, terrainMaterial string) *whm.Model {
-	scene, _, _ := sgbBuildSceneModelWithEntityAnimations(tree, m, terrainMaterial)
-	return scene
-}
-
-func sgbBuildSceneModelWithEntityIDs(tree *modtree.ModTree, m *sgb.Map, terrainMaterial string) (*whm.Model, map[string]int) {
-	scene, entityMeshes, _ := sgbBuildSceneModelWithEntityAnimations(tree, m, terrainMaterial)
-	return scene, entityMeshes
-}
-
-func sgbBuildSceneModelWithEntityAnimations(tree *modtree.ModTree, m *sgb.Map, terrainMaterial string) (*whm.Model, map[string]int, []sgb.AnimatedEntity) {
-	entityMeshes := make(map[string]int)
-	var animatedEntities []sgb.AnimatedEntity
-	if m == nil {
-		return nil, entityMeshes, animatedEntities
-	}
-	start := time.Now()
-	scene := m.TerrainModel(sgbTerrainMaxGrid)
-	if scene == nil && len(m.Entities) == 0 {
-		return nil, entityMeshes, animatedEntities
-	}
-	if scene == nil {
-		scene = &whm.Model{Name: "sgb-scene"}
-	}
-	if len(scene.Meshes) > 0 {
-		scene.Meshes[0].Material = terrainMaterial
-	}
-	if !sceneHasMesh(scene, sgb.WaterMeshName) {
-		m.AddWaterMesh(scene)
-	}
-	scene.Name = "sgb-scene"
-	type blueprintModel struct {
-		model     *whm.Model
-		modelPath string
-		idleAnim  string
-		animation *whm.Animation
-	}
-	cache := map[int]blueprintModel{}
-	placed, skipped, distinct := 0, 0, 0
-	for _, e := range m.Entities {
-		cached, seen := cache[e.BP]
-		if !seen {
-			src, modelPath := sgbLoadEntityModelWithPath(tree, e)
-			cached = blueprintModel{model: src, modelPath: modelPath, idleAnim: sgbEntityIdleAnimationName(tree, m, e)}
-			if cached.idleAnim == "" {
-				cached.animation, _ = sgb.ResolveLinkedIdleAnimation(tree, modelPath, src)
-			} else {
-				cached.animation, _ = sgb.ResolveLinkedAnimation(tree, modelPath, src, cached.idleAnim)
-			}
-			cached.animation = sgb.BindAnimationToModel(src, cached.animation)
-			cache[e.BP] = cached
-		}
-		src := cached.model
-		if src == nil {
-			if !seen {
-				skipped++
-			}
-			continue
-		}
-		if !seen {
-			distinct++
-		}
-		meshName := fmt.Sprintf("entity-%d", e.ID)
-		boneBase := -1
-		if cached.animation != nil && len(src.Bones) > 0 {
-			boneBase = sgb.AppendEntityWithPose(scene, src, e.PlacementOf(), meshName, src.RestPose(), true)
-			animatedEntities = append(animatedEntities, sgb.AnimatedEntity{ID: e.ID, BoneBase: boneBase, Placement: e.PlacementOf(), Model: src, Animation: cached.animation})
-		} else {
-			sgb.AppendEntity(scene, src, e.PlacementOf(), meshName)
-		}
-		for i := len(scene.Meshes) - 1; i >= 0 && scene.Meshes[i].Name == meshName; i-- {
-			entityMeshes[meshName] = e.ID
-		}
-		placed++
-	}
-	sgbSceneBounds(scene)
-	log.Printf("sgb: scene %s: %d/%d objects placed from %d distinct models (%d blueprints unresolved), %d verts, in %v",
-		filepath.Base(m.Name), placed, len(m.Entities), distinct, skipped, len(scene.Vertices), time.Since(start))
-	if placed == 0 {
-		return nil, entityMeshes, animatedEntities
-	}
-	return scene, entityMeshes, animatedEntities
-}
-
-func sceneHasMesh(scene *whm.Model, name string) bool {
+func SceneHasMesh(scene *whm.Model, name string) bool {
 	if scene == nil {
 		return false
 	}
@@ -127,9 +36,9 @@ func sceneHasMesh(scene *whm.Model, name string) bool {
 	return false
 }
 
-// sgbSceneAppendEntity appends renderable static geometry to the live map
+// SgbSceneAppendEntity appends renderable static geometry to the live map
 // scene, then refreshes its bounds for the viewer and GPU renderer.
-func sgbSceneAppendEntity(scene, src *whm.Model, placement sgb.Placement, entityID int) bool {
+func SgbSceneAppendEntity(scene, src *whm.Model, placement sgb.Placement, entityID int) bool {
 	if scene == nil || src == nil || len(src.Vertices) == 0 || len(src.Meshes) == 0 {
 		return false
 	}
@@ -156,12 +65,12 @@ func sgbSceneAppendEntity(scene, src *whm.Model, placement sgb.Placement, entity
 		}
 		mesh.Material = fmt.Sprintf("%s::%s", meshName, mesh.Material)
 	}
-	sgbSceneBounds(scene)
+	SgbSceneBounds(scene)
 	return true
 }
 
-// sgbSceneBounds recomputes the merged model's bounds after geometry changes.
-func sgbSceneBounds(scene *whm.Model) {
+// SgbSceneBounds recomputes the merged model's bounds after geometry changes.
+func SgbSceneBounds(scene *whm.Model) {
 	if scene == nil {
 		return
 	}
@@ -190,11 +99,11 @@ func sgbSceneBounds(scene *whm.Model) {
 	scene.BoundMin, scene.BoundMax = lo, hi
 }
 
-// sgbRemoveEntities drops placed entity records and their scene meshes. Vertex
+// SgbRemoveEntities drops placed entity records and their scene meshes. Vertex
 // storage is left intact because the remaining mesh indices are stable; bounds
 // are recomputed from referenced vertices so removed geometry no longer affects
 // framing or culling.
-func sgbRemoveEntities(m *sgb.Map, scene *whm.Model, entityMeshes map[string]int, animated []sgb.AnimatedEntity, selected map[int]bool) ([]sgb.AnimatedEntity, int) {
+func SgbRemoveEntities(m *sgb.Map, scene *whm.Model, entityMeshes map[string]int, animated []sgb.AnimatedEntity, selected map[int]bool) ([]sgb.AnimatedEntity, int) {
 	if m == nil || len(selected) == 0 {
 		return animated, 0
 	}
@@ -290,15 +199,15 @@ func sgbRemoveEntities(m *sgb.Map, scene *whm.Model, entityMeshes map[string]int
 				keptAnimations[i].BoneBase = int(boneRemap[oldBase])
 			}
 		}
-		sgbSceneBounds(scene)
+		SgbSceneBounds(scene)
 	}
 	return keptAnimations, removed
 }
 
-// sgbRotateEntities rotates selected placements around map vertical (world Z).
+// SgbRotateEntities rotates selected placements around map vertical (world Z).
 // Static vertices are transformed around each entity's origin; animated models
 // use the same heading on their placement matrix.
-func sgbRotateEntities(m *sgb.Map, scene *whm.Model, entityMeshes map[string]int, animated []sgb.AnimatedEntity, selected map[int]bool, delta float64) int {
+func SgbRotateEntities(m *sgb.Map, scene *whm.Model, entityMeshes map[string]int, animated []sgb.AnimatedEntity, selected map[int]bool, delta float64) int {
 	if m == nil || scene == nil || len(selected) == 0 || delta == 0 {
 		return 0
 	}
@@ -337,15 +246,15 @@ func sgbRotateEntities(m *sgb.Map, scene *whm.Model, entityMeshes map[string]int
 		rotated++
 	}
 	if rotated > 0 {
-		sgbSceneBounds(scene)
+		SgbSceneBounds(scene)
 	}
 	return rotated
 }
 
-// sgbMoveEntitiesOnSurface applies a map-plane drag to the selected entities,
+// SgbMoveEntitiesOnSurface applies a map-plane drag to the selected entities,
 // sampling each destination's relief height. Static scene vertices are moved
 // in-place; animated instances use their separate placement transforms.
-func sgbMoveEntitiesOnSurface(m *sgb.Map, scene *whm.Model, entityMeshes map[string]int, animated []sgb.AnimatedEntity, selected map[int]bool, dx, dy float64) ([]sgb.AnimatedEntity, int) {
+func SgbMoveEntitiesOnSurface(m *sgb.Map, scene *whm.Model, entityMeshes map[string]int, animated []sgb.AnimatedEntity, selected map[int]bool, dx, dy float64) ([]sgb.AnimatedEntity, int) {
 	if m == nil || scene == nil || len(selected) == 0 || (dx == 0 && dy == 0) {
 		return animated, 0
 	}
@@ -383,7 +292,7 @@ func sgbMoveEntitiesOnSurface(m *sgb.Map, scene *whm.Model, entityMeshes map[str
 		if newX == float64(entity.X) && newY == float64(entity.Z) {
 			continue
 		}
-		height, ok := sgbTerrainHeightAt(m, newX, newY)
+		height, ok := SgbTerrainHeightAt(m, newX, newY)
 		if !ok {
 			continue
 		}
@@ -416,12 +325,12 @@ func sgbMoveEntitiesOnSurface(m *sgb.Map, scene *whm.Model, entityMeshes map[str
 		moved++
 	}
 	if moved > 0 {
-		sgbSceneBounds(scene)
+		SgbSceneBounds(scene)
 	}
 	return animated, moved
 }
 
-func sgbNextPlacementID(entities []sgb.Entity, next int) int {
+func SgbNextPlacementID(entities []sgb.Entity, next int) int {
 	const reservedPlacementIDs = 2 // IDs 0 and 1 are reserved by the game.
 	if next < reservedPlacementIDs {
 		next = reservedPlacementIDs
@@ -446,7 +355,7 @@ func sgbNextPlacementID(entities []sgb.Entity, next int) int {
 	}
 }
 
-func canonicalSgbBlueprintPath(path string) string {
+func CanonicalSgbBlueprintPath(path string) string {
 	path = strings.TrimSpace(strings.ReplaceAll(path, "/", `\`))
 	path = strings.TrimPrefix(path, `Data\`)
 	path = strings.TrimPrefix(path, `data:`)
@@ -457,11 +366,11 @@ func canonicalSgbBlueprintPath(path string) string {
 	return `data:` + path
 }
 
-func sgbPlacementWorldToEntity(point fauxgl.Vector) (x, y, z float32) {
+func SgbPlacementWorldToEntity(point fauxgl.Vector) (x, y, z float32) {
 	return float32(point.X), float32(point.Z), float32(point.Y)
 }
 
-func sgbScreenPointToWorld(model *whm.Model, camera engine.Camera, canvas image.Point, frameWidth, frameHeight int, point image.Point) (fauxgl.Vector, bool) {
+func SgbScreenPointToWorld(model *whm.Model, camera engine.Camera, canvas image.Point, frameWidth, frameHeight int, point image.Point) (fauxgl.Vector, bool) {
 	if frameWidth <= 0 || frameHeight <= 0 || point.X < 0 || point.Y < 0 || point.X >= canvas.X || point.Y >= canvas.Y {
 		return fauxgl.Vector{}, false
 	}
@@ -471,13 +380,13 @@ func sgbScreenPointToWorld(model *whm.Model, camera engine.Camera, canvas image.
 	if float64(point.X) < offsetX || float64(point.Y) < offsetY || float64(point.X) >= offsetX+float64(frameWidth)*scale || float64(point.Y) >= offsetY+float64(frameHeight)*scale {
 		return fauxgl.Vector{}, false
 	}
-	framePoint := sgbCanvasToFramePoint(canvas, frameWidth, frameHeight, f32.Pt(float32(point.X), float32(point.Y)))
-	return sgbPickTerrainPoint(model, camera, float64(framePoint.X), float64(framePoint.Y))
+	framePoint := SgbCanvasToFramePoint(canvas, frameWidth, frameHeight, f32.Pt(float32(point.X), float32(point.Y)))
+	return SgbPickTerrainPoint(model, camera, float64(framePoint.X), float64(framePoint.Y))
 }
 
-// sgbPickTerrainPoint unprojects a pixel into a world ray and intersects it
+// SgbPickTerrainPoint unprojects a pixel into a world ray and intersects it
 // against the terrain triangles only; water and placed objects are excluded.
-func sgbPickTerrainPoint(model *whm.Model, camera engine.Camera, pixelX, pixelY float64) (fauxgl.Vector, bool) {
+func SgbPickTerrainPoint(model *whm.Model, camera engine.Camera, pixelX, pixelY float64) (fauxgl.Vector, bool) {
 	if model == nil || camera.Width <= 0 || camera.Height <= 0 || len(model.Meshes) == 0 {
 		return fauxgl.Vector{}, false
 	}
@@ -508,7 +417,7 @@ func sgbPickTerrainPoint(model *whm.Model, camera engine.Camera, pixelX, pixelY 
 			v0 := render.VecFromWhm(model.Vertices[a].Pos)
 			v1 := render.VecFromWhm(model.Vertices[b].Pos)
 			v2 := render.VecFromWhm(model.Vertices[c].Pos)
-			distance, ok := sgbRayTriangle(origin, direction, v0, v1, v2)
+			distance, ok := SgbRayTriangle(origin, direction, v0, v1, v2)
 			if ok && distance < closest {
 				closest = distance
 				hitPoint = origin.Add(direction.MulScalar(distance))
@@ -518,9 +427,7 @@ func sgbPickTerrainPoint(model *whm.Model, camera engine.Camera, pixelX, pixelY 
 	return hitPoint, !math.IsInf(closest, 1)
 }
 
-// render.VecFromWhm lives in internal/app/render as render.VecFromWhm.
-
-func sgbRayTriangle(origin, direction, a, b, c fauxgl.Vector) (float64, bool) {
+func SgbRayTriangle(origin, direction, a, b, c fauxgl.Vector) (float64, bool) {
 	edge1, edge2 := b.Sub(a), c.Sub(a)
 	p := direction.Cross(edge2)
 	determinant := edge1.Dot(p)
@@ -542,7 +449,7 @@ func sgbRayTriangle(origin, direction, a, b, c fauxgl.Vector) (float64, bool) {
 	return distance, distance >= 0
 }
 
-func sgbEntityIdleAnimationName(tree *modtree.ModTree, m *sgb.Map, e sgb.Entity) string {
+func SgbEntityIdleAnimationName(tree *modtree.ModTree, m *sgb.Map, e sgb.Entity) string {
 	if tree == nil || m == nil || e.BP < 0 || e.BP >= len(m.Blueprints) || e.Name == "" {
 		return ""
 	}
@@ -560,103 +467,55 @@ func sgbEntityIdleAnimationName(tree *modtree.ModTree, m *sgb.Map, e sgb.Entity)
 	if err != nil || rf == nil || rf.Root == nil {
 		return ""
 	}
-	return sgbBlueprintIdleAnimationName(rf)
+	return SgbBlueprintIdleAnimationName(rf)
 }
 
-func sgbBlueprintIdleAnimationName(rf *rgd.RgdFile) string {
+func SgbBlueprintIdleAnimationName(rf *rgd.RgdFile) string {
 	if rf == nil || rf.Root == nil {
 		return ""
 	}
-	sp := rgdFindChild(rf.Root, "strategic_point_ext")
+	sp := unitdef.RgdFindChild(rf.Root, "strategic_point_ext")
 	if sp != nil {
-		if relic := rgdFindChild(sp, "is_relic"); relic != nil && relic.Type == rgd.RgdTypeBool && relic.BoolVal {
+		if relic := unitdef.RgdFindChild(sp, "is_relic"); relic != nil && relic.Type == rgd.RgdTypeBool && relic.BoolVal {
 			return "ol_uncaptured_idle"
 		}
 		return "uncaptured_idle"
 	}
-	if objective := rgdFindChild(rf.Root, "is_strategic_objective"); objective != nil && objective.Type == rgd.RgdTypeBool && objective.BoolVal {
+	if objective := unitdef.RgdFindChild(rf.Root, "is_strategic_objective"); objective != nil && objective.Type == rgd.RgdTypeBool && objective.BoolVal {
 		return "uncaptured_idle"
 	}
-	if objective := rgdFindChild(rgdFindChild(rf.Root, "entity_blueprint_ext"), "is_strategic_objective"); objective != nil && objective.Type == rgd.RgdTypeBool && objective.BoolVal {
+	if objective := unitdef.RgdFindChild(unitdef.RgdFindChild(rf.Root, "entity_blueprint_ext"), "is_strategic_objective"); objective != nil && objective.Type == rgd.RgdTypeBool && objective.BoolVal {
 		return "uncaptured_idle"
 	}
 	return ""
 }
 
-func sgbLoadEntityModelWithPath(tree *modtree.ModTree, e sgb.Entity) (*whm.Model, string) {
-	if tree == nil || e.Name == "" {
-		return nil, ""
-	}
-	rel := strings.ReplaceAll(strings.TrimSpace(e.Name), `\`, "/")
-	rel = strings.TrimPrefix(rel, "data:")
-	rgdPath := "Data/" + strings.TrimPrefix(rel, "/")
-	if !strings.HasSuffix(strings.ToLower(rgdPath), ".rgd") {
-		rgdPath += ".rgd"
-	}
-	data, err := tree.ReadFile(rgdPath)
-	if err != nil {
-		return nil, ""
-	}
-	rf, err := rgd.ParseRgd(data)
-	if err != nil {
-		return nil, ""
-	}
-	animator := strings.ReplaceAll(strings.TrimSpace(unitAnimatorName(rf)), `\`, "/")
-	animator = strings.TrimPrefix(animator, "./")
-	if animator == "" {
-		return nil, ""
-	}
-	whmPath := "Data/art/ebps/" + strings.TrimPrefix(animator, "/")
-	if !strings.HasSuffix(strings.ToLower(whmPath), ".whm") {
-		whmPath += ".whm"
-	}
-	wdata, err := tree.ReadFile(whmPath)
-	if err != nil {
-		file := tree.FindByName(filepath.Base(whmPath))
-		if file == nil {
-			return nil, ""
-		}
-		wdata, err = tree.ReadTreeFile(file)
-		if err != nil {
-			return nil, ""
-		}
-		whmPath = file.FullPath
-	}
-	parsed, err := ParseWhmModel(wdata)
-	if err != nil || parsed == nil || len(parsed.Model.Vertices) == 0 {
-		return nil, ""
-	}
-	return &parsed.Model, whmPath
+const SgbEnvironmentRoot = `Data\attrib\ebps\environment`
+
+type SgbEnvironmentEntry struct {
+	Folder   *modtree.TreeFolder
+	File     *modtree.TreeFile
+	Depth    int
+	Expanded bool
 }
 
-// ─── merged from sgb_objects.go ───────────────────────────────────────────────
+type SgbPlacementRequest = uistate.SgbPlacementRequest
 
-const sgbEnvironmentRoot = `Data\attrib\ebps\environment`
-
-type sgbEnvironmentEntry struct {
-	folder   *modtree.TreeFolder
-	file     *modtree.TreeFile
-	depth    int
-	expanded bool
-}
-
-type sgbPlacementRequest = uistate.SgbPlacementRequest
-
-func sgbNewPlayerList() *widget.Enum {
+func SgbNewPlayerList() *widget.Enum {
 	return &widget.Enum{Value: "neutral"}
 }
 
-type sgbObjectModelResult = uistate.SgbObjectModelResult
+type SgbObjectModelResult = uistate.SgbObjectModelResult
 
-type sgbObjectMaterialRequest = uistate.SgbObjectMaterialRequest
+type SgbObjectMaterialRequest = uistate.SgbObjectMaterialRequest
 
-type sgbObjectMaterialsResult = uistate.SgbObjectMaterialsResult
+type SgbObjectMaterialsResult = uistate.SgbObjectMaterialsResult
 
-func sgbEnvironmentEntries(root *modtree.TreeFolder, expanded map[string]bool) []sgbEnvironmentEntry {
+func SgbEnvironmentEntries(root *modtree.TreeFolder, expanded map[string]bool) []SgbEnvironmentEntry {
 	if root == nil {
 		return nil
 	}
-	var entries []sgbEnvironmentEntry
+	var entries []SgbEnvironmentEntry
 	var walk func(*modtree.TreeFolder, int)
 	walk = func(folder *modtree.TreeFolder, depth int) {
 		children := append([]*modtree.TreeFolder(nil), folder.Children...)
@@ -666,7 +525,7 @@ func sgbEnvironmentEntries(root *modtree.TreeFolder, expanded map[string]bool) [
 				continue
 			}
 			open := expanded[child.FullPath]
-			entries = append(entries, sgbEnvironmentEntry{folder: child, depth: depth, expanded: open})
+			entries = append(entries, SgbEnvironmentEntry{Folder: child, Depth: depth, Expanded: open})
 			if open {
 				walk(child, depth+1)
 			}
@@ -675,7 +534,7 @@ func sgbEnvironmentEntries(root *modtree.TreeFolder, expanded map[string]bool) [
 		sort.Slice(files, func(i, j int) bool { return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name) })
 		for _, file := range files {
 			if file != nil && strings.EqualFold(filepath.Ext(file.Name), ".rgd") {
-				entries = append(entries, sgbEnvironmentEntry{file: file, depth: depth})
+				entries = append(entries, SgbEnvironmentEntry{File: file, Depth: depth})
 			}
 		}
 	}
@@ -683,7 +542,7 @@ func sgbEnvironmentEntries(root *modtree.TreeFolder, expanded map[string]bool) [
 	return entries
 }
 
-func EnsureSgbObjectTree(ui *uiState, tab *fileTab) {
+func EnsureSgbObjectTree(ui *uistate.State, tab *uistate.Tab) {
 	if tab == nil {
 		return
 	}
@@ -694,25 +553,11 @@ func EnsureSgbObjectTree(ui *uiState, tab *fileTab) {
 		tab.SgbObjectClicks = make(map[string]*widget.Clickable)
 	}
 	if tab.SgbObjectRoot == nil && ui.ModTree != nil {
-		tab.SgbObjectRoot = ui.ModTree.FindFolder(sgbEnvironmentRoot)
+		tab.SgbObjectRoot = ui.ModTree.FindFolder(SgbEnvironmentRoot)
 	}
 }
 
-func EnsureSgbObjectModel(ui *uiState, tab *fileTab) {
-	if tab == nil || tab.SgbObjectSelected == "" || ui.ModTree == nil || tab.SgbObjectModelCh != nil {
-		return
-	}
-	blueprint, tree := tab.SgbObjectSelected, ui.ModTree
-	ch := make(chan sgbObjectModelResult, 1)
-	tab.SgbObjectModelPath = blueprint
-	tab.SgbObjectModelCh = ch
-	go func() {
-		model, modelPath := sgbBlueprintModelWithPath(tree, blueprint)
-		ch <- sgbObjectModelResult{Blueprint: blueprint, ModelPath: modelPath, Model: model}
-	}()
-}
-
-func PollSgbObjectModel(ui *uiState, tab *fileTab) bool {
+func PollSgbObjectModel(ui *uistate.State, tab *uistate.Tab) bool {
 	if tab == nil || tab.SgbObjectModelCh == nil {
 		return false
 	}
@@ -737,7 +582,7 @@ func PollSgbObjectModel(ui *uiState, tab *fileTab) bool {
 	}
 }
 
-func clearSgbObjectSelection(tab *fileTab) {
+func ClearSgbObjectSelection(tab *uistate.Tab) {
 	if tab == nil {
 		return
 	}
@@ -748,99 +593,21 @@ func clearSgbObjectSelection(tab *fileTab) {
 	tab.SgbPlacementPending = nil
 }
 
-func LayoutSgbObjectPanel(ui *uiState, gtx layout.Context, tab *fileTab) layout.Dimensions {
-	EnsureSgbObjectTree(ui, tab)
-	if tab.SgbObjectSelected != "" && tab.SgbObjectModel == nil {
-		EnsureSgbObjectModel(ui, tab)
-	}
-	if tab.SgbObjectModelCh != nil || tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) > 0 || tab.SgbPlacementPending != nil {
-		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
-	}
-	if tab.SgbObjectClear.Clicked(gtx) {
-		clearSgbObjectSelection(tab)
-		ui.StatusText = "Object placement cancelled"
-	}
-	if tab.SgbPlayerList == nil {
-		tab.SgbPlayerList = sgbNewPlayerList()
-	}
-	if tab.SgbPlayerSet.Clicked(gtx) {
-		if owner, ok := sgbPlayerOwner(tab.SgbPlayerList.Value); ok {
-			SetSelectedSgbOwner(ui, tab, owner)
-		}
-	}
-	entries := sgbEnvironmentEntries(tab.SgbObjectRoot, tab.SgbObjectExpanded)
-	return PanelWithScroll(ui, gtx, &tab.SgbObjectScroll, func(gtx layout.Context) layout.Dimensions {
-		var children []layout.FlexChild
-		children = append(children,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return sectionHeader(gtx, ui.Th, "Object Owner")
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return LayoutSgbPlayerSelector(ui, gtx, tab)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return hLine(gtx, uikit.CHeaderLine, 1)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return sectionHeader(gtx, ui.Th, "Objects — EBPS Environment")
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				msg := "Select an object, then click the map surface to place it."
-				if tab.SgbObjectSelected != "" {
-					msg = "Selected: " + filepath.Base(tab.SgbObjectSelected)
-					if tab.SgbObjectModelCh != nil {
-						msg += " (loading…)"
-					}
-				}
-				l := material.Label(ui.Th, unit.Sp(9), msg)
-				l.Color = uikit.CTextDim
-				l.MaxLines = 2
-				return layout.Inset{Top: unit.Dp(5), Bottom: unit.Dp(5), Left: unit.Dp(8), Right: unit.Dp(6)}.Layout(gtx, l.Layout)
-			}),
-		)
-		if tab.SgbObjectSelected != "" {
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				button := material.Button(ui.Th, &tab.SgbObjectClear, "Clear selection")
-				button.TextSize = unit.Sp(9)
-				button.Inset = layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}
-				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(5)}.Layout(gtx, button.Layout)
-			}))
-		}
-		if tab.SgbObjectRoot == nil {
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return LayoutClassicOEHint(ui, gtx, "", "Data/attrib/ebps/environment was not found in this module.")
-			}))
-		} else if len(entries) == 0 {
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return LayoutClassicOEHint(ui, gtx, "", "Expand a folder to browse environment objects.")
-			}))
-		} else {
-			for _, entry := range entries {
-				entry := entry
-				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return LayoutSgbEnvironmentRow(ui, gtx, tab, entry)
-				}))
-			}
-		}
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
-	})
-}
-
-type sgbPlayerOption struct {
+type SgbPlayerOption struct {
 	key, label string
 	owner      int
 }
 
-var sgbPlayerOptions = func() []sgbPlayerOption {
-	options := []sgbPlayerOption{{key: "neutral", label: "Neutral", owner: 0}}
+var SgbPlayerOptions = func() []SgbPlayerOption {
+	options := []SgbPlayerOption{{key: "neutral", label: "Neutral", owner: 0}}
 	for player := 1; player <= 8; player++ {
-		options = append(options, sgbPlayerOption{key: fmt.Sprintf("player-%d", player), label: fmt.Sprintf("Player %d", player), owner: player})
+		options = append(options, SgbPlayerOption{key: fmt.Sprintf("player-%d", player), label: fmt.Sprintf("Player %d", player), owner: player})
 	}
 	return options
 }()
 
-func sgbPlayerOwner(key string) (int, bool) {
-	for _, option := range sgbPlayerOptions {
+func SgbPlayerOwner(key string) (int, bool) {
+	for _, option := range SgbPlayerOptions {
 		if option.key == key {
 			return option.owner, true
 		}
@@ -848,10 +615,10 @@ func sgbPlayerOwner(key string) (int, bool) {
 	return 0, false
 }
 
-func LayoutSgbPlayerSelector(ui *uiState, gtx layout.Context, tab *fileTab) layout.Dimensions {
+func LayoutSgbPlayerSelector(ui *uistate.State, gtx layout.Context, tab *uistate.Tab) layout.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, sgbPlayerRadioChildren(ui, tab)...)
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, SgbPlayerRadioChildren(ui, tab)...)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			button := material.Button(ui.Th, &tab.SgbPlayerSet, "Set")
@@ -862,9 +629,9 @@ func LayoutSgbPlayerSelector(ui *uiState, gtx layout.Context, tab *fileTab) layo
 	)
 }
 
-func sgbPlayerRadioChildren(ui *uiState, tab *fileTab) []layout.FlexChild {
-	children := make([]layout.FlexChild, 0, len(sgbPlayerOptions))
-	for _, option := range sgbPlayerOptions {
+func SgbPlayerRadioChildren(ui *uistate.State, tab *uistate.Tab) []layout.FlexChild {
+	children := make([]layout.FlexChild, 0, len(SgbPlayerOptions))
+	for _, option := range SgbPlayerOptions {
 		option := option
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			radio := material.RadioButton(ui.Th, tab.SgbPlayerList, option.key, option.label)
@@ -875,7 +642,7 @@ func sgbPlayerRadioChildren(ui *uiState, tab *fileTab) []layout.FlexChild {
 	return children
 }
 
-func SetSelectedSgbOwner(ui *uiState, tab *fileTab, owner int) int {
+func SetSelectedSgbOwner(ui *uistate.State, tab *uistate.Tab, owner int) int {
 	if tab == nil || tab.SgbMap == nil || len(tab.SgbSelectedEntities) == 0 || owner < 0 || owner > 8 {
 		return 0
 	}
@@ -893,7 +660,7 @@ func SetSelectedSgbOwner(ui *uiState, tab *fileTab, owner int) int {
 	}
 	if changed > 0 {
 		tab.SgbDirty = true
-		ui.StatusText = fmt.Sprintf("Assigned %s to %d selected map object(s)", sgbPlayerOptions[owner].label, changed)
+		ui.StatusText = fmt.Sprintf("Assigned %s to %d selected map object(s)", SgbPlayerOptions[owner].label, changed)
 	} else {
 		found := false
 		for _, entity := range tab.SgbMap.Entities {
@@ -905,135 +672,24 @@ func SetSelectedSgbOwner(ui *uiState, tab *fileTab, owner int) int {
 		if !found {
 			ui.StatusText = "Select one or more map objects first"
 		} else {
-			ui.StatusText = fmt.Sprintf("Selected map objects already belong to %s", sgbPlayerOptions[owner].label)
+			ui.StatusText = fmt.Sprintf("Selected map objects already belong to %s", SgbPlayerOptions[owner].label)
 		}
 	}
 	return changed
 }
 
-func LayoutSgbEnvironmentRow(ui *uiState, gtx layout.Context, tab *fileTab, entry sgbEnvironmentEntry) layout.Dimensions {
-	folder := entry.folder != nil
-	key, label := "", ""
-	if folder {
-		key, label = "folder:"+entry.folder.FullPath, entry.folder.Name
-	} else if entry.file != nil {
-		key, label = "file:"+entry.file.FullPath, strings.TrimSuffix(entry.file.Name, filepath.Ext(entry.file.Name))
-	} else {
-		return layout.Dimensions{}
-	}
-	click := tab.SgbObjectClicks[key]
-	if click == nil {
-		click = &widget.Clickable{}
-		tab.SgbObjectClicks[key] = click
-	}
-	if click.Clicked(gtx) {
-		if folder {
-			tab.SgbObjectExpanded[entry.folder.FullPath] = !entry.expanded
-		} else {
-			if strings.EqualFold(tab.SgbObjectSelected, entry.file.FullPath) {
-				clearSgbObjectSelection(tab)
-				ui.StatusText = "Object placement cancelled"
-			} else {
-				tab.SgbObjectSelected = entry.file.FullPath
-				tab.SgbObjectModel = nil
-				tab.SgbObjectModelPath = ""
-				tab.SgbObjectModelFile = ""
-				tab.SgbPlacementPending = nil
-				EnsureSgbObjectModel(ui, tab)
-				ui.StatusText = "Loading map object " + filepath.Base(entry.file.FullPath)
-			}
-		}
-	}
-	selected := !folder && strings.EqualFold(tab.SgbObjectSelected, entry.file.FullPath)
-	bg := uikit.CPanelBg
-	if selected {
-		bg = uikit.CSelectBg
-	} else if click.Hovered() {
-		bg = uikit.CMenuHover
-	}
-	h := gtx.Dp(unit.Dp(22))
-	gtx.Constraints.Min = image.Pt(gtx.Constraints.Max.X, h)
-	gtx.Constraints.Max = image.Pt(gtx.Constraints.Max.X, h)
-	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		defer func() {
-			if folder {
-				return
-			}
-			rect := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
-			pointer.CursorPointer.Add(gtx.Ops)
-			rect.Pop()
-		}()
-		return layout.Stack{}.Layout(gtx,
-			layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-				if bg != uikit.CPanelBg {
-					rrect(gtx, bg, gtx.Constraints.Max, gtx.Dp(2))
-				}
-				return layout.Dimensions{Size: gtx.Constraints.Max}
-			}),
-			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-				marker := ""
-				if folder {
-					marker = "▸"
-					if entry.expanded {
-						marker = "▾"
-					}
-				}
-				return layout.Inset{Left: unit.Dp(6 + entry.depth*12), Right: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.Th, unit.Sp(9), marker)
-							l.Color = uikit.CTextDim
-							return l.Layout(gtx)
-						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
-						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.Th, unit.Sp(9), label)
-							l.Color = uikit.CText
-							l.MaxLines = 1
-							return l.Layout(gtx)
-						}),
-					)
-				})
-			}),
-		)
-	})
-}
-
-func PlaceSgbObject(ui *uiState, tab *fileTab, point fauxgl.Vector) {
-	if tab == nil || tab.Model == nil || tab.SgbMap == nil || tab.SgbObjectSelected == "" {
-		return
-	}
-	if tab.Model.Loading || tab.ModelMaterialCh != nil || tab.Model.Rendering || tab.Model.FrameCh != nil || tab.Model.GpuRetries > 0 || tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) > 0 {
-		tab.SgbPlacementPending = &sgbPlacementRequest{Blueprint: tab.SgbObjectSelected, Point: point, Owner: sgbSelectedPlayerOwner(tab)}
-		ui.StatusText = "Object placement — waiting for the map scene to finish loading"
-		return
-	}
-	if !strings.EqualFold(tab.SgbObjectModelPath, tab.SgbObjectSelected) || tab.SgbObjectModel == nil {
-		tab.SgbPlacementPending = &sgbPlacementRequest{Blueprint: tab.SgbObjectSelected, Point: point, Owner: sgbSelectedPlayerOwner(tab)}
-		EnsureSgbObjectModel(ui, tab)
-		ui.StatusText = "Loading selected environment object…"
-		return
-	}
-	if tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) > 0 {
-		tab.SgbPlacementPending = &sgbPlacementRequest{Blueprint: tab.SgbObjectSelected, Point: point, Owner: sgbSelectedPlayerOwner(tab)}
-		ui.StatusText = "Loading selected object materials…"
-		return
-	}
-	AppendSgbPlacement(ui, tab, sgbPlacementRequest{Blueprint: tab.SgbObjectSelected, Point: point, Owner: sgbSelectedPlayerOwner(tab)}, tab.SgbObjectModel)
-}
-
-func StartSgbObjectMaterials(ui *uiState, tab *fileTab, blueprint string, model *whm.Model) {
+func StartSgbObjectMaterials(ui *uistate.State, tab *uistate.Tab, blueprint string, model *whm.Model) {
 	if tab == nil || model == nil || ui.ModTree == nil {
 		return
 	}
-	QueueSgbObjectMaterials(ui, tab, sgbObjectMaterialRequest{
+	QueueSgbObjectMaterials(ui, tab, SgbObjectMaterialRequest{
 		Blueprint: blueprint,
 		ModelPath: tab.SgbObjectModelFile,
 		Model:     model,
 	})
 }
 
-func QueueSgbObjectMaterials(ui *uiState, tab *fileTab, request sgbObjectMaterialRequest) {
+func QueueSgbObjectMaterials(ui *uistate.State, tab *uistate.Tab, request SgbObjectMaterialRequest) {
 	if tab == nil || request.Model == nil {
 		return
 	}
@@ -1063,37 +719,37 @@ func QueueSgbObjectMaterials(ui *uiState, tab *fileTab, request sgbObjectMateria
 	LaunchNextSgbObjectMaterials(ui, tab)
 }
 
-func LaunchNextSgbObjectMaterials(ui *uiState, tab *fileTab) {
+func LaunchNextSgbObjectMaterials(ui *uistate.State, tab *uistate.Tab) {
 	if tab == nil || tab.SgbObjectMaterialsCh != nil || len(tab.SgbObjectMaterialsPending) == 0 || ui.ModTree == nil {
 		return
 	}
 	request := tab.SgbObjectMaterialsPending[0]
 	tab.SgbObjectMaterialsPending = tab.SgbObjectMaterialsPending[1:]
 	tree := ui.ModTree
-	ch := make(chan sgbObjectMaterialsResult, 1)
+	ch := make(chan SgbObjectMaterialsResult, 1)
 	tab.SgbObjectMaterialsCh = ch
 	tab.SgbObjectMaterialsActive = request
 	go func() {
-		rsh, materials, missing, diagnostics := sgbEntityMaterials(tree, request.ModelPath, request.Model, "", nil)
-		ch <- sgbObjectMaterialsResult{
+		rsh, materials, missing, diagnostics := SgbEntityMaterials(tree, request.ModelPath, request.Model, "", nil)
+		ch <- SgbObjectMaterialsResult{
 			Request: request, Materials: materials, Rsh: rsh,
 			Diagnostics: diagnostics, Missing: missing,
 		}
 	}()
 }
 
-func PollSgbObjectMaterials(ui *uiState, tab *fileTab) bool {
+func PollSgbObjectMaterials(ui *uistate.State, tab *uistate.Tab) bool {
 	if tab == nil || tab.SgbObjectMaterialsCh == nil {
 		return false
 	}
 	select {
 	case result := <-tab.SgbObjectMaterialsCh:
 		tab.SgbObjectMaterialsCh = nil
-		tab.SgbObjectMaterialsActive = sgbObjectMaterialRequest{}
+		tab.SgbObjectMaterialsActive = SgbObjectMaterialRequest{}
 		key := strings.ToLower(result.Request.ModelPath)
 		active := tab.SgbObjectMaterialsActive
 		if tab.SgbObjectMaterialsCache == nil {
-			tab.SgbObjectMaterialsCache = make(map[string]sgbObjectMaterialsResult)
+			tab.SgbObjectMaterialsCache = make(map[string]SgbObjectMaterialsResult)
 		}
 		cached := result
 		cached.Request.EntityID = 0
@@ -1114,7 +770,7 @@ func PollSgbObjectMaterials(ui *uiState, tab *fileTab) bool {
 	}
 }
 
-func ApplySgbObjectMaterials(ui *uiState, tab *fileTab, result sgbObjectMaterialsResult) {
+func ApplySgbObjectMaterials(ui *uistate.State, tab *uistate.Tab, result SgbObjectMaterialsResult) {
 	if tab == nil || tab.Model == nil {
 		return
 	}
@@ -1125,7 +781,7 @@ func ApplySgbObjectMaterials(ui *uiState, tab *fileTab, result sgbObjectMaterial
 		tab.Model.RshData = make(map[string][]byte)
 	}
 	if tab.Model.MaterialDiagnostics == nil {
-		tab.Model.MaterialDiagnostics = make(map[string]modelMaterialDiagnostic)
+		tab.Model.MaterialDiagnostics = make(map[string]viewer.ModelMaterialDiagnostic)
 	}
 	if result.Request.ModelPath != "" && tab.SgbEntityModelFiles != nil {
 		for id, modelPath := range tab.SgbEntityModelFiles {
@@ -1157,14 +813,14 @@ func ApplySgbObjectMaterials(ui *uiState, tab *fileTab, result sgbObjectMaterial
 	if len(result.Materials) > 0 {
 		tab.Model.Textured = true
 	}
-	Invalidate(tab.Model)
+	viewer.Invalidate(tab.Model)
 }
 
-func DeleteSelectedSgbEntities(ui *uiState, tab *fileTab) {
+func DeleteSelectedSgbEntities(ui *uistate.State, tab *uistate.Tab) {
 	if tab == nil || tab.SgbMap == nil || tab.Model == nil || len(tab.SgbSelectedEntities) == 0 {
 		return
 	}
-	animated, removed := sgbRemoveEntities(tab.SgbMap, ModelData(tab.Model), tab.SgbEntityMeshIDs, tab.Model.AnimatedEntities, tab.SgbSelectedEntities)
+	animated, removed := SgbRemoveEntities(tab.SgbMap, viewer.ModelData(tab.Model), tab.SgbEntityMeshIDs, tab.Model.AnimatedEntities, tab.SgbSelectedEntities)
 	if removed == 0 {
 		return
 	}
@@ -1173,33 +829,33 @@ func DeleteSelectedSgbEntities(ui *uiState, tab *fileTab) {
 		delete(tab.SgbEntityModelFiles, id)
 	}
 	clear(tab.SgbSelectedEntities)
-	GeometryChangedModelGpu(ui, tab.Model.Model)
-	Invalidate(tab.Model)
+	viewer.GeometryChangedModelGpu(ui, tab.Model.Model)
+	viewer.Invalidate(tab.Model)
 	tab.SgbDirty = true
 	ui.StatusText = fmt.Sprintf("Deleted %d selected map object(s)", removed)
 }
 
-func sgbSelectedPlayerOwner(tab *fileTab) int {
+func SgbSelectedPlayerOwner(tab *uistate.Tab) int {
 	if tab == nil || tab.SgbPlayerList == nil {
 		return 0
 	}
-	owner, ok := sgbPlayerOwner(tab.SgbPlayerList.Value)
+	owner, ok := SgbPlayerOwner(tab.SgbPlayerList.Value)
 	if !ok {
 		return 0
 	}
 	return owner
 }
 
-func AppendSgbPlacement(ui *uiState, tab *fileTab, request sgbPlacementRequest, src *whm.Model) {
+func AppendSgbPlacement(ui *uistate.State, tab *uistate.Tab, request SgbPlacementRequest, src *whm.Model) {
 	if tab == nil || tab.SgbMap == nil || tab.Model == nil || tab.Model.Model == nil || src == nil ||
 		!strings.EqualFold(tab.SgbObjectSelected, request.Blueprint) {
 		return
 	}
 	m := tab.SgbMap
-	Blueprint := canonicalSgbBlueprintPath(request.Blueprint)
+	Blueprint := CanonicalSgbBlueprintPath(request.Blueprint)
 	bp := -1
 	for i, existing := range m.Blueprints {
-		if strings.EqualFold(canonicalSgbBlueprintPath(existing), Blueprint) {
+		if strings.EqualFold(CanonicalSgbBlueprintPath(existing), Blueprint) {
 			bp = i
 			break
 		}
@@ -1208,21 +864,21 @@ func AppendSgbPlacement(ui *uiState, tab *fileTab, request sgbPlacementRequest, 
 		bp = len(m.Blueprints)
 		m.Blueprints = append(m.Blueprints, Blueprint)
 	}
-	id := sgbNextPlacementID(m.Entities, tab.SgbNextEntityID)
-	x, y, z := sgbPlacementWorldToEntity(request.Point)
+	id := SgbNextPlacementID(m.Entities, tab.SgbNextEntityID)
+	x, y, z := SgbPlacementWorldToEntity(request.Point)
 	if request.Owner < 0 || request.Owner > 8 {
 		ui.StatusText = fmt.Sprintf("Object placement failed: invalid player slot %d", request.Owner)
 		return
 	}
 	entity := sgb.Entity{ID: id, BP: bp, Owner: request.Owner, Name: Blueprint, X: x, Y: y, Z: z}
-	if !sgbSceneAppendEntity(ModelData(tab.Model), src, entity.PlacementOf(), entity.ID) {
+	if !SgbSceneAppendEntity(viewer.ModelData(tab.Model), src, entity.PlacementOf(), entity.ID) {
 		ui.StatusText = "Object placement failed: model has no renderable meshes"
 		return
 	}
-	// The viewer keeps the same WhmModel pointer as the GPU mesh-cache key.
+	// The viewer keeps the same uistate.WhmModel pointer as the GPU mesh-cache key.
 	// Appending vertices does not change that pointer, so discard the cached
 	// buffers before the next frame or the newly placed object stays invisible.
-	GeometryChangedModelGpu(ui, tab.Model.Model)
+	viewer.GeometryChangedModelGpu(ui, tab.Model.Model)
 	tab.SgbNextEntityID = id + 1
 	m.Entities = append(m.Entities, entity)
 	tab.SgbDirty = true
@@ -1235,66 +891,12 @@ func AppendSgbPlacement(ui *uiState, tab *fileTab, request sgbPlacementRequest, 
 		tab.SgbEntityModelFiles = make(map[int]string)
 	}
 	tab.SgbEntityModelFiles[entity.ID] = tab.SgbObjectModelFile
-	QueueSgbObjectMaterials(ui, tab, sgbObjectMaterialRequest{
+	QueueSgbObjectMaterials(ui, tab, SgbObjectMaterialRequest{
 		Blueprint: request.Blueprint,
 		ModelPath: tab.SgbObjectModelFile,
 		Model:     src,
 		EntityID:  entity.ID,
 	})
-	Invalidate(tab.Model)
+	viewer.Invalidate(tab.Model)
 	ui.StatusText = fmt.Sprintf("Placed %s at %.1f, %.1f, %.1f", filepath.Base(request.Blueprint), entity.X, entity.Z, entity.Y)
-}
-
-func sgbBlueprintModel(tree *modtree.ModTree, blueprintPath string) *whm.Model {
-	model, _ := sgbBlueprintModelWithPath(tree, blueprintPath)
-	return model
-}
-
-func sgbBlueprintModelWithPath(tree *modtree.ModTree, blueprintPath string) (*whm.Model, string) {
-	if tree == nil || blueprintPath == "" {
-		return nil, ""
-	}
-	path := strings.ReplaceAll(strings.TrimSpace(blueprintPath), "\\", "/")
-	path = strings.TrimPrefix(path, "data:")
-	path = strings.TrimPrefix(path, "/")
-	if !strings.HasPrefix(strings.ToLower(path), "data/") {
-		path = "Data/" + path
-	}
-	if !strings.HasSuffix(strings.ToLower(path), ".rgd") {
-		path += ".rgd"
-	}
-	data, err := tree.ReadFile(path)
-	if err != nil {
-		return nil, ""
-	}
-	rf, err := rgd.ParseRgd(data)
-	if err != nil || rf == nil || rf.Root == nil {
-		return nil, ""
-	}
-	animator := strings.ReplaceAll(strings.TrimSpace(unitAnimatorName(rf)), "\\", "/")
-	animator = strings.TrimPrefix(animator, "./")
-	if animator == "" {
-		return nil, ""
-	}
-	modelPath := "Data/art/ebps/" + strings.TrimPrefix(animator, "/")
-	if !strings.HasSuffix(strings.ToLower(modelPath), ".whm") {
-		modelPath += ".whm"
-	}
-	modelData, err := tree.ReadFile(modelPath)
-	if err != nil {
-		file := tree.FindByName(filepath.Base(modelPath))
-		if file == nil {
-			return nil, ""
-		}
-		modelData, err = tree.ReadTreeFile(file)
-		if err != nil {
-			return nil, ""
-		}
-		modelPath = file.FullPath
-	}
-	parsed, err := ParseWhmModel(modelData)
-	if err != nil || parsed == nil || len(parsed.Model.Vertices) == 0 {
-		return nil, ""
-	}
-	return &parsed.Model, modelPath
 }

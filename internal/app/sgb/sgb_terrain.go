@@ -1,82 +1,79 @@
-package app
+package sgb
 
 import (
+	"dow-mod-studio/internal/app/render"
+	"dow-mod-studio/internal/app/uikit"
+	"dow-mod-studio/internal/app/uistate"
+	"dow-mod-studio/internal/app/viewer"
+	"dow-mod-studio/internal/modtree"
+	"dow-mod-studio/internal/raster"
+	"dow-mod-studio/internal/sgb"
+	"dow-mod-studio/internal/whm"
 	"image"
 	"image/draw"
 	"log"
 	"math"
 	"strings"
 	"time"
-
-	"dow-mod-studio/internal/app/render"
-	"dow-mod-studio/internal/modtree"
-	"dow-mod-studio/internal/raster"
-	"dow-mod-studio/internal/sgb"
-	"dow-mod-studio/internal/whm"
 )
 
 const (
-	// sgbCameraDistance is how far the 3D map view's camera opens from the
+	// SgbCameraDistance is how far the 3D map view's camera opens from the
 	// ground, in metres: the range the in-game camera works at, rather than
 	// the whole-map fit a model viewer would choose.
-	sgbCameraDistance = 70.0
-	// sgbCameraMinDistance is the closest the wheel may bring the camera,
+	SgbCameraDistance = 70.0
+	// SgbCameraMinDistance is the closest the wheel may bring the camera,
 	// still an orbit a unit would fit in rather than a pinch of ground.
-	sgbCameraMinDistance = 10.0
-	// sgbCameraPitch is the opening elevation — what the game's camera looks
+	SgbCameraMinDistance = 10.0
+	// SgbCameraPitch is the opening elevation — what the game's camera looks
 	// down from. The model viewer's 0.2 rad is nearly sideways at map scale.
-	sgbCameraPitch = 49.481994013136 * math.Pi / 180
+	SgbCameraPitch = 49.481994013136 * math.Pi / 180
 	// The opening view's camera-to-axis angles are the closest realizable
 	// direction to X=120°, Y=65°, Z=140° for a single unit-length vector.
-	sgbCameraYaw = -40.205715405573 * math.Pi / 180
+	SgbCameraYaw = -40.205715405573 * math.Pi / 180
 )
 
-// sgbCameraDefaultDistance picks the opening camera distance: the in-game
+// SgbCameraDefaultDistance picks the opening camera distance: the in-game
 // range, but never past the fit of a map too small to need it.
-func sgbCameraDefaultDistance(m *sgb.Map) float64 {
+func SgbCameraDefaultDistance(m *sgb.Map) float64 {
 	if m == nil {
-		return sgbCameraDistance
+		return SgbCameraDistance
 	}
 	w := float64(m.Ground.XMax() - m.Ground.XMin())
 	d := float64(m.Ground.ZMax() - m.Ground.ZMin())
 	fit := 1.4 * math.Hypot(w, d)
-	if fit > 0 && fit < sgbCameraDistance {
+	if fit > 0 && fit < SgbCameraDistance {
 		return fit
 	}
-	return sgbCameraDistance
+	return SgbCameraDistance
 }
 
-// 3D terrain for the .sgb viewer. The heightmap mesh itself is built by
-// sgb.Map.TerrainModel in the scenario package, so a probe can render the
-// same geometry the viewer shows; this file is the app-side glue — the
-// material name, the model wrapper and the shaded relief as a diffuse map.
-
-// sgbTerrainMaxGrid caps one axis of the terrain grid. The hardware
+// SgbTerrainMaxGrid caps one axis of the terrain grid. The hardware
 // renderer's index buffer is 16 bit and buildMesh refuses a model above
 // 0xffff vertices, so a 250×250 grid is the densest one both paths draw.
-const sgbTerrainMaxGrid = 250
+const SgbTerrainMaxGrid = 250
 
-// sgbTerrainMaterial names one map's terrain diffuse. It carries the tab's
+// SgbTerrainMaterial names one map's terrain diffuse. It carries the tab's
 // path so two open maps never share a texture slot in the renderer's cache.
-func sgbTerrainMaterial(virtualPath string) string {
+func SgbTerrainMaterial(virtualPath string) string {
 	return "sgb-terrain:" + virtualPath
 }
 
-// sgbTerrainModel wraps the scenario package's heightmap mesh for the
+// SgbTerrainModel wraps the scenario package's heightmap mesh for the
 // viewer's model type.
-func sgbTerrainModel(m *sgb.Map, material string) *WhmModel {
-	model := m.TerrainModel(sgbTerrainMaxGrid)
+func SgbTerrainModel(m *sgb.Map, material string) *uistate.WhmModel {
+	model := m.TerrainModel(SgbTerrainMaxGrid)
 	if model == nil {
 		return nil
 	}
 	model.Meshes[0].Material = material
 	m.AddWaterMesh(model)
-	return &WhmModel{Model: *model}
+	return &uistate.WhmModel{Model: *model}
 }
 
-// sgbTerrainHeightAt returns the heightmap's bilinearly interpolated surface
+// SgbTerrainHeightAt returns the heightmap's bilinearly interpolated surface
 // height at world-space X/Y coordinates, clamped to the map edges.
-func sgbTerrainHeightAt(m *sgb.Map, x, y float64) (float64, bool) {
+func SgbTerrainHeightAt(m *sgb.Map, x, y float64) (float64, bool) {
 	if m == nil || m.Relief.W < 2 || m.Relief.H < 2 || len(m.Relief.Data) < m.Relief.W*m.Relief.H ||
 		m.Ground.CellSize <= 0 {
 		return 0, false
@@ -85,7 +82,7 @@ func sgbTerrainHeightAt(m *sgb.Map, x, y float64) (float64, bool) {
 	ix := math.Max(0, math.Min(float64(m.Relief.W-1), x/cell+float64(m.Ground.CenterX)-1))
 	iy := math.Max(0, math.Min(float64(m.Relief.H-1), y/cell+float64(m.Ground.CenterZ)-1))
 	x0, y0 := int(math.Floor(ix)), int(math.Floor(iy))
-	x1, y1 := minInt(x0+1, m.Relief.W-1), minInt(y0+1, m.Relief.H-1)
+	x1, y1 := uikit.MinInt(x0+1, m.Relief.W-1), uikit.MinInt(y0+1, m.Relief.H-1)
 	fx, fy := ix-float64(x0), iy-float64(y0)
 	h00 := float64(m.Relief.At(x0, y0))
 	h10 := float64(m.Relief.At(x1, y0))
@@ -96,9 +93,9 @@ func sgbTerrainHeightAt(m *sgb.Map, x, y float64) (float64, bool) {
 	return (h0*(1-fy) + h1*fy) * float64(m.Ground.HeightScale), true
 }
 
-// sgbApproachCameraVelocity eases one movement axis toward its input target.
+// SgbApproachCameraVelocity eases one movement axis toward its input target.
 // A linear ramp gives predictable acceleration and a soft stop when released.
-func sgbApproachCameraVelocity(value, target, seconds float64) float64 {
+func SgbApproachCameraVelocity(value, target, seconds float64) float64 {
 	const acceleration = 4.5 // reach full movement speed in about 220 ms
 	step := acceleration * seconds
 	if value < target {
@@ -115,7 +112,7 @@ func sgbApproachCameraVelocity(value, target, seconds float64) float64 {
 // sgbMoveCamera advances the orbit target over the map in camera-relative
 // directions. forward and strafe are signed velocity axes; seconds makes
 // motion independent of frame rate. The target's Z follows the terrain.
-func SgbMoveCamera(ui *uiState, t *fileTab, forward, strafe, seconds float64) bool {
+func SgbMoveCamera(ui *uistate.State, t *uistate.Tab, forward, strafe, seconds float64) bool {
 	if t == nil || t.SgbMap == nil || t.Model == nil || seconds <= 0 || (forward == 0 && strafe == 0) {
 		return false
 	}
@@ -135,52 +132,41 @@ func SgbMoveCamera(ui *uiState, t *fileTab, forward, strafe, seconds float64) bo
 	if x == t.Model.Center.X && y == t.Model.Center.Y {
 		return false
 	}
-	height, ok := sgbTerrainHeightAt(t.SgbMap, x, y)
+	height, ok := SgbTerrainHeightAt(t.SgbMap, x, y)
 	if !ok {
 		return false
 	}
 	t.Model.Center.X, t.Model.Center.Y, t.Model.Center.Z = x, y, height
 	t.Model.ActiveCamera = ""
-	Invalidate(t.Model)
+	viewer.Invalidate(t.Model)
 	return true
 }
-
-// ─── merged from sgb_textures.go ───────────────────────────────────────────────
-
-// The 3D map view's terrain diffuse is built from the actual DSHD tile art.
-// The similarly named .tga beside an .sgb is only the map-selection/minimap
-// preview and is never read here. Output density follows source texture pixels
-// and TileRepeat, not the relief image or number of heightmap cells.
-//
-// Decals (the placed SMAP records) are baked on top of either base: each is a
-// rotated quad of texW*size × texH*size metres, alpha blended from its own
-// texture, with the same rotated mapping as the reference editor.
 
 const (
 	// Bound the texture uploaded to the GPU. Native tile pixels and repeat
 	// count determine requested resolution; this cap only applies to large maps.
-	sgbTerrainTextureMaxDim    = 2048
-	sgbTerrainTextureMaxPixels = 4 * 1024 * 1024
+	SgbTerrainTextureMaxDim    = 2048
+	SgbTerrainTextureMaxPixels = 4 * 1024 * 1024
 )
 
-// sgbBuildTerrainTexture composes the DSHD ground tile assets and placed
+// SgbBuildTerrainTexture composes the DSHD ground tile assets and placed
 // SMAP decals. Its diffuse resolution is asset-driven, not tied to heightmap
 // resolution or the map's UI preview image.
-func sgbBuildTerrainTexture(tree *modtree.ModTree, _ string, m *sgb.Map) *image.RGBA {
+func SgbBuildTerrainTexture(tree *modtree.ModTree, _ string, m *sgb.Map) *image.RGBA {
 	if m == nil {
 		return nil
 	}
 	start := time.Now()
 	source := "tiles"
-	base := sgbBuildTileTexture(tree, m)
+	base := SgbBuildTileTexture(tree, m)
 	if base == nil {
 		source = "relief fallback"
-		base = buildSgbImage(m, 0)
+		base = BuildSgbImage(m, 0)
 	}
 	if base == nil {
 		return nil
 	}
-	decals := sgbBakeDecals(base, tree, m)
+	decals := SgbBakeDecals(base, tree, m)
 	b := base.Bounds()
 	log.Printf("sgb: terrain texture %s: %dx%d, %d decals baked, in %v",
 		source, b.Dx(), b.Dy(), decals, time.Since(start))
@@ -189,15 +175,15 @@ func sgbBuildTerrainTexture(tree *modtree.ModTree, _ string, m *sgb.Map) *image.
 	return out
 }
 
-// sgbBuildTileTexture uses native texture detail: each map tile gets
+// SgbBuildTileTexture uses native texture detail: each map tile gets
 // TileRepeat repeats of its texture at its source dimensions. The safety cap
 // only reduces a massive result; it never selects detail from map dimensions.
-func sgbBuildTileTexture(tree *modtree.ModTree, m *sgb.Map) *image.NRGBA {
+func SgbBuildTileTexture(tree *modtree.ModTree, m *sgb.Map) *image.NRGBA {
 	if tree == nil || m == nil || m.Ground.CellsX <= 0 || m.Ground.CellsZ <= 0 ||
 		m.Ground.TileSize <= 0 || m.TileNX <= 0 || m.TileNZ <= 0 || len(m.Tiles) == 0 {
 		return nil
 	}
-	repeat := maxInt(1, m.Ground.TileRepeat)
+	repeat := uikit.MaxInt(1, m.Ground.TileRepeat)
 	// Resolve each source once and size each tile from the native image. Each
 	// tile requests native texture size × repeat; only a large final image is
 	// uniformly reduced to the GPU safety cap.
@@ -207,7 +193,7 @@ func sgbBuildTileTexture(tree *modtree.ModTree, m *sgb.Map) *image.NRGBA {
 		if _, seen := cache[ptr]; seen {
 			continue
 		}
-		tex := sgbTreeTexture(tree, m.TexNames[ptr])
+		tex := SgbTreeTexture(tree, m.TexNames[ptr])
 		cache[ptr] = tex
 		if tex != nil {
 			if tex.Bounds().Dx() > tileWidth {
@@ -226,12 +212,12 @@ func sgbBuildTileTexture(tree *modtree.ModTree, m *sgb.Map) *image.NRGBA {
 	if width < 1 || height < 1 {
 		return nil
 	}
-	scale := math.Min(1, math.Min(float64(sgbTerrainTextureMaxDim)/float64(width), float64(sgbTerrainTextureMaxDim)/float64(height)))
-	if pixels := int64(width) * int64(height); pixels > sgbTerrainTextureMaxPixels {
-		scale = math.Min(scale, math.Sqrt(float64(sgbTerrainTextureMaxPixels)/float64(pixels)))
+	scale := math.Min(1, math.Min(float64(SgbTerrainTextureMaxDim)/float64(width), float64(SgbTerrainTextureMaxDim)/float64(height)))
+	if pixels := int64(width) * int64(height); pixels > SgbTerrainTextureMaxPixels {
+		scale = math.Min(scale, math.Sqrt(float64(SgbTerrainTextureMaxPixels)/float64(pixels)))
 	}
-	width = maxInt(1, int(math.Round(float64(width)*scale)))
-	height = maxInt(1, int(math.Round(float64(height)*scale)))
+	width = uikit.MaxInt(1, int(math.Round(float64(width)*scale)))
+	height = uikit.MaxInt(1, int(math.Round(float64(height)*scale)))
 	tilePixelWidth := width / m.TileNX
 	tilePixelHeight := height / m.TileNZ
 	if tilePixelWidth < 1 || tilePixelHeight < 1 {
@@ -262,9 +248,9 @@ func sgbBuildTileTexture(tree *modtree.ModTree, m *sgb.Map) *image.NRGBA {
 				v := 1 - float64(y-y0)/float64(y1-y0)*float64(repeat)
 				for x := x0; x < x1; x++ {
 					u := float64(x-x0) / float64(x1-x0) * float64(repeat)
-					r, g, b, a := sgbSample(tex, u, v, true)
+					r, g, b, a := SgbSample(tex, u, v, true)
 					if a > 0 {
-						sgbBlendPixel(out, x, y, r, g, b, a)
+						SgbBlendPixel(out, x, y, r, g, b, a)
 					}
 				}
 			}
@@ -278,64 +264,11 @@ func sgbBuildTileTexture(tree *modtree.ModTree, m *sgb.Map) *image.NRGBA {
 	return out
 }
 
-// startSgbSceneLoad builds the map's diffuse and its object scene off the UI
-// goroutine, in two results over the material channel every viewer already
-// polls: the terrain diffuse first, so the ground appears as soon as it is
-// baked, then the model with the placed objects plus their materials,
-// resolved through the same .rsh lookup a .whm tab uses. The whole build
-// reads files and bakes pixels for seconds on a real map, so none of it may
-// run inside a layout pass; v.Loading keeps layoutModelViewer from starting
-// its own .rsh lookup over the terrain material while this is in flight, and
-// both paths answer even on failure so the viewer settles instead of waiting
-// forever.
-func StartSgbSceneLoad(ui *uiState, t *fileTab, material string) {
-	if t == nil || t.Model == nil {
-		return
-	}
-	t.Model.Loading = true
-	tree := ui.ModTree
-	path := t.Path
-	m := t.SgbMap
-	ch := make(chan modelMaterialResult, 2)
-	t.ModelMaterialCh = ch
-	go func() {
-		// Phase one: the ground. Its diffuse is the only material the
-		// terrain-only model the tab opened with can show.
-		ground := modelMaterialResult{Materials: map[string]render.WhmMaterial{}, More: true}
-		if img := sgbBuildTerrainTexture(tree, path, m); img != nil {
-			ground.Materials[material] = render.WhmMaterial{Texture: render.NewModelTexture(img), Color: render.RgbaWhite}
-		} else {
-			ground.Missing = 1
-		}
-		ch <- ground
-		// Phase two: the scene — terrain plus every resolvable object —
-		// with the entity .rsh materials alongside the ground's.
-		res := modelMaterialResult{Materials: map[string]render.WhmMaterial{}, Missing: ground.Missing,
-			Diagnostics: map[string]modelMaterialDiagnostic{},
-		}
-		for name, mat := range ground.Materials {
-			res.Materials[name] = mat
-			res.Diagnostics[name] = modelMaterialDiagnostic{Format: "SGB terrain diffuse", Status: "decoded in memory"}
-		}
-		if scene, entityMeshes, animatedEntities := sgbBuildSceneModelWithEntityAnimations(tree, m, material); scene != nil {
-			res.Model = &WhmModel{Model: *scene}
-			res.EntityMeshes = entityMeshes
-			res.AnimatedEntities = animatedEntities
-			var entityDiagnostics map[string]modelMaterialDiagnostic
-			res.Rsh, res.Materials, res.Missing, entityDiagnostics = sgbEntityMaterials(tree, path, scene, material, res.Materials)
-			for name, diag := range entityDiagnostics {
-				res.Diagnostics[name] = diag
-			}
-		}
-		ch <- res
-	}()
-}
-
-// sgbEntityMaterials resolves the .rsh diffuse maps of every material a
+// SgbEntityMaterials resolves the .rsh diffuse maps of every material a
 // scene's object meshes name, keeping the materials already resolved (the
 // terrain's own diffuse). It returns raw bytes for Vulkan, the merged material
 // map, the count of missing textures, and source/format diagnostics.
-func sgbEntityMaterials(tree *modtree.ModTree, sceneFile string, scene *whm.Model, keep string, base map[string]render.WhmMaterial) (map[string][]byte, map[string]render.WhmMaterial, int, map[string]modelMaterialDiagnostic) {
+func SgbEntityMaterials(tree *modtree.ModTree, sceneFile string, scene *whm.Model, keep string, base map[string]render.WhmMaterial) (map[string][]byte, map[string]render.WhmMaterial, int, map[string]viewer.ModelMaterialDiagnostic) {
 	if base == nil {
 		base = make(map[string]render.WhmMaterial)
 	}
@@ -353,15 +286,15 @@ func sgbEntityMaterials(tree *modtree.ModTree, sceneFile string, scene *whm.Mode
 		needed[key] = true
 	}
 	if len(needed) == 0 {
-		return nil, base, 0, map[string]modelMaterialDiagnostic{}
+		return nil, base, 0, map[string]viewer.ModelMaterialDiagnostic{}
 	}
 	names := make([]string, 0, len(needed))
 	for name := range needed {
 		names = append(names, name)
 	}
-	files, paths := resolveModelMaterialsWithPaths(tree, materialSearchRoots(tree), sceneFile, names)
-	res := decodeModelMaterials(files, true)
-	attachMaterialSourcePaths(res.Diagnostics, paths)
+	files, paths := viewer.ResolveModelMaterialsWithPaths(tree, viewer.MaterialSearchRoots(tree), sceneFile, names)
+	res := viewer.DecodeModelMaterials(files, true)
+	viewer.AttachMaterialSourcePaths(res.Diagnostics, paths)
 	for _, mesh := range scene.Meshes {
 		if mesh.Material == "" || mesh.Material == keep || mesh.Material == sgb.WaterMaterialName {
 			continue
@@ -386,16 +319,16 @@ func sgbEntityMaterials(tree *modtree.ModTree, sceneFile string, scene *whm.Mode
 	}
 	for _, name := range names {
 		if _, ok := res.Diagnostics[name]; !ok {
-			res.Diagnostics[name] = modelMaterialDiagnostic{Format: "—", Status: "not found"}
+			res.Diagnostics[name] = viewer.ModelMaterialDiagnostic{Format: "—", Status: "not found"}
 		}
 	}
 	return res.Rsh, base, res.Missing, res.Diagnostics
 }
 
-// sgbBlendTiles paints tile textures over a relief-sized preview image. Kept
+// SgbBlendTiles paints tile textures over a relief-sized preview image. Kept
 // for callers which explicitly request a relief-sized diagnostic image; the
-// 3D path instead uses sgbBuildTileTexture at asset-driven resolution.
-func sgbBlendTiles(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) {
+// 3D path instead uses SgbBuildTileTexture at asset-driven resolution.
+func SgbBlendTiles(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) {
 	g := m.Ground
 	if dst == nil || g.CellsX <= 0 || g.CellsZ <= 0 || g.TileSize <= 0 || m.TileNX <= 0 || m.TileNZ <= 0 {
 		return
@@ -421,7 +354,7 @@ func sgbBlendTiles(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) {
 			}
 			tex := cache[name]
 			if _, seen := cache[name]; !seen {
-				tex = sgbTreeTexture(tree, name)
+				tex = SgbTreeTexture(tree, name)
 				cache[name] = tex
 			}
 			if tex == nil {
@@ -447,11 +380,11 @@ func sgbBlendTiles(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) {
 				v := 1 - (float64(py)-float64(z0))/float64(z1-z0)*repeat
 				for px := x0; px < x1; px++ {
 					u := (float64(px) - float64(x0)) / float64(x1-x0) * repeat
-					r, gr, bl, a := sgbSample(tex, u, v, true)
+					r, gr, bl, a := SgbSample(tex, u, v, true)
 					if a <= 0 {
 						continue
 					}
-					sgbBlendPixel(dst, px, py, r, gr, bl, a)
+					SgbBlendPixel(dst, px, py, r, gr, bl, a)
 				}
 			}
 			painted++
@@ -462,12 +395,12 @@ func sgbBlendTiles(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) {
 	}
 }
 
-// sgbBakeDecals draws every placed decal onto the base and reports how many
+// SgbBakeDecals draws every placed decal onto the base and reports how many
 // landed. A decal whose texture cannot be resolved is skipped, and a map with
 // thousands of them still bakes in one pass — the records share textures
 // through the SMAP table, so the decode count is the table's size, not the
 // placement count.
-func sgbBakeDecals(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) int {
+func SgbBakeDecals(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) int {
 	if dst == nil || m == nil || len(m.Decals) == 0 {
 		return 0
 	}
@@ -476,7 +409,7 @@ func sgbBakeDecals(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) int {
 	for _, d := range m.Decals {
 		tex, seen := cache[d.Ptr]
 		if !seen {
-			tex = sgbTreeTexture(tree, d.Name)
+			tex = SgbTreeTexture(tree, d.Name)
 			if tex == nil {
 				// The game's special baddecal asset is intentionally not
 				// used: it is a solid square diagnostic, not a real decal.
@@ -487,7 +420,7 @@ func sgbBakeDecals(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) int {
 		if tex == nil {
 			continue
 		}
-		if sgbDrawDecal(dst, m, d, tex) {
+		if SgbDrawDecal(dst, m, d, tex) {
 			baked++
 		}
 	}
@@ -497,10 +430,10 @@ func sgbBakeDecals(dst *image.NRGBA, tree *modtree.ModTree, m *sgb.Map) int {
 	return baked
 }
 
-// sgbDrawDecal alpha blends one decal's texture onto the base. The footprint
+// SgbDrawDecal alpha blends one decal's texture onto the base. The footprint
 // is texW*size × texH*size metres and the rotated mapping is the same matrix
 // the reference editor applies to the decal texture coordinates.
-func sgbDrawDecal(dst *image.NRGBA, m *sgb.Map, d sgb.Decal, tex *image.NRGBA) bool {
+func SgbDrawDecal(dst *image.NRGBA, m *sgb.Map, d sgb.Decal, tex *image.NRGBA) bool {
 	g := m.Ground
 	if dst == nil || tex == nil || g.CellSize <= 0 || d.Size <= 0 {
 		return false
@@ -524,10 +457,10 @@ func sgbDrawDecal(dst *image.NRGBA, m *sgb.Map, d sgb.Decal, tex *image.NRGBA) b
 	halfZ := (math.Abs(sinA)/sx + math.Abs(cosA)/sz) / 2
 	centerPX := (xc/float64(g.CellSize) + float64(g.CenterX-1)) * ppcX
 	centerPZ := (zc/float64(g.CellSize) + float64(g.CenterZ-1)) * ppcZ
-	x0 := clampInt(int(math.Floor(centerPX-halfX*ppmX)), 0, b.Dx()-1)
-	x1 := clampInt(int(math.Ceil(centerPX+halfX*ppmX)), 0, b.Dx())
-	z0 := clampInt(int(math.Floor(centerPZ-halfZ*ppmZ)), 0, b.Dy()-1)
-	z1 := clampInt(int(math.Ceil(centerPZ+halfZ*ppmZ)), 0, b.Dy())
+	x0 := uikit.ClampInt(int(math.Floor(centerPX-halfX*ppmX)), 0, b.Dx()-1)
+	x1 := uikit.ClampInt(int(math.Ceil(centerPX+halfX*ppmX)), 0, b.Dx())
+	z0 := uikit.ClampInt(int(math.Floor(centerPZ-halfZ*ppmZ)), 0, b.Dy()-1)
+	z1 := uikit.ClampInt(int(math.Ceil(centerPZ+halfZ*ppmZ)), 0, b.Dy())
 	if x1-x0 < 1 || z1-z0 < 1 {
 		return false
 	}
@@ -544,26 +477,26 @@ func sgbDrawDecal(dst *image.NRGBA, m *sgb.Map, d sgb.Decal, tex *image.NRGBA) b
 			}
 			// GL samples the buffer bottom-up; the decoded image is
 			// top-down, hence the flipped v.
-			r, gr, bl, a := sgbSample(tex, u, 1-v, false)
+			r, gr, bl, a := SgbSample(tex, u, 1-v, false)
 			if a <= 0 {
 				continue
 			}
-			sgbBlendPixel(dst, px, py, r, gr, bl, a)
+			SgbBlendPixel(dst, px, py, r, gr, bl, a)
 		}
 	}
 	return true
 }
 
-// sgbTreeTexture loads a map-referenced texture — a DSHD or SMAP blueprint
+// SgbTreeTexture loads a map-referenced texture — a DSHD or SMAP blueprint
 // path with no extension, relative to Data — trying .tga first and .dds the
 // way the reference editor does.
-func sgbTreeTexture(tree *modtree.ModTree, name string) *image.NRGBA {
+func SgbTreeTexture(tree *modtree.ModTree, name string) *image.NRGBA {
 	if tree == nil || name == "" {
 		return nil
 	}
 	rel := strings.ReplaceAll(strings.TrimSpace(name), "\\", "/")
 	rel = strings.TrimPrefix(rel, "/")
-	if !strings.EqualFold(rel[:minInt(len(rel), 5)], "data/") {
+	if !strings.EqualFold(rel[:uikit.MinInt(len(rel), 5)], "data/") {
 		rel = "Data/" + rel
 	}
 	for _, ext := range []string{".tga", ".dds"} {
@@ -582,10 +515,10 @@ func sgbTreeTexture(tree *modtree.ModTree, name string) *image.NRGBA {
 	return nil
 }
 
-// sgbSample bilinearly samples a decoded texture at (u, v) in 0..1, either
+// SgbSample bilinearly samples a decoded texture at (u, v) in 0..1, either
 // clamped to the edge or wrapped — the tile textures repeat, the decal ones
 // clamp.
-func sgbSample(img *image.NRGBA, u, v float64, wrap bool) (float64, float64, float64, float64) {
+func SgbSample(img *image.NRGBA, u, v float64, wrap bool) (float64, float64, float64, float64) {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
 	if w < 1 || h < 1 {
@@ -610,8 +543,8 @@ func sgbSample(img *image.NRGBA, u, v float64, wrap bool) (float64, float64, flo
 			ix = ((ix % w) + w) % w
 			iy = ((iy % h) + h) % h
 		} else {
-			ix = clampInt(ix, 0, w-1)
-			iy = clampInt(iy, 0, h-1)
+			ix = uikit.ClampInt(ix, 0, w-1)
+			iy = uikit.ClampInt(iy, 0, h-1)
 		}
 		weight := (1 - math.Abs(float64(int(tap[0]))-fx)) * (1 - math.Abs(float64(int(tap[1]))-fy))
 		o := img.PixOffset(b.Min.X+ix, b.Min.Y+iy)
@@ -633,12 +566,12 @@ func sgbSample(img *image.NRGBA, u, v float64, wrap bool) (float64, float64, flo
 	return acc[0] / acc[3], acc[1] / acc[3], acc[2] / acc[3], acc[3] / 255
 }
 
-// sgbBlendPixel source-overs one normalized sampled colour into the byte
+// SgbBlendPixel source-overs one normalized sampled colour into the byte
 // channels of the base, which stays opaque throughout.
-func sgbBlendPixel(dst *image.NRGBA, x, y int, r, g, b, a float64) {
+func SgbBlendPixel(dst *image.NRGBA, x, y int, r, g, b, a float64) {
 	o := dst.PixOffset(x, y)
-	dst.Pix[o+0] = sgbClampByte(float32(r*a*255 + float64(dst.Pix[o+0])*(1-a)))
-	dst.Pix[o+1] = sgbClampByte(float32(g*a*255 + float64(dst.Pix[o+1])*(1-a)))
-	dst.Pix[o+2] = sgbClampByte(float32(b*a*255 + float64(dst.Pix[o+2])*(1-a)))
+	dst.Pix[o+0] = SgbClampByte(float32(r*a*255 + float64(dst.Pix[o+0])*(1-a)))
+	dst.Pix[o+1] = SgbClampByte(float32(g*a*255 + float64(dst.Pix[o+1])*(1-a)))
+	dst.Pix[o+2] = SgbClampByte(float32(b*a*255 + float64(dst.Pix[o+2])*(1-a)))
 	dst.Pix[o+3] = 0xFF
 }
