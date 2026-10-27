@@ -48,7 +48,7 @@ func fieldAt(t *testing.T, tree *modtree.ModTree, virtualPath, field string) str
 
 func freezeTestUI(t *testing.T) (*uiState, *modtree.ModTree) {
 	t.Helper()
-	tree := newGraphTestMod(t)
+	tree := testutil.NewGraphTestMod(t)
 	freezeTestMod(t, tree)
 	ui := newUI(testutil.UnitTestTheme())
 	ui.ModTree = tree
@@ -64,7 +64,7 @@ func TestFreezingMovesTheFilesOutOfTheModAndRecordsWhere(t *testing.T) {
 	squad := `Data\attrib\sbps\races\necrons\necron_gauntlet.rgd`
 	writeFixtureFile(t, tree, squad)
 
-	record, err := FreezeEntity(ui, graphTestGauntlet)
+	record, err := FreezeEntity(ui, testutil.GraphTestGauntlet)
 	if err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
@@ -92,10 +92,10 @@ func TestFreezingMovesTheFilesOutOfTheModAndRecordsWhere(t *testing.T) {
 		}
 	}
 	// And the rest of the mod is untouched.
-	if tree.FindFile(graphTestLoose) == nil {
+	if tree.FindFile(testutil.GraphTestLoose) == nil {
 		t.Error("freezing one unit took another one out of the mod")
 	}
-	if tree.FindFile(graphTestArmoury) == nil {
+	if tree.FindFile(testutil.GraphTestArmoury) == nil {
 		t.Error("freezing a unit took the building out of the mod")
 	}
 }
@@ -107,7 +107,7 @@ func TestFreezingClearsEveryReferenceAndWritesThemDownFirst(t *testing.T) {
 	// The gauntlet's own file names the armoury as its builder, and the
 	// fixture's add-on is unlocked by it. Freeze the armoury, so the
 	// references are in two other files of two other kinds.
-	before := fieldAt(t, tree, graphTestGauntlet, "requirement_ext.requirements.required_1.structure_name")
+	before := fieldAt(t, tree, testutil.GraphTestGauntlet, "requirement_ext.requirements.required_1.structure_name")
 	if before == "" {
 		t.Fatal("the fixture's gauntlet does not name the armoury, so nothing is being tested")
 	}
@@ -118,7 +118,7 @@ func TestFreezingClearsEveryReferenceAndWritesThemDownFirst(t *testing.T) {
 	if GraphFor(ui).Linked {
 		t.Fatal("the fixture's graph was already read, so this is not testing what it should")
 	}
-	record, err := FreezeEntity(ui, graphTestArmoury)
+	record, err := FreezeEntity(ui, testutil.GraphTestArmoury)
 	if err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestFreezingClearsEveryReferenceAndWritesThemDownFirst(t *testing.T) {
 	}
 	var m freezeMention
 	for _, one := range record.Mentions {
-		if strings.EqualFold(one.File, graphTestGauntlet) {
+		if strings.EqualFold(one.File, testutil.GraphTestGauntlet) {
 			m = one
 		}
 	}
@@ -141,7 +141,7 @@ func TestFreezingClearsEveryReferenceAndWritesThemDownFirst(t *testing.T) {
 		t.Errorf("the record names the field %q, which is not the one the reference is in", m.Field)
 	}
 	// And the field really is empty now.
-	if got := fieldAt(t, tree, graphTestGauntlet, m.Field); got != "" {
+	if got := fieldAt(t, tree, testutil.GraphTestGauntlet, m.Field); got != "" {
 		t.Errorf("the reference is still %q after the freeze", got)
 	}
 }
@@ -156,14 +156,14 @@ func TestFreezingClearsTheMentionsInAbilitiesAndAddonsToo(t *testing.T) {
 
 	const abilityLeaf = "area_effect.weapon_damage.modifiers.modifier_01.modifier.target_type_name"
 	const addonLeaf = "modifiers.modifier_01.target_type_name"
-	if got := fieldAt(t, tree, graphTestWarp, abilityLeaf); got != "necron_gauntlet" {
+	if got := fieldAt(t, tree, testutil.GraphTestWarp, abilityLeaf); got != "necron_gauntlet" {
 		t.Fatalf("the fixture's ability does not name the gauntlet, it names %q", got)
 	}
-	if got := fieldAt(t, tree, graphTestHubris, addonLeaf); got != "necron_gauntlet" {
+	if got := fieldAt(t, tree, testutil.GraphTestHubris, addonLeaf); got != "necron_gauntlet" {
 		t.Fatalf("the fixture's add-on does not name the gauntlet, it names %q", got)
 	}
 
-	record, err := FreezeEntity(ui, graphTestGauntlet)
+	record, err := FreezeEntity(ui, testutil.GraphTestGauntlet)
 	if err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
@@ -177,22 +177,22 @@ func TestFreezingClearsTheMentionsInAbilitiesAndAddonsToo(t *testing.T) {
 	for _, m := range record.Mentions {
 		byFile[strings.ToLower(m.File)] = m
 	}
-	if _, ok := byFile[strings.ToLower(graphTestWarp)]; !ok {
+	if _, ok := byFile[strings.ToLower(testutil.GraphTestWarp)]; !ok {
 		t.Error("the ability's reference to the gauntlet was not recorded")
 	}
-	if _, ok := byFile[strings.ToLower(graphTestHubris)]; !ok {
+	if _, ok := byFile[strings.ToLower(testutil.GraphTestHubris)]; !ok {
 		t.Error("the add-on's reference to the gauntlet was not recorded")
 	}
-	if got := fieldAt(t, tree, graphTestWarp, abilityLeaf); got != "" {
+	if got := fieldAt(t, tree, testutil.GraphTestWarp, abilityLeaf); got != "" {
 		t.Errorf("the ability still names %q after the freeze", got)
 	}
-	if got := fieldAt(t, tree, graphTestHubris, addonLeaf); got != "" {
+	if got := fieldAt(t, tree, testutil.GraphTestHubris, addonLeaf); got != "" {
 		t.Errorf("the add-on still names %q after the freeze", got)
 	}
 	// The add-on's other reference is to the armoury, which is still in the
 	// mod, and must have been left alone. A freeze clears what points at the
 	// thing being moved, not everything in the files it happens to touch.
-	if got := fieldAt(t, tree, graphTestHubris, "requirements.required_1.structure_name"); got != "necron_armoury" {
+	if got := fieldAt(t, tree, testutil.GraphTestHubris, "requirements.required_1.structure_name"); got != "necron_armoury" {
 		t.Errorf("the add-on's reference to the armoury is %q, want it left alone", got)
 	}
 }
@@ -201,7 +201,7 @@ func TestTheRecordIsWrittenBeforeAnythingIsTouched(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
 
-	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, testutil.GraphTestArmoury); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
 	path, err := freezeBookPath(tree, ui.ModulePath)
@@ -218,10 +218,10 @@ func TestTheRecordIsWrittenBeforeAnythingIsTouched(t *testing.T) {
 	if book.Mod != "GraphTestMod" {
 		t.Errorf("the record says the mod is %q, want GraphTestMod", book.Mod)
 	}
-	if !book.IsFrozen(graphTestArmoury) {
+	if !book.IsFrozen(testutil.GraphTestArmoury) {
 		t.Error("the record does not say the armoury is frozen")
 	}
-	if book.IsFrozen(graphTestLoose) {
+	if book.IsFrozen(testutil.GraphTestLoose) {
 		t.Error("the record says a unit is frozen that never was")
 	}
 }
@@ -229,10 +229,10 @@ func TestTheRecordIsWrittenBeforeAnythingIsTouched(t *testing.T) {
 func TestFreezingTwiceIsRefused(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, testutil.GraphTestArmoury); err != nil {
 		t.Fatalf("the first freeze: %v", err)
 	}
-	if _, err := FreezeEntity(ui, graphTestArmoury); err == nil {
+	if _, err := FreezeEntity(ui, testutil.GraphTestArmoury); err == nil {
 		t.Error("freezing an already frozen unit was allowed, which would lose the first record")
 	}
 }
@@ -240,7 +240,7 @@ func TestFreezingTwiceIsRefused(t *testing.T) {
 func TestOnlyAUnitOrABuildingCanBeFrozen(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	if _, err := FreezeEntity(ui, graphTestGauss); err == nil {
+	if _, err := FreezeEntity(ui, testutil.GraphTestGauss); err == nil {
 		t.Error("a weapon was frozen, but only units and buildings are units the mod ships")
 	}
 	if _, err := FreezeEntity(ui, `Data\attrib\ebps\races\necrons\troops\nothing_here.rgd`); err == nil {
@@ -255,22 +255,22 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 	writeFixtureFile(t, tree, squad)
 
 	field := "requirement_ext.requirements.required_1.structure_name"
-	before := fieldAt(t, tree, graphTestGauntlet, field)
-	gauntletBefore, err := os.ReadFile(mustDiskPath(t, tree, graphTestGauntlet))
+	before := fieldAt(t, tree, testutil.GraphTestGauntlet, field)
+	gauntletBefore, err := os.ReadFile(mustDiskPath(t, tree, testutil.GraphTestGauntlet))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, testutil.GraphTestArmoury); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
-	record, err := UnfreezeEntity(ui, graphTestArmoury)
+	record, err := UnfreezeEntity(ui, testutil.GraphTestArmoury)
 	if err != nil {
 		t.Fatalf("unfreezeEntity: %v", err)
 	}
 
 	// The reference is back, with the value it had.
-	if got := fieldAt(t, tree, graphTestGauntlet, field); got != before {
+	if got := fieldAt(t, tree, testutil.GraphTestGauntlet, field); got != before {
 		t.Errorf("after unfreezing the field says %q, want %q", got, before)
 	}
 	// The files are back in the mod.
@@ -279,7 +279,7 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 			t.Errorf("%s was not put back into the mod", f.From)
 		}
 	}
-	armouryAfter, err := os.ReadFile(mustDiskPath(t, tree, graphTestArmoury))
+	armouryAfter, err := os.ReadFile(mustDiskPath(t, tree, testutil.GraphTestArmoury))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 	}
 	// The gauntlet's file, which was rewritten to clear the reference, is
 	// back to the same bytes: the rewrite round-tripped.
-	gauntletAfter, err := os.ReadFile(mustDiskPath(t, tree, graphTestGauntlet))
+	gauntletAfter, err := os.ReadFile(mustDiskPath(t, tree, testutil.GraphTestGauntlet))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if book.IsFrozen(graphTestArmoury) {
+	if book.IsFrozen(testutil.GraphTestArmoury) {
 		t.Error("the record still says the unit is frozen after it was unfrozen")
 	}
 }
@@ -318,7 +318,7 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 func TestUnfreezingSomethingThatWasNeverFrozenIsRefused(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	freezeTestMod(t, tree)
-	if _, err := UnfreezeEntity(ui, graphTestArmoury); err == nil {
+	if _, err := UnfreezeEntity(ui, testutil.GraphTestArmoury); err == nil {
 		t.Error("unfreezing a unit that is not frozen was allowed")
 	}
 }
@@ -332,7 +332,7 @@ func TestAskingWhatIsFrozenCreatesNothing(t *testing.T) {
 	ui, tree := freezeTestUI(t)
 	appData := freezeTestMod(t, tree)
 
-	if IsFrozen(ui, graphTestArmoury) {
+	if IsFrozen(ui, testutil.GraphTestArmoury) {
 		t.Error("a mod that has frozen nothing says a unit is frozen")
 	}
 	if rows := FrozenRows(ui); len(rows) != 0 {
@@ -340,7 +340,7 @@ func TestAskingWhatIsFrozenCreatesNothing(t *testing.T) {
 	}
 	// Asking a few more times, which is what a window does.
 	for i := 0; i < 5; i++ {
-		IsFrozen(ui, graphTestLoose)
+		IsFrozen(ui, testutil.GraphTestLoose)
 		FrozenRows(ui)
 	}
 	if _, err := os.Stat(filepath.Join(appData, "DoW Mod Studio")); !os.IsNotExist(err) {
@@ -349,7 +349,7 @@ func TestAskingWhatIsFrozenCreatesNothing(t *testing.T) {
 
 	// A freeze does create the project folder, because it has somewhere to put
 	// the files.
-	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, testutil.GraphTestArmoury); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
 	dir, err := freezeUnitsDir(tree, ui.ModulePath)
@@ -379,20 +379,20 @@ func TestTheRecordIsReadOnceNotOnceAFrame(t *testing.T) {
 		t.Error("the record was read again instead of being kept")
 	}
 	// A freeze changes it, so the cache has to be dropped.
-	if _, err := FreezeEntity(ui, graphTestArmoury); err != nil {
+	if _, err := FreezeEntity(ui, testutil.GraphTestArmoury); err != nil {
 		t.Fatalf("freezeEntity: %v", err)
 	}
 	after := FreezeBookFor(ui)
 	if after == first {
 		t.Error("the cached record survived a freeze, so the window would not show it")
 	}
-	if !after.IsFrozen(graphTestArmoury) {
+	if !after.IsFrozen(testutil.GraphTestArmoury) {
 		t.Error("the record read back after the freeze does not say the unit is frozen")
 	}
 }
 
 func TestRgdEntryAtPathFindsTheFieldAgain(t *testing.T) {
-	rf := readRgdAt(t, newGraphTestMod(t), graphTestGauntlet)
+	rf := readRgdAt(t, testutil.NewGraphTestMod(t), testutil.GraphTestGauntlet)
 	e := rgdEntryAtPath(rf.Root, "requirement_ext.requirements.required_1.structure_name")
 	if e == nil {
 		t.Fatal("the field the record names could not be found again")
@@ -451,7 +451,7 @@ func writeFixtureFile(t *testing.T, tree *modtree.ModTree, virtualPath string) {
 	if err := os.MkdirAll(filepath.Dir(disk), 0755); err != nil {
 		t.Fatal(err)
 	}
-	body := mustMarshalGraph(t, &rgd.RgdFile{
+	body := testutil.MustMarshalGraph(t, &rgd.RgdFile{
 		HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
 		Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable},
 	})

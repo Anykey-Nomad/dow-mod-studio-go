@@ -1,4 +1,4 @@
-package app
+package highlight_test
 
 import (
 	"dow-mod-studio/internal/highlight"

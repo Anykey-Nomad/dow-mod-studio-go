@@ -1,6 +1,6 @@
 //go:build windows
 
-package app
+package render_test
 
 import (
 	"dow-mod-studio/internal/testutil"

@@ -1,13 +1,15 @@
-package app
+package shell_test
 
 import (
+	"dow-mod-studio/internal/app/editors"
+	"dow-mod-studio/internal/app/shell"
 	"dow-mod-studio/internal/modtree"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func testExportTree(t *testing.T) (*uiState, *modtree.ModTree, string) {
+func testExportTree(t *testing.T) (*shell.UiState, *modtree.ModTree, string) {
 	t.Helper()
 	appPath := t.TempDir()
 	tree := &modtree.ModTree{
@@ -25,15 +27,15 @@ func testExportTree(t *testing.T) (*uiState, *modtree.ModTree, string) {
 	}
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
-	ui := &uiState{ModTree: tree, TabSel: 1, OpenTabs: []*fileTab{{Path: file.FullPath, Kind: "rgd"}}}
+	ui := &shell.UiState{ModTree: tree, TabSel: 1, OpenTabs: []*shell.FileTab{{Path: file.FullPath, Kind: "rgd"}}}
 	return ui, tree, file.FullPath
 }
 
 func TestWavToFDAUsesCurrentModFolder(t *testing.T) {
 	_, tree, _ := testExportTree(t)
 	wavPath := `Data\sound\music\track.wav`
-	fdaPath := wavTargetFDA(wavPath)
-	disk, err := writeFDAOverlay(tree, fdaPath, []byte("fake FDA"))
+	fdaPath := editors.WavTargetFDA(wavPath)
+	disk, err := editors.WriteFDAOverlay(tree, fdaPath, []byte("fake FDA"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +56,7 @@ func TestWavToFDAUsesCurrentModFolder(t *testing.T) {
 
 func TestExportEligible_SGAWithoutCurrentOverlay(t *testing.T) {
 	ui, _, path := testExportTree(t)
-	eligible, reason := ExportEligible(ui, ActiveTab(ui))
+	eligible, reason := shell.ExportEligible(ui, shell.ActiveTab(ui))
 	if !eligible {
 		t.Fatalf("expected SGA file to be exportable: %s", reason)
 	}
@@ -72,7 +74,7 @@ func TestExportEligible_BlockedByCurrentOverlay(t *testing.T) {
 	if _, err := tree.WriteOverlayFile(path, []byte("overlay")); err != nil {
 		t.Fatal(err)
 	}
-	eligible, reason := ExportEligible(ui, ActiveTab(ui))
+	eligible, reason := shell.ExportEligible(ui, shell.ActiveTab(ui))
 	if eligible {
 		t.Fatal("expected file already present in current mod to be blocked")
 	}
@@ -86,7 +88,7 @@ func TestExportEligible_FSSourceNotEligible(t *testing.T) {
 	file := tree.FindFile(path)
 	file.Source.IsSGA = false
 	file.Source.Kind = modtree.KindThisMod
-	eligible, reason := ExportEligible(ui, ActiveTab(ui))
+	eligible, reason := shell.ExportEligible(ui, shell.ActiveTab(ui))
 	if eligible {
 		t.Fatal("expected filesystem source to be blocked")
 	}

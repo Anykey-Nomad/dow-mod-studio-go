@@ -1,6 +1,8 @@
-package app
+package fileops_test
 
 import (
+	"dow-mod-studio/internal/app/fileops"
+	"dow-mod-studio/internal/app/shell"
 	"dow-mod-studio/internal/modtree"
 	"os"
 	"path/filepath"
@@ -8,14 +10,14 @@ import (
 )
 
 func TestExternalTextFileExtensions(t *testing.T) {
-	ui := &uiState{}
+	ui := &shell.UiState{}
 	for _, path := range []string{"script.lua", "readme.txt", "unit.ai", "battle.scar", "voice.rat", "console.con"} {
-		if !IsExternalTextFile(ui, path) {
+		if !fileops.IsExternalTextFile(ui, path) {
 			t.Errorf("isExternalTextFile(%q) = false, want true", path)
 		}
 	}
 	for _, path := range []string{"data.rgd", "sound.fda", "texture.dds", "module.module"} {
-		if IsExternalTextFile(ui, path) {
+		if fileops.IsExternalTextFile(ui, path) {
 			t.Errorf("isExternalTextFile(%q) = true, want false", path)
 		}
 	}
@@ -39,7 +41,7 @@ func TestTextFormatsAreParsedAsTyped(t *testing.T) {
 		{".lua,.custom.dls", []string{".lua", ".custom.dls"}},
 	}
 	for _, c := range cases {
-		got := parseTextFormats(c.in)
+		got := fileops.ParseTextFormats(c.in)
 		if len(got) != len(c.want) {
 			t.Errorf("parseTextFormats(%q) = %v, want %v", c.in, got, c.want)
 			continue
@@ -57,9 +59,9 @@ func TestTextFormatsAreParsedAsTyped(t *testing.T) {
 // falls back to the built-in list rather than to nothing.
 func TestEmptyTextFormatListFallsBackToTheDefault(t *testing.T) {
 	for _, in := range []string{"", "   ", ",,,"} {
-		got := parseTextFormats(in)
-		if len(got) != len(defaultTextFormats) {
-			t.Errorf("parseTextFormats(%q) returned %d formats, want the %d defaults", in, len(got), len(defaultTextFormats))
+		got := fileops.ParseTextFormats(in)
+		if len(got) != len(fileops.DefaultTextFormats) {
+			t.Errorf("parseTextFormats(%q) returned %d formats, want the %d defaults", in, len(got), len(fileops.DefaultTextFormats))
 		}
 	}
 }
@@ -67,19 +69,19 @@ func TestEmptyTextFormatListFallsBackToTheDefault(t *testing.T) {
 // The whole point of the setting: a format nobody shipped with is opened by
 // one click, and one the reader took back out is not.
 func TestAReaderCanExtendTheTextEditorFormats(t *testing.T) {
-	ui := &uiState{TextEditorFormats: parseTextFormats(".lua, .txt, .dsl")}
+	ui := &shell.UiState{TextEditorFormats: fileops.ParseTextFormats(".lua, .txt, .dsl")}
 	for _, path := range []string{"a.lua", "a.txt", "a.dsl", "nested/path/to/a.dsl", "a.DSL"} {
-		if !IsEditorFile(ui, path) {
+		if !fileops.IsEditorFile(ui, path) {
 			t.Errorf("isEditorFile(%q) = false, want true", path)
 		}
 	}
 	for _, path := range []string{"a.ai", "a.con", "a.rgd"} {
-		if IsEditorFile(ui, path) {
+		if fileops.IsEditorFile(ui, path) {
 			t.Errorf("isEditorFile(%q) = true, want false once it was left out", path)
 		}
 	}
 	// One click, not two: the same list decides the double click.
-	if !IsExternalTextFile(ui, "a.dsl") {
+	if !fileops.IsExternalTextFile(ui, "a.dsl") {
 		t.Error("isExternalTextFile did not follow the reader's list")
 	}
 }
@@ -88,9 +90,9 @@ func TestAReaderCanExtendTheTextEditorFormats(t *testing.T) {
 // loses what was typed.
 func TestTextFormatsRoundTripThroughTheFieldText(t *testing.T) {
 	for _, in := range []string{".lua, .txt, .dsl", ".LUA .TXT", ".lua,.txt"} {
-		text := formatTextFormats(parseTextFormats(in))
-		back := parseTextFormats(text)
-		want := parseTextFormats(in)
+		text := fileops.FormatTextFormats(fileops.ParseTextFormats(in))
+		back := fileops.ParseTextFormats(text)
+		want := fileops.ParseTextFormats(in)
 		if len(back) != len(want) {
 			t.Errorf("round trip of %q gave %q -> %v, want %v", in, text, back, want)
 			continue
@@ -106,9 +108,9 @@ func TestTextFormatsRoundTripThroughTheFieldText(t *testing.T) {
 
 // A file with no extension at all is never text, whatever the list says.
 func TestAFileWithNoExtensionIsNotText(t *testing.T) {
-	ui := &uiState{TextEditorFormats: parseTextFormats(".lua")}
+	ui := &shell.UiState{TextEditorFormats: fileops.ParseTextFormats(".lua")}
 	for _, path := range []string{"Makefile", "dir/file", ""} {
-		if IsEditorFile(ui, path) {
+		if fileops.IsEditorFile(ui, path) {
 			t.Errorf("isEditorFile(%q) = true, want false", path)
 		}
 	}
@@ -124,7 +126,7 @@ func TestMoveFileToRecycleAndClear(t *testing.T) {
 		t.Fatal(err)
 	}
 	recycle := filepath.Join(root, "recycle")
-	destination, err := moveFileToRecycle(source, recycle)
+	destination, err := fileops.MoveFileToRecycle(source, recycle)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,10 +136,10 @@ func TestMoveFileToRecycleAndClear(t *testing.T) {
 	if data, err := os.ReadFile(destination); err != nil || string(data) != "payload" {
 		t.Fatalf("recycled data = %q, error=%v", data, err)
 	}
-	if got := countFilesInDir(recycle); got != 1 {
+	if got := fileops.CountFilesInDir(recycle); got != 1 {
 		t.Fatalf("recycle file count = %d, want 1", got)
 	}
-	if err := clearRecycleDir(recycle); err != nil {
+	if err := fileops.ClearRecycleDir(recycle); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := os.ReadDir(recycle)
@@ -156,7 +158,7 @@ func TestDuplicateVirtualPathAvoidsExistingName(t *testing.T) {
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
 
-	got := duplicateVirtualPath(tree, `Data\sound\track.wav`)
+	got := fileops.DuplicateVirtualPath(tree, `Data\sound\track.wav`)
 	want := `Data\sound\track (1).wav`
 	if got != want {
 		t.Fatalf("duplicateVirtualPath() = %q, want %q", got, want)
@@ -188,14 +190,14 @@ func TestCanDeleteCurrentModFile(t *testing.T) {
 	for _, file := range folder.Files {
 		folder.FileByLower[file.Name] = file
 	}
-	ui := &uiState{ModTree: tree}
-	if !CanDeleteCurrentModFile(ui, current.FullPath) {
+	ui := &shell.UiState{ModTree: tree}
+	if !fileops.CanDeleteCurrentModFile(ui, current.FullPath) {
 		t.Fatal("current mod file should be deletable")
 	}
-	if CanDeleteCurrentModFile(ui, required.FullPath) {
+	if fileops.CanDeleteCurrentModFile(ui, required.FullPath) {
 		t.Fatal("required mod file should not be deletable")
 	}
-	if CanDeleteCurrentModFile(ui, sga.FullPath) {
+	if fileops.CanDeleteCurrentModFile(ui, sga.FullPath) {
 		t.Fatal("SGA file should not be deletable")
 	}
 }

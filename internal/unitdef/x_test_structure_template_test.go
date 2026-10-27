@@ -1,6 +1,8 @@
-package app
+package unitdef_test
 
 import (
+	"dow-mod-studio/internal/app/editors"
+	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/unitdef"
@@ -21,7 +23,7 @@ import (
 // except for the npc_* markers and test_building, which are not things a player
 // builds, so a new building is written with all of them.
 func TestANewBuildingHasTheSectionsTheGameAgreesOn(t *testing.T) {
-	rf := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"})
+	rf := unitdef.NewStructureRgd(uistate.StructureTemplateName{Race: "necrons", Name: "necron_relay"})
 	if len(rf.Root.Children) != len(unitdef.StructureTemplateSections) {
 		t.Fatalf("the building has %d sections, want the %d a structure has", len(rf.Root.Children), len(unitdef.StructureTemplateSections))
 	}
@@ -48,7 +50,7 @@ func TestANewBuildingHasTheSectionsTheGameAgreesOn(t *testing.T) {
 // structure_ext it is not a structure, without structure_buildable_ext the
 // player cannot build it, and health and cost are what it is judged on.
 func TestTheSectionsTheUserNamedAreThere(t *testing.T) {
-	rf := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"})
+	rf := unitdef.NewStructureRgd(uistate.StructureTemplateName{Race: "necrons", Name: "necron_relay"})
 	byName := map[string]*rgd.RgdEntry{}
 	for _, ch := range rf.Root.Children {
 		byName[ch.Name] = ch
@@ -94,26 +96,26 @@ func TestTheSectionsTheUserNamedAreThere(t *testing.T) {
 	}
 	// The cost is a time cost table over a cost table, and a building that
 	// cannot be paid for is not one anybody asked for.
-	timeCost := rgdFindChild(byName["cost_ext"], "time_cost")
+	timeCost := unitdef.RgdFindChild(byName["cost_ext"], "time_cost")
 	if timeCost == nil {
 		t.Fatal("cost_ext has no time_cost, so the building cannot be priced")
 	}
 	if timeCost.Ref == nil || timeCost.Ref.StrVal != unitdef.RefTimeCostTable {
 		t.Errorf("time_cost points at %v, want %s", timeCost.Ref, unitdef.RefTimeCostTable)
 	}
-	if rgdFindChild(timeCost, "time_seconds") == nil {
+	if unitdef.RgdFindChild(timeCost, "time_seconds") == nil {
 		t.Error("time_cost has no time_seconds, so the building would build instantly")
 	}
-	cost := rgdFindChild(timeCost, "cost")
+	cost := unitdef.RgdFindChild(timeCost, "cost")
 	if cost == nil {
 		t.Fatal("time_cost has no cost table, so the building would be free")
 	}
 	for _, want := range []string{"faith", "population", "power", "requisition", "souls"} {
-		if rgdFindChild(cost, want) == nil {
+		if unitdef.RgdFindChild(cost, want) == nil {
 			t.Errorf("the cost table has no %s, which the game reads for every cost", want)
 		}
 	}
-	if r := rgdFindChild(cost, "requisition"); r != nil && r.FloatVal <= 0 {
+	if r := unitdef.RgdFindChild(cost, "requisition"); r != nil && r.FloatVal <= 0 {
 		t.Errorf("the building costs %v requisition, so it is free", r.FloatVal)
 	}
 }
@@ -124,13 +126,13 @@ func TestTheSectionsTheUserNamedAreThere(t *testing.T) {
 // the template has to have written that value.
 func TestTheValuesTheStructuresAgreeOnAreTheValuesWritten(t *testing.T) {
 	tree := testutil.OpenDXP3(t)
-	cat := buildUnitCatalog(tree)
-	var structures []unitEntry
+	cat := unitdef.BuildUnitCatalog(tree)
+	var structures []unitdef.UnitEntry
 	for _, r := range cat.Races {
 		structures = append(structures, r.Structures...)
 	}
 	stats, _ := rgdCommonStats(tree, structures)
-	rf := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"})
+	rf := unitdef.NewStructureRgd(uistate.StructureTemplateName{Race: "necrons", Name: "necron_relay"})
 	checked := 0
 	for _, p := range rgdSortedPaths(stats) {
 		a := stats[p]
@@ -158,7 +160,7 @@ func TestTheValuesTheStructuresAgreeOnAreTheValuesWritten(t *testing.T) {
 		if strings.HasPrefix(rel, "health_ext/usable_body_indicator") {
 			continue
 		}
-		got := rgdFindPath(rf.Root, strings.Split(rel, "/")...)
+		got := unitdef.RgdFindPath(rf.Root, strings.Split(rel, "/")...)
 		if got == nil {
 			// The template leaves an attribute out on purpose in some cases,
 			// and says so where it does.
@@ -180,13 +182,13 @@ func TestTheValuesTheStructuresAgreeOnAreTheValuesWritten(t *testing.T) {
 // game has never heard of, and one that cannot be right.
 func TestANewBuildingInventsNothingTheGameDoesNotAskFor(t *testing.T) {
 	tree := testutil.OpenDXP3(t)
-	cat := buildUnitCatalog(tree)
-	var structures []unitEntry
+	cat := unitdef.BuildUnitCatalog(tree)
+	var structures []unitdef.UnitEntry
 	for _, r := range cat.Races {
 		structures = append(structures, r.Structures...)
 	}
 	stats, _ := rgdCommonStats(tree, structures)
-	rf := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"})
+	rf := unitdef.NewStructureRgd(uistate.StructureTemplateName{Race: "necrons", Name: "necron_relay"})
 	// The game's structures number their slots event_01 … event_36 and
 	// modifier_01 … modifier_45, and the path of a generated file says so too,
 	// so a numbered slot is compared under its collapsed name.
@@ -213,30 +215,30 @@ func TestANewBuildingInventsNothingTheGameDoesNotAskFor(t *testing.T) {
 // TestTheBuildingIsNamedAfterItself is the part a name can decide: the folder it
 // goes in, the model it points at, the icon, the hotkey.
 func TestTheBuildingIsNamedAfterItself(t *testing.T) {
-	n := structureTemplateName{Race: "necrons", Name: "necron_relay"}
+	n := uistate.StructureTemplateName{Race: "necrons", Name: "necron_relay"}
 	if got, want := n.StructureTemplateVirtualPath(), `Data\attrib\ebps\races\necrons\structures\necron_relay.rgd`; got != want {
 		t.Errorf("a necron building would be written to %q, want %q", got, want)
 	}
-	rf := newStructureRgd(n)
-	blueprint := rgdFindChild(rf.Root, "entity_blueprint_ext")
+	rf := unitdef.NewStructureRgd(n)
+	blueprint := unitdef.RgdFindChild(rf.Root, "entity_blueprint_ext")
 	if blueprint == nil {
 		t.Fatal("no entity_blueprint_ext, so the building has no model")
 	}
-	anim := rgdFindChild(blueprint, "animator")
+	anim := unitdef.RgdFindChild(blueprint, "animator")
 	if anim == nil || anim.StrVal != "Races/Necrons/Structures/Necron_Relay" {
 		t.Errorf("the model is %v, want the one named after the building", anim)
 	}
-	ui := rgdFindChild(rgdFindChild(rf.Root, "ui_ext"), "ui_info")
+	ui := unitdef.RgdFindChild(unitdef.RgdFindChild(rf.Root, "ui_ext"), "ui_info")
 	if ui == nil {
 		t.Fatal("no ui_info, so the building has no name or icon")
 	}
-	if icon := rgdFindChild(ui, "icon_name"); icon == nil || icon.StrVal != "necron_icons/necron_relay_icon" {
+	if icon := unitdef.RgdFindChild(ui, "icon_name"); icon == nil || icon.StrVal != "necron_icons/necron_relay_icon" {
 		t.Errorf("the icon is %v, want the one named after the building", icon)
 	}
-	if name := rgdFindChild(ui, "screen_name_id"); name == nil || name.Type != rgd.RgdTypeWString {
+	if name := unitdef.RgdFindChild(ui, "screen_name_id"); name == nil || name.Type != rgd.RgdTypeWString {
 		t.Errorf("the screen name is %v, want a wide string, since the game reads it as localised text", name)
 	}
-	if hot := rgdFindChild(rgdFindChild(rf.Root, "ui_ext"), "ui_hotkey_name"); hot == nil || hot.StrVal != "necron_relay" {
+	if hot := unitdef.RgdFindChild(unitdef.RgdFindChild(rf.Root, "ui_ext"), "ui_hotkey_name"); hot == nil || hot.StrVal != "necron_relay" {
 		t.Errorf("the hotkey is %v, want the building's own name", hot)
 	}
 }
@@ -244,7 +246,7 @@ func TestTheBuildingIsNamedAfterItself(t *testing.T) {
 // TestTheBuildingRoundTripsThroughTheParser is the file as the app will read it
 // back: written, parsed, and the sections still all there.
 func TestTheBuildingRoundTripsThroughTheParser(t *testing.T) {
-	data, err := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"}).MarshalBinary()
+	data, err := unitdef.NewStructureRgd(uistate.StructureTemplateName{Race: "necrons", Name: "necron_relay"}).MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,13 +268,13 @@ func TestTheBuildingRoundTripsThroughTheParser(t *testing.T) {
 // three tables, all but the first empty, and the two modifiers the game applies
 // written the way it applies them.
 func TestTheModifierTablesAreTheShapeTheGameReads(t *testing.T) {
-	rf := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"})
-	apply := rgdFindChild(rf.Root, "modifier_apply_ext")
+	rf := unitdef.NewStructureRgd(uistate.StructureTemplateName{Race: "necrons", Name: "necron_relay"})
+	apply := unitdef.RgdFindChild(rf.Root, "modifier_apply_ext")
 	if apply == nil {
 		t.Fatal("no modifier_apply_ext, which all 150 structures have")
 	}
 	for _, name := range []string{"modifiers", "modifiers_idle", "modifiers_immediate"} {
-		table := rgdFindChild(apply, name)
+		table := unitdef.RgdFindChild(apply, name)
 		if table == nil {
 			t.Errorf("modifier_apply_ext has no %s, which all 150 structures have", name)
 			continue
@@ -288,26 +290,26 @@ func TestTheModifierTablesAreTheShapeTheGameReads(t *testing.T) {
 	}
 	// The first slot of the first table is the infiltration; the game reads it
 	// as a switch that is on, not as a multiplier.
-	first := rgdFindChild(rgdFindChild(apply, "modifiers"), "modifier_01")
+	first := unitdef.RgdFindChild(unitdef.RgdFindChild(apply, "modifiers"), "modifier_01")
 	if first == nil || first.Ref == nil || first.Ref.StrVal != unitdef.RefEnableInfiltration {
 		t.Fatalf("the first modifier is %v, want the infiltration the game gives 146 of its 150 structures", first)
 	}
-	if usage := rgdFindChild(first, "usage_type"); usage == nil || usage.Ref == nil || usage.Ref.StrVal != unitdef.RefModUsageEnable {
+	if usage := unitdef.RgdFindChild(first, "usage_type"); usage == nil || usage.Ref == nil || usage.Ref.StrVal != unitdef.RefModUsageEnable {
 		t.Errorf("the infiltration's usage is %v, want the enable one", usage)
 	}
-	if v := rgdFindChild(first, "value"); v == nil || v.FloatVal != -1 {
+	if v := unitdef.RgdFindChild(first, "value"); v == nil || v.FloatVal != -1 {
 		t.Errorf("the infiltration's value is %v, want -1", v)
 	}
 	// Everything else is no_modifier: a multiplier of 1, which is how the game
 	// spells a slot that does nothing.
-	second := rgdFindChild(rgdFindChild(apply, "modifiers"), "modifier_02")
+	second := unitdef.RgdFindChild(unitdef.RgdFindChild(apply, "modifiers"), "modifier_02")
 	if second == nil || second.Ref == nil || second.Ref.StrVal != unitdef.RefNoModifier {
 		t.Fatalf("the second modifier is %v, want no_modifier", second)
 	}
-	if usage := rgdFindChild(second, "usage_type"); usage == nil || usage.Ref == nil || usage.Ref.StrVal != unitdef.RefModUsageMultiply {
+	if usage := unitdef.RgdFindChild(second, "usage_type"); usage == nil || usage.Ref == nil || usage.Ref.StrVal != unitdef.RefModUsageMultiply {
 		t.Errorf("no_modifier's usage is %v, want the multiplication one", usage)
 	}
-	if v := rgdFindChild(second, "value"); v == nil || v.FloatVal != 1 {
+	if v := unitdef.RgdFindChild(second, "value"); v == nil || v.FloatVal != 1 {
 		t.Errorf("no_modifier's value is %v, want 1", v)
 	}
 }
@@ -317,7 +319,7 @@ func TestTheModifierTablesAreTheShapeTheGameReads(t *testing.T) {
 // would fail if the two were ever merged by accident.
 func TestABuildingIsNotAUnit(t *testing.T) {
 	building := map[string]bool{}
-	for _, ch := range newStructureRgd(structureTemplateName{Race: "necrons", Name: "x"}).Root.Children {
+	for _, ch := range unitdef.NewStructureRgd(uistate.StructureTemplateName{Race: "necrons", Name: "x"}).Root.Children {
 		building[ch.Name] = true
 	}
 	for _, unitOnly := range []string{"cover_ext", "moving_ext", "special_attack_physics_ext"} {
@@ -331,7 +333,7 @@ func TestABuildingIsNotAUnit(t *testing.T) {
 		}
 	}
 	unit := map[string]bool{}
-	for _, ch := range newUnitRgd(unitTemplateName{Race: "necrons", Name: "x"}).Root.Children {
+	for _, ch := range unitdef.NewUnitRgd(uistate.UnitTemplateName{Race: "necrons", Name: "x"}).Root.Children {
 		unit[ch.Name] = true
 	}
 	if unit["structure_ext"] {
@@ -343,16 +345,16 @@ func TestABuildingIsNotAUnit(t *testing.T) {
 // not about what goes in it, so both kinds are held to them.
 func TestABuildingRefusesTheSameNamesAUnitDoes(t *testing.T) {
 	for _, name := range []string{"", "  ", "necrons/other", `sub\necron`, "necron_hq.rgd", "necron:hq"} {
-		if err := newObjTemplateNameError(newObjBuilding, name); err == nil {
+		if err := editors.NewObjTemplateNameError(editors.NewObjBuilding, name); err == nil {
 			t.Errorf("the building name %q was accepted, so a file nobody asked for could be written", name)
 		}
 	}
-	if err := newObjTemplateNameError(newObjBuilding, "necron_hq"); err != nil {
+	if err := editors.NewObjTemplateNameError(editors.NewObjBuilding, "necron_hq"); err != nil {
 		t.Errorf("a plain building name was refused: %v", err)
 	}
 	// And the message names the thing, so the dialog does not say "unit" while
 	// writing a building.
-	err := newObjTemplateNameError(newObjBuilding, "")
+	err := editors.NewObjTemplateNameError(editors.NewObjBuilding, "")
 	if err == nil || !strings.Contains(err.Error(), "building") {
 		t.Errorf("an empty building name says %v, want a message that says building", err)
 	}

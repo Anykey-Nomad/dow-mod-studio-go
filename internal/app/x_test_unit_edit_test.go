@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"math"
 	"os"
@@ -32,7 +33,7 @@ const (
 // and a localisation id, each under the section the game keeps it in.
 func unitEditFixture(t *testing.T) []byte {
 	t.Helper()
-	return mustMarshalGraph(t, &rgd.RgdFile{
+	return testutil.MustMarshalGraph(t, &rgd.RgdFile{
 		HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
 		Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
 			unitdef.RgdTemplateTable("ui_ext", unitdef.RefUIExt,
@@ -81,9 +82,9 @@ func unitEditFixture(t *testing.T) []byte {
 // test goes through the same path the window does.
 func unitEditUI(t *testing.T) (*uiState, *modtree.ModTree) {
 	t.Helper()
-	tree := newGraphTestMod(t)
+	tree := testutil.NewGraphTestMod(t)
 	freezeTestMod(t, tree)
-	writeTreeFile(t, tree, unitEditTroop, unitEditFixture(t))
+	testutil.WriteTreeFile(t, tree, unitEditTroop, unitEditFixture(t))
 	// A second unit that the mod does not own: it comes from the engine's own
 	// data, which is where most units a modder edits actually live.
 	engineRoot := t.TempDir()
@@ -102,7 +103,7 @@ func unitEditUI(t *testing.T) (*uiState, *modtree.ModTree) {
 	return ui, tree
 }
 
-// writeSourcedFile is writeTreeFile for a file that belongs to another source
+// writeSourcedFile is testutil.WriteTreeFile for a file that belongs to another source
 // than the mod, which is what makes it a base game file as far as the app is
 // concerned.
 func writeSourcedFile(t *testing.T, tree *modtree.ModTree, virtualPath string, data []byte, src *modtree.FileSource) {
@@ -1409,9 +1410,9 @@ func unitViewportWriteUnit(t *testing.T, tree *modtree.ModTree, name unitTemplat
 		t.Fatal(err)
 	}
 	rgdPath := name.UnitTemplateVirtualPath()
-	writeTreeFile(t, tree, rgdPath, data)
+	testutil.WriteTreeFile(t, tree, rgdPath, data)
 	if modelPath != "" {
-		writeTreeFile(t, tree, modelPath, []byte("not a real model"))
+		testutil.WriteTreeFile(t, tree, modelPath, []byte("not a real model"))
 	}
 	tree.SortAll(tree.Root)
 	for _, u := range buildUnitCatalog(tree).AllUnits() {
@@ -2830,4 +2831,102 @@ func TestObjectTabNotWrittenToSession(t *testing.T) {
 	if saved.Tabs[0].Path == "" {
 		t.Error("the file tab lost its path")
 	}
+}
+
+// ─── rgd report helpers, shared with the common-attributes report ─────────
+
+type rgdAttrStat struct {
+	files  int            // how many files carry the path at all
+	types  map[uint32]int // type -> how many files carry it that way
+	values map[string]int // value -> how many files carry that value
+}
+
+func newRgdAttrStat() *rgdAttrStat {
+	return &rgdAttrStat{types: map[uint32]int{}, values: map[string]int{}}
+}
+func rgdTypeName(typ uint32) string {
+	switch typ {
+	case rgd.RgdTypeFloat:
+		return "float"
+	case rgd.RgdTypeInt:
+		return "int"
+	case rgd.RgdTypeBool:
+		return "bool"
+	case rgd.RgdTypeString:
+		return "string"
+	case rgd.RgdTypeWString:
+		return "wstring"
+	case rgd.RgdTypeTable:
+		return "table"
+	case rgd.RgdTypeTableInt:
+		return "tableInt"
+	case rgd.RgdTypeNoData:
+		return "nodata"
+	}
+	return fmt.Sprintf("type%d", typ)
+}
+
+// rgdAttrValue is what makes two occurrences of the same attribute comparable.
+// A table is its reference, because that is what the unit inherits from; a
+// scalar is its printed value.
+func rgdAttrValue(e *rgd.RgdEntry) string {
+	if e.IsTable() {
+		if ref := e.RefString(); ref != "" {
+			return "table->" + ref
+		}
+		return fmt.Sprintf("table(%d children)", len(e.Children))
+	}
+	return rgdTypeName(e.Type) + ":" + e.DisplayValue()
+}
+func collectRgdAttrs(prefix string, children []*rgd.RgdEntry, into map[string]*rgdAttrStat) {
+	for _, ch := range children {
+		path := prefix + "/" + ch.Name
+		a := into[path]
+		if a == nil {
+			a = newRgdAttrStat()
+			into[path] = a
+		}
+		a.files++
+		a.types[ch.Type]++
+		a.values[rgdAttrValue(ch)]++
+		collectRgdAttrs(path, ch.Children, into)
+	}
+}
+
+// rgdCommonStats reads every file of the set and folds its attributes together.
+func rgdCommonStats(tree *modtree.ModTree, entries []unitEntry) (map[string]*rgdAttrStat, []string) {
+	stats := map[string]*rgdAttrStat{}
+	var unreadable []string
+	for _, e := range entries {
+		if !strings.EqualFold(filepath.Ext(e.Path), ".rgd") {
+			continue
+		}
+		data, err := tree.ReadFile(e.Path)
+		if err != nil {
+			unreadable = append(unreadable, e.Name)
+			continue
+		}
+		rf, err := rgd.ParseRgd(data)
+		if err != nil {
+			unreadable = append(unreadable, e.Name)
+			continue
+		}
+		one := map[string]*rgdAttrStat{}
+		collectRgdAttrs(rf.Root.Name, rf.Root.Children, one)
+		for path, a := range one {
+			s := stats[path]
+			if s == nil {
+				s = newRgdAttrStat()
+				stats[path] = s
+			}
+			s.files++
+			for typ, c := range a.types {
+				s.types[typ] += c
+			}
+			for v, c := range a.values {
+				s.values[v] += c
+			}
+		}
+	}
+	return stats, unreadable
 }

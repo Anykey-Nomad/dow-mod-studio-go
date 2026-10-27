@@ -1,10 +1,13 @@
-package app
+package shell_test
 
 import (
-	"dow-mod-studio/internal/app/render"
 	"encoding/json"
 	"os"
 	"testing"
+
+	"dow-mod-studio/internal/app/render"
+	"dow-mod-studio/internal/app/shell"
+	"gioui.org/widget/material"
 )
 
 func TestGPUAPIDefaultsToVulkanAndOverridesEnvironment(t *testing.T) {
@@ -18,12 +21,12 @@ func TestGPUAPIDefaultsToVulkanAndOverridesEnvironment(t *testing.T) {
 }
 
 func TestPersistedGPUAPIDefaultsToVulkan(t *testing.T) {
-	var old persistedState
+	var old shell.PersistedState
 	if err := json.Unmarshal([]byte(`{"version":1,"darkTheme":true}`), &old); err != nil {
 		t.Fatalf("unmarshal legacy state: %v", err)
 	}
-	ui := newLocaleTestUI()
-	ApplyPersistedSettings(ui, old)
+	ui := shell.NewUI(material.NewTheme())
+	shell.ApplyPersistedSettings(ui, old)
 	if got := ui.GpuAPI; got != render.DefaultGPUAPI {
 		t.Fatalf("legacy config selected GPU API %q, want %q", got, render.DefaultGPUAPI)
 	}
@@ -32,10 +35,10 @@ func TestPersistedGPUAPIDefaultsToVulkan(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", configDir)
 	t.Setenv("AppData", configDir)
 	t.Setenv("LOCALAPPDATA", configDir)
-	if err := savePersistedState(ui); err != nil {
+	if err := shell.SavePersistedState(ui); err != nil {
 		t.Fatalf("save state: %v", err)
 	}
-	back, _, err := loadPersistedState()
+	back, _, err := shell.LoadPersistedState()
 	if err != nil {
 		t.Fatalf("load state: %v", err)
 	}

@@ -11,14 +11,14 @@ import (
 // one says about a unit that is wired up, and about a reference that is not.
 
 func TestLinkRowsSayBothDirectionsAndWhichIsWhich(t *testing.T) {
-	tree := newGraphTestMod(t)
+	tree := testutil.NewGraphTestMod(t)
 	g := newModGraph(tree)
 	g.EnsureLinks()
 
 	// The gauntlet refers out once, to the armoury, and is referred to twice:
 	// by the ability and by the add-on, both of which upgrade it. The two
 	// directions have to be told apart, because a freeze works from the second.
-	rows := linkRows(g, graphTestGauntlet)
+	rows := linkRows(g, testutil.GraphTestGauntlet)
 	if len(rows) != 3 {
 		t.Fatalf("the gauntlet has %d rows, want one out and two in: %+v", len(rows), rows)
 	}
@@ -42,7 +42,7 @@ func TestLinkRowsSayBothDirectionsAndWhichIsWhich(t *testing.T) {
 	// relationship, so the armoury lists the gauntlet as something referring to
 	// it, and lists the add-on as something waiting on it. This is the
 	// direction a freeze works from.
-	back := linkRows(g, graphTestArmoury)
+	back := linkRows(g, testutil.GraphTestArmoury)
 	if len(back) != 2 {
 		t.Fatalf("the armoury has %d rows, want the two references pointing at it", len(back))
 	}
@@ -71,12 +71,12 @@ func TestLinkRowsSayBothDirectionsAndWhichIsWhich(t *testing.T) {
 }
 
 func TestLinkRowsSplitIntoTheTwoDirections(t *testing.T) {
-	g := newModGraph(newGraphTestMod(t))
+	g := newModGraph(testutil.NewGraphTestMod(t))
 	g.EnsureLinks()
 	// The gauntlet refers out once and is referred to twice, so both sides of
 	// the split are populated for it — which is the normal case, and the one
 	// that a list showing only outgoing links would get wrong.
-	outgoing, incoming := groupLinkRows(linkRows(g, graphTestGauntlet))
+	outgoing, incoming := groupLinkRows(linkRows(g, testutil.GraphTestGauntlet))
 	if len(outgoing) != 1 || len(incoming) != 2 {
 		t.Fatalf("the gauntlet's split gave %d out and %d in, want 1 and 2", len(outgoing), len(incoming))
 	}
@@ -85,13 +85,13 @@ func TestLinkRowsSplitIntoTheTwoDirections(t *testing.T) {
 	}
 	// The loose unit is wired to nothing at all, so it can put a list
 	// entirely on one side.
-	outgoing, incoming = groupLinkRows(linkRows(g, graphTestLoose))
+	outgoing, incoming = groupLinkRows(linkRows(g, testutil.GraphTestLoose))
 	if len(outgoing) != 0 || len(incoming) != 0 {
 		t.Fatalf("the loose unit's split gave %d out and %d in, want none of either", len(outgoing), len(incoming))
 	}
 	// And the add-on refers out twice, once at the unit it upgrades and once
 	// at the building that unlocks it, and is referred to by nobody.
-	outgoing, incoming = groupLinkRows(linkRows(g, graphTestHubris))
+	outgoing, incoming = groupLinkRows(linkRows(g, testutil.GraphTestHubris))
 	if len(outgoing) != 2 || len(incoming) != 0 {
 		t.Fatalf("the add-on's split gave %d out and %d in, want 2 and 0", len(outgoing), len(incoming))
 	}
@@ -103,9 +103,9 @@ func TestLinkRowsSplitIntoTheTwoDirections(t *testing.T) {
 }
 
 func TestAUnitThatRefersToNothingHasNoRows(t *testing.T) {
-	g := newModGraph(newGraphTestMod(t))
+	g := newModGraph(testutil.NewGraphTestMod(t))
 	g.EnsureLinks()
-	if rows := linkRows(g, graphTestLoose); len(rows) != 0 {
+	if rows := linkRows(g, testutil.GraphTestLoose); len(rows) != 0 {
 		t.Errorf("a unit nothing refers to and which refers to nothing has %d rows: %v", len(rows), rows)
 	}
 }
@@ -113,10 +113,10 @@ func TestAUnitThatRefersToNothingHasNoRows(t *testing.T) {
 func TestAUnitDoesNotListItselfTwice(t *testing.T) {
 	// A building whose requirement names itself is normal in the game, and
 	// saying so once is enough.
-	tree := newGraphTestMod(t)
+	tree := testutil.NewGraphTestMod(t)
 	g := newModGraph(tree)
 	g.EnsureLinks()
-	for _, r := range linkRows(g, graphTestArmoury) {
+	for _, r := range linkRows(g, testutil.GraphTestArmoury) {
 		if !r.Outgoing && strings.EqualFold(r.Target, "necron_armoury") {
 			t.Error("the armoury lists itself as something that refers to it")
 		}
@@ -124,8 +124,8 @@ func TestAUnitDoesNotListItselfTwice(t *testing.T) {
 }
 
 func TestGraphEntityNameFallsBackToTheFileName(t *testing.T) {
-	g := newModGraph(newGraphTestMod(t))
-	if got := graphEntityName(g, graphTestGauntlet); got != "necron_gauntlet" {
+	g := newModGraph(testutil.NewGraphTestMod(t))
+	if got := graphEntityName(g, testutil.GraphTestGauntlet); got != "necron_gauntlet" {
 		t.Errorf("a known entity is called %q", got)
 	}
 	if got := graphEntityName(g, `Data\attrib\weapon\never_seen.rgd`); got != "never_seen" {
@@ -134,11 +134,11 @@ func TestGraphEntityNameFallsBackToTheFileName(t *testing.T) {
 }
 
 func TestBrokenLinkGroupsCollectOneRowPerMissingFile(t *testing.T) {
-	tree := newGraphTestMod(t)
+	tree := testutil.NewGraphTestMod(t)
 	// A unit naming a weapon that is not in the mod: the one thing this whole
 	// feature exists to find.
 	broken := `Data\attrib\ebps\races\necrons\troops\necron_broken.rgd`
-	appendBrokenUnit(t, tree, broken, `weapon\necron_missing_gun.lua`)
+	testutil.AppendBrokenUnit(t, tree, broken, `weapon\necron_missing_gun.lua`)
 
 	g := newModGraph(tree)
 	g.EnsureLinks()
@@ -160,16 +160,16 @@ func TestBrokenLinkGroupsCollectOneRowPerMissingFile(t *testing.T) {
 		t.Errorf("the row says the files that still point at it are %v", grp.Holders)
 	}
 	// A mod with nothing broken reports nothing, rather than a row saying so.
-	if rows := brokenLinkGroups(newModGraph(newGraphTestMod(t))); len(rows) != 0 {
+	if rows := brokenLinkGroups(newModGraph(testutil.NewGraphTestMod(t))); len(rows) != 0 {
 		t.Errorf("a mod with no broken references has %d rows", len(rows))
 	}
 }
 
 func TestBrokenLinkGroupsPutTheMostUsedMissingFileFirst(t *testing.T) {
-	tree := newGraphTestMod(t)
-	appendBrokenUnit(t, tree, `Data\attrib\ebps\races\necrons\troops\necron_one.rgd`, `weapon\rare.lua`)
-	appendBrokenUnit(t, tree, `Data\attrib\ebps\races\necrons\troops\necron_two.rgd`, `weapon\common.lua`)
-	appendBrokenUnit(t, tree, `Data\attrib\ebps\races\necrons\troops\necron_three.rgd`, `weapon\common.lua`)
+	tree := testutil.NewGraphTestMod(t)
+	testutil.AppendBrokenUnit(t, tree, `Data\attrib\ebps\races\necrons\troops\necron_one.rgd`, `weapon\rare.lua`)
+	testutil.AppendBrokenUnit(t, tree, `Data\attrib\ebps\races\necrons\troops\necron_two.rgd`, `weapon\common.lua`)
+	testutil.AppendBrokenUnit(t, tree, `Data\attrib\ebps\races\necrons\troops\necron_three.rgd`, `weapon\common.lua`)
 
 	g := newModGraph(tree)
 	g.EnsureLinks()
@@ -223,7 +223,7 @@ func TestTheBackgroundScanFindsWhatTheBlockingReadFinds(t *testing.T) {
 
 func TestStartingAScanTwiceDoesNotReadTheModTwice(t *testing.T) {
 	ui := newUI(testutil.UnitTestTheme())
-	ui.ModTree = newGraphTestMod(t)
+	ui.ModTree = testutil.NewGraphTestMod(t)
 	g := StartGraphLinkScan(ui)
 	if again := StartGraphLinkScan(ui); again != g {
 		t.Error("a second scan replaced the graph the first one is writing into")
@@ -251,7 +251,7 @@ func waitForLinkScan(t *testing.T, ui *uiState) {
 			return
 		}
 		PollGraphLinks(ui)
-		sleepMillis()
+		testutil.SleepMillis()
 	}
 	t.Fatal("the background scan did not finish")
 }

@@ -114,7 +114,7 @@ func TestLocaleDropdownWritesTheLanguageNames(t *testing.T) {
 		ui.LocaleList[i] = names[i]
 	}
 
-	if diff := imagesDifferIn(img, blank, box); diff == 0 {
+	if diff := testutil.ImagesDifferIn(img, blank, box); diff == 0 {
 		t.Fatal("the list is pixel for pixel the same with the language names removed: " +
 			"nothing is being written, the row fill is painted over the text")
 	} else {
@@ -132,7 +132,7 @@ func TestLocaleDropdownWritesTheLanguageNames(t *testing.T) {
 		oneBlank := renderLocaleOverlay(t, ui, w, h)
 		ui.LocaleList = names
 
-		if imagesDifferIn(img, oneBlank, box) == 0 {
+		if testutil.ImagesDifferIn(img, oneBlank, box) == 0 {
 			t.Errorf("nothing changes when %q is removed: row %d is not being drawn", names[i], i)
 		}
 	}
@@ -171,7 +171,7 @@ func TestLocaleFieldWritesTheChosenLanguage(t *testing.T) {
 	ui := localeTestUI(t)
 	ui.LocaleOpen = false
 
-	img := renderFrame(t, w, h, func(gtx layout.Context) {
+	img := testutil.RenderFrame(t, w, h, func(gtx layout.Context) {
 		gtx.Constraints.Min = image.Point{}
 		LayoutLocaleField(ui, gtx)
 	})

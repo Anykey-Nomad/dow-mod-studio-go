@@ -1,13 +1,14 @@
-package app
+package shell_test
 
 import (
+	"dow-mod-studio/internal/app/shell"
 	"encoding/json"
 	"path/filepath"
 	"testing"
 )
 
 func TestPersistedStateJSONRoundTrip(t *testing.T) {
-	want := persistedState{
+	want := shell.PersistedState{
 		Version:          1,
 		DarkTheme:        false,
 		GamePath:         `C:\Games\Dawn of War Definitive Edition`,
@@ -17,13 +18,13 @@ func TestPersistedStateJSONRoundTrip(t *testing.T) {
 		SelectedTreePath: `Data\attrib\example.rgd`,
 		SelectedPath:     `Data\attrib\example.rgd`,
 		ActiveTab:        2,
-		Tabs:             []persistedTab{{Path: `Data\attrib\example.rgd`, Kind: "rgd", RGDSelected: "GameData"}},
+		Tabs:             []shell.PersistedTab{{Path: `Data\attrib\example.rgd`, Kind: "rgd", RGDSelected: "GameData"}},
 	}
 	data, err := json.Marshal(want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got persistedState
+	var got shell.PersistedState
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,7 @@ func TestPersistedStateJSONRoundTrip(t *testing.T) {
 }
 
 func TestRecentModules(t *testing.T) {
-	ui := &uiState{}
+	ui := &shell.UiState{}
 	first, err := filepath.Abs(filepath.Join("mods", "B", "B.module"))
 	if err != nil {
 		t.Fatal(err)
@@ -42,9 +43,9 @@ func TestRecentModules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	RememberRecentModule(ui, first)
-	RememberRecentModule(ui, second)
-	RememberRecentModule(ui, first)
+	shell.RememberRecentModule(ui, first)
+	shell.RememberRecentModule(ui, second)
+	shell.RememberRecentModule(ui, first)
 	if len(ui.RecentModules) != 2 || ui.RecentModules[0] != first || ui.RecentModules[1] != second {
 		t.Fatalf("recent modules = %#v", ui.RecentModules)
 	}
@@ -53,7 +54,7 @@ func TestRecentModules(t *testing.T) {
 func TestSamePath(t *testing.T) {
 	a := filepath.Join("C:", "Games", "DoW", "..", "DoW")
 	b := filepath.Join("C:", "Games", "DoW")
-	if !samePath(a, b) {
+	if !shell.SamePath(a, b) {
 		t.Fatalf("samePath(%q, %q) = false", a, b)
 	}
 }

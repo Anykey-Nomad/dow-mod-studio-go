@@ -1,6 +1,7 @@
-package app
+package shell_test
 
 import (
+	"dow-mod-studio/internal/app/shell"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/testutil"
 	"path/filepath"
@@ -270,12 +271,12 @@ func TestSearchRealModule(t *testing.T) {
 // the panel is the field's text, so a dismissed panel has to stay down while
 // the text is the same — and must come back the moment the text differs.
 func TestSearchPanelStaysDownUntilTheQueryChanges(t *testing.T) {
-	ui := newUI(testutil.UnitTestTheme())
+	ui := shell.NewUI(testutil.UnitTestTheme())
 
-	if SearchPanelWanted(ui, "") {
+	if shell.SearchPanelWanted(ui, "") {
 		t.Fatal("an empty field should not want the panel")
 	}
-	if !SearchPanelWanted(ui, "necron") {
+	if !shell.SearchPanelWanted(ui, "necron") {
 		t.Fatal("typing a query should bring the panel up")
 	}
 	ui.SearchVisible = true
@@ -283,19 +284,19 @@ func TestSearchPanelStaysDownUntilTheQueryChanges(t *testing.T) {
 	// The user clicks outside, which dismisses it. The query is kept in the
 	// field so it can be refined, and the hold is recorded from that field.
 	ui.SearchEditor.SetText("necron")
-	CloseSearch(ui)
+	shell.CloseSearch(ui)
 	if ui.SearchVisible {
 		t.Fatal("closeSearch left the panel on screen")
 	}
 	for i := 0; i < 5; i++ {
-		if SearchPanelWanted(ui, "necron") {
+		if shell.SearchPanelWanted(ui, "necron") {
 			t.Fatalf("the panel sprang back open on frame %d with an unchanged query; "+
 				"its dismiss catcher is now over the file tree", i)
 		}
 	}
 
 	// Refining the query is how the user asks for the panel again.
-	if !SearchPanelWanted(ui, "necron lord") {
+	if !shell.SearchPanelWanted(ui, "necron lord") {
 		t.Error("changing the query should bring the panel back")
 	}
 }
@@ -304,15 +305,15 @@ func TestSearchPanelStaysDownUntilTheQueryChanges(t *testing.T) {
 // drop the hold, or retyping the very same text would leave the panel down and
 // look like the search had stopped working.
 func TestEmptyingTheSearchReleasesTheHold(t *testing.T) {
-	ui := newUI(testutil.UnitTestTheme())
+	ui := shell.NewUI(testutil.UnitTestTheme())
 	ui.SearchEditor.SetText("necron")
-	SearchPanelWanted(ui, "necron")
-	CloseSearch(ui)
+	shell.SearchPanelWanted(ui, "necron")
+	shell.CloseSearch(ui)
 
-	if SearchPanelWanted(ui, "") {
+	if shell.SearchPanelWanted(ui, "") {
 		t.Error("an empty field should not want the panel")
 	}
-	if !SearchPanelWanted(ui, "necron") {
+	if !shell.SearchPanelWanted(ui, "necron") {
 		t.Error("the same query typed again after clearing should bring the panel back")
 	}
 }
@@ -322,17 +323,17 @@ func TestEmptyingTheSearchReleasesTheHold(t *testing.T) {
 // so if that did not hold the panel down it would spring back on the very next
 // frame and quietly cover the content again.
 func TestEveryPathThatHidesThePanelHoldsItDown(t *testing.T) {
-	ui := newUI(testutil.UnitTestTheme())
+	ui := shell.NewUI(testutil.UnitTestTheme())
 	ui.SearchEditor.SetText("necron")
-	SearchPanelWanted(ui, "necron")
+	shell.SearchPanelWanted(ui, "necron")
 	ui.SearchVisible = true
 
-	CloseSearch(ui) // what a menu click and the language picker both do
+	shell.CloseSearch(ui) // what a menu click and the language picker both do
 
 	if ui.SearchVisible {
 		t.Error("closeSearch did not put the panel away")
 	}
-	if SearchPanelWanted(ui, ui.SearchEditor.Text()) {
+	if shell.SearchPanelWanted(ui, ui.SearchEditor.Text()) {
 		t.Error("a panel hidden from the menu bar sprang straight back up")
 	}
 }

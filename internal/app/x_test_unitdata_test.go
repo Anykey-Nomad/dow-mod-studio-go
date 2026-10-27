@@ -1,9 +1,9 @@
 package app
 
 import (
-	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/testutil"
 	"dow-mod-studio/internal/unitdef"
 	"path/filepath"
 	"strconv"

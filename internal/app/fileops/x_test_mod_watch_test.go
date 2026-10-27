@@ -1,6 +1,7 @@
-package app
+package fileops_test
 
 import (
+	"dow-mod-studio/internal/app/fileops"
 	"dow-mod-studio/internal/modtree"
 	"os"
 	"path/filepath"
@@ -25,14 +26,14 @@ func TestCurrentModSnapshotDetectsFileChanges(t *testing.T) {
 			DiskRoot:   modRoot,
 		}},
 	}
-	before := currentModSnapshot(tree)
+	before := fileops.CurrentModSnapshot(tree)
 	if before == "" {
 		t.Fatal("expected non-empty initial snapshot")
 	}
 	if err := os.WriteFile(filepath.Join(modRoot, "new.lua"), []byte("return true"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	after := currentModSnapshot(tree)
+	after := fileops.CurrentModSnapshot(tree)
 	if before == after {
 		t.Fatal("expected snapshot to change after adding a mod file")
 	}
@@ -44,11 +45,11 @@ func TestCurrentModSnapshotDetectsFileChanges(t *testing.T) {
 	tree.Sources = append(tree.Sources, &modtree.FileSource{
 		ModName: "TestMod", SourceName: "DataGeneric", Kind: modtree.KindThisMod, DiskRoot: external,
 	})
-	beforeExternal := currentModSnapshot(tree)
+	beforeExternal := fileops.CurrentModSnapshot(tree)
 	if err := os.WriteFile(filepath.Join(external, "ignored.lua"), []byte("return true"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if got := currentModSnapshot(tree); got != beforeExternal {
+	if got := fileops.CurrentModSnapshot(tree); got != beforeExternal {
 		t.Fatal("external DataGeneric changes must not trigger current-mod catalog polling")
 	}
 }

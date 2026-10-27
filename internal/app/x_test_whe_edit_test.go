@@ -515,7 +515,7 @@ func TestEventsSectionSavesEditedWheIntoModOverlay(t *testing.T) {
 // an empty or half-loaded state.
 func TestTheEventsSectionLayoutsItsColumns(t *testing.T) {
 	ui, tree := unitEditUI(t)
-	writeTreeFile(t, tree, unitEventsTestWhePath, syntheticEventWhe())
+	testutil.WriteTreeFile(t, tree, unitEventsTestWhePath, syntheticEventWhe())
 	tree.SortAll(tree.Root)
 	ui.UnitSection = unitSectionNamed("Events")
 	var ops op.Ops

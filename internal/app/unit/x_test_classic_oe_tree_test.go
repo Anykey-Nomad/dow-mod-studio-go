@@ -1,10 +1,12 @@
-package app
+package unit_test
 
 import (
 	"bytes"
 	"strconv"
 	"testing"
 
+	"dow-mod-studio/internal/app/shell"
+	"dow-mod-studio/internal/app/unit"
 	"dow-mod-studio/internal/chunky"
 	"dow-mod-studio/internal/whe"
 )
@@ -16,7 +18,7 @@ import (
 // become the hierarchy the classic editor drew.
 
 // treeNames lists a row dump as "name@depth" for readable diffs.
-func treeNames(rows []classicOETreeRow) []string {
+func treeNames(rows []unit.ClassicOETreeRow) []string {
 	out := make([]string, len(rows))
 	for i, r := range rows {
 		out[i] = r.Name + "@" + strconv.Itoa(r.Depth)
@@ -34,7 +36,7 @@ func TestClassicOETreeRoots(t *testing.T) {
 		{Name: "movefire"},
 		{Name: "capture_strategic_point"},
 	}
-	roots := classicOETreeRoots(actions)
+	roots := unit.ClassicOETreeRoots(actions)
 	want := []string{"default", "capture_strategic_point"}
 	if len(roots) != len(want) {
 		t.Fatalf("roots = %d, want %d (%v)", len(roots), len(want), roots)
@@ -64,8 +66,8 @@ func TestClassicOETreeRowsDefaults(t *testing.T) {
 	// With no expansion state recorded: roots open, nested nodes closed —
 	// so the root's children and its motion leaves show, but a closed
 	// sub-action keeps its own motions hidden.
-	rows := classicOETreeRows(actions, nil)
-	want := []classicOETreeRow{
+	rows := unit.ClassicOETreeRows(actions, nil)
+	want := []unit.ClassicOETreeRow{
 		{Name: "default", Depth: 0, Key: "/default", Expanded: true},
 		{Name: "idlefire", Depth: 1, Note: "if can_fire", Key: "/default/idlefire", Expanded: false},
 		{Name: "movefire", Depth: 1, Note: "else", Key: "/default/movefire", Expanded: false},
@@ -91,7 +93,7 @@ func TestClassicOETreeRowsExpansion(t *testing.T) {
 		}},
 	}
 	// An explicit open node shows its children regardless of the default.
-	rows := classicOETreeRows(actions, map[string]bool{"/default/idlefire": true})
+	rows := unit.ClassicOETreeRows(actions, map[string]bool{"/default/idlefire": true})
 	got := treeNames(rows)
 	want := []string{"default@0", "idlefire@1", "idle_fire_devourer@2"}
 	if len(got) != len(want) {
@@ -107,7 +109,7 @@ func TestClassicOETreeRowsExpansion(t *testing.T) {
 	}
 
 	// An explicit closed root collapses everything beneath it.
-	rows = classicOETreeRows(actions, map[string]bool{"/default": false})
+	rows = unit.ClassicOETreeRows(actions, map[string]bool{"/default": false})
 	if len(rows) != 1 {
 		t.Fatalf("rows = %v, want only the collapsed root", treeNames(rows))
 	}
@@ -123,7 +125,7 @@ func TestClassicOETreeRowsCycleTerminates(t *testing.T) {
 	}
 	// Both nodes forced open: a calls b calls a. The link back up the tree
 	// has to appear as an inert leaf instead of recursing forever.
-	rows := classicOETreeRows(actions, map[string]bool{"/a": true, "/a/b": true})
+	rows := unit.ClassicOETreeRows(actions, map[string]bool{"/a": true, "/a/b": true})
 	got := treeNames(rows)
 	want := []string{"a@0", "b@1", "a@2"}
 	if len(got) != len(want) {
@@ -160,62 +162,62 @@ func TestClassicOETreeJumpIndex(t *testing.T) {
 
 	// A leaf matches its own name, case-insensitively: motions are named
 	// for the animations they drive.
-	if got := classicOETreeJumpIndex(classicOETreeRow{Name: "runaim_d"}, actions, clips); got != 3 {
+	if got := unit.ClassicOETreeJumpIndex(unit.ClassicOETreeRow{Name: "runaim_d"}, actions, clips); got != 3 {
 		t.Errorf("leaf jump = %d, want 3 (runaim_d)", got)
 	}
-	if got := classicOETreeJumpIndex(classicOETreeRow{Name: "MOVE"}, actions, clips); got != 2 {
+	if got := unit.ClassicOETreeJumpIndex(unit.ClassicOETreeRow{Name: "MOVE"}, actions, clips); got != 2 {
 		t.Errorf("leaf jump MOVE = %d, want 2 (move)", got)
 	}
 
 	// A branch whose own name is no clip dives into its subtree in the
 	// order the tree draws the children: the subaction before the root's
 	// own motion.
-	row := classicOETreeRow{Name: "default", Key: "/default"}
-	if got := classicOETreeJumpIndex(row, actions, clips); got != 1 {
+	row := unit.ClassicOETreeRow{Name: "default", Key: "/default"}
+	if got := unit.ClassicOETreeJumpIndex(row, actions, clips); got != 1 {
 		t.Errorf("default jump = %d, want 1 (idle_1 through idlefire)", got)
 	}
 
 	// A branch with no subactions falls through to its own motion leaf.
-	row = classicOETreeRow{Name: "die", Key: "/die"}
-	if got := classicOETreeJumpIndex(row, actions, clips); got != 0 {
+	row = unit.ClassicOETreeRow{Name: "die", Key: "/die"}
+	if got := unit.ClassicOETreeJumpIndex(row, actions, clips); got != 0 {
 		t.Errorf("die jump = %d, want 0 (die_1)", got)
 	}
 
 	// The Actions folder lists every action, not just roots: a non-root
 	// still resolves through its own name.
-	row = classicOETreeRow{Name: "idlefire", Key: "/idlefire"}
-	if got := classicOETreeJumpIndex(row, actions, clips); got != 1 {
+	row = unit.ClassicOETreeRow{Name: "idlefire", Key: "/idlefire"}
+	if got := unit.ClassicOETreeJumpIndex(row, actions, clips); got != 1 {
 		t.Errorf("idlefire jump = %d, want 1 (idle_1)", got)
 	}
 
 	// Nothing in the subtree names a clip — the press reports a miss.
-	row = classicOETreeRow{Name: "flag_motion", Key: "/flag_motion"}
-	if got := classicOETreeJumpIndex(row, actions, clips); got != -1 {
+	row = unit.ClassicOETreeRow{Name: "flag_motion", Key: "/flag_motion"}
+	if got := unit.ClassicOETreeJumpIndex(row, actions, clips); got != -1 {
 		t.Errorf("flag_motion jump = %d, want -1", got)
 	}
-	if got := classicOETreeJumpIndex(classicOETreeRow{Name: "nope"}, actions, clips); got != -1 {
+	if got := unit.ClassicOETreeJumpIndex(unit.ClassicOETreeRow{Name: "nope"}, actions, clips); got != -1 {
 		t.Errorf("leaf miss = %d, want -1", got)
 	}
 
 	// A self-referential action terminates and reports no clip.
-	row = classicOETreeRow{Name: "loop", Key: "/loop"}
-	if got := classicOETreeJumpIndex(row, actions, clips); got != -1 {
+	row = unit.ClassicOETreeRow{Name: "loop", Key: "/loop"}
+	if got := unit.ClassicOETreeJumpIndex(row, actions, clips); got != -1 {
 		t.Errorf("loop jump = %d, want -1 (cycle, no clip)", got)
 	}
 }
 
 func TestClassicOEDoubleClick(t *testing.T) {
-	ui := &uiState{}
-	if ClassicOEDoubleClick(ui, "motion:phase_in") {
+	ui := &shell.UiState{}
+	if unit.ClassicOEDoubleClick(ui, "motion:phase_in") {
 		t.Fatal("the first press reported a double")
 	}
-	if !ClassicOEDoubleClick(ui, "motion:phase_in") {
+	if !unit.ClassicOEDoubleClick(ui, "motion:phase_in") {
 		t.Fatal("an immediate second press on the same row was not a double")
 	}
-	if ClassicOEDoubleClick(ui, "motion:phase_in") {
+	if unit.ClassicOEDoubleClick(ui, "motion:phase_in") {
 		t.Fatal("a third press repeated the double instead of starting fresh")
 	}
-	if ClassicOEDoubleClick(ui, "action:default") {
+	if unit.ClassicOEDoubleClick(ui, "action:default") {
 		t.Fatal("a first press on another row counted as a double")
 	}
 }
@@ -246,25 +248,25 @@ func TestClassicOETreeRowDialogPicksTheEditorsArea(t *testing.T) {
 		t.Fatalf("parsing the fixture .whe: %v", err)
 	}
 
-	kind, name, index, ok := classicOETreeRowDialog(doc, classicOETreeRow{Name: "idle", Key: "/idle"})
-	if !ok || kind != classicOEDialogAction || name != "idle" || index != 0 {
+	kind, name, index, ok := unit.ClassicOETreeRowDialog(doc, unit.ClassicOETreeRow{Name: "idle", Key: "/idle"})
+	if !ok || kind != unit.ClassicOEDialogAction || name != "idle" || index != 0 {
 		t.Errorf("action row = (%d, %q, %d, %v), want the action editor at index 0", kind, name, index, ok)
 	}
 
-	kind, name, _, ok = classicOETreeRowDialog(doc, classicOETreeRow{Name: "idle_shared"})
-	if !ok || kind != classicOEDialogTimeline || name != "idle_shared" {
+	kind, name, _, ok = unit.ClassicOETreeRowDialog(doc, unit.ClassicOETreeRow{Name: "idle_shared"})
+	if !ok || kind != unit.ClassicOEDialogTimeline || name != "idle_shared" {
 		t.Errorf("motion leaf = (%d, %q, _, %v), want the timeline editor for idle_shared", kind, name, ok)
 	}
 
 	// A motion the file carries no timeline for has no editor to raise.
-	if _, _, _, ok := classicOETreeRowDialog(doc, classicOETreeRow{Name: "missing_clip"}); ok {
+	if _, _, _, ok := unit.ClassicOETreeRowDialog(doc, unit.ClassicOETreeRow{Name: "missing_clip"}); ok {
 		t.Error("a name with no timeline and no action reported an editor")
 	}
 	// Nor does a branch whose action is not in the file (a broken tree).
-	if _, _, _, ok := classicOETreeRowDialog(doc, classicOETreeRow{Name: "gone", Key: "/gone"}); ok {
+	if _, _, _, ok := unit.ClassicOETreeRowDialog(doc, unit.ClassicOETreeRow{Name: "gone", Key: "/gone"}); ok {
 		t.Error("an action row with no such action reported an editor")
 	}
-	if _, _, _, ok := classicOETreeRowDialog(nil, classicOETreeRow{Name: "idle", Key: "/idle"}); ok {
+	if _, _, _, ok := unit.ClassicOETreeRowDialog(nil, unit.ClassicOETreeRow{Name: "idle", Key: "/idle"}); ok {
 		t.Error("a nil document reported an editor")
 	}
 }
@@ -274,14 +276,14 @@ func TestClassicOETreeRowDialogPicksTheEditorsArea(t *testing.T) {
 // the mesh list — is appended past it, which is why the index is found by
 // kind rather than by being last.
 func TestClassicOEHeadersKeepTheAnimsPanelDefault(t *testing.T) {
-	if classicOEHeaders[classicOEAnimsHeader].Kind != classicOEKindAnims {
+	if unit.ClassicOEHeaders[unit.ClassicOEAnimsHeader].Kind != unit.ClassicOEKindAnims {
 		t.Fatalf("default-open panel = %q (%s), want the anims panel",
-			classicOEHeaders[classicOEAnimsHeader].Label,
-			classicOEHeaders[classicOEAnimsHeader].Kind)
+			unit.ClassicOEHeaders[unit.ClassicOEAnimsHeader].Label,
+			unit.ClassicOEHeaders[unit.ClassicOEAnimsHeader].Kind)
 	}
 	meshes := false
-	for _, h := range classicOEHeaders {
-		if h.Kind == classicOEKindMeshes {
+	for _, h := range unit.ClassicOEHeaders {
+		if h.Kind == unit.ClassicOEKindMeshes {
 			meshes = true
 		}
 	}

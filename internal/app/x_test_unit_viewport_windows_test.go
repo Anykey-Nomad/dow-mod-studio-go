@@ -76,7 +76,7 @@ func unitViewportLoad(t *testing.T, ui *uiState, f *windowFrame, quiet bool) boo
 		if time.Now().After(deadline) {
 			return false
 		}
-		sleepMillis()
+		testutil.SleepMillis()
 	}
 	return false
 }
@@ -146,7 +146,7 @@ func TestTheViewportPlaysTheClip(t *testing.T) {
 	first := v.Time
 	deadline := time.Now().Add(30 * time.Second)
 	for v.Time == first && time.Now().Before(deadline) {
-		sleepMillis()
+		testutil.SleepMillis()
 		unitViewportFrames(f, 1)
 	}
 	if v.Time == first {
@@ -245,7 +245,7 @@ func TestTheViewportSaysWhenAUnitHasNoModel(t *testing.T) {
 	deadline := time.Now().Add(30 * time.Second)
 	for ui.UnitModelErr == "" && time.Now().Before(deadline) {
 		PollUnitModel(ui)
-		sleepMillis()
+		testutil.SleepMillis()
 	}
 	unitViewportFrames(f, 2)
 	if ui.UnitModelErr == "" {

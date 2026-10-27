@@ -1,12 +1,16 @@
-package app
+package shell_test
 
 import (
+	"dow-mod-studio/internal/app/shell"
+	"dow-mod-studio/internal/app/uistate"
+	"dow-mod-studio/internal/app/unit"
+	"dow-mod-studio/internal/app/viewer"
 	"image"
 	"testing"
 
 	"gioui.org/f32"
 	"gioui.org/layout"
-	"gioui.org/unit"
+	giounit "gioui.org/unit"
 )
 
 // ── scrolling ──────────────────────────────────────────────────────────────
@@ -15,22 +19,22 @@ import (
 // has nothing to reveal, so the offset stays at zero however hard the wheel is
 // turned — otherwise the bar would slide its own background out of view.
 func TestTabScrollIsOnlyPossibleWhenTheRowOverflows(t *testing.T) {
-	ui := &uiState{}
+	ui := &shell.UiState{}
 
-	if got := TabMaxScroll(ui, 900, 400); got != 0 {
+	if got := shell.TabMaxScroll(ui, 900, 400); got != 0 {
 		t.Errorf("maxScroll = %d for a 400px row in a 900px bar, want 0", got)
 	}
-	if got := TabMaxScroll(ui, 900, 900); got != 0 {
+	if got := shell.TabMaxScroll(ui, 900, 900); got != 0 {
 		t.Errorf("maxScroll = %d for an exactly fitting row, want 0", got)
 	}
-	if got := TabMaxScroll(ui, 900, 1300); got != 400 {
+	if got := shell.TabMaxScroll(ui, 900, 1300); got != 400 {
 		t.Errorf("maxScroll = %d, want 400", got)
 	}
 }
 
 func TestClampTabScrollHoldsTheOffsetInsideTheRow(t *testing.T) {
-	ui := &uiState{TabScrollX: 5000}
-	ClampTabScroll(ui, 900, 1300)
+	ui := &shell.UiState{TabScrollX: 5000}
+	shell.ClampTabScroll(ui, 900, 1300)
 	if ui.TabScrollX != 400 {
 		t.Errorf("scrollX = %d, want it pulled back to the 400px of overflow", ui.TabScrollX)
 	}
@@ -38,7 +42,7 @@ func TestClampTabScrollHoldsTheOffsetInsideTheRow(t *testing.T) {
 	// A negative offset would slide the row off its left edge, leaving a gap
 	// where the first tab should be.
 	ui.TabScrollX = -200
-	ClampTabScroll(ui, 900, 1300)
+	shell.ClampTabScroll(ui, 900, 1300)
 	if ui.TabScrollX != 0 {
 		t.Errorf("scrollX = %d, want 0", ui.TabScrollX)
 	}
@@ -48,13 +52,13 @@ func TestClampTabScrollHoldsTheOffsetInsideTheRow(t *testing.T) {
 // tabs slide out of sight and the bar shows nothing. This is the path a closed
 // tab takes, and it is checked here because the bar does not watch the tab list.
 func TestTabScrollFollowsTheRowShrinking(t *testing.T) {
-	ui := &uiState{TabScrollX: 600, TabBarWidth: 900, TabRowWidth: 1600}
-	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	ui := &shell.UiState{TabScrollX: 600, TabBarWidth: 900, TabRowWidth: 1600}
+	shell.ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
 	if ui.TabScrollX != 600 {
 		t.Fatalf("scrollX = %d, want 600 to start with", ui.TabScrollX)
 	}
 	// Last tab closed: the row is now narrower than the bar.
-	ClampTabScroll(ui, 900, 700)
+	shell.ClampTabScroll(ui, 900, 700)
 	if ui.TabScrollX != 0 {
 		t.Errorf("scrollX = %d after the row shrank below the bar, want 0", ui.TabScrollX)
 	}
@@ -67,14 +71,14 @@ func TestTabScrollFollowsTheRowShrinking(t *testing.T) {
 // the first tab, a wheel down towards the last.
 func TestTabWheelMovesTheRowSideways(t *testing.T) {
 	const bar, row = 400, 1400
-	ui := &uiState{TabBarWidth: bar, TabRowWidth: row, TabScrollX: 400}
+	ui := &shell.UiState{TabBarWidth: bar, TabRowWidth: row, TabScrollX: 400}
 	overflow := row - bar
 
 	// A notch is wheelNotchDelta, and the step is a fraction of a pixel per
 	// unit of that. Reading the step as pixels per notch — which is what it
 	// used to be — asks for 48×120 pixels a click, and every click slammed the
 	// row to one end. A notch has to be a move, not a jump.
-	notch := int(wheelNotchDelta * tabWheelStepPx)
+	notch := int(shell.WheelNotchDelta * shell.TabWheelStepPx)
 	if notch <= 0 {
 		t.Fatalf("a notch of the wheel moves the row %d pixels", notch)
 	}
@@ -85,14 +89,14 @@ func TestTabWheelMovesTheRowSideways(t *testing.T) {
 	// Starting at the end, so a wheel that moves the row the wrong way shows
 	// up as a clamp rather than as nothing happening.
 	ui.TabScrollX += -2 * notch
-	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	shell.ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
 	if want := 400 - 2*notch; ui.TabScrollX != want {
 		t.Errorf("scrollX = %d after two notches up, want %d", ui.TabScrollX, want)
 	}
 
 	// And down again, back to the end of the row.
 	ui.TabScrollX += 2 * notch
-	ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
+	shell.ClampTabScroll(ui, ui.TabBarWidth, ui.TabRowWidth)
 	if ui.TabScrollX != 400 {
 		t.Errorf("scrollX = %d after two notches down, want 400", ui.TabScrollX)
 	}
@@ -103,7 +107,7 @@ func TestTabWheelMovesTheRowSideways(t *testing.T) {
 // A right press is resolved by position, not by a clickable per tab, so the
 // recorded rects have to line up with where the tabs were drawn.
 func TestTabAtFindsTheTabUnderAPoint(t *testing.T) {
-	ui := &uiState{TabRects: []image.Rectangle{
+	ui := &shell.UiState{TabRects: []image.Rectangle{
 		{Min: image.Pt(0, 0), Max: image.Pt(80, 28)},
 		{Min: image.Pt(82, 0), Max: image.Pt(200, 28)},
 		{Min: image.Pt(202, 0), Max: image.Pt(260, 28)},
@@ -125,7 +129,7 @@ func TestTabAtFindsTheTabUnderAPoint(t *testing.T) {
 		{image.Pt(230, 28), -1}, // below the bar is nothing
 		{image.Pt(500, 14), -1}, // past the last tab
 	} {
-		got := TabAt(ui, f32.Point{X: float32(tc.p.X), Y: float32(tc.p.Y)})
+		got := shell.TabAt(ui, f32.Point{X: float32(tc.p.X), Y: float32(tc.p.Y)})
 		if got != tc.want {
 			t.Errorf("tabAt(%v) = %d, want %d", tc.p, got, tc.want)
 		}
@@ -136,14 +140,14 @@ func TestTabAtFindsTheTabUnderAPoint(t *testing.T) {
 // window's, so the bar's top has to be added. Getting that wrong puts the menu
 // 25px above the tab it belongs to.
 func TestTabContextMenuOpensBelowTheBar(t *testing.T) {
-	ui := &uiState{}
-	gtx := layout.Context{Metric: unit.Metric{PxPerDp: 1, PxPerSp: 1}}
+	ui := &shell.UiState{}
+	gtx := layout.Context{Metric: giounit.Metric{PxPerDp: 1, PxPerSp: 1}}
 
-	pos := TabContextPoint(ui, gtx, 40)
+	pos := shell.TabContextPoint(ui, gtx, 40)
 
 	// The bar sits under the 24px menu bar and its 1px line, so its own bottom
 	// is at 25+28 and the menu has to start below that, not on it.
-	wantY := menuBarHeightDp + 1 + tabBarHeightDp
+	wantY := shell.MenuBarHeightDp + 1 + shell.TabBarHeightDp
 	if pos.Y != wantY {
 		t.Errorf("menu at y=%d, want %d: it is drawn on top of the bar", pos.Y, wantY)
 	}
@@ -155,14 +159,14 @@ func TestTabContextMenuOpensBelowTheBar(t *testing.T) {
 // ── the context menu ───────────────────────────────────────────────────────
 
 func TestTabContextMenuSelectsTheTabItWasOpenedOn(t *testing.T) {
-	ui := &uiState{OpenTabs: []*fileTab{
+	ui := &shell.UiState{OpenTabs: []*shell.FileTab{
 		{Path: "a.rgd", Kind: "rgd"},
 		{Path: "b.rgd", Kind: "rgd"},
 		{Path: "c.rgd", Kind: "rgd"},
 	}}
 	ui.TabSel = 1
 
-	OpenTabContextMenu(ui, 2, image.Pt(300, 60))
+	shell.OpenTabContextMenu(ui, 2, image.Pt(300, 60))
 
 	if !ui.TabContextVisible {
 		t.Fatal("the menu did not open")
@@ -178,17 +182,17 @@ func TestTabContextMenuSelectsTheTabItWasOpenedOn(t *testing.T) {
 }
 
 func TestTabContextMenuRefusesATabThatIsNotThere(t *testing.T) {
-	ui := &uiState{OpenTabs: []*fileTab{{Path: "a.rgd", Kind: "rgd"}}}
-	OpenTabContextMenu(ui, 5, image.Pt(10, 10))
+	ui := &shell.UiState{OpenTabs: []*shell.FileTab{{Path: "a.rgd", Kind: "rgd"}}}
+	shell.OpenTabContextMenu(ui, 5, image.Pt(10, 10))
 	if ui.TabContextVisible {
 		t.Error("a menu opened for a tab that does not exist")
 	}
 }
 
 func TestCloseTabContextMenuForgetsWhichTabItWasOn(t *testing.T) {
-	ui := &uiState{OpenTabs: []*fileTab{{Path: "a.rgd", Kind: "rgd"}, {Path: "b.rgd", Kind: "rgd"}}}
-	OpenTabContextMenu(ui, 1, image.Pt(10, 10))
-	CloseTabContextMenu(ui)
+	ui := &shell.UiState{OpenTabs: []*shell.FileTab{{Path: "a.rgd", Kind: "rgd"}, {Path: "b.rgd", Kind: "rgd"}}}
+	shell.OpenTabContextMenu(ui, 1, image.Pt(10, 10))
+	shell.CloseTabContextMenu(ui)
 
 	if ui.TabContextVisible {
 		t.Error("the menu is still open")
@@ -206,15 +210,15 @@ func TestCloseTabContextMenuForgetsWhichTabItWasOn(t *testing.T) {
 // audio and its GPU buffers, which is why the two paths share one function.
 func TestCloseAllFileTabsReleasesWhatEachTabHeld(t *testing.T) {
 	stopped := 0
-	tab := &fileTab{
+	tab := &shell.FileTab{
 		Path: "a.rgd", Kind: "rgd",
 		ImageDecodeStop: func() { stopped++ },
-		Model:           &modelViewer{Model: &WhmModel{}},
+		Model:           &viewer.ModelViewer{Model: &uistate.WhmModel{}},
 	}
-	ui := &uiState{OpenTabs: []*fileTab{tab}, TabSel: 1}
-	EnsureTabClicks(ui)
+	ui := &shell.UiState{OpenTabs: []*shell.FileTab{tab}, TabSel: 1}
+	shell.EnsureTabClicks(ui)
 
-	CloseAllFileTabs(ui)
+	shell.CloseAllFileTabs(ui)
 
 	if stopped != 1 {
 		t.Errorf("the decode was stopped %d times, want 1", stopped)
@@ -233,14 +237,14 @@ func TestCloseAllFileTabsReleasesWhatEachTabHeld(t *testing.T) {
 // A bar with nothing left in it has nothing to scroll, so the offset goes back
 // to the left rather than leaving the bar showing empty background.
 func TestCloseAllFileTabsResetsTheScroll(t *testing.T) {
-	ui := &uiState{
-		OpenTabs:   []*fileTab{{Path: "a.rgd", Kind: "rgd"}},
+	ui := &shell.UiState{
+		OpenTabs:   []*shell.FileTab{{Path: "a.rgd", Kind: "rgd"}},
 		TabSel:     1,
 		TabScrollX: 240,
 	}
-	EnsureTabClicks(ui)
+	shell.EnsureTabClicks(ui)
 
-	CloseAllFileTabs(ui)
+	shell.CloseAllFileTabs(ui)
 
 	if ui.TabScrollX != 0 {
 		t.Errorf("scrollX = %d on an empty bar, want 0", ui.TabScrollX)
@@ -253,11 +257,11 @@ func TestCloseAllFileTabsResetsTheScroll(t *testing.T) {
 // The object tab's dropdowns belong to that tab, so they go with it rather than
 // being left open over whatever takes its place.
 func TestCloseAllFileTabsClosesTheObjectDropdowns(t *testing.T) {
-	unit := &fileTab{Kind: unitTabKind}
-	ui := &uiState{OpenTabs: []*fileTab{unit}, TabSel: 1, UnitRaceOpen: true, UnitListOpen: true}
-	EnsureTabClicks(ui)
+	unit := &shell.FileTab{Kind: unit.UnitTabKind}
+	ui := &shell.UiState{OpenTabs: []*shell.FileTab{unit}, TabSel: 1, UnitRaceOpen: true, UnitListOpen: true}
+	shell.EnsureTabClicks(ui)
 
-	CloseAllFileTabs(ui)
+	shell.CloseAllFileTabs(ui)
 
 	if ui.UnitRaceOpen || ui.UnitListOpen {
 		t.Errorf("a dropdown is still open (race=%v list=%v)", ui.UnitRaceOpen, ui.UnitListOpen)

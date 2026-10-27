@@ -1,4 +1,4 @@
-package app
+package unitdef_test
 
 import (
 	"fmt"
@@ -9,9 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"dow-mod-studio/internal/app/editors"
+	"dow-mod-studio/internal/app/shell"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/testutil"
+	"dow-mod-studio/internal/unitdef"
 )
 
 type rgdAttrStat struct {
@@ -100,8 +103,8 @@ func collectRgdAttrs(prefix string, children []*rgd.RgdEntry, into map[string]*r
 
 func TestRealCommonRgdAttributes(t *testing.T) {
 	tree := testutil.OpenDXP3(t)
-	cat := buildUnitCatalog(tree)
-	var troops, structures []unitEntry
+	cat := unitdef.BuildUnitCatalog(tree)
+	var troops, structures []unitdef.UnitEntry
 	for _, r := range cat.Races {
 		troops = append(troops, r.Troops...)
 		structures = append(structures, r.Structures...)
@@ -113,7 +116,7 @@ func TestRealCommonRgdAttributes(t *testing.T) {
 	}
 	for _, set := range []struct {
 		title   string
-		entries []unitEntry
+		entries []unitdef.UnitEntry
 	}{
 		{"TROOPS", troops},
 		{"STRUCTURES", structures},
@@ -133,7 +136,7 @@ func TestRealCommonRgdAttributes(t *testing.T) {
 }
 
 // rgdCommonStats reads every file of the set and folds its attributes together.
-func rgdCommonStats(tree *modtree.ModTree, entries []unitEntry) (map[string]*rgdAttrStat, []string) {
+func rgdCommonStats(tree *modtree.ModTree, entries []unitdef.UnitEntry) (map[string]*rgdAttrStat, []string) {
 	stats := map[string]*rgdAttrStat{}
 	var unreadable []string
 	for _, e := range entries {
@@ -556,7 +559,7 @@ func TestRgdScalarEditingAndRoundTrip(t *testing.T) {
 		5: "Новая строка",
 	}
 	for _, entry := range root.Children {
-		if _, err := rgdApplyScalarText(entry, changes[entry.Hash]); err != nil {
+		if _, err := editors.RgdApplyScalarText(entry, changes[entry.Hash]); err != nil {
 			t.Fatalf("apply %s: %v", entry.Name, err)
 		}
 	}
@@ -604,7 +607,7 @@ func TestRgdDisplayFieldValue(t *testing.T) {
 
 func TestRgdScalarEditingRejectsInvalidValues(t *testing.T) {
 	entry := &rgd.RgdEntry{Type: rgd.RgdTypeInt, IntVal: 7}
-	if _, err := rgdApplyScalarText(entry, "not-a-number"); err == nil {
+	if _, err := editors.RgdApplyScalarText(entry, "not-a-number"); err == nil {
 		t.Fatal("invalid integer was accepted")
 	}
 	if entry.IntVal != 7 {
@@ -624,19 +627,19 @@ func TestFindRgdReferenceFile(t *testing.T) {
 	}
 	folder.Files = append(folder.Files, file)
 	folder.FileByLower[file.Name] = file
-	ui := &uiState{ModTree: tree}
+	ui := &shell.UiState{ModTree: tree}
 
 	for _, ref := range []string{
 		`ebpextensions\health_ext.lua`,
 		`ebpextensions/health_ext.lua`,
 		`Data\ebpextensions\health_ext.lua`,
 	} {
-		if got := FindRgdReferenceFile(ui, ref); got != file.FullPath {
+		if got := shell.FindRgdReferenceFile(ui, ref); got != file.FullPath {
 			t.Errorf("reference %q resolved to %q, want %q", ref, got, file.FullPath)
 		}
 	}
 	for _, ref := range []string{"object://something", "missing.lua", ""} {
-		if got := FindRgdReferenceFile(ui, ref); got != "" {
+		if got := shell.FindRgdReferenceFile(ui, ref); got != "" {
 			t.Errorf("reference %q unexpectedly resolved to %q", ref, got)
 		}
 	}

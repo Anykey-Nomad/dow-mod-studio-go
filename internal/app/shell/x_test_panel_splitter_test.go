@@ -1,6 +1,9 @@
-package app
+package shell_test
 
-import "testing"
+import (
+	"dow-mod-studio/internal/app/shell"
+	"testing"
+)
 
 func TestPanelSplitterSlowDragKeepsWindowPointerCoordinate(t *testing.T) {
 	const total, splitterWidth = 1200, 6
@@ -13,7 +16,7 @@ func TestPanelSplitterSlowDragKeepsWindowPointerCoordinate(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			left, right := 300, 400
-			origin := panelSplitterLayoutOrigin(tc.index, total, splitterWidth, left, right)
+			origin := shell.PanelSplitterLayoutOrigin(tc.index, total, splitterWidth, left, right)
 			pressX := float32(origin + 3)
 			startLeft, startRight := left, right
 
@@ -24,7 +27,7 @@ func TestPanelSplitterSlowDragKeepsWindowPointerCoordinate(t *testing.T) {
 			for _, delta := range []float32{0, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2, 1.75, 1.5, 1.25, 1, .75, .5, .25, 0, -.25, -.5} {
 				pointerX := pressX + delta
 				localX := pointerX - float32(origin)
-				left, right = panelSplitterWidthFromDrag(
+				left, right = shell.PanelSplitterWidthFromDrag(
 					tc.index, float32(origin)+localX, pressX, startLeft, startRight,
 				)
 				if tc.index == 0 {
@@ -39,7 +42,7 @@ func TestPanelSplitterSlowDragKeepsWindowPointerCoordinate(t *testing.T) {
 					}
 				}
 				// Layout emits the new splitter position for the next frame.
-				origin = panelSplitterLayoutOrigin(tc.index, total, splitterWidth, left, right)
+				origin = shell.PanelSplitterLayoutOrigin(tc.index, total, splitterWidth, left, right)
 			}
 		})
 	}
@@ -59,9 +62,9 @@ func TestPanelSplitterDragCalculatesFromPressState(t *testing.T) {
 		{"right divider rightward", 1, 13, startLeft, 390},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			origin := panelSplitterLayoutOrigin(tc.index, total, splitterWidth, startLeft, startRight)
+			origin := shell.PanelSplitterLayoutOrigin(tc.index, total, splitterWidth, startLeft, startRight)
 			pressX := float32(origin + 3)
-			left, right := panelSplitterWidthFromDrag(tc.index, float32(origin)+tc.localX, pressX, startLeft, startRight)
+			left, right := shell.PanelSplitterWidthFromDrag(tc.index, float32(origin)+tc.localX, pressX, startLeft, startRight)
 			if left != tc.wantLeft || right != tc.wantRight {
 				t.Fatalf("drag result left=%d right=%d; want left=%d right=%d", left, right, tc.wantLeft, tc.wantRight)
 			}

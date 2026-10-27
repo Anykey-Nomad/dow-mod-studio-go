@@ -1,4 +1,4 @@
-package app
+package render_test
 
 import (
 	"encoding/binary"

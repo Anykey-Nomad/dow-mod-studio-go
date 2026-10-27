@@ -1,6 +1,8 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/editors"
+	"dow-mod-studio/internal/app/shell"
 	"dow-mod-studio/internal/testutil"
 	"image"
 	"image/color"
@@ -29,17 +31,17 @@ func TestImageViewerPaintsTheImage(t *testing.T) {
 		}
 	}
 
-	ui := newUI(testutil.UnitTestTheme())
-	tab := &fileTab{
+	ui := shell.NewUI(testutil.UnitTestTheme())
+	tab := &shell.FileTab{
 		Path:        `Data\test\pink.png`,
 		Kind:        "image",
 		ImageData:   img,
 		ImageFormat: "PNG",
 		ImageZoom:   1,
 	}
-	ui.OpenTabs = []*fileTab{tab}
+	ui.OpenTabs = []*shell.FileTab{tab}
 	ui.TabSel = 1
-	EnsureTabClicks(ui)
+	shell.EnsureTabClicks(ui)
 
 	var ops op.Ops
 	gtx := testutil.NewLayoutContext(&ops, size.X, size.Y)
@@ -89,10 +91,10 @@ func TestImageViewerPaintsTheImage(t *testing.T) {
 // ─── merged from x_test_image_decode_test.go ────────────────────────────────────────
 
 func TestImageCache(t *testing.T) {
-	ui := newUI(nil)
+	ui := shell.NewUI(nil)
 	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
-	CacheDecodedImage(ui, `Data\attrib\textures\icon.dds`, img, nil, "DDS", 123)
-	entry, ok := CachedImage(ui, `data/attrib/textures/icon.DDS`)
+	editors.CacheDecodedImage(ui, `Data\attrib\textures\icon.dds`, img, nil, "DDS", 123)
+	entry, ok := editors.CachedImage(ui, `data/attrib/textures/icon.DDS`)
 	if !ok || entry.Data == nil || entry.Bytes != 123 || entry.Format != "DDS" {
 		t.Fatalf("cache lookup failed: %#v", entry)
 	}

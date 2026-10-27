@@ -1,6 +1,9 @@
-package app
+package fileops_test
 
-import "testing"
+import (
+	"dow-mod-studio/internal/app/fileops"
+	"testing"
+)
 
 func TestCleanDialogPathStripsSurroundingQuotes(t *testing.T) {
 	cases := map[string]string{
@@ -10,7 +13,7 @@ func TestCleanDialogPathStripsSurroundingQuotes(t *testing.T) {
 		`"C:\Game`:               `"C:\Game`,
 	}
 	for in, want := range cases {
-		if got := cleanDialogPath(in); got != want {
+		if got := fileops.CleanDialogPath(in); got != want {
 			t.Errorf("cleanDialogPath(%q) = %q, want %q", in, got, want)
 		}
 	}

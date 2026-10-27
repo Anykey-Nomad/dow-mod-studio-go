@@ -1,6 +1,9 @@
-package app
+package unit_test
 
-import "testing"
+import (
+	"dow-mod-studio/internal/app/unit"
+	"testing"
+)
 
 // The action rows of the Classic Object Editor borrow the game's own command
 // buttons as their icons: an action whose name says what it does ("move",
@@ -102,7 +105,7 @@ func TestActionIconFile(t *testing.T) {
 		{"thrown_run", "move"},
 	}
 	for _, c := range cases {
-		if got := actionIconFile(c.action); got != c.want {
+		if got := unit.ActionIconFile(c.action); got != c.want {
 			t.Errorf("actionIconFile(%q) = %q, want %q", c.action, got, c.want)
 		}
 	}
@@ -124,7 +127,7 @@ func TestActionIconHasWord(t *testing.T) {
 		{"rerun", "run", false},
 	}
 	for _, c := range cases {
-		if got := actionIconHasWord(c.name, c.word); got != c.want {
+		if got := unit.ActionIconHasWord(c.name, c.word); got != c.want {
 			t.Errorf("actionIconHasWord(%q, %q) = %v, want %v", c.name, c.word, got, c.want)
 		}
 	}

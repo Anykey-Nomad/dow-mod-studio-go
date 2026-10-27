@@ -1,6 +1,7 @@
-package app
+package fileops_test
 
 import (
+	"dow-mod-studio/internal/app/fileops"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,7 @@ func TestDiscoverModuleFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := discoverModuleFiles([]string{dir, dir})
+	got := fileops.DiscoverModuleFiles([]string{dir, dir})
 	if len(got) != 2 {
 		t.Fatalf("expected two module files, got %d: %#v", len(got), got)
 	}
