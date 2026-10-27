@@ -523,9 +523,9 @@ func FrozenRows(ui *uiState) []unitWeaponRow {
 	out := make([]unitWeaponRow, 0, len(book.Frozen))
 	for _, r := range book.Frozen {
 		out = append(out, unitWeaponRow{
-			hardpoint: r.Kind,
-			name:      r.Name,
-			ref:       r.Path,
+			Hardpoint: r.Kind,
+			Name:      r.Name,
+			Ref:       r.Path,
 		})
 	}
 	return out
@@ -553,7 +553,7 @@ func LayoutFrozenList(ui *uiState, gtx layout.Context) layout.Dimensions {
 			for i := range rows {
 				i := i
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return LayoutUnitSelectableRow(ui, gtx, i, len(rows), rows[i].hardpoint, rows[i].name, "put back", false)
+					return LayoutUnitSelectableRow(ui, gtx, i, len(rows), rows[i].Hardpoint, rows[i].Name, "put back", false)
 				}))
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -572,9 +572,9 @@ func HandleFrozenRowInput(ui *uiState, gtx layout.Context) {
 	for i := range rows {
 		if i < len(ui.UnitRowClicks) && ui.UnitRowClicks[i].Clicked(gtx) {
 			ui.UnitSelRow = i
-			record, err := UnfreezeEntity(ui, rows[i].ref)
+			record, err := UnfreezeEntity(ui, rows[i].Ref)
 			if err != nil {
-				ui.StatusText = "Could not put " + rows[i].name + " back: " + err.Error()
+				ui.StatusText = "Could not put " + rows[i].Name + " back: " + err.Error()
 			} else {
 				ui.StatusText = freezeStatusLine("Put back into the mod", record)
 			}

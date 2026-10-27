@@ -192,7 +192,7 @@ func markerDebugResolve(tree *modtree.ModTree, query string) (modelPath, unitPat
 	if parseErr != nil {
 		return "", "", "", fmt.Errorf("parse unit %q: %w", unitPath, parseErr)
 	}
-	source := unitModelSource{unit: unitPath, name: unitName, race: entry.Race, kind: entry.Kind.Folder, animator: unitAnimatorName(rgdFile)}
+	source := unitModelSource{Unit: unitPath, Name: unitName, Race: entry.Race, Kind: entry.Kind.Folder, Animator: unitAnimatorName(rgdFile)}
 	modelPath = unitModelPath(tree, source)
 	if modelPath == "" {
 		return "", "", "", fmt.Errorf("no .whm model found for unit %q (%s)", unitName, unitPath)
