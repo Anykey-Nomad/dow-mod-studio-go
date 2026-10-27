@@ -1,14 +1,13 @@
-package app
+package fileops
 
 import (
 	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/modtree"
 	"fmt"
-	"log"
-
 	"github.com/fsnotify/fsnotify"
 	"hash/fnv"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,9 +16,9 @@ import (
 	"time"
 )
 
-const modCatalogPollInterval = 30 * time.Second
+const ModCatalogPollInterval = 30 * time.Second
 
-func currentModFolderRoot(tree *modtree.ModTree) string {
+func CurrentModFolderRoot(tree *modtree.ModTree) string {
 	if tree == nil {
 		return ""
 	}
@@ -33,7 +32,7 @@ func currentModFolderRoot(tree *modtree.ModTree) string {
 	return filepath.Clean(filepath.Join(tree.AppPath, modFolder))
 }
 
-func pathWithinRoot(path, root string) bool {
+func PathWithinRoot(path, root string) bool {
 	path = filepath.Clean(path)
 	root = filepath.Clean(root)
 	rel, err := filepath.Rel(root, path)
@@ -43,31 +42,31 @@ func pathWithinRoot(path, root string) bool {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
-// currentModSnapshot returns a compact fingerprint of the current mod's
+// CurrentModSnapshot returns a compact fingerprint of the current mod's
 // writable filesystem sources and declared archives. It intentionally does
 // not walk SGA contents: archive changes are detected by their file stat and
 // cause a full merged-tree rebuild.
-type modCatalogWatchSource struct {
+type ModCatalogWatchSource struct {
 	isSGA       bool
 	kind        modtree.SourceKind
 	archivePath string
 	diskRoot    string
 }
 
-type modCatalogWatch struct {
+type ModCatalogWatch struct {
 	appPath         string
 	modFolder       string
 	fileMapName     string
 	modFilePath     string
 	writableOverlay string
-	sources         []modCatalogWatchSource
+	sources         []ModCatalogWatchSource
 }
 
-func watchFromTree(tree *modtree.ModTree) modCatalogWatch {
+func WatchFromTree(tree *modtree.ModTree) ModCatalogWatch {
 	if tree == nil {
-		return modCatalogWatch{}
+		return ModCatalogWatch{}
 	}
-	watch := modCatalogWatch{
+	watch := ModCatalogWatch{
 		appPath:         tree.AppPath,
 		modFolder:       tree.ModFolder,
 		fileMapName:     tree.FileMapName,
@@ -81,7 +80,7 @@ func watchFromTree(tree *modtree.ModTree) modCatalogWatch {
 		if source == nil {
 			continue
 		}
-		watch.sources = append(watch.sources, modCatalogWatchSource{
+		watch.sources = append(watch.sources, ModCatalogWatchSource{
 			isSGA:       source.IsSGA,
 			kind:        source.Kind,
 			archivePath: source.ArchivePath,
@@ -91,7 +90,7 @@ func watchFromTree(tree *modtree.ModTree) modCatalogWatch {
 	return watch
 }
 
-func (watch modCatalogWatch) modFolderRoot() string {
+func (watch ModCatalogWatch) modFolderRoot() string {
 	modFolder := watch.modFolder
 	if modFolder == "" {
 		modFolder = watch.fileMapName
@@ -102,15 +101,15 @@ func (watch modCatalogWatch) modFolderRoot() string {
 	return filepath.Clean(filepath.Join(watch.appPath, modFolder))
 }
 
-func (watch modCatalogWatch) roots() []string {
+func (watch ModCatalogWatch) roots() []string {
 	roots := make(map[string]bool)
 	modRoot := watch.modFolderRoot()
 	for _, source := range watch.sources {
-		if !source.isSGA && source.kind == modtree.KindThisMod && source.diskRoot != "" && pathWithinRoot(source.diskRoot, modRoot) {
+		if !source.isSGA && source.kind == modtree.KindThisMod && source.diskRoot != "" && PathWithinRoot(source.diskRoot, modRoot) {
 			roots[filepath.Clean(source.diskRoot)] = true
 		}
 	}
-	if watch.writableOverlay != "" && pathWithinRoot(watch.writableOverlay, modRoot) {
+	if watch.writableOverlay != "" && PathWithinRoot(watch.writableOverlay, modRoot) {
 		roots[filepath.Clean(watch.writableOverlay)] = true
 	}
 	orderedRoots := make([]string, 0, len(roots))
@@ -121,7 +120,7 @@ func (watch modCatalogWatch) roots() []string {
 	return orderedRoots
 }
 
-func (watch modCatalogWatch) snapshot() string {
+func (watch ModCatalogWatch) snapshot() string {
 	orderedRoots := watch.roots()
 
 	h := fnv.New64a()
@@ -165,11 +164,11 @@ func (watch modCatalogWatch) snapshot() string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
-func currentModSnapshot(tree *modtree.ModTree) string {
-	return watchFromTree(tree).snapshot()
+func CurrentModSnapshot(tree *modtree.ModTree) string {
+	return WatchFromTree(tree).snapshot()
 }
 
-func addWatchTree(watcher *fsnotify.Watcher, root string) error {
+func AddWatchTree(watcher *fsnotify.Watcher, root string) error {
 	seen := make(map[string]bool)
 	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -187,7 +186,7 @@ func addWatchTree(watcher *fsnotify.Watcher, root string) error {
 	})
 }
 
-func startModFileWatcher(tree *modtree.ModTree, signal chan struct{}) (*fsnotify.Watcher, error) {
+func StartModFileWatcherWorker(tree *modtree.ModTree, signal chan struct{}) (*fsnotify.Watcher, error) {
 	if tree == nil || signal == nil {
 		return nil, nil
 	}
@@ -195,16 +194,16 @@ func startModFileWatcher(tree *modtree.ModTree, signal chan struct{}) (*fsnotify
 	if err != nil {
 		return nil, err
 	}
-	watch := watchFromTree(tree)
+	watch := WatchFromTree(tree)
 	for _, root := range watch.roots() {
-		if err := addWatchTree(watcher, root); err != nil {
+		if err := AddWatchTree(watcher, root); err != nil {
 			_ = watcher.Close()
 			return nil, err
 		}
 	}
 	// The module file and current-mod SGA archives are outside the recursive
 	// data roots, so watch their containing directories as well.
-	for _, file := range append([]string{watch.modFilePath}, currentModArchivePaths(watch)...) {
+	for _, file := range append([]string{watch.modFilePath}, CurrentModArchivePaths(watch)...) {
 		if file == "" {
 			continue
 		}
@@ -224,7 +223,7 @@ func startModFileWatcher(tree *modtree.ModTree, signal chan struct{}) (*fsnotify
 				}
 				if event.Op&fsnotify.Create != 0 {
 					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-						_ = addWatchTree(watcher, event.Name)
+						_ = AddWatchTree(watcher, event.Name)
 					}
 				}
 				select {
@@ -241,7 +240,7 @@ func startModFileWatcher(tree *modtree.ModTree, signal chan struct{}) (*fsnotify
 	return watcher, nil
 }
 
-func currentModArchivePaths(watch modCatalogWatch) []string {
+func CurrentModArchivePaths(watch ModCatalogWatch) []string {
 	var paths []string
 	for _, source := range watch.sources {
 		if source.isSGA && source.kind == modtree.KindThisMod && source.archivePath != "" {
@@ -251,16 +250,16 @@ func currentModArchivePaths(watch modCatalogWatch) []string {
 	return paths
 }
 
-type modCatalogRefreshResult = uistate.ModCatalogRefreshResult
+type ModCatalogRefreshResult = uistate.ModCatalogRefreshResult
 
-func StopModFileWatcher(ui *uiState) {
+func StopModFileWatcher(ui *uistate.State) {
 	if ui.ModFileWatcher != nil {
 		_ = ui.ModFileWatcher.Close()
 		ui.ModFileWatcher = nil
 	}
 }
 
-func StartModFileWatcher(ui *uiState, tree *modtree.ModTree) {
+func StartModFileWatcher(ui *uistate.State, tree *modtree.ModTree) {
 	StopModFileWatcher(ui)
 	if ui.ModFileWatchSignal == nil {
 		ui.ModFileWatchSignal = make(chan struct{}, 1)
@@ -273,7 +272,7 @@ func StartModFileWatcher(ui *uiState, tree *modtree.ModTree) {
 		}
 	}
 drained:
-	watcher, err := startModFileWatcher(tree, ui.ModFileWatchSignal)
+	watcher, err := StartModFileWatcherWorker(tree, ui.ModFileWatchSignal)
 	if err != nil {
 		log.Printf("file watcher unavailable, falling back to periodic refresh: %v", err)
 		return
@@ -281,7 +280,7 @@ drained:
 	ui.ModFileWatcher = watcher
 }
 
-func PollModCatalog(ui *uiState) {
+func PollModCatalog(ui *uistate.State) {
 	if ui.ModTree == nil || ui.ModulePath == "" {
 		return
 	}
@@ -299,22 +298,22 @@ func PollModCatalog(ui *uiState) {
 		}
 	}
 	now := time.Now()
-	if !ui.LastModPoll.IsZero() && now.Sub(ui.LastModPoll) < modCatalogPollInterval {
+	if !ui.LastModPoll.IsZero() && now.Sub(ui.LastModPoll) < ModCatalogPollInterval {
 		return
 	}
 	ui.LastModPoll = now
 
 	baseTree := ui.ModTree
 	if ui.ModRefreshCh == nil {
-		ui.ModRefreshCh = make(chan modCatalogRefreshResult, 1)
+		ui.ModRefreshCh = make(chan ModCatalogRefreshResult, 1)
 	}
-	watch := watchFromTree(baseTree)
+	watch := WatchFromTree(baseTree)
 	knownSnapshot := ui.ModSnapshot
 	modulePath := ui.ModulePath
 	refreshCh := ui.ModRefreshCh
 	ui.ModRefreshRunning = true
 	go func() {
-		result := modCatalogRefreshResult{Path: modulePath, BaseTree: baseTree}
+		result := ModCatalogRefreshResult{Path: modulePath, BaseTree: baseTree}
 		result.Snapshot = watch.snapshot()
 		if result.Snapshot == "" || result.Snapshot == knownSnapshot {
 			refreshCh <- result
@@ -322,26 +321,26 @@ func PollModCatalog(ui *uiState) {
 		}
 		result.NewTree, result.Err = modtree.BuildModTree(result.Path, "English")
 		if result.NewTree != nil {
-			result.Snapshot = watchFromTree(result.NewTree).snapshot()
+			result.Snapshot = WatchFromTree(result.NewTree).snapshot()
 		}
 		refreshCh <- result
 	}()
 }
 
-func PollModCatalogResult(ui *uiState) (modCatalogRefreshResult, bool) {
+func PollModCatalogResult(ui *uistate.State) (ModCatalogRefreshResult, bool) {
 	if ui.ModRefreshCh == nil {
-		return modCatalogRefreshResult{}, false
+		return ModCatalogRefreshResult{}, false
 	}
 	select {
 	case result := <-ui.ModRefreshCh:
 		ui.ModRefreshRunning = false
 		return result, true
 	default:
-		return modCatalogRefreshResult{}, false
+		return ModCatalogRefreshResult{}, false
 	}
 }
 
-func ApplyModCatalogResult(ui *uiState, result modCatalogRefreshResult) {
+func ApplyModCatalogResult(ui *uistate.State, result ModCatalogRefreshResult) {
 	if result.Path != ui.ModulePath || result.BaseTree != ui.ModTree {
 		if result.NewTree != nil {
 			result.NewTree.Close()

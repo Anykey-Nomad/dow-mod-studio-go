@@ -1,13 +1,13 @@
-package app
+package fileops
 
 import (
-	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/sga"
 	"dow-mod-studio/internal/sgapack"
 	"fmt"
-	"image"
+	"gioui.org/layout"
+	"gioui.org/widget"
 	"image/color"
 	"io/fs"
 	"os"
@@ -15,19 +15,11 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"gioui.org/font"
-	"gioui.org/layout"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
-	"gioui.org/unit"
-	"gioui.org/widget"
-	"gioui.org/widget/material"
 )
 
-type archiveOption = uistate.ArchiveOption
+type ArchiveOption = uistate.ArchiveOption
 
-func OpenArchiveDialog(ui *uiState) {
+func OpenArchiveDialog(ui *uistate.State) {
 	if ui.ModTree == nil {
 		ui.StatusText = "Extract SGA — no mod loaded"
 		return
@@ -44,7 +36,7 @@ func OpenArchiveDialog(ui *uiState) {
 		}
 		seen[key] = true
 		label := fmt.Sprintf("%s — %s", source.ModName, source.SourceName)
-		ui.ArchiveOptions = append(ui.ArchiveOptions, archiveOption{Source: source, Label: label})
+		ui.ArchiveOptions = append(ui.ArchiveOptions, ArchiveOption{Source: source, Label: label})
 	}
 	sort.Slice(ui.ArchiveOptions, func(i, j int) bool {
 		return strings.ToLower(ui.ArchiveOptions[i].Label) < strings.ToLower(ui.ArchiveOptions[j].Label)
@@ -62,18 +54,18 @@ func OpenArchiveDialog(ui *uiState) {
 	}
 }
 
-func CurrentModFiles(ui *uiState) (map[string]string, error) {
+func CurrentModFiles(ui *uistate.State) (map[string]string, error) {
 	if ui.ModTree == nil {
 		return nil, fmt.Errorf("no mod loaded")
 	}
 	roots := make(map[string]bool)
-	modRoot := currentModFolderRoot(ui.ModTree)
+	modRoot := CurrentModFolderRoot(ui.ModTree)
 	for _, source := range ui.ModTree.Sources {
-		if source != nil && !source.IsSGA && source.Kind == modtree.KindThisMod && source.DiskRoot != "" && pathWithinRoot(source.DiskRoot, modRoot) {
+		if source != nil && !source.IsSGA && source.Kind == modtree.KindThisMod && source.DiskRoot != "" && PathWithinRoot(source.DiskRoot, modRoot) {
 			roots[filepath.Clean(source.DiskRoot)] = true
 		}
 	}
-	if root, err := ui.ModTree.ResolveWritableRoot(); err == nil && pathWithinRoot(root, modRoot) {
+	if root, err := ui.ModTree.ResolveWritableRoot(); err == nil && PathWithinRoot(root, modRoot) {
 		roots[filepath.Clean(root)] = true
 	}
 	files := make(map[string]string)
@@ -102,7 +94,7 @@ func CurrentModFiles(ui *uiState) (map[string]string, error) {
 	return files, nil
 }
 
-func PackCurrentModSGA(ui *uiState) {
+func PackCurrentModSGA(ui *uistate.State) {
 	if ui.ModTree == nil || ui.ModTree.ModFilePath == "" {
 		ui.StatusText = "Pack SGA — no mod loaded"
 		return
@@ -129,12 +121,12 @@ func PackCurrentModSGA(ui *uiState) {
 		}
 		return
 	}
-	if err := writeSGA2(output, files, "Data"); err != nil {
+	if err := WriteSGA2(output, files, "Data"); err != nil {
 		ui.StatusText = "Pack SGA failed: " + err.Error()
 		return
 	}
 	archiveBase := strings.TrimSuffix(filepath.Base(output), filepath.Ext(output))
-	if err := addModuleArchive(ui.ModTree.ModFilePath, archiveBase); err != nil {
+	if err := AddModuleArchive(ui.ModTree.ModFilePath, archiveBase); err != nil {
 		ui.StatusText = "SGA created, but .module update failed: " + err.Error()
 		return
 	}
@@ -143,7 +135,7 @@ func PackCurrentModSGA(ui *uiState) {
 	ui.StatusText = fmt.Sprintf("Packed %d files to %s", len(files), output)
 }
 
-func addModuleArchive(modulePath, archiveBase string) error {
+func AddModuleArchive(modulePath, archiveBase string) error {
 	m, err := modtree.ParseModule(modulePath)
 	if err != nil {
 		return err
@@ -189,7 +181,7 @@ func addModuleArchive(modulePath, archiveBase string) error {
 	return os.WriteFile(modulePath, []byte(strings.Join(updated, "\n")), 0644)
 }
 
-func ExtractSelectedArchives(ui *uiState) {
+func ExtractSelectedArchives(ui *uistate.State) {
 	if ui.ModTree == nil {
 		return
 	}
@@ -219,7 +211,7 @@ func ExtractSelectedArchives(ui *uiState) {
 	ui.LastModPoll = time.Time{}
 }
 
-func ExtractSGADir(ui *uiState, sga *sga.SGAFile, dirID int, virtualDir string, written, skipped int) (int, int) {
+func ExtractSGADir(ui *uistate.State, sga *sga.SGAFile, dirID int, virtualDir string, written, skipped int) (int, int) {
 	entries, err := sga.List(dirID)
 	if err != nil {
 		return written, skipped
@@ -254,7 +246,7 @@ func ExtractSGADir(ui *uiState, sga *sga.SGAFile, dirID int, virtualDir string, 
 	return written, skipped
 }
 
-func HandleArchiveDialogInput(ui *uiState, gtx layout.Context) {
+func HandleArchiveDialogInput(ui *uistate.State, gtx layout.Context) {
 	if !ui.ArchiveDialog {
 		return
 	}
@@ -272,108 +264,10 @@ func HandleArchiveDialogInput(ui *uiState, gtx layout.Context) {
 	}
 }
 
-func LayoutArchiveDialog(ui *uiState, gtx layout.Context) layout.Dimensions {
-	sz := gtx.Constraints.Max
-	st := clip.Rect{Max: sz}.Push(gtx.Ops)
-	paint.ColorOp{Color: rgba(0, 0, 0, 70)}.Add(gtx.Ops)
-	paint.PaintOp{}.Add(gtx.Ops)
-	st.Pop()
-	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		cardW := minInt(gtx.Dp(unit.Dp(640)), gtx.Constraints.Max.X-gtx.Dp(unit.Dp(30)))
-		cardH := minInt(gtx.Dp(unit.Dp(520)), gtx.Constraints.Max.Y-gtx.Dp(unit.Dp(30)))
-		gtx.Constraints.Min = image.Pt(cardW, cardH)
-		gtx.Constraints.Max = image.Pt(cardW, cardH)
-		return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return layout.Stack{}.Layout(gtx,
-				layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-					rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(unit.Dp(4)))
-					return layout.Dimensions{Size: gtx.Constraints.Max}
-				}),
-				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Top: unit.Dp(16), Bottom: unit.Dp(14), Left: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						var children []layout.FlexChild
-						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.Th, unit.Sp(14), "Extract SGA archives")
-							l.Font.Weight = font.Medium
-							return l.Layout(gtx)
-						}))
-						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout))
-						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.Th, unit.Sp(10), "Select one or more current/parent SGA archives. Existing current-mod files are preserved.")
-							l.Color = uikit.CTextDim
-							return l.Layout(gtx)
-						}))
-						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout))
-						children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							ui.ArchiveList.Axis = layout.Vertical
-							return ui.ArchiveList.Layout(gtx, len(ui.ArchiveOptions), func(gtx layout.Context, index int) layout.Dimensions {
-								opt := ui.ArchiveOptions[index]
-								click := &ui.ArchiveSelectClicks[index]
-								bg := uikit.CPanelBg
-								if click.Hovered() {
-									bg = uikit.CMenuHover
-								}
-								return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-									gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(28))
-									st := clip.Rect{Max: image.Pt(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(28)))}.Push(gtx.Ops)
-									paint.ColorOp{Color: bg}.Add(gtx.Ops)
-									paint.PaintOp{}.Add(gtx.Ops)
-									st.Pop()
-									return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												box := image.Pt(gtx.Dp(unit.Dp(14)), gtx.Dp(unit.Dp(14)))
-												col := uikit.CBorder
-												if ui.ArchiveSelected[index] {
-													col = rgb(0x0078D4)
-												}
-												st := clip.Rect{Max: box}.Push(gtx.Ops)
-												paint.ColorOp{Color: col}.Add(gtx.Ops)
-												paint.PaintOp{}.Add(gtx.Ops)
-												st.Pop()
-												return layout.Dimensions{Size: box}
-											}),
-											layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
-											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-												l := material.Label(ui.Th, unit.Sp(11), opt.Label)
-												l.Color = uikit.CText
-												return l.Layout(gtx)
-											}),
-										)
-									})
-								})
-							})
-						}))
-						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout))
-						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Label(ui.Th, unit.Sp(10), ui.ArchiveStatus)
-							l.Color = uikit.CTextDim
-							return l.Layout(gtx)
-						}))
-						children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout))
-						children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									return SmallButton(ui, gtx, &ui.ArchiveCloseClick, "Close")
-								}),
-								layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									return SmallButton(ui, gtx, &ui.ArchiveExtractClick, "Extract selected")
-								}),
-							)
-						}))
-						return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
-					})
-				}),
-			)
-		})
-	})
-}
+func ColorWhite() color.NRGBA { return color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF} }
 
-func colorWhite() color.NRGBA { return color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF} }
-
-// writeSGA2 packs a folder of files into an SGA v2 archive; the format work
+// WriteSGA2 packs a folder of files into an SGA v2 archive; the format work
 // lives in internal/sgapack, this is the name the packer UI calls.
-func writeSGA2(output string, files map[string]string, tocName string) error {
+func WriteSGA2(output string, files map[string]string, tocName string) error {
 	return sgapack.WriteSGA2(output, files, tocName)
 }
