@@ -202,8 +202,8 @@ func UnregisterModuleAssociation() error { return assoc.UnregisterModuleAssociat
 func GetExePath() string { return assoc.GetExePath() }
 
 type ModuleCandidate struct {
-	path   string
-	folder string
+	Path   string
+	Folder string
 }
 
 const SteamDowFolder = `C:/Program Files/Steam/steamapps/common/Dawn of War Definitive Edition`
@@ -212,7 +212,7 @@ const SteamDowFolder = `C:/Program Files/Steam/steamapps/common/Dawn of War Defi
 func DiscoverModuleFiles(dirs []string) []ModuleCandidate {
 	var modules []ModuleCandidate
 	for _, r := range ListPickFiles(dirs, func(name string) bool { return PickExt(name) == ".module" }) {
-		modules = append(modules, ModuleCandidate{path: r.Path, folder: r.Folder})
+		modules = append(modules, ModuleCandidate{Path: r.Path, Folder: r.Folder})
 	}
 	return modules
 }

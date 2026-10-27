@@ -1,34 +1,35 @@
 package app
 
 import (
+	"dow-mod-studio/internal/highlight"
 	"strings"
 	"testing"
 )
 
 func TestHighlightSyntaxTokensLua(t *testing.T) {
-	tokens, lines := highlightSyntaxTokens("local answer = 42 -- done\nprint(\"ok\")", ".lua")
+	tokens, lines := highlight.HighlightSyntaxTokens("local answer = 42 -- done\nprint(\"ok\")", ".lua")
 	if len(lines) != 2 {
 		t.Fatalf("lines = %d, want 2", len(lines))
 	}
 
-	want := map[string]syntaxKind{
-		"local":                  syntaxKeyword,
-		"answer":                 syntaxPlain,
-		"42":                     syntaxNumber,
-		"-- done\nprint(\"ok\")": syntaxComment,
+	want := map[string]highlight.SyntaxKind{
+		"local":                  highlight.SyntaxKeyword,
+		"answer":                 highlight.SyntaxPlain,
+		"42":                     highlight.SyntaxNumber,
+		"-- done\nprint(\"ok\")": highlight.SyntaxComment,
 	}
 	for _, token := range tokens {
-		if kind, ok := want[token.text]; ok && kind != token.kind {
-			t.Errorf("token %q kind = %d, want %d", token.text, token.kind, kind)
+		if kind, ok := want[token.Text]; ok && kind != token.Kind {
+			t.Errorf("token %q kind = %d, want %d", token.Text, token.Kind, kind)
 		}
 	}
 }
 
 func TestHighlightSyntaxTokensDoesNotMergeCommentLines(t *testing.T) {
-	tokens, _ := highlightSyntaxTokens("-- first comment\nlocal value = 1\n-- second comment\nreturn value\n", ".lua")
+	tokens, _ := highlight.HighlightSyntaxTokens("-- first comment\nlocal value = 1\n-- second comment\nreturn value\n", ".lua")
 	for _, token := range tokens {
-		if token.kind == syntaxComment && strings.Contains(token.text, "\n") {
-			t.Fatalf("comment token crosses line boundary: %q", token.text)
+		if token.Kind == highlight.SyntaxComment && strings.Contains(token.Text, "\n") {
+			t.Fatalf("comment token crosses line boundary: %q", token.Text)
 		}
 	}
 	if len(tokens) == 0 {
@@ -37,18 +38,18 @@ func TestHighlightSyntaxTokensDoesNotMergeCommentLines(t *testing.T) {
 }
 
 func TestHighlightSyntaxTokensRat(t *testing.T) {
-	tokens, _ := highlightSyntaxTokens("set value = 0x10 // comment", ".rat")
-	found := map[string]syntaxKind{}
+	tokens, _ := highlight.HighlightSyntaxTokens("set value = 0x10 // comment", ".rat")
+	found := map[string]highlight.SyntaxKind{}
 	for _, token := range tokens {
-		found[token.text] = token.kind
+		found[token.Text] = token.Kind
 	}
-	if found["set"] != syntaxKeyword {
+	if found["set"] != highlight.SyntaxKeyword {
 		t.Errorf("set kind = %d, want keyword", found["set"])
 	}
-	if found["0x10"] != syntaxNumber {
+	if found["0x10"] != highlight.SyntaxNumber {
 		t.Errorf("number kind = %d, want number", found["0x10"])
 	}
-	if found["// comment"] != syntaxComment {
+	if found["// comment"] != highlight.SyntaxComment {
 		t.Errorf("comment kind = %d, want comment", found["// comment"])
 	}
 }

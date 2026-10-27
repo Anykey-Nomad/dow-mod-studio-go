@@ -31,13 +31,13 @@ func TestOpenModuleListRowsAreOnScreen(t *testing.T) {
 	for y := 150; y < 800 && !found; y += 5 {
 		f.send(pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: f32.Pt(60, float32(y))})
 		f.frame()
-		for i := range ui.FilePick.clicks {
-			if ui.FilePick.clicks[i].Hovered() {
+		for i := range ui.FilePick.Clicks {
+			if ui.FilePick.Clicks[i].Hovered() {
 				found = true
 			}
 		}
 	}
 	if !found {
-		t.Fatalf("no row of the %d-row list takes the pointer: the list is not drawn", len(ui.FilePick.rows))
+		t.Fatalf("no row of the %d-row list takes the pointer: the list is not drawn", len(ui.FilePick.Rows))
 	}
 }

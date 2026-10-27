@@ -421,7 +421,7 @@ func TestTheWheelOverTheAnimationListScrollsThePanel(t *testing.T) {
 	// scroll view its content to be taller than.
 	unitViewportFrames(f, 3)
 	state := &ui.UnitViewportScroll
-	if !state.hasBar {
+	if !state.HasBar {
 		t.Skipf("the panel fits its %d clips without a scrollbar", len(anims))
 	}
 	// The wheel has to land on the list itself: the panel's fixed controls
@@ -436,10 +436,10 @@ func TestTheWheelOverTheAnimationListScrollsThePanel(t *testing.T) {
 
 	// Down, then back up. The wheel is the only way to reach the last clip, so
 	// a panel that ignores it leaves the bottom of the list unreachable.
-	start := state.offset
+	start := state.Offset
 	f.send(pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: at, Scroll: f32.Pt(0, wheelNotchDelta)})
 	unitViewportFrames(f, 2)
-	down := state.offset
+	down := state.Offset
 	if down <= start {
 		t.Errorf("the wheel over the animation list left the panel at %d, want more than %d", down, start)
 	}
@@ -455,12 +455,12 @@ func TestTheWheelOverTheAnimationListScrollsThePanel(t *testing.T) {
 	// clips and 66 of the list's 236. Twenty eight per cent of a short list is
 	// a couple of rows; what the guard is for is the notch that covers the
 	// whole of it.
-	if moved := down - start; moved*3 > state.contentHeight {
-		t.Errorf("one notch of the wheel moved the panel %d pixels of its %d, which is most of the list", moved, state.contentHeight)
+	if moved := down - start; moved*3 > state.ContentHeight {
+		t.Errorf("one notch of the wheel moved the panel %d pixels of its %d, which is most of the list", moved, state.ContentHeight)
 	}
 	f.send(pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: at, Scroll: f32.Pt(0, -wheelNotchDelta)})
 	unitViewportFrames(f, 2)
-	if back := state.offset; back >= down {
+	if back := state.Offset; back >= down {
 		t.Errorf("the wheel back up left the panel at %d, want less than %d", back, down)
 	}
 	// And the ends of the list are the ends of the panel: a wheel that keeps
@@ -469,8 +469,8 @@ func TestTheWheelOverTheAnimationListScrollsThePanel(t *testing.T) {
 		f.send(pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: at, Scroll: f32.Pt(0, wheelNotchDelta)})
 	}
 	unitViewportFrames(f, 2)
-	if last := maxInt(0, state.contentHeight-state.viewport); state.offset != last {
-		t.Errorf("the panel scrolled to %d of %d, want the end of the list", state.offset, last)
+	if last := maxInt(0, state.ContentHeight-state.Viewport); state.Offset != last {
+		t.Errorf("the panel scrolled to %d of %d, want the end of the list", state.Offset, last)
 	}
 }
 
@@ -658,7 +658,7 @@ func renderUnitSection(t *testing.T, ui *uiState, section, raceSel, unitSel, w, 
 func findUnitSection(t *testing.T, label string) int {
 	t.Helper()
 	for i, s := range unitSections {
-		if s.label == label {
+		if s.Label == label {
 			return i
 		}
 	}
@@ -746,7 +746,7 @@ func TestSquadColumnScrolls(t *testing.T) {
 	}
 	// The scroll state has to have been written for the scrollbar to be
 	// drawable; an untouched one means the list was laid out without it.
-	if ui.UnitSquadScroll.viewport == 0 {
+	if ui.UnitSquadScroll.Viewport == 0 {
 		t.Error("the Squads list never recorded a viewport, so its scrollbar cannot be drawn")
 	}
 }
@@ -766,12 +766,12 @@ func TestInfoColumnScrollsAndGroups(t *testing.T) {
 	if d == nil || len(d.Fields) < 40 {
 		t.Fatalf("the info list has %v rows, so this proves nothing", len(d.Fields))
 	}
-	if ui.UnitInfoScroll.viewport == 0 {
+	if ui.UnitInfoScroll.Viewport == 0 {
 		t.Error("the info list never recorded a viewport, so its scrollbar cannot be drawn")
 	}
 	// With a hundred rows in a 700px window the list is longer than the column,
 	// which is exactly the case the scrollbar is there for.
-	if !ui.UnitInfoScroll.hasBar {
+	if !ui.UnitInfoScroll.HasBar {
 		t.Log("the info list fitted its column at this size; the scrollbar is simply not needed")
 	}
 	// A group heading is drawn as part of the row, so laying the list out at all
@@ -799,7 +799,7 @@ func TestEverySectionHasBothColumns(t *testing.T) {
 	for i := range unitSections {
 		img := renderUnitSection(t, &uiState{ModTree: tree}, i, 0, 0, 1400, 800)
 		if !unitFrameHasContent(img) {
-			t.Errorf("the %q section drew a blank frame", unitSections[i].label)
+			t.Errorf("the %q section drew a blank frame", unitSections[i].Label)
 		}
 	}
 	// The middle column's dispatcher is a switch on the label, so a section that
@@ -817,8 +817,8 @@ func TestEverySectionHasBothColumns(t *testing.T) {
 	}
 	placeholder := map[string]bool{}
 	for _, s := range unitSections {
-		if !routed[s.label] && !placeholder[s.label] {
-			t.Errorf("the %q section is not routed by layoutUnitMiddleColumnBody", s.label)
+		if !routed[s.Label] && !placeholder[s.Label] {
+			t.Errorf("the %q section is not routed by layoutUnitMiddleColumnBody", s.Label)
 		}
 	}
 	// And no case may exist for a section that is not in the menu, which is the
@@ -826,7 +826,7 @@ func TestEverySectionHasBothColumns(t *testing.T) {
 	for label := range routed {
 		found := false
 		for _, s := range unitSections {
-			if s.label == label {
+			if s.Label == label {
 				found = true
 			}
 		}
@@ -835,11 +835,11 @@ func TestEverySectionHasBothColumns(t *testing.T) {
 		}
 	}
 	for _, s := range unitSections {
-		if strings.TrimSpace(s.hint) == "" {
-			t.Errorf("the %q section has no hint text for its empty state", s.label)
+		if strings.TrimSpace(s.Hint) == "" {
+			t.Errorf("the %q section has no hint text for its empty state", s.Label)
 		}
-		if strings.TrimSpace(s.middleTitle) == "" || strings.TrimSpace(s.rightTitle) == "" {
-			t.Errorf("the %q section has an empty column heading", s.label)
+		if strings.TrimSpace(s.MiddleTitle) == "" || strings.TrimSpace(s.RightTitle) == "" {
+			t.Errorf("the %q section has an empty column heading", s.Label)
 		}
 	}
 }
@@ -1105,7 +1105,7 @@ func TestUnitDropdownRendersItsRows(t *testing.T) {
 
 	// The rows must also be tall enough for the list to hold several of them.
 	EnsureUnitDropdownClicks(ui, len(necrons.UnitsOf()))
-	if ui.UnitListScroll.contentHeight <= 0 {
+	if ui.UnitListScroll.ContentHeight <= 0 {
 		t.Error("the list reported no content height")
 	}
 }

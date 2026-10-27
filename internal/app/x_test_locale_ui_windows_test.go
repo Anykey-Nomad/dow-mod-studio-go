@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/testutil"
 	"gioui.org/gpu/headless"
@@ -178,7 +179,7 @@ func TestLocaleFieldWritesTheChosenLanguage(t *testing.T) {
 	// The field is wider than it looks, so the box is generous; what matters is
 	// that the glyphs are somewhere inside it.
 	box := image.Rectangle{Max: image.Pt(300, localeFieldHeightDp)}
-	if !containsColor(img, box, cText, 12) {
+	if !containsColor(img, box, uikit.CText, 12) {
 		t.Errorf("no text-coloured pixels in the field: %q is not being drawn", LocaleLabel(ui))
 	} else {
 		t.Logf("the field carries text-coloured pixels, so %q is written in it", LocaleLabel(ui))

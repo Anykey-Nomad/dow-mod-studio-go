@@ -43,7 +43,7 @@ const (
 // order that editor showed them. The hint is what an expanded panel with
 // nothing in it yet says instead of showing an empty hole.
 var ClassicOEHeaders = []struct {
-	label string
+	Label string
 	Kind  string
 	Hint  string
 }{
@@ -120,7 +120,7 @@ func LayoutClassicOEHeaderRow(ui *uistate.State, gtx layout.Context, index int) 
 				}),
 				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(ui.Th, unit.Sp(10), ClassicOEHeaders[index].label)
+						l := material.Label(ui.Th, unit.Sp(10), ClassicOEHeaders[index].Label)
 						l.Color = uikit.CText
 						l.MaxLines = 1
 						return l.Layout(gtx)

@@ -13,6 +13,7 @@ import (
 	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/unitdef"
 	"dow-mod-studio/internal/whm"
 	"gioui.org/io/key"
 	"gioui.org/layout"
@@ -33,40 +34,40 @@ func unitEditFixture(t *testing.T) []byte {
 	return mustMarshalGraph(t, &rgd.RgdFile{
 		HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
 		Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
-			rgdTemplateTable("ui_ext", refUIExt,
-				rgdTemplateTable("ui_info", "",
-					rgdTemplateWString("screen_name_id", "$1000"),
+			unitdef.RgdTemplateTable("ui_ext", unitdef.RefUIExt,
+				unitdef.RgdTemplateTable("ui_info", "",
+					unitdef.RgdTemplateWString("screen_name_id", "$1000"),
 				),
-				rgdTemplateString("ui_hotkey_name", "necron_lancer"),
+				unitdef.RgdTemplateString("ui_hotkey_name", "necron_lancer"),
 			),
-			rgdTemplateTable("health_ext", refHealthExt,
-				rgdTemplateFloat("hitpoints", 100),
-				rgdTemplateFloat("armour", 5),
-				rgdTemplateBool("can_be_repaired", false),
-				rgdTemplateFloat("max_repairers", 2),
+			unitdef.RgdTemplateTable("health_ext", unitdef.RefHealthExt,
+				unitdef.RgdTemplateFloat("hitpoints", 100),
+				unitdef.RgdTemplateFloat("armour", 5),
+				unitdef.RgdTemplateBool("can_be_repaired", false),
+				unitdef.RgdTemplateFloat("max_repairers", 2),
 			),
-			rgdTemplateTable("moving_ext", refMovingExt,
-				rgdTemplateFloat("speed_max", 3.5),
+			unitdef.RgdTemplateTable("moving_ext", unitdef.RefMovingExt,
+				unitdef.RgdTemplateFloat("speed_max", 3.5),
 			),
-			rgdTemplateTable("sight_ext", refSightExt,
-				rgdTemplateFloat("sight_radius", 20),
+			unitdef.RgdTemplateTable("sight_ext", unitdef.RefSightExt,
+				unitdef.RgdTemplateFloat("sight_radius", 20),
 			),
-			rgdTemplateTable("cost_ext", refCostExt,
-				rgdTemplateTable("time_cost", "",
-					rgdTemplateTable("cost", "",
-						rgdTemplateFloat("requisition", 150),
-						rgdTemplateFloat("population", 2),
+			unitdef.RgdTemplateTable("cost_ext", unitdef.RefCostExt,
+				unitdef.RgdTemplateTable("time_cost", "",
+					unitdef.RgdTemplateTable("cost", "",
+						unitdef.RgdTemplateFloat("requisition", 150),
+						unitdef.RgdTemplateFloat("population", 2),
 					),
-					rgdTemplateFloat("time_seconds", 25),
+					unitdef.RgdTemplateFloat("time_seconds", 25),
 				),
 			),
 			// One modifier in use, which is what puts a counted row in the list:
 			// it is a statement about a list rather than a value, and has to be
 			// left out of the editor rather than offered as one.
-			rgdTemplateTable("modifier_apply_ext", refModifierExt,
-				rgdTemplateTable("modifiers", refModifierTable,
-					rgdTemplateTable("modifier_01", "",
-						rgdTemplateString("target_type_name", "necron_gauntlet"),
+			unitdef.RgdTemplateTable("modifier_apply_ext", unitdef.RefModifierExt,
+				unitdef.RgdTemplateTable("modifiers", unitdef.RefModifierTable,
+					unitdef.RgdTemplateTable("modifier_01", "",
+						unitdef.RgdTemplateString("target_type_name", "necron_gauntlet"),
 					),
 				),
 			),
@@ -463,7 +464,7 @@ func TestAFieldPointedAtANewStringIsWrittenOutWithTheUnit(t *testing.T) {
 	}
 	// A field of some other file is not the unit's business.
 	ui.UnitInfoDirty = false
-	MarkUnitFieldDirty(ui, rgdTemplateFloat("somewhere_else", 1))
+	MarkUnitFieldDirty(ui, unitdef.RgdTemplateFloat("somewhere_else", 1))
 	if ui.UnitInfoDirty {
 		t.Error("a field of another file marked this unit as changed")
 	}
@@ -766,7 +767,7 @@ func TestUnitInfoScalarsAreRealPaths(t *testing.T) {
 	// seen counts, per row of the table, how many units carry the field. A row
 	// that no unit carries is either a typo or a field the game has since
 	// renamed, and both mean the row will never be shown.
-	seen := make([]int, len(unitInfoScalars))
+	seen := make([]int, len(unitdef.UnitInfoScalars))
 	notScalar := map[string]bool{}
 	checked := 0
 	for _, u := range cat.AllUnits() {
@@ -782,15 +783,15 @@ func TestUnitInfoScalarsAreRealPaths(t *testing.T) {
 			continue
 		}
 		checked++
-		for i, s := range unitInfoScalars {
-			e := rgdFindPath(rf.Root, s.path...)
+		for i, s := range unitdef.UnitInfoScalars {
+			e := rgdFindPath(rf.Root, s.Path...)
 			if e == nil {
 				continue
 			}
 			if e.IsTable() {
 				// A table's value would render as a $ref rather than as the
 				// number the label promises, so the path is wrong for this row.
-				notScalar[strings.Join(s.path, "\\")] = true
+				notScalar[strings.Join(s.Path, "\\")] = true
 				continue
 			}
 			seen[i]++
@@ -799,10 +800,10 @@ func TestUnitInfoScalarsAreRealPaths(t *testing.T) {
 	if checked < 400 {
 		t.Fatalf("only %d troops were readable, so this proves nothing", checked)
 	}
-	for i, s := range unitInfoScalars {
+	for i, s := range unitdef.UnitInfoScalars {
 		if seen[i] == 0 {
 			t.Errorf("%s\\%s (%s) is on no unit of the tree: a typo, or a field the game has renamed",
-				strings.Join(s.path, "\\"), s.label, s.group)
+				strings.Join(s.Path, "\\"), s.Label, s.Group)
 		}
 	}
 	for path := range notScalar {
@@ -823,12 +824,12 @@ func TestUnitInfoScalarsAreRealPaths(t *testing.T) {
 // cover ones are named for their cover type.
 func TestUnitInfoListsAreDistinctGroups(t *testing.T) {
 	seen := map[string]string{}
-	for _, c := range unitInfoCounts {
-		key := c.group + "/" + c.label
-		if prev, ok := seen[c.label]; ok {
-			t.Errorf("two list rows are both labelled %q (%s and %s)", c.label, prev, key)
+	for _, c := range unitdef.UnitInfoCounts {
+		key := c.Group + "/" + c.Label
+		if prev, ok := seen[c.Label]; ok {
+			t.Errorf("two list rows are both labelled %q (%s and %s)", c.Label, prev, key)
 		}
-		seen[c.label] = key
+		seen[c.Label] = key
 	}
 }
 
@@ -896,14 +897,14 @@ func TestUnitInfoFieldsOnAUnitWithoutThem(t *testing.T) {
 			{Name: "hitpoints", Type: rgd.RgdTypeFloat, FloatVal: 100},
 		}},
 	}}}
-	fields := unitInfoFields(stub)
+	fields := unitdef.UnitInfoFields(stub)
 	if len(fields) == 0 {
 		t.Fatal("a unit with a name and hitpoints produced no rows")
 	}
 	declared := map[string]bool{"Name": true, "Hit points": true}
 	for _, f := range fields {
-		if !declared[f.label] {
-			t.Errorf("a row %q = %q was invented for a unit that declares only a name and hitpoints", f.label, f.value)
+		if !declared[f.Label] {
+			t.Errorf("a row %q = %q was invented for a unit that declares only a name and hitpoints", f.Label, f.Value)
 		}
 	}
 	if _, ok := unitFieldValue(t, fields, "Hit points"); !ok {
@@ -911,10 +912,10 @@ func TestUnitInfoFieldsOnAUnitWithoutThem(t *testing.T) {
 	}
 	// A unit with nothing at all must produce nothing, and must not panic.
 	empty := &rgd.RgdFile{Root: &rgd.RgdEntry{Name: "GameData", Type: rgd.RgdTypeTable}}
-	if got := unitInfoFields(empty); len(got) != 0 {
+	if got := unitdef.UnitInfoFields(empty); len(got) != 0 {
 		t.Errorf("an empty unit produced %d rows: %v", len(got), labelList(got))
 	}
-	if got := unitInfoFields(nil); got != nil {
+	if got := unitdef.UnitInfoFields(nil); got != nil {
 		t.Errorf("a nil file produced %d rows", len(got))
 	}
 }
@@ -992,7 +993,7 @@ func keySelFramesEqual(got, want []int) bool {
 
 func TestKeyFrameRowsAreListedPositionKeysThenRotationKeys(t *testing.T) {
 	v := keySelViewer()
-	want := []boneKeyRef{{mode: 0, frame: 2}, {mode: 0, frame: 5}, {mode: 1, frame: 3}, {mode: 1, frame: 7}}
+	want := []boneKeyRef{{Mode: 0, Frame: 2}, {Mode: 0, Frame: 5}, {Mode: 1, Frame: 3}, {Mode: 1, Frame: 7}}
 	got := BoneKeyRefs(v)
 	if len(got) != len(want) {
 		t.Fatalf("the list has %d rows, want %d (%v)", len(got), len(want), got)
@@ -1015,7 +1016,7 @@ func TestInsertBoneKeyCopyTakesTheValueOfTheKeyItCopies(t *testing.T) {
 	if got := BoneTrack(v).PosKey[1].V; got != [3]float32{1, 2, 3} {
 		t.Errorf("the new key holds %v, want the copied [1 2 3]", got)
 	}
-	if ref, ok := PickedBoneKeyRef(v); !ok || ref != (boneKeyRef{mode: 0, frame: 4}) {
+	if ref, ok := PickedBoneKeyRef(v); !ok || ref != (boneKeyRef{Mode: 0, Frame: 4}) {
 		t.Errorf("the picked key is %+v (ok=%v), want the new one on frame 4", ref, ok)
 	}
 }
@@ -1069,7 +1070,7 @@ func TestDeleteBoneKeyAtKeepsThePickedKeyAimedAtItself(t *testing.T) {
 	if v.BoneKeyIndex != 0 || v.BoneKeyMode != 0 {
 		t.Fatalf("the picked key is now (idx %d, mode %d), want (0, 0)", v.BoneKeyIndex, v.BoneKeyMode)
 	}
-	if ref, ok := PickedBoneKeyRef(v); !ok || ref != (boneKeyRef{mode: 0, frame: 5}) {
+	if ref, ok := PickedBoneKeyRef(v); !ok || ref != (boneKeyRef{Mode: 0, Frame: 5}) {
 		t.Errorf("the picked key is %+v (ok=%v), want the one still standing on frame 5", ref, ok)
 	}
 }
@@ -1184,7 +1185,7 @@ func TestKeyButtonsFallBackToTheStripPickedKey(t *testing.T) {
 	v.BoneKeyIndex, v.BoneKeyMode = 1, 0
 
 	got := BoneKeyActionRefs(ui, v)
-	if len(got) != 1 || got[0] != (boneKeyRef{mode: 0, frame: 5}) {
+	if len(got) != 1 || got[0] != (boneKeyRef{Mode: 0, Frame: 5}) {
 		t.Fatalf("the buttons would act on %v, want the single key the strip picked", got)
 	}
 	DeleteBoneKeysAction(ui, v)
@@ -1224,7 +1225,7 @@ func TestAnotherBoneStartsAFreshSelection(t *testing.T) {
 	if len(ui.UnitBoneKeySel) != 0 {
 		t.Errorf("the rows picked on the last bone were carried over: %v", ui.UnitBoneKeySel)
 	}
-	if ui.UnitBoneKeySelAnchor != (boneKeyRef{mode: -1}) {
+	if ui.UnitBoneKeySelAnchor != (boneKeyRef{Mode: -1}) {
 		t.Errorf("the anchor still stands on %+v after the bone changed", ui.UnitBoneKeySelAnchor)
 	}
 }
@@ -1246,7 +1247,7 @@ func TestAddBeforeGivesEveryPickedRowItsOwnFrame(t *testing.T) {
 	}
 	// The keys just added are what the list shows picked, since editing or
 	// taking them away is what comes next.
-	want := map[boneKeyRef]bool{{mode: 0, frame: 1}: true, {mode: 0, frame: 4}: true}
+	want := map[boneKeyRef]bool{{Mode: 0, Frame: 1}: true, {Mode: 0, Frame: 4}: true}
 	if len(ui.UnitBoneKeySel) != len(want) {
 		t.Fatalf("the selection holds %v, want the two keys just added", ui.UnitBoneKeySel)
 	}
@@ -1282,7 +1283,7 @@ func TestAddBeforeWalksFurtherWhenTheNeighbourIsTaken(t *testing.T) {
 	refs = BoneKeyRefs(v)
 	row := -1
 	for i, r := range refs {
-		if r == (boneKeyRef{mode: 0, frame: 3}) {
+		if r == (boneKeyRef{Mode: 0, Frame: 3}) {
 			row = i
 		}
 	}
@@ -1309,7 +1310,7 @@ func TestAddAroundSaysSoWhenNothingCanBeAdded(t *testing.T) {
 	}
 	refs := BoneKeyRefs(v)
 	for _, r := range refs {
-		if r == (boneKeyRef{mode: 0, frame: 2}) {
+		if r == (boneKeyRef{Mode: 0, Frame: 2}) {
 			BoneKeyRowClicked(ui, v, r, refs, 0)
 		}
 	}
@@ -1522,7 +1523,7 @@ func TestUnitModelPathWithoutAnAnimatorField(t *testing.T) {
 	placed := `Data\art\ebps\races\necron_wraith.whm`
 	tree, entry := unitViewportFixture(t, unitTemplateName{Race: "necrons", Name: "necron_wraith"}, placed)
 	src, _ := newUnitModelSource(tree, loadUnitDetails(tree, entry))
-	src.animator = ""
+	src.Animator = ""
 	got := unitModelPath(tree, src)
 	if !strings.EqualFold(got, placed) {
 		t.Fatalf("model path is %q, want %q", got, placed)
@@ -1699,16 +1700,16 @@ func TestRealSquadScanFindsTheLinkage(t *testing.T) {
 	}
 	var found bool
 	for _, s := range squads {
-		if strings.EqualFold(s.name, "necron_lord_squad") {
+		if strings.EqualFold(s.Name, "necron_lord_squad") {
 			found = true
 			// The size of a lord squad is fixed at one, which is the whole
 			// point of the field: a count that came out as 0 or 45 would mean
 			// the loadout was read from the wrong place.
-			if s.unitMin != "1" || s.unitMax != "1" {
-				t.Errorf("necron_lord_squad size is %s-%s, want 1-1", s.unitMin, s.unitMax)
+			if s.UnitMin != "1" || s.UnitMax != "1" {
+				t.Errorf("necron_lord_squad size is %s-%s, want 1-1", s.UnitMin, s.UnitMax)
 			}
-			if s.race != "necrons" {
-				t.Errorf("squad race is %q, want necrons", s.race)
+			if s.Race != "necrons" {
+				t.Errorf("squad race is %q, want necrons", s.Race)
 			}
 		}
 	}
@@ -1739,7 +1740,7 @@ func TestRealSquadScanFindsAScaledSquad(t *testing.T) {
 	// A warrior squad is 3 to 8: the row's whole reason for existing.
 	var scaled bool
 	for _, s := range squads {
-		if s.unitMin != s.unitMax {
+		if s.UnitMin != s.UnitMax {
 			scaled = true
 		}
 	}
@@ -1801,9 +1802,9 @@ func TestRealSquadScanCoversTheTree(t *testing.T) {
 // the same mod — which a reader would read as the tool being wrong.
 func TestSquadScanIndexIsSorted(t *testing.T) {
 	refs := []unitSquadRef{
-		{name: "zulu_squad", race: "tau"},
-		{name: "alpha_squad", race: "tau"},
-		{name: "alpha_squad", race: "eldar"},
+		{Name: "zulu_squad", Race: "tau"},
+		{Name: "alpha_squad", Race: "tau"},
+		{Name: "alpha_squad", Race: "eldar"},
 	}
 	sortSquadRefs(refs)
 	// The stripped name is the primary key, so the two alpha_squads lead. They
@@ -1812,23 +1813,23 @@ func TestSquadScanIndexIsSorted(t *testing.T) {
 	// they were given. What is being checked is that the sort is stable in the
 	// sense that matters: the same input always produces the same output, and
 	// zulu is last however the ties fall.
-	if refs[2].name != "zulu_squad" {
-		t.Errorf("last entry is %s, want zulu_squad", refs[2].name)
+	if refs[2].Name != "zulu_squad" {
+		t.Errorf("last entry is %s, want zulu_squad", refs[2].Name)
 	}
 	for i := 0; i < 2; i++ {
-		if refs[i].name != "alpha_squad" {
-			t.Errorf("entry %d is %s, want an alpha_squad ahead of zulu", i, refs[i].name)
+		if refs[i].Name != "alpha_squad" {
+			t.Errorf("entry %d is %s, want an alpha_squad ahead of zulu", i, refs[i].Name)
 		}
 	}
 	// A distinguishing path must break the tie deterministically.
 	tied := []unitSquadRef{
-		{name: "alpha_squad", race: "tau", path: `Data\b\tau.rgd`},
-		{name: "alpha_squad", race: "eldar", path: `Data\b\eldar.rgd`},
+		{Name: "alpha_squad", Race: "tau", Path: `Data\b\tau.rgd`},
+		{Name: "alpha_squad", Race: "eldar", Path: `Data\b\eldar.rgd`},
 	}
 	sortSquadRefs(tied)
-	if tied[0].path != `Data\b\eldar.rgd` {
+	if tied[0].Path != `Data\b\eldar.rgd` {
 		t.Errorf("tied entries were ordered %s then %s, want the paths sorted",
-			tied[0].path, tied[1].path)
+			tied[0].Path, tied[1].Path)
 	}
 }
 
@@ -1845,7 +1846,7 @@ func TestSquadNameDropsTheSuffix(t *testing.T) {
 		{"", ""},
 	}
 	for _, c := range cases {
-		if got := squadNameOf(unitSquadRef{name: c.in}); got != c.want {
+		if got := squadNameOf(unitSquadRef{Name: c.in}); got != c.want {
 			t.Errorf("squadNameOf(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
@@ -1865,7 +1866,7 @@ func TestSquadSizeLabel(t *testing.T) {
 		{"", "", "", "no size at all says nothing"},
 	}
 	for _, c := range cases {
-		got := squadSizeLabel(unitSquadRef{unitMin: c.min, unitMax: c.max})
+		got := squadSizeLabel(unitSquadRef{UnitMin: c.min, UnitMax: c.max})
 		if got != c.want {
 			t.Errorf("size %q-%q = %q, want %q: %s", c.min, c.max, got, c.want, c.why)
 		}
@@ -1919,7 +1920,7 @@ func TestSquadsOfUnitBeforeScan(t *testing.T) {
 		t.Errorf("an unstarted index returned %d squads, want nil", len(refs))
 	}
 	ui = squadRowsForTest(map[string][]unitSquadRef{
-		strings.ToLower(u.Path): {{name: "necron_lord_squad", unitMin: "1", unitMax: "1"}},
+		strings.ToLower(u.Path): {{Name: "necron_lord_squad", UnitMin: "1", UnitMax: "1"}},
 	})
 	if refs := SquadsOfUnitOf(ui, u); len(refs) != 1 {
 		t.Errorf("a filled index returned %d squads, want 1", len(refs))
@@ -1968,13 +1969,13 @@ func TestBirthCostSkipsZero(t *testing.T) {
 func TestSquadFieldsCarrySquadOnlyValues(t *testing.T) {
 	tree := openTestDXP3(t)
 	s := unitSquadRef{
-		path: `Data\attrib\sbps\races\necrons\necron_lord_squad.rgd`,
-		name: "necron_lord_squad",
-		race: "necrons",
+		Path: `Data\attrib\sbps\races\necrons\necron_lord_squad.rgd`,
+		Name: "necron_lord_squad",
+		Race: "necrons",
 	}
 	fields := squadFields(tree, s)
 	if len(fields) == 0 {
-		t.Skipf("could not read %s", s.path)
+		t.Skipf("could not read %s", s.Path)
 	}
 	byLabel := map[string]string{}
 	for _, f := range fields {
@@ -2253,11 +2254,11 @@ func TestNewUnitRgdHasTheTwelveSections(t *testing.T) {
 	for _, c := range rf.Root.Children {
 		names = append(names, c.Name)
 	}
-	if len(names) != len(unitTemplateSections) {
+	if len(names) != len(unitdef.UnitTemplateSections) {
 		t.Fatalf("a new unit has %d top level entries, want the %d sections every unit has: %v",
-			len(names), len(unitTemplateSections), names)
+			len(names), len(unitdef.UnitTemplateSections), names)
 	}
-	for i, want := range unitTemplateSections {
+	for i, want := range unitdef.UnitTemplateSections {
 		if names[i] != want {
 			t.Errorf("entry %d is %q, want %q", i, names[i], want)
 		}
@@ -2330,7 +2331,7 @@ func TestNewUnitRgdCarriesTheGivenName(t *testing.T) {
 		"GameData/cost_ext/time_cost/cost/requisition":               "250",
 		"GameData/cost_ext/time_cost/time_seconds":                   "60",
 		"GameData/ui_ext/ui_info/screen_name_id":                     "$0",
-		"GameData/type_ext/type_surface":                             refTypeSurface,
+		"GameData/type_ext/type_surface":                             unitdef.RefTypeSurface,
 		"GameData/special_attack_physics_ext/disable_special_attack": "True",
 	}
 	for path, expect := range want {
@@ -2569,7 +2570,7 @@ func TestUADEDiagnoseUnitPipeline(t *testing.T) {
 			t.Logf("  model: no source")
 			continue
 		}
-		t.Logf("  model: animator=%q path=%q", src.animator, unitModelPath(tree, src))
+		t.Logf("  model: animator=%q path=%q", src.Animator, unitModelPath(tree, src))
 	}
 }
 
@@ -2584,14 +2585,14 @@ func TestUnitSectionsAreInOrder(t *testing.T) {
 		t.Fatalf("got %d sections, want %d: %v", len(unitSections), len(want), unitSectionLabels())
 	}
 	for i, label := range want {
-		if unitSections[i].label != label {
-			t.Errorf("section %d = %q, want %q", i, unitSections[i].label, label)
+		if unitSections[i].Label != label {
+			t.Errorf("section %d = %q, want %q", i, unitSections[i].Label, label)
 		}
 	}
 	// Every section needs both column headings, or a column comes out blank.
 	for _, s := range unitSections {
-		if s.middleTitle == "" || s.rightTitle == "" || s.hint == "" {
-			t.Errorf("section %q is incomplete: middle=%q right=%q hint=%q", s.label, s.middleTitle, s.rightTitle, s.hint)
+		if s.MiddleTitle == "" || s.RightTitle == "" || s.Hint == "" {
+			t.Errorf("section %q is incomplete: middle=%q right=%q hint=%q", s.Label, s.MiddleTitle, s.RightTitle, s.Hint)
 		}
 	}
 }
@@ -2599,7 +2600,7 @@ func TestUnitSectionsAreInOrder(t *testing.T) {
 func unitSectionLabels() []string {
 	out := make([]string, 0, len(unitSections))
 	for _, s := range unitSections {
-		out = append(out, s.label)
+		out = append(out, s.Label)
 	}
 	return out
 }
@@ -2610,12 +2611,12 @@ func unitSectionLabels() []string {
 func TestCurrentUnitSectionSurvivesBadIndex(t *testing.T) {
 	for _, bad := range []int{-1, len(unitSections), len(unitSections) + 5} {
 		ui := &uiState{UnitSection: bad}
-		if got := CurrentUnitSection(ui).label; got != unitSections[0].label {
-			t.Errorf("section index %d gave %q, want fallback %q", bad, got, unitSections[0].label)
+		if got := CurrentUnitSection(ui).Label; got != unitSections[0].Label {
+			t.Errorf("section index %d gave %q, want fallback %q", bad, got, unitSections[0].Label)
 		}
 	}
 	ui := &uiState{UnitSection: 1}
-	if got := CurrentUnitSection(ui).label; got != "Weapons" {
+	if got := CurrentUnitSection(ui).Label; got != "Weapons" {
 		t.Errorf("section index 1 gave %q, want Weapons", got)
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/unitdef"
 )
 
 func graphOf(t *testing.T) *modGraph {
@@ -460,10 +461,10 @@ func graphTestRgdFiles(t *testing.T) map[string][]byte {
 		graphTestGauntlet: mustMarshalGraph(t, &rgd.RgdFile{
 			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
 			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
-				rgdTemplateTable("requirement_ext", refRequirementExt,
-					rgdTemplateTable("requirements", refRequirementsList,
-						rgdTemplateTable("required_1", refRequirementSlot,
-							rgdTemplateString("structure_name", `ebps\races\necrons\structures\necron_armoury.lua`),
+				unitdef.RgdTemplateTable("requirement_ext", unitdef.RefRequirementExt,
+					unitdef.RgdTemplateTable("requirements", unitdef.RefRequirementsList,
+						unitdef.RgdTemplateTable("required_1", unitdef.RefRequirementSlot,
+							unitdef.RgdTemplateString("structure_name", `ebps\races\necrons\structures\necron_armoury.lua`),
 						),
 					),
 				),
@@ -483,18 +484,18 @@ func graphTestRgdFiles(t *testing.T) map[string][]byte {
 		graphTestWarp: mustMarshalGraph(t, &rgd.RgdFile{
 			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
 			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
-				rgdTemplateTable("area_effect", "",
-					rgdTemplateTable("weapon_damage", "",
-						rgdTemplateTable("modifiers", "",
-							rgdTemplateTable("modifier_01", "",
-								rgdTemplateTable("modifier", "",
-									rgdTemplateString("target_type_name", `necron_gauntlet`),
+				unitdef.RgdTemplateTable("area_effect", "",
+					unitdef.RgdTemplateTable("weapon_damage", "",
+						unitdef.RgdTemplateTable("modifiers", "",
+							unitdef.RgdTemplateTable("modifier_01", "",
+								unitdef.RgdTemplateTable("modifier", "",
+									unitdef.RgdTemplateString("target_type_name", `necron_gauntlet`),
 								),
 							),
 						),
 					),
 				),
-				rgdTemplateString("ui_hotkey_name", "necron_warp_ability"),
+				unitdef.RgdTemplateString("ui_hotkey_name", "necron_warp_ability"),
 			}},
 		}),
 		// The add-on names the same unit, one table shallower, and unlocks
@@ -504,14 +505,14 @@ func graphTestRgdFiles(t *testing.T) map[string][]byte {
 		graphTestHubris: mustMarshalGraph(t, &rgd.RgdFile{
 			HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
 			Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
-				rgdTemplateTable("modifiers", "",
-					rgdTemplateTable("modifier_01", "",
-						rgdTemplateString("target_type_name", `necron_gauntlet`),
+				unitdef.RgdTemplateTable("modifiers", "",
+					unitdef.RgdTemplateTable("modifier_01", "",
+						unitdef.RgdTemplateString("target_type_name", `necron_gauntlet`),
 					),
 				),
-				rgdTemplateTable("requirements", "",
-					rgdTemplateTable("required_1", "",
-						rgdTemplateString("structure_name", `necron_armoury`),
+				unitdef.RgdTemplateTable("requirements", "",
+					unitdef.RgdTemplateTable("required_1", "",
+						unitdef.RgdTemplateString("structure_name", `necron_armoury`),
 					),
 				),
 			}},
@@ -537,15 +538,15 @@ func appendBrokenUnit(t *testing.T, tree *modtree.ModTree, virtualPath, weaponRe
 	body := mustMarshalGraph(t, &rgd.RgdFile{
 		HeaderVersion: 1, HeaderUnknown3: 1, ChunkVersion: 1,
 		Root: &rgd.RgdEntry{Hash: rgd.Hash("GameData"), Name: "GameData", Type: rgd.RgdTypeTable, Children: []*rgd.RgdEntry{
-			rgdTemplateTable("combat_ext", refCombatExt,
-				rgdTemplateTable("hardpoints", refHardpointTable,
-					rgdTemplateTable("hardpoint_01", refHardpointDetails,
-						rgdTemplateTable("weapon_table", refWeaponTable,
-							rgdTemplateTable("weapon_01", refWeaponDetails,
-								rgdTemplatePosition("muzzle"),
-								rgdTemplateString("name_for_this_weapon_choice", ""),
-								rgdTemplatePosition("origin"),
-								rgdTemplateString("weapon", weaponRef),
+			unitdef.RgdTemplateTable("combat_ext", unitdef.RefCombatExt,
+				unitdef.RgdTemplateTable("hardpoints", unitdef.RefHardpointTable,
+					unitdef.RgdTemplateTable("hardpoint_01", unitdef.RefHardpointDetails,
+						unitdef.RgdTemplateTable("weapon_table", unitdef.RefWeaponTable,
+							unitdef.RgdTemplateTable("weapon_01", unitdef.RefWeaponDetails,
+								unitdef.RgdTemplatePosition("muzzle"),
+								unitdef.RgdTemplateString("name_for_this_weapon_choice", ""),
+								unitdef.RgdTemplatePosition("origin"),
+								unitdef.RgdTemplateString("weapon", weaponRef),
 							),
 						),
 					),

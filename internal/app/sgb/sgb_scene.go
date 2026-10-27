@@ -594,21 +594,21 @@ func ClearSgbObjectSelection(tab *uistate.Tab) {
 }
 
 type SgbPlayerOption struct {
-	key, label string
+	Key, Label string
 	owner      int
 }
 
 var SgbPlayerOptions = func() []SgbPlayerOption {
-	options := []SgbPlayerOption{{key: "neutral", label: "Neutral", owner: 0}}
+	options := []SgbPlayerOption{{Key: "neutral", Label: "Neutral", owner: 0}}
 	for player := 1; player <= 8; player++ {
-		options = append(options, SgbPlayerOption{key: fmt.Sprintf("player-%d", player), label: fmt.Sprintf("Player %d", player), owner: player})
+		options = append(options, SgbPlayerOption{Key: fmt.Sprintf("player-%d", player), Label: fmt.Sprintf("Player %d", player), owner: player})
 	}
 	return options
 }()
 
 func SgbPlayerOwner(key string) (int, bool) {
 	for _, option := range SgbPlayerOptions {
-		if option.key == key {
+		if option.Key == key {
 			return option.owner, true
 		}
 	}
@@ -634,7 +634,7 @@ func SgbPlayerRadioChildren(ui *uistate.State, tab *uistate.Tab) []layout.FlexCh
 	for _, option := range SgbPlayerOptions {
 		option := option
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			radio := material.RadioButton(ui.Th, tab.SgbPlayerList, option.key, option.label)
+			radio := material.RadioButton(ui.Th, tab.SgbPlayerList, option.Key, option.Label)
 			radio.TextSize = unit.Sp(9)
 			return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(4), Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, radio.Layout)
 		}))
@@ -660,7 +660,7 @@ func SetSelectedSgbOwner(ui *uistate.State, tab *uistate.Tab, owner int) int {
 	}
 	if changed > 0 {
 		tab.SgbDirty = true
-		ui.StatusText = fmt.Sprintf("Assigned %s to %d selected map object(s)", SgbPlayerOptions[owner].label, changed)
+		ui.StatusText = fmt.Sprintf("Assigned %s to %d selected map object(s)", SgbPlayerOptions[owner].Label, changed)
 	} else {
 		found := false
 		for _, entity := range tab.SgbMap.Entities {
@@ -672,7 +672,7 @@ func SetSelectedSgbOwner(ui *uistate.State, tab *uistate.Tab, owner int) int {
 		if !found {
 			ui.StatusText = "Select one or more map objects first"
 		} else {
-			ui.StatusText = fmt.Sprintf("Selected map objects already belong to %s", SgbPlayerOptions[owner].label)
+			ui.StatusText = fmt.Sprintf("Selected map objects already belong to %s", SgbPlayerOptions[owner].Label)
 		}
 	}
 	return changed

@@ -3,6 +3,7 @@ package app
 import (
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/unitdef"
 	"image"
 	"os"
 	"path/filepath"
@@ -88,8 +89,8 @@ func TestCreatingAUnitWritesItIntoTheMod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the file the app wrote does not parse: %v", err)
 	}
-	if len(rf.Root.Children) != len(unitTemplateSections) {
-		t.Errorf("the written unit has %d sections, want the %d every unit has", len(rf.Root.Children), len(unitTemplateSections))
+	if len(rf.Root.Children) != len(unitdef.UnitTemplateSections) {
+		t.Errorf("the written unit has %d sections, want the %d every unit has", len(rf.Root.Children), len(unitdef.UnitTemplateSections))
 	}
 	if ui.ModTree.FindFile(virtual) == nil {
 		t.Error("the mod tree does not know the new unit, so it would not show up in the list")

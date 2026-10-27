@@ -274,14 +274,14 @@ func TestClassicOETreeRowDialogPicksTheEditorsArea(t *testing.T) {
 // the mesh list — is appended past it, which is why the index is found by
 // kind rather than by being last.
 func TestClassicOEHeadersKeepTheAnimsPanelDefault(t *testing.T) {
-	if classicOEHeaders[classicOEAnimsHeader].kind != classicOEKindAnims {
+	if classicOEHeaders[classicOEAnimsHeader].Kind != classicOEKindAnims {
 		t.Fatalf("default-open panel = %q (%s), want the anims panel",
-			classicOEHeaders[classicOEAnimsHeader].label,
-			classicOEHeaders[classicOEAnimsHeader].kind)
+			classicOEHeaders[classicOEAnimsHeader].Label,
+			classicOEHeaders[classicOEAnimsHeader].Kind)
 	}
 	meshes := false
 	for _, h := range classicOEHeaders {
-		if h.kind == classicOEKindMeshes {
+		if h.Kind == classicOEKindMeshes {
 			meshes = true
 		}
 	}

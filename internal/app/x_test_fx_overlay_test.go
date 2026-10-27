@@ -406,7 +406,7 @@ func TestFxOverlaySizeFollowsTheCamera(t *testing.T) {
 // with no ring to draw at all.
 func TestFxMarkerlessEffectFallsBackToAnUprightFrame(t *testing.T) {
 	e := fxOverlayEffect{Marker: -1}
-	x, y, z := e.fxRingFrame()
+	x, y, z := e.FxRingFrame()
 	if x != fxFallbackFrame[0] || y != fxFallbackFrame[1] || z != fxFallbackFrame[2] {
 		t.Fatalf("a marker-less effect was given the frame (%v, %v, %v), not the file's own",
 			x, y, z)
@@ -426,7 +426,7 @@ func TestFxMarkerlessEffectFallsBackToAnUprightFrame(t *testing.T) {
 	// A partially filled frame is no frame: taking the whole fallback rather
 	// than the two axes it does have keeps the cross product above alive.
 	partial := fxOverlayEffect{Marker: -1, Frame: [3]fauxgl.Vector{fxFallbackFrame[0], {}, {}}}
-	px, py, pz := partial.fxRingFrame()
+	px, py, pz := partial.FxRingFrame()
 	if n := fx.CrossOf(py, pz).Length(); n < 1e-6 {
 		t.Errorf("a half-filled frame left the offset axes parallel: %v, %v", py, pz)
 	}
@@ -465,11 +465,11 @@ func TestMarkerLocalParticleOffsetAndPlaneFollowMarker(t *testing.T) {
 		Frame:  frame,
 		Axis:   frame[2],
 	}
-	sp := e.fxTurnSprite(fx.Sprite{
+	sp := e.FxTurnSprite(fx.Sprite{
 		Pos:        [3]float64{2, 3, 4},
 		Horizontal: true,
 	})
-	axX, axY, axZ := e.fxRingFrame()
+	axX, axY, axZ := e.FxRingFrame()
 	sp = fxOrientSprite(sp, [3]fauxgl.Vector{axX, axY, axZ})
 	if got, want := sp.Pos, [3]float64{4, 2, 3}; got != want {
 		t.Errorf("marker-local particle offset = %v, want %v", got, want)
@@ -490,7 +490,7 @@ func TestMarkerLocalParticleOffsetAndPlaneFollowMarker(t *testing.T) {
 
 func TestFxRingOffsetIsMeasuredUpward(t *testing.T) {
 	e := fxOverlayEffect{Marker: -1}
-	axX, axY, axZ := e.fxRingFrame()
+	axX, axY, axZ := e.FxRingFrame()
 	sim := &fx.FxSim{}
 	sim.RingNodes = []fx.Ring{{
 		Texture:  "",
@@ -565,16 +565,16 @@ func TestLoadModelEffectsForRealModel(t *testing.T) {
 			t.Fatalf("ParseWhmModel(%s): %v", name, err)
 		}
 		file := fxRacesPath(name)
-		res := loadModelEffects(tree, model, file, fxLoadOpts{audio: true})
-		if res.err != nil {
-			t.Logf("%s: %v", name, res.err)
+		res := loadModelEffects(tree, model, file, fxLoadOpts{Audio: true})
+		if res.Err != nil {
+			t.Logf("%s: %v", name, res.Err)
 			continue
 		}
-		if len(res.effects) == 0 {
+		if len(res.Effects) == 0 {
 			continue
 		}
-		t.Logf("%s: %d effects, %d sprite textures", name, len(res.effects), len(res.textures))
-		for i, e := range res.effects {
+		t.Logf("%s: %d effects, %d sprite textures", name, len(res.Effects), len(res.Textures))
+		for i, e := range res.Effects {
 			sprites := e.Sim.Sprites()
 			if len(sprites) == 0 {
 				continue

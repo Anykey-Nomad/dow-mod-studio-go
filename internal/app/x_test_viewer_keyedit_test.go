@@ -245,10 +245,10 @@ func TestBoneTrackSnapshotAndRestoreRollsAnEditBack(t *testing.T) {
 	track := BoneTrack(v)
 	track.RotKey[0].V = [4]float32{9, 9, 9, 9}
 
-	if len(snap.posKey) != 2 {
-		t.Fatalf("the snapshot holds %d position keys, want 2 — it must be a copy, not the live track", len(snap.posKey))
+	if len(snap.PosKey) != 2 {
+		t.Fatalf("the snapshot holds %d position keys, want 2 — it must be a copy, not the live track", len(snap.PosKey))
 	}
-	if snap.rotKey[0].V == [4]float32{9, 9, 9, 9} {
+	if snap.RotKey[0].V == [4]float32{9, 9, 9, 9} {
 		t.Error("the snapshot saw the rotation rewrite; it aliases the live track")
 	}
 
@@ -381,11 +381,11 @@ func TestMaterialTreePathIncludesArchiveAndVirtualPath(t *testing.T) {
 
 func TestDecodeModelMaterialsReportsRTXFormat(t *testing.T) {
 	got := decodeModelMaterials(map[string][]byte{"slag_deposit": diagnosticTestRTX(t, 8)}, true)
-	diag := got.diagnostics["slag_deposit"]
+	diag := got.Diagnostics["slag_deposit"]
 	if diag.Format != "RTX / DXT1 (BC1)" || diag.Status != "decoded" {
 		t.Fatalf("format/status = %q/%q, want RTX / DXT1 (BC1)/decoded", diag.Format, diag.Status)
 	}
-	if got.materials["slag_deposit"].Texture == nil {
+	if got.Materials["slag_deposit"].Texture == nil {
 		t.Fatal("diagnostic decode did not produce a usable material image")
 	}
 }

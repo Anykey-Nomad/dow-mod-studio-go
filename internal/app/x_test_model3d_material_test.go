@@ -77,14 +77,14 @@ func TestInstalledCompiledEntityTexturesResolve(t *testing.T) {
 			}
 			files, paths := resolveModelMaterialsWithPaths(tree, roots, tc.modelPath, names)
 			result := decodeModelMaterials(files, true)
-			attachMaterialSourcePaths(result.diagnostics, paths)
+			attachMaterialSourcePaths(result.Diagnostics, paths)
 			for _, name := range names {
-				if result.materials[name].Texture == nil {
-					t.Errorf("material %q did not resolve and decode: %+v", name, result.diagnostics[name])
+				if result.Materials[name].Texture == nil {
+					t.Errorf("material %q did not resolve and decode: %+v", name, result.Diagnostics[name])
 				}
 			}
-			if result.missing != 0 {
-				t.Errorf("%d/%d material textures missing", result.missing, len(names))
+			if result.Missing != 0 {
+				t.Errorf("%d/%d material textures missing", result.Missing, len(names))
 			}
 		})
 	}
@@ -129,14 +129,14 @@ func TestModelMaterialReferenceResolvesUnderRendererMaterialKey(t *testing.T) {
 	// canonical MaterialPath stored in the WHM shared shader.
 	files, paths := resolveModelMaterialsWithPaths(tree, materialSearchRoots(tree), modelPath, []string{material})
 	decoded := decodeModelMaterials(files, true)
-	attachMaterialSourcePaths(decoded.diagnostics, paths)
+	attachMaterialSourcePaths(decoded.Diagnostics, paths)
 	if got := string(files[material]); got != string(textureData) {
 		t.Fatalf("material lookup returned %d bytes, want the diffuse for key %q", len(files[material]), material)
 	}
-	if decoded.materials[material].Texture == nil || len(decoded.rsh[material]) == 0 {
-		t.Fatalf("resolved texture was not available under renderer key %q: materials=%v raw=%v", material, decoded.materials, len(decoded.rsh[material]))
+	if decoded.Materials[material].Texture == nil || len(decoded.Rsh[material]) == 0 {
+		t.Fatalf("resolved texture was not available under renderer key %q: materials=%v raw=%v", material, decoded.Materials, len(decoded.Rsh[material]))
 	}
-	if got := decoded.diagnostics[material].ResolvedPath; !strings.HasSuffix(strings.ToLower(got), "nec_warrior.rsh") {
+	if got := decoded.Diagnostics[material].ResolvedPath; !strings.HasSuffix(strings.ToLower(got), "nec_warrior.rsh") {
 		t.Fatalf("diagnostic source path = %q, want the resolved canonical diffuse", got)
 	}
 }
@@ -330,38 +330,38 @@ func TestFindMaterialsInTreeChoosesTextureShareAndHighestPriority(t *testing.T) 
 func TestDecodeModelMaterialsKeepsCompressedRSHForVulkan(t *testing.T) {
 	data := syntheticRSHDXT1(t)
 	got := decodeModelMaterials(map[string][]byte{"map": data}, true)
-	if len(got.rsh) != 1 || len(got.materials) != 1 {
-		t.Fatalf("Vulkan material result = %d raw, %d decoded, want both upload and preview data", len(got.rsh), len(got.materials))
+	if len(got.Rsh) != 1 || len(got.Materials) != 1 {
+		t.Fatalf("Vulkan material result = %d raw, %d decoded, want both upload and preview data", len(got.Rsh), len(got.Materials))
 	}
-	if string(got.rsh["map"]) != string(data) {
+	if string(got.Rsh["map"]) != string(data) {
 		t.Fatal("raw RSH bytes were changed before upload")
 	}
-	if got.materials["map"].Texture == nil {
+	if got.Materials["map"].Texture == nil {
 		t.Fatal("Vulkan material has no decoded view for the texture inspector")
 	}
-	if got.missing != 0 {
-		t.Fatalf("Vulkan material marked %d files missing", got.missing)
+	if got.Missing != 0 {
+		t.Fatalf("Vulkan material marked %d files missing", got.Missing)
 	}
 }
 
 func TestDecodeModelMaterialsKeepsCompiledRTXForVulkan(t *testing.T) {
 	data := syntheticRTXDXT1(t)
 	got := decodeModelMaterials(map[string][]byte{"slag_deposit": data}, true)
-	if len(got.rsh) != 0 {
-		t.Errorf("compiled RTX was incorrectly returned as raw RSH: %d", len(got.rsh))
+	if len(got.Rsh) != 0 {
+		t.Errorf("compiled RTX was incorrectly returned as raw RSH: %d", len(got.Rsh))
 	}
-	if material := got.materials["slag_deposit"]; material.Texture == nil {
+	if material := got.Materials["slag_deposit"]; material.Texture == nil {
 		t.Fatal("compiled RTX did not produce a decoded material texture")
 	}
-	if got.missing != 0 {
-		t.Fatalf("compiled RTX was counted as missing: %d", got.missing)
+	if got.Missing != 0 {
+		t.Fatalf("compiled RTX was counted as missing: %d", got.Missing)
 	}
 }
 
 func TestVulkanFragmentAlphaTestsRSHAlpha(t *testing.T) {
 	data := makeRSHWithFormat(11, solidDXT5AlphaBlock())
 	got := decodeModelMaterials(map[string][]byte{"wire": data}, true)
-	if len(got.rsh) != 1 || got.materials["wire"].Texture == nil {
+	if len(got.Rsh) != 1 || got.Materials["wire"].Texture == nil {
 		t.Fatal("test texture did not load for Vulkan")
 	}
 	shader, err := os.ReadFile(filepath.Join("shaders", "model3d_vk.frag"))
@@ -442,8 +442,8 @@ func TestLoadWhmGroundImageFindsTreeBasename(t *testing.T) {
 
 func TestDecodeModelMaterialsRejectsMalformedRSH(t *testing.T) {
 	got := decodeModelMaterials(map[string][]byte{"map": []byte("invalid")}, true)
-	if len(got.rsh) != 0 || got.missing != 1 {
-		t.Fatalf("malformed RSH result = raw:%d missing:%d", len(got.rsh), got.missing)
+	if len(got.Rsh) != 0 || got.Missing != 1 {
+		t.Fatalf("malformed RSH result = raw:%d missing:%d", len(got.Rsh), got.Missing)
 	}
 }
 
@@ -723,7 +723,7 @@ func TestViewerMarksEmptyMaterialLoadComplete(t *testing.T) {
 		Redraw:    false,
 	}
 	tab := &fileTab{Model: v, ModelMaterialCh: make(chan modelMaterialResult, 1)}
-	tab.ModelMaterialCh <- modelMaterialResult{materials: map[string]render.WhmMaterial{}}
+	tab.ModelMaterialCh <- modelMaterialResult{Materials: map[string]render.WhmMaterial{}}
 	ui := &uiState{}
 	PollViewerJobs(ui, tab)
 
@@ -795,15 +795,15 @@ func TestModelViewerProducesFirstFrame(t *testing.T) {
 		t.Fatal("requestRender did not start a render")
 	}
 	frame := <-v.FrameCh
-	if frame.image == nil {
+	if frame.Image == nil {
 		t.Fatal("render returned no image")
 	}
-	if frame.image.Bounds().Dx() != 64 || frame.image.Bounds().Dy() != 48 {
-		t.Fatalf("frame is %v, want 64x48", frame.image.Bounds())
+	if frame.Image.Bounds().Dx() != 64 || frame.Image.Bounds().Dy() != 48 {
+		t.Fatalf("frame is %v, want 64x48", frame.Image.Bounds())
 	}
 	// The frame has to be opaque enough to see: the model must have covered
 	// some pixels rather than leaving the background.
-	if !frameHasGeometry(frame.image) {
+	if !frameHasGeometry(frame.Image) {
 		t.Error("frame has no geometry; the canvas would look empty")
 	}
 }

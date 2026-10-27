@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"dow-mod-studio/internal/3d_engine"
+	viewer3d "dow-mod-studio/internal/3d_viewer"
 	"dow-mod-studio/internal/app/render"
+	viewer "dow-mod-studio/internal/app/viewer"
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
 	"dow-mod-studio/internal/sgb"
@@ -33,9 +35,9 @@ func TestSgbPlayerSelectionDefaultsToNeutralAndAssignsSelectedEntities(t *testin
 		t.Fatalf("player options = %d, want Neutral plus players 1–8", len(sgbPlayerOptions))
 	}
 	for owner, option := range sgbPlayerOptions {
-		got, ok := sgbPlayerOwner(option.key)
+		got, ok := sgbPlayerOwner(option.Key)
 		if !ok || got != owner {
-			t.Errorf("option %q maps to owner %d (valid=%v), want %d", option.key, got, ok, owner)
+			t.Errorf("option %q maps to owner %d (valid=%v), want %d", option.Key, got, ok, owner)
 		}
 	}
 
@@ -195,7 +197,7 @@ func TestClearSgbObjectSelectionCancelsPendingPlacement(t *testing.T) {
 		SgbObjectModelPath:  `Data\\attrib\\ebps\\environment\\rocks\\boulder.rgd`,
 		SgbObjectModelFile:  `Data\\art\\ebps\\environment\\rocks\\boulder.whm`,
 		SgbObjectModel:      &whm.Model{Name: "boulder"},
-		SgbPlacementPending: &sgbPlacementRequest{blueprint: "boulder"},
+		SgbPlacementPending: &sgbPlacementRequest{Blueprint: "boulder"},
 	}
 	clearSgbObjectSelection(tab)
 	if tab.SgbObjectSelected != "" || tab.SgbObjectModelPath != "" || tab.SgbObjectModelFile != "" || tab.SgbObjectModel != nil || tab.SgbPlacementPending != nil {
@@ -211,11 +213,11 @@ func TestSgbEnvironmentEntriesRespectExpandableFolders(t *testing.T) {
 	root.Children = []*modtree.TreeFolder{rocks}
 	rocks.Files = []*modtree.TreeFile{boulder}
 	closed := sgbEnvironmentEntries(root, map[string]bool{})
-	if len(closed) != 1 || closed[0].folder != rocks {
+	if len(closed) != 1 || closed[0].Folder != rocks {
 		t.Fatalf("closed-folder entries = %+v, want only rocks folder", closed)
 	}
 	open := sgbEnvironmentEntries(root, map[string]bool{rocks.FullPath: true})
-	if len(open) != 2 || open[1].file != boulder || open[1].depth != 1 {
+	if len(open) != 2 || open[1].File != boulder || open[1].Depth != 1 {
 		t.Fatalf("expanded-folder entries = %+v, want nested boulder at depth 1", open)
 	}
 }
@@ -685,23 +687,23 @@ func TestSgbTerrainHeightAtBilinearlyInterpolatesAndClamps(t *testing.T) {
 }
 
 func TestSgbCameraTargetMarkerProjectsOntoSurfaceTarget(t *testing.T) {
-	viewer := &modelViewer{CameraState: modelviewer.CameraState{
+	mv := &modelViewer{CameraState: viewer3d.CameraState{
 		Yaw: 0.7, Pitch: 0.5, Distance: 40, FOV: 45,
 		Center: fauxgl.Vector{X: 2, Y: -3, Z: 5},
 	}}
-	at, ok := sgbCameraTargetScreen(viewer, 640, 480)
+	at, ok := sgbCameraTargetScreen(mv, 640, 480)
 	if !ok {
 		t.Fatal("camera target did not project")
 	}
-	opts := viewer.Options(640, 480)
-	projected := fxProject(render.BuildViewMatrix(opts), viewer.Center, 640, 480)
+	opts := viewer.Options(mv, 640, 480)
+	projected := fxProject(render.BuildViewMatrix(opts), mv.Center, 640, 480)
 	if projected == nil || math.Hypot(at.X-projected.X, at.Y-projected.Y) > 1e-9 {
 		t.Fatalf("camera target marker at (%v,%v), projected orbit target %v", at.X, at.Y, projected)
 	}
 	if math.Abs(at.X-320) > 1e-6 || math.Abs(at.Y-240) > 1e-6 {
 		t.Errorf("orbit target marker should sit at view center, got (%v,%v)", at.X, at.Y)
 	}
-	if _, ok := sgbCameraTargetScreen(viewer, 0, 480); ok {
+	if _, ok := sgbCameraTargetScreen(mv, 0, 480); ok {
 		t.Error("marker projected for an invalid viewport")
 	}
 }
@@ -716,7 +718,7 @@ func TestSgbArrowMovesOrbitTargetAlongCameraHeadingAndTerrain(t *testing.T) {
 			0, 0, 0, 0,
 		}},
 	}
-	viewer := &modelViewer{CameraState: modelviewer.CameraState{Yaw: 0, Pitch: 0.4, Distance: 30, Center: fauxgl.Vector{X: 0, Y: 1, Z: 3}}}
+	viewer := &modelViewer{CameraState: viewer3d.CameraState{Yaw: 0, Pitch: 0.4, Distance: 30, Center: fauxgl.Vector{X: 0, Y: 1, Z: 3}}}
 	tab := &fileTab{SgbMap: m, Model: viewer}
 	ui := &uiState{}
 	if !SgbMoveCamera(ui, tab, 1, 0, 0.2) {
@@ -762,7 +764,7 @@ func TestSgbCameraVelocityEasesIntoMovementAndBrakesOnRelease(t *testing.T) {
 
 func TestSgbCameraMovementIsSmoothAndHorizontalControlsAreReversed(t *testing.T) {
 	newViewer := func() *modelViewer {
-		return &modelViewer{CameraState: modelviewer.CameraState{Yaw: 0, Center: fauxgl.Vector{}}}
+		return &modelViewer{CameraState: viewer3d.CameraState{Yaw: 0, Center: fauxgl.Vector{}}}
 	}
 	m := &sgb.Map{
 		Ground: sgb.Ground{CenterX: 20, CenterZ: 20, CellSize: 1, HeightScale: 1, CellsX: 39, CellsZ: 39},
@@ -790,7 +792,7 @@ func TestSgbArrowStopsAtMapEdge(t *testing.T) {
 		Ground: sgb.Ground{CenterX: 1, CenterZ: 1, CellSize: 1, HeightScale: 1, CellsX: 2, CellsZ: 2},
 		Relief: sgb.Grid{W: 3, H: 3, Data: make([]byte, 9)},
 	}
-	viewer := &modelViewer{CameraState: modelviewer.CameraState{Yaw: 0, Pitch: 0.4, Distance: 20, Center: fauxgl.Vector{X: float64(m.Ground.XMin()), Y: 0}}}
+	viewer := &modelViewer{CameraState: viewer3d.CameraState{Yaw: 0, Pitch: 0.4, Distance: 20, Center: fauxgl.Vector{X: float64(m.Ground.XMin()), Y: 0}}}
 	tab := &fileTab{SgbMap: m, Model: viewer}
 	ui := &uiState{}
 	if SgbMoveCamera(ui, tab, 1, 0, 1) {
@@ -840,19 +842,19 @@ func TestSgbObjectMaterialResultsMergeIntoMapViewer(t *testing.T) {
 		Materials: map[string]render.WhmMaterial{"ground": {Color: render.RgbaWhite}},
 		RshData:   map[string][]byte{"ground": []byte("ground-rsh")},
 	}
-	request := sgbObjectMaterialRequest{modelPath: "Data/art/ebps/environment/rock.whm"}
+	request := sgbObjectMaterialRequest{ModelPath: "Data/art/ebps/environment/rock.whm"}
 	tab := &fileTab{
 		Model:                    viewer,
 		SgbObjectMaterialsCh:     make(chan sgbObjectMaterialsResult, 1),
 		SgbObjectMaterialsActive: request,
 	}
 	tab.SgbObjectMaterialsCh <- sgbObjectMaterialsResult{
-		request: request,
-		materials: map[string]render.WhmMaterial{
+		Request: request,
+		Materials: map[string]render.WhmMaterial{
 			"rock_diffuse": {Color: render.RgbaWhite},
 		},
-		rsh:         map[string][]byte{"rock_diffuse": []byte("rock-rsh")},
-		diagnostics: map[string]modelMaterialDiagnostic{"rock_diffuse": {Status: "decoded"}},
+		Rsh:         map[string][]byte{"rock_diffuse": []byte("rock-rsh")},
+		Diagnostics: map[string]modelMaterialDiagnostic{"rock_diffuse": {Status: "decoded"}},
 	}
 	ui := &uiState{}
 	if !PollSgbObjectMaterials(ui, tab) {
@@ -873,7 +875,7 @@ func TestSgbObjectMaterialResultsMergeIntoMapViewer(t *testing.T) {
 	if viewer.MaterialDiagnostics["rock_diffuse"].Status != "decoded" {
 		t.Fatalf("placed object's diagnostics not merged: %+v", viewer.MaterialDiagnostics)
 	}
-	if !tab.SgbObjectMaterialsLoaded[strings.ToLower(request.modelPath)] {
+	if !tab.SgbObjectMaterialsLoaded[strings.ToLower(request.ModelPath)] {
 		t.Fatal("loaded WHM was not recorded to prevent duplicate lookups")
 	}
 }
@@ -883,7 +885,7 @@ func TestSgbSceneDeliveryTwoPhases(t *testing.T) {
 	tab := &fileTab{Model: v, ModelMaterialCh: make(chan modelMaterialResult, 2)}
 	ui := &uiState{}
 	terrainMat := map[string]render.WhmMaterial{"ground": {Color: render.RgbaWhite}}
-	tab.ModelMaterialCh <- modelMaterialResult{materials: terrainMat, more: true}
+	tab.ModelMaterialCh <- modelMaterialResult{Materials: terrainMat, More: true}
 	PollViewerJobs(ui, tab)
 	if tab.ModelMaterialCh == nil {
 		t.Fatal("channel closed after phase one although more=true")
@@ -893,7 +895,7 @@ func TestSgbSceneDeliveryTwoPhases(t *testing.T) {
 	}
 	scene := &WhmModel{}
 	both := map[string]render.WhmMaterial{"ground": {Color: render.RgbaWhite}, "wall": {Color: render.RgbaWhite}}
-	tab.ModelMaterialCh <- modelMaterialResult{materials: both, model: scene}
+	tab.ModelMaterialCh <- modelMaterialResult{Materials: both, Model: scene}
 	PollViewerJobs(ui, tab)
 	if tab.ModelMaterialCh != nil {
 		t.Fatal("channel still armed after the final phase")

@@ -3,6 +3,7 @@ package app
 import (
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/unitdef"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -244,12 +245,12 @@ func TestCatalogDeduplicatesByPath(t *testing.T) {
 
 func TestEmptyWeaponRef(t *testing.T) {
 	for _, ref := range []string{"", "   ", `weapons\no_weapon.lua`, "NO_WEAPON"} {
-		if !isEmptyWeaponRef(ref) {
+		if !unitdef.IsEmptyWeaponRef(ref) {
 			t.Errorf("isEmptyWeaponRef(%q) = false, want true", ref)
 		}
 	}
 	for _, ref := range []string{`weapons\necron_dirac_gun.lua`, `weapons\guard_lasgun.lua`} {
-		if isEmptyWeaponRef(ref) {
+		if unitdef.IsEmptyWeaponRef(ref) {
 			t.Errorf("isEmptyWeaponRef(%q) = true, want false", ref)
 		}
 	}
@@ -262,7 +263,7 @@ func TestWeaponNameFromRef(t *testing.T) {
 		"":                             "",
 	}
 	for ref, want := range cases {
-		if got := weaponNameFromRef(ref); got != want {
+		if got := unitdef.WeaponNameFromRef(ref); got != want {
 			t.Errorf("weaponNameFromRef(%q) = %q, want %q", ref, got, want)
 		}
 	}
@@ -333,13 +334,13 @@ func TestRealUnitAbilitiesResolve(t *testing.T) {
 			if err != nil {
 				continue
 			}
-			for _, a := range unitAbilities(tree, rf) {
-				if a.ref == "" {
+			for _, a := range unitdef.UnitAbilities(tree, rf) {
+				if a.Ref == "" {
 					continue
 				}
 				named++
-				if !a.resolved() {
-					t.Errorf("%s: ability slot %s ref %q did not resolve", u.Name, a.slot, a.ref)
+				if !a.Resolved() {
+					t.Errorf("%s: ability slot %s ref %q did not resolve", u.Name, a.Slot, a.Ref)
 					continue
 				}
 				resolved++

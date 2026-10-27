@@ -2,6 +2,7 @@ package app
 
 import (
 	"dow-mod-studio/internal/rgd"
+	"dow-mod-studio/internal/unitdef"
 	"strings"
 	"testing"
 )
@@ -20,8 +21,8 @@ import (
 // builds, so a new building is written with all of them.
 func TestANewBuildingHasTheSectionsTheGameAgreesOn(t *testing.T) {
 	rf := newStructureRgd(structureTemplateName{Race: "necrons", Name: "necron_relay"})
-	if len(rf.Root.Children) != len(structureTemplateSections) {
-		t.Fatalf("the building has %d sections, want the %d a structure has", len(rf.Root.Children), len(structureTemplateSections))
+	if len(rf.Root.Children) != len(unitdef.StructureTemplateSections) {
+		t.Fatalf("the building has %d sections, want the %d a structure has", len(rf.Root.Children), len(unitdef.StructureTemplateSections))
 	}
 	have := map[string]bool{}
 	for _, ch := range rf.Root.Children {
@@ -34,7 +35,7 @@ func TestANewBuildingHasTheSectionsTheGameAgreesOn(t *testing.T) {
 			t.Errorf("%s does not point at an ebpextensions lua, so the game has nothing to extend", ch.Name)
 		}
 	}
-	for _, want := range structureTemplateSections {
+	for _, want := range unitdef.StructureTemplateSections {
 		if !have[want] {
 			t.Errorf("the building has no %s, which every structure of the game has", want)
 		}
@@ -56,21 +57,21 @@ func TestTheSectionsTheUserNamedAreThere(t *testing.T) {
 		ref     string
 		want    []string
 	}{
-		{"structure_ext", refStructureExt, []string{
+		{"structure_ext", unitdef.RefStructureExt, []string{
 			"attach_to", "control_structure_is", "control_structure_radius",
 			"control_structure_use", "control_structure_use_allied",
 			"extra_no_build_buffer", "orientation",
 		}},
-		{"structure_buildable_ext", refStructureBuild, []string{
+		{"structure_buildable_ext", unitdef.RefStructureBuild, []string{
 			"advanced_build_option", "build_menu_priority", "power_gift",
 			"requisition_gift", "return_power_percent", "return_power_unbuilt_percent",
 			"return_requisition_percent", "return_requisition_unbuilt_percent",
 		}},
-		{"health_ext", refHealthExt, []string{
+		{"health_ext", unitdef.RefHealthExt, []string{
 			"armour", "armour_minimum", "can_be_repaired", "hitpoints",
 			"invulnerable", "keep_persistent_body", "max_repairers",
 		}},
-		{"cost_ext", refCostExt, []string{"time_cost"}},
+		{"cost_ext", unitdef.RefCostExt, []string{"time_cost"}},
 	} {
 		sec := byName[c.section]
 		if sec == nil {
@@ -96,8 +97,8 @@ func TestTheSectionsTheUserNamedAreThere(t *testing.T) {
 	if timeCost == nil {
 		t.Fatal("cost_ext has no time_cost, so the building cannot be priced")
 	}
-	if timeCost.Ref == nil || timeCost.Ref.StrVal != refTimeCostTable {
-		t.Errorf("time_cost points at %v, want %s", timeCost.Ref, refTimeCostTable)
+	if timeCost.Ref == nil || timeCost.Ref.StrVal != unitdef.RefTimeCostTable {
+		t.Errorf("time_cost points at %v, want %s", timeCost.Ref, unitdef.RefTimeCostTable)
 	}
 	if rgdFindChild(timeCost, "time_seconds") == nil {
 		t.Error("time_cost has no time_seconds, so the building would build instantly")
@@ -250,8 +251,8 @@ func TestTheBuildingRoundTripsThroughTheParser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the building the app wrote does not parse: %v", err)
 	}
-	if len(rf.Root.Children) != len(structureTemplateSections) {
-		t.Errorf("the parsed building has %d sections, want %d", len(rf.Root.Children), len(structureTemplateSections))
+	if len(rf.Root.Children) != len(unitdef.StructureTemplateSections) {
+		t.Errorf("the parsed building has %d sections, want %d", len(rf.Root.Children), len(unitdef.StructureTemplateSections))
 	}
 	// The root of a parsed file is the GameData table by name; its hash is not
 	// stored, in the game's files or in this one's.
@@ -275,11 +276,11 @@ func TestTheModifierTablesAreTheShapeTheGameReads(t *testing.T) {
 			t.Errorf("modifier_apply_ext has no %s, which all 150 structures have", name)
 			continue
 		}
-		if len(table.Children) != structureTemplateModifierSlots {
-			t.Errorf("%s has %d slots, want the %d the game reads", name, len(table.Children), structureTemplateModifierSlots)
+		if len(table.Children) != unitdef.StructureTemplateModifierSlots {
+			t.Errorf("%s has %d slots, want the %d the game reads", name, len(table.Children), unitdef.StructureTemplateModifierSlots)
 		}
 		for i, slot := range table.Children {
-			if want := rgdTemplateSlotName("modifier", i+1); slot.Name != want {
+			if want := unitdef.RgdTemplateSlotName("modifier", i+1); slot.Name != want {
 				t.Errorf("%s slot %d is named %q, want %q", name, i+1, slot.Name, want)
 			}
 		}
@@ -287,10 +288,10 @@ func TestTheModifierTablesAreTheShapeTheGameReads(t *testing.T) {
 	// The first slot of the first table is the infiltration; the game reads it
 	// as a switch that is on, not as a multiplier.
 	first := rgdFindChild(rgdFindChild(apply, "modifiers"), "modifier_01")
-	if first == nil || first.Ref == nil || first.Ref.StrVal != refEnableInfiltration {
+	if first == nil || first.Ref == nil || first.Ref.StrVal != unitdef.RefEnableInfiltration {
 		t.Fatalf("the first modifier is %v, want the infiltration the game gives 146 of its 150 structures", first)
 	}
-	if usage := rgdFindChild(first, "usage_type"); usage == nil || usage.Ref == nil || usage.Ref.StrVal != refModUsageEnable {
+	if usage := rgdFindChild(first, "usage_type"); usage == nil || usage.Ref == nil || usage.Ref.StrVal != unitdef.RefModUsageEnable {
 		t.Errorf("the infiltration's usage is %v, want the enable one", usage)
 	}
 	if v := rgdFindChild(first, "value"); v == nil || v.FloatVal != -1 {
@@ -299,10 +300,10 @@ func TestTheModifierTablesAreTheShapeTheGameReads(t *testing.T) {
 	// Everything else is no_modifier: a multiplier of 1, which is how the game
 	// spells a slot that does nothing.
 	second := rgdFindChild(rgdFindChild(apply, "modifiers"), "modifier_02")
-	if second == nil || second.Ref == nil || second.Ref.StrVal != refNoModifier {
+	if second == nil || second.Ref == nil || second.Ref.StrVal != unitdef.RefNoModifier {
 		t.Fatalf("the second modifier is %v, want no_modifier", second)
 	}
-	if usage := rgdFindChild(second, "usage_type"); usage == nil || usage.Ref == nil || usage.Ref.StrVal != refModUsageMultiply {
+	if usage := rgdFindChild(second, "usage_type"); usage == nil || usage.Ref == nil || usage.Ref.StrVal != unitdef.RefModUsageMultiply {
 		t.Errorf("no_modifier's usage is %v, want the multiplication one", usage)
 	}
 	if v := rgdFindChild(second, "value"); v == nil || v.FloatVal != 1 {

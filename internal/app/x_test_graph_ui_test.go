@@ -23,17 +23,17 @@ func TestLinkRowsSayBothDirectionsAndWhichIsWhich(t *testing.T) {
 	}
 	var r linkRow
 	for _, one := range rows {
-		if one.outgoing {
+		if one.Outgoing {
 			r = one
 		}
 	}
-	if r.role != "built by" {
-		t.Errorf("the gauntlet's own reference is a %q, want built by", r.role)
+	if r.Role != "built by" {
+		t.Errorf("the gauntlet's own reference is a %q, want built by", r.Role)
 	}
-	if r.target != "necron_armoury" {
-		t.Errorf("the gauntlet is built by %q, want necron_armoury", r.target)
+	if r.Target != "necron_armoury" {
+		t.Errorf("the gauntlet is built by %q, want necron_armoury", r.Target)
 	}
-	if !r.found {
+	if !r.Found {
 		t.Error("the gauntlet's reference did not resolve")
 	}
 
@@ -53,13 +53,13 @@ func TestLinkRowsSayBothDirectionsAndWhichIsWhich(t *testing.T) {
 	// its own product.
 	roles := map[string]string{}
 	for _, one := range back {
-		if one.outgoing {
+		if one.Outgoing {
 			t.Error("the armoury's row is marked as its own reference, but it is the one being referred to")
 		}
-		if !one.found {
-			t.Errorf("the reference from %s did not resolve", one.target)
+		if !one.Found {
+			t.Errorf("the reference from %s did not resolve", one.Target)
 		}
-		roles[one.role] = one.target
+		roles[one.Role] = one.Target
 	}
 	if roles["built by"] != "necron_gauntlet" {
 		t.Errorf("the armoury is built-by %q, want necron_gauntlet", roles["built by"])
@@ -79,7 +79,7 @@ func TestLinkRowsSplitIntoTheTwoDirections(t *testing.T) {
 	if len(outgoing) != 1 || len(incoming) != 2 {
 		t.Fatalf("the gauntlet's split gave %d out and %d in, want 1 and 2", len(outgoing), len(incoming))
 	}
-	if !outgoing[0].outgoing {
+	if !outgoing[0].Outgoing {
 		t.Error("a row is on the wrong side of the split")
 	}
 	// The loose unit is wired to nothing at all, so it can put a list
@@ -95,7 +95,7 @@ func TestLinkRowsSplitIntoTheTwoDirections(t *testing.T) {
 		t.Fatalf("the add-on's split gave %d out and %d in, want 2 and 0", len(outgoing), len(incoming))
 	}
 	for _, one := range outgoing {
-		if !one.outgoing {
+		if !one.Outgoing {
 			t.Error("a row is on the wrong side of the split")
 		}
 	}
@@ -116,7 +116,7 @@ func TestAUnitDoesNotListItselfTwice(t *testing.T) {
 	g := newModGraph(tree)
 	g.EnsureLinks()
 	for _, r := range linkRows(g, graphTestArmoury) {
-		if !r.outgoing && strings.EqualFold(r.target, "necron_armoury") {
+		if !r.Outgoing && strings.EqualFold(r.Target, "necron_armoury") {
 			t.Error("the armoury lists itself as something that refers to it")
 		}
 	}
@@ -149,14 +149,14 @@ func TestBrokenLinkGroupsCollectOneRowPerMissingFile(t *testing.T) {
 		t.Fatalf("the report has %d rows, want one for the single missing file", len(groups))
 	}
 	grp := groups[0]
-	if grp.ref != `weapon\necron_missing_gun.lua` {
-		t.Errorf("the row names %q", grp.ref)
+	if grp.Ref != `weapon\necron_missing_gun.lua` {
+		t.Errorf("the row names %q", grp.Ref)
 	}
-	if grp.role != roleWeapon {
-		t.Errorf("the row says the reference was a %q, want weapon", grp.role.Label())
+	if grp.Role != roleWeapon {
+		t.Errorf("the row says the reference was a %q, want weapon", grp.Role.Label())
 	}
-	if len(grp.holders) != 1 || !strings.EqualFold(grp.holders[0], broken) {
-		t.Errorf("the row says the files that still point at it are %v", grp.holders)
+	if len(grp.Holders) != 1 || !strings.EqualFold(grp.Holders[0], broken) {
+		t.Errorf("the row says the files that still point at it are %v", grp.Holders)
 	}
 	// A mod with nothing broken reports nothing, rather than a row saying so.
 	if rows := brokenLinkGroups(newModGraph(newGraphTestMod(t))); len(rows) != 0 {
@@ -178,8 +178,8 @@ func TestBrokenLinkGroupsPutTheMostUsedMissingFileFirst(t *testing.T) {
 	}
 	// The file three units lost comes first, because that is the one the
 	// author most needs to see.
-	if len(groups[0].holders) != 2 || groups[0].ref != `weapon\common.lua` {
-		t.Errorf("the first row is %q held by %d files, want common.lua held by 2", groups[0].ref, len(groups[0].holders))
+	if len(groups[0].Holders) != 2 || groups[0].Ref != `weapon\common.lua` {
+		t.Errorf("the first row is %q held by %d files, want common.lua held by 2", groups[0].Ref, len(groups[0].Holders))
 	}
 }
 

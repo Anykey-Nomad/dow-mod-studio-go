@@ -217,10 +217,10 @@ func TestTheRecordIsWrittenBeforeAnythingIsTouched(t *testing.T) {
 	if book.Mod != "GraphTestMod" {
 		t.Errorf("the record says the mod is %q, want GraphTestMod", book.Mod)
 	}
-	if !book.isFrozen(graphTestArmoury) {
+	if !book.IsFrozen(graphTestArmoury) {
 		t.Error("the record does not say the armoury is frozen")
 	}
-	if book.isFrozen(graphTestLoose) {
+	if book.IsFrozen(graphTestLoose) {
 		t.Error("the record says a unit is frozen that never was")
 	}
 }
@@ -309,7 +309,7 @@ func TestUnfreezingPutsBackExactlyWhatWasThere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if book.isFrozen(graphTestArmoury) {
+	if book.IsFrozen(graphTestArmoury) {
 		t.Error("the record still says the unit is frozen after it was unfrozen")
 	}
 }
@@ -385,7 +385,7 @@ func TestTheRecordIsReadOnceNotOnceAFrame(t *testing.T) {
 	if after == first {
 		t.Error("the cached record survived a freeze, so the window would not show it")
 	}
-	if !after.isFrozen(graphTestArmoury) {
+	if !after.IsFrozen(graphTestArmoury) {
 		t.Error("the record read back after the freeze does not say the unit is frozen")
 	}
 }
@@ -531,7 +531,7 @@ func TestFreezingFromTheWindowMovesTheSelectedUnitAndSaysSo(t *testing.T) {
 	}
 	// The window sends the user where the way back is, because the unit is no
 	// longer in the list it was just frozen from.
-	if got := unitSections[ui.UnitSection].label; got != "Frozen" {
+	if got := unitSections[ui.UnitSection].Label; got != "Frozen" {
 		t.Errorf("after freezing the window shows %q, want the Frozen section", got)
 	}
 	// And it still draws.
@@ -555,11 +555,11 @@ func TestAFrozenUnitIsListedSoItCanBePutBack(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("the Frozen list has %d rows, want the one that was frozen", len(rows))
 	}
-	if rows[0].name != sel.Name {
-		t.Errorf("the Frozen list names %q, want %s", rows[0].name, sel.Name)
+	if rows[0].Name != sel.Name {
+		t.Errorf("the Frozen list names %q, want %s", rows[0].Name, sel.Name)
 	}
-	if !strings.EqualFold(rows[0].ref, sel.Path) {
-		t.Errorf("the row carries %q as the path to put back, want %s", rows[0].ref, sel.Path)
+	if !strings.EqualFold(rows[0].Ref, sel.Path) {
+		t.Errorf("the row carries %q as the path to put back, want %s", rows[0].Ref, sel.Path)
 	}
 	// A mod that has never frozen anything says so rather than showing a gap.
 	if got := (freezeTestUIRows(t)); len(got) != 0 {

@@ -21,7 +21,7 @@ func TestDiscoverModuleFiles(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected two module files, got %d: %#v", len(got), got)
 	}
-	if got[0].path != filepath.Join(dir, "DXP3.MODULE") || got[1].path != filepath.Join(dir, "UA.module") {
+	if got[0].Path != filepath.Join(dir, "DXP3.MODULE") || got[1].Path != filepath.Join(dir, "UA.module") {
 		t.Fatalf("unexpected module order: %#v", got)
 	}
 }

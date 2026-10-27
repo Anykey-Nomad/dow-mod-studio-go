@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/testutil"
 	"fmt"
 	"image"
@@ -343,7 +344,7 @@ func TestTabContextMenuLandsWhereItWasPlaced(t *testing.T) {
 	// Painted last over a known background, so anything inside the menu's box
 	// that is not the background is the menu having landed there.
 	img := renderFrame(t, w, h, func(gtx layout.Context) {
-		fillRect(gtx, cBg, gtx.Constraints.Max)
+		fillRect(gtx, uikit.CBg, gtx.Constraints.Max)
 		LayoutTabContextMenu(ui, gtx)
 	})
 

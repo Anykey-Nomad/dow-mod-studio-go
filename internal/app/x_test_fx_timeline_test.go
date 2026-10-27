@@ -167,7 +167,7 @@ func TestAClipNoTimelineNamesDrawsNothingRatherThanEverything(t *testing.T) {
 	v := &modelViewer{FxEffects: effects, ShowFX: true, FxScale: 1}
 	var played []fxOverlayEffect
 	for i := range v.FxEffects {
-		if v.FxEffects[i].fxPlaysFor("add_on_1a") {
+		if v.FxEffects[i].FxPlaysFor("add_on_1a") {
 			played = append(played, v.FxEffects[i])
 		}
 	}
@@ -181,7 +181,7 @@ func TestAClipNoTimelineNamesDrawsNothingRatherThanEverything(t *testing.T) {
 	for i := range effects {
 		untimed := effects[i]
 		untimed.Timed = false
-		if !untimed.fxPlaysFor("add_on_1a") {
+		if !untimed.FxPlaysFor("add_on_1a") {
 			t.Errorf("an untimed model must play %s on any clip", untimed.Label)
 		}
 	}
@@ -1906,7 +1906,7 @@ func TestFXLocalAxesFollowMarkerUnlessNoRotate(t *testing.T) {
 func TestFXLocalParticleOffsetMapsThroughMarkerFrame(t *testing.T) {
 	frame := [3]fauxgl.Vector{{Y: 1}, {X: 1}, {Z: 1}}
 	e := fxOverlayEffect{Origin: fauxgl.Vector{X: 10, Y: 20, Z: 30}, Frame: frame}
-	sp := e.fxTurnSprite(fx.Sprite{Pos: [3]float64{2, 3, 4}})
+	sp := e.FxTurnSprite(fx.Sprite{Pos: [3]float64{2, 3, 4}})
 	if want := [3]float64{3, 2, 4}; sp.Pos != want {
 		t.Fatalf("local particle offset = %v, want marker-frame result %v", sp.Pos, want)
 	}
@@ -1936,8 +1936,8 @@ func TestFXMarkerlessEmitterDirectionUsesAuthoredFXAxis(t *testing.T) {
 		t.Fatalf("authored direction = %v, want renderer-local +X", sim.Axis)
 	}
 	e := fxOverlayEffect{Sim: sim, Origin: fauxgl.Vector{Z: 5}, Marker: -1, Frame: fxFallbackFrame}
-	e.Axis = e.fxMarkerVector(sim.Axis)
-	far := e.fxFarPoint()
+	e.Axis = e.FxMarkerVector(sim.Axis)
+	far := e.FxFarPoint()
 	got := far.Sub(e.Origin).Normalize()
 	if want := (fauxgl.Vector{X: 1}); got.Sub(want).Length() > 1e-6 {
 		t.Errorf("markerless beam direction = %v, want authored direction %v", got, want)
@@ -1983,7 +1983,7 @@ func TestFXSelfToOtherAlignsTheLocalFXForwardWithTheMarkerSpan(t *testing.T) {
 	// is written Y up and the renderer is Z up, so the authored forward
 	// still arrives on the model's Y axis.
 	e := fxOverlayEffect{Sim: &fx.FxSim{NoRotate: true}, Frame: frame}
-	if got, want := e.fxMarkerVector(fauxgl.Vector{Z: 1}), (fauxgl.Vector{Y: 1}); got != want {
+	if got, want := e.FxMarkerVector(fauxgl.Vector{Z: 1}), (fauxgl.Vector{Y: 1}); got != want {
 		t.Errorf("No_Rotate forward axis = %v, want the file's own axis carried over as %v", got, want)
 	}
 }
@@ -2036,10 +2036,10 @@ func TestFXNoRotateKeepsFileFrameAndDropsMarkerRotation(t *testing.T) {
 	// The marker rotation is ignored, but the effect file's Y-up frame is
 	// still carried over to the renderer's Z-up one.
 	local := fauxgl.Vector{X: 2, Y: 3, Z: 4}
-	if got, want := e.fxMarkerVector(local), (fauxgl.Vector{X: 2, Y: 4, Z: 3}); got != want {
+	if got, want := e.FxMarkerVector(local), (fauxgl.Vector{X: 2, Y: 4, Z: 3}); got != want {
 		t.Errorf("No_Rotate local displacement = %v, want the file's own frame carried over as %v", got, want)
 	}
-	if x, y, z := e.fxRingFrame(); x != fxFallbackFrame[0] || y != fxFallbackFrame[1] || z != fxFallbackFrame[2] {
+	if x, y, z := e.FxRingFrame(); x != fxFallbackFrame[0] || y != fxFallbackFrame[1] || z != fxFallbackFrame[2] {
 		t.Errorf("No_Rotate ring frame = (%v,%v,%v), want authored FX frame %v", x, y, z, fxFallbackFrame)
 	}
 }
@@ -2240,7 +2240,7 @@ func TestFxScaleRibbonScalesAuthoredDimensionsButKeepsMarkerGap(t *testing.T) {
 		Arc:   fauxgl.Vector{Y: 0.2},
 		Noise: 0.1,
 	}
-	got := e.fxScaleRibbon(rb, true)
+	got := e.FxScaleRibbon(rb, true)
 	if math.Abs(got.From.X-11) > 1e-9 || math.Abs(got.To.X-13) > 1e-9 {
 		t.Errorf("scaled beam endpoints = %v to %v, want translated offset and fixed two-unit marker gap", got.From, got.To)
 	}
@@ -2259,7 +2259,7 @@ func TestFxScaleRibbonScalesIntrinsicBeamLength(t *testing.T) {
 		To:    e.Origin.Add(fauxgl.Vector{Z: 2}),
 		Width: 0.2,
 	}
-	got := e.fxScaleRibbon(rb, false)
+	got := e.FxScaleRibbon(rb, false)
 	if math.Abs(got.To.Sub(got.From).Length()-3) > 1e-9 {
 		t.Errorf("intrinsic beam length = %v, want 3 model units", got.To.Sub(got.From).Length())
 	}
@@ -2275,7 +2275,7 @@ func TestFxScaleFXControlSetsTheGeometryMultiplier(t *testing.T) {
 		t.Fatalf("UI scale control set %.3f, want %.3f", v.FxScale, modelFXScaleStep)
 	}
 	effects := fxScaledEffects([]fxOverlayEffect{{}}, v.FxScale)
-	if len(effects) != 1 || math.Abs(effects[0].fxScaleOrOne()-modelFXScaleStep) > 1e-9 {
+	if len(effects) != 1 || math.Abs(effects[0].FxScaleOrOne()-modelFXScaleStep) > 1e-9 {
 		t.Errorf("displayed scale did not reach FX geometry: %+v", effects)
 	}
 	ScaleFX(v, 1/modelFXScaleStep)
@@ -3030,7 +3030,7 @@ func markerlessBeam() fxOverlayEffect {
 
 func TestMarkerlessBeamRunsUpNotSideways(t *testing.T) {
 	e := markerlessBeam()
-	far := e.fxFarPoint()
+	far := e.FxFarPoint()
 	d := far.Sub(e.Origin)
 	if n := d.Length(); n < 1e-9 {
 		t.Fatalf("the far point fell on the origin, so the beam has no direction at all")
@@ -3049,7 +3049,7 @@ func TestMarkerlessBeamUsesTheRenderersUpAxis(t *testing.T) {
 		t.Errorf("the renderer's up is (%.1f %.1f %.1f), which is not +Z", fxAxisZ.X, fxAxisZ.Y, fxAxisZ.Z)
 	}
 	e := markerlessBeam()
-	d := e.fxFarPoint().Sub(e.Origin).Normalize()
+	d := e.FxFarPoint().Sub(e.Origin).Normalize()
 	want := fxAxisZ.Normalize()
 	if d.Sub(want).Length() > 1e-9 {
 		t.Errorf("the beam runs (%.3f %.3f %.3f), the up axis is (%.3f %.3f %.3f)",
@@ -3062,7 +3062,7 @@ func TestMarkerlessBeamUsesTheRenderersUpAxis(t *testing.T) {
 func TestMarkeredBeamStillUsesItsOwnAxis(t *testing.T) {
 	e := markerlessBeam()
 	e.Axis = fauxgl.Vector{X: 1}
-	d := e.fxFarPoint().Sub(e.Origin).Normalize()
+	d := e.FxFarPoint().Sub(e.Origin).Normalize()
 	if math.Abs(d.X) < 0.99 {
 		t.Errorf("a beam with its own axis runs (%.3f %.3f %.3f), not along it", d.X, d.Y, d.Z)
 	}
@@ -3077,7 +3077,7 @@ func TestMarkerlessBeamLengthComesFromTheFile(t *testing.T) {
 	// own Length curve is read as model units because there is no gap to be a
 	// fraction of.
 	sim := fx.NewFxSim(mustParseFx(t, awakeningLightingGroundLua))
-	for _, r := range sim.Beams(e.Origin, e.fxFarPoint(), e.fxSpansMarkers()) {
+	for _, r := range sim.Beams(e.Origin, e.FxFarPoint(), e.FxSpansMarkers()) {
 		got := r.To.Sub(r.From).Length()
 		if math.Abs(got-12) > 0.01 {
 			t.Errorf("the beam spans %.3f, the file asks for 12", got)

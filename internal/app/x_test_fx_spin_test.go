@@ -514,19 +514,19 @@ func TestLoadModelSoundsNeedsNoEffects(t *testing.T) {
 	loaded := 0
 	for _, f := range files {
 		res := loadModelSounds(tree, f)
-		if res.err != nil {
+		if res.Err != nil {
 			continue
 		}
-		if len(res.soundBundles) > 0 {
+		if len(res.SoundBundles) > 0 {
 			loaded++
 			t.Logf("%s: %d sound events, %d samples decoded, %d timelines",
-				f, len(res.soundBundles), res.sounds.Len(), len(res.timelines))
+				f, len(res.SoundBundles), res.Sounds.Len(), len(res.Timelines))
 		}
 		// The point of the split: loading sounds must not have resolved a
 		// single effect, or the frame would be doing the button's work early.
-		if len(res.effects) != 0 || len(res.textures) != 0 {
+		if len(res.Effects) != 0 || len(res.Textures) != 0 {
 			t.Errorf("%s: loading sounds also resolved %d effects and %d textures",
-				f, len(res.effects), len(res.textures))
+				f, len(res.Effects), len(res.Textures))
 		}
 	}
 	if loaded == 0 {

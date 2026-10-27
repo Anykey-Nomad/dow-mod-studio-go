@@ -93,7 +93,7 @@ func TestImageCache(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
 	CacheDecodedImage(ui, `Data\attrib\textures\icon.dds`, img, nil, "DDS", 123)
 	entry, ok := CachedImage(ui, `data/attrib/textures/icon.DDS`)
-	if !ok || entry.data == nil || entry.bytes != 123 || entry.format != "DDS" {
+	if !ok || entry.Data == nil || entry.Bytes != 123 || entry.Format != "DDS" {
 		t.Fatalf("cache lookup failed: %#v", entry)
 	}
 	if ui.ImageCacheBytes != 16 {
