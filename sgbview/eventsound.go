@@ -39,7 +39,7 @@ func (a *Anim) DeathSounds() []SoundEvent {
 			return out
 		}
 	}
-	return fxSoundsOfTimelines(a.doc, fxDeathTimeline)
+	return fxSoundsOfTimelines(a.doc, fxDeathTimeline, true)
 }
 
 // ShotSounds отдаёт звуки стрельбы: то, что .whe играет в таймлайнах,
@@ -49,6 +49,27 @@ func (a *Anim) ShotSounds() []SoundEvent {
 		return nil
 	}
 	return fxSoundsForClips(a.doc, a.shotClips)
+}
+
+// MoveSounds отдаёт звуки шага: то, что .whe играет в таймлайнах клипа
+// движения. Повторы здесь сохраняются — шаг звучит на каждой своей секунде,
+// и это разные шаги, а не дубли одного события.
+func (a *Anim) MoveSounds() []SoundEvent {
+	if a == nil || a.doc == nil || a.move == nil {
+		return nil
+	}
+	return fxSoundsOfTimelines(a.doc, func(timeline whe.FxTimeline) bool {
+		return fxTimelineRunsClip(timeline, map[string]bool{strings.ToLower(a.move.Name): true})
+	}, false)
+}
+
+// MoveClipDuration — длина клипа движения в секундах: по ней считается цикл
+// шагов. 0 — клипа движения нет.
+func (a *Anim) MoveClipDuration() float64 {
+	if a == nil || a.move == nil {
+		return 0
+	}
+	return float64(a.move.Duration)
 }
 
 // fxSoundsForClips собирает звуки таймлайнов, которые ведут перечисленные
@@ -69,13 +90,13 @@ func fxSoundsForClips(doc *whe.Document, clips []string) []SoundEvent {
 	}
 	return fxSoundsOfTimelines(doc, func(timeline whe.FxTimeline) bool {
 		return fxTimelineRunsClip(timeline, wanted)
-	})
+	}, true)
 }
 
-// fxSoundsOfTimelines собирает звуки подходящих таймлайнов. Одинаковые
-// пути звука не повторяются: файл описывает категорию, а не конкретный
-// sample, и повтор того же пути — это тот же крик, а не второй.
-func fxSoundsOfTimelines(doc *whe.Document, keep func(whe.FxTimeline) bool) []SoundEvent {
+// fxSoundsOfTimelines собирает звуки подходящих таймлайнов. unique=true
+// оставляет по одному событию на путь звука (смерть, выстрел), unique=false
+// сохраняет повторы (шаги): в игре это разные моменты одного звука.
+func fxSoundsOfTimelines(doc *whe.Document, keep func(whe.FxTimeline) bool, unique bool) []SoundEvent {
 	if doc == nil {
 		return nil
 	}
@@ -105,14 +126,16 @@ func fxSoundsOfTimelines(doc *whe.Document, keep func(whe.FxTimeline) bool) []So
 				Clip:  timeline.Name,
 				Time:  fxEventTime(timed.Time),
 			}
-			lower := strings.ToLower(strings.TrimSpace(sound))
-			if at, ok := seen[lower]; ok {
-				if ev.Time < out[at].Time {
-					out[at].Time = ev.Time
+			if unique {
+				lower := strings.ToLower(strings.TrimSpace(sound))
+				if at, ok := seen[lower]; ok {
+					if ev.Time < out[at].Time {
+						out[at].Time = ev.Time
+					}
+					continue
 				}
-				continue
+				seen[lower] = len(out)
 			}
-			seen[lower] = len(out)
 			out = append(out, ev)
 		}
 	}
