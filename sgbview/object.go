@@ -59,6 +59,13 @@ func ObjectForBlueprint(tree *modtree.ModTree, blueprint string, x, y, z, headin
 		Selected: selectedUIWorld(selectedUI(tree, whmPath), placement),
 		Anim:     anim,
 	}
+	// Действия нужны и без скелета: телепорт монолита — это jump_setup и
+	// jump_breakdown с их клипами и таймлайнами, хотя кости модели запечены.
+	if anim == nil {
+		if doc, err := modelWHE(tree, whmPath); err == nil {
+			object.Actions = NewActionSet(doc)
+		}
+	}
 	// Текстуры ищутся по материалам модели: путь к .whm ведёт к её картинкам.
 	paths := map[string]string{}
 	for _, wm := range model.Meshes {
