@@ -128,14 +128,23 @@ type clipFrame struct {
 	at   float32
 }
 
-// buildClip — этап стройки: клип, диапазон прогресса в процентах (ranged) и
-// зацикленность таймлайна. Этап без диапазона — появление постройки.
+// longBuildFrames — с какой длины клип считается длинной стройкой: такой клип
+// ведёт прогресс (кадр — доля работы), а не часы, иначе он не успевал бы за
+// работой или висел на последнем кадре полстройки.
+const longBuildFrames = 600
+
+// buildClip — этап стройки: клип, диапазон прогресса в процентах (ranged),
+// зацикленность таймлайна и способ игры. Этап без диапазона — появление
+// постройки.
 type buildClip struct {
 	clip   *whm.Animation
 	min    float64
 	max    float64
 	ranged bool
 	loop   bool
+	// scrub — длинный клип: его время задаёт прогресс внутри диапазона, а
+	// не собственные часы.
+	scrub bool
 }
 
 // SetFacing задаёт направление взгляда в мировых радианах (0 — вдоль +X).
@@ -241,6 +250,7 @@ func buildStageClips(tree *modtree.ModTree, whmPath string, model *whm.Model, do
 			max:    stage.Max,
 			ranged: stage.HasRange,
 			loop:   stage.Loop,
+			scrub:  clip.NumFrames > longBuildFrames,
 		})
 	}
 	if len(clips) > 0 {
@@ -761,7 +771,20 @@ func (a *Anim) SetProgress(progress float64) {
 	}
 	wasConstruct := a.state == AnimConstruct
 	a.state = AnimConstruct
-	index := a.buildStageAt(progress * 100)
+	percent := progress * 100
+	index := a.buildStageAt(percent)
+	stage := a.build[index]
+	if stage.scrub {
+		// Длинный клип ведёт прогресс: его кадр — доля работы внутри
+		// диапазона этапа.
+		a.stage = index
+		if span := stage.max - stage.min; span > 0 {
+			a.time = float32(clamp01((percent - stage.min) / span))
+		} else {
+			a.time = 0
+		}
+		return
+	}
 	if wasConstruct && index == a.stage {
 		return
 	}
@@ -785,20 +808,31 @@ func (a *Anim) buildStageAt(percent float64) int {
 	if percent <= 0 && placed >= 0 {
 		return placed
 	}
-	best := -1
+	covering, lower := -1, -1
 	for i, stage := range a.build {
 		if !stage.ranged {
 			continue
 		}
-		if percent >= stage.min && (percent < stage.max || stage.max >= 100) {
-			return i
+		// Нулевой диапазон (prebuild у тёмных элдар: max 0 при min 0) — это
+		// кадр самого начала, а не пустота: он попадает ровно в свой процент.
+		zero := stage.max <= stage.min && percent <= stage.max
+		if percent >= stage.min && (percent < stage.max || stage.max >= 100 || zero) {
+			// Наложение — это фоновый слой (idle-оверлей, качание крана):
+			// он зациклен и не должен вытеснять клип стройки.
+			if covering < 0 || (!stage.loop && a.build[covering].loop) {
+				covering = i
+			}
+			continue
 		}
-		if stage.min <= percent && (best < 0 || stage.min > a.build[best].min) {
-			best = i
+		if stage.min <= percent && (lower < 0 || stage.min > a.build[lower].min) {
+			lower = i
 		}
 	}
-	if best >= 0 {
-		return best
+	if covering >= 0 {
+		return covering
+	}
+	if lower >= 0 {
+		return lower
 	}
 	if placed >= 0 {
 		return placed
@@ -944,6 +978,10 @@ func (a *Anim) Step(dt float64) {
 	// Стройка: этап выбрал прогресс, а клип этапа идёт по своим часам и
 	// остаётся на последнем кадре (hold end), пока прогресс не сменит этап.
 	if a.state == AnimConstruct {
+		if a.stage >= 0 && a.stage < len(a.build) && a.build[a.stage].scrub {
+			// Длинный клип ведёт прогресс (SetProgress), часы его не двигают.
+			return
+		}
 		clip := a.clip()
 		if clip == nil || clip.Duration <= 0 {
 			return

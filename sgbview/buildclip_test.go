@@ -1,10 +1,12 @@
 package sgbview
 
 import (
+	"math"
 	"testing"
 
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/sgb"
+	"dow-mod-studio/internal/whm"
 )
 
 // TestBuildStageAt — прогресс выбирает этап по его диапазону: шаблон даёт
@@ -37,6 +39,53 @@ func TestBuildStageAt(t *testing.T) {
 	}
 	if got := placed.buildStageAt(10); got != 1 {
 		t.Errorf("на 10%% этап %d, хотели 1", got)
+	}
+}
+
+// TestBuildStageScrubsLongClip — клип длиннее 600 кадров ведёт прогресс:
+// его время — доля работы внутри диапазона этапа, и часы его не двигают.
+func TestBuildStageScrubsLongClip(t *testing.T) {
+	a := &Anim{build: []buildClip{
+		{clip: &whm.Animation{Name: "long", NumFrames: 900, Duration: 30}, min: 20, max: 60, ranged: true, scrub: true},
+	}}
+	a.SetProgress(0.30)
+	if a.stage != 0 || math.Abs(float64(a.time)-0.25) > 1e-5 {
+		t.Fatalf("30 %% при 20..60: этап %d, время %v, хотели 0.25", a.stage, a.time)
+	}
+	a.Step(2)
+	if math.Abs(float64(a.time)-0.25) > 1e-5 {
+		t.Fatalf("часы сдвинули скраб на %v", a.time)
+	}
+	a.SetProgress(0.50)
+	if math.Abs(float64(a.time)-0.75) > 1e-5 {
+		t.Fatalf("50 %% дали время %v, хотели 0.75", a.time)
+	}
+}
+
+// TestBuildStageAtZeroRange — нулевой диапазон (prebuild 0..0 у тёмных
+// элдар) играет ровно в начале стройки и уступает основному этапу дальше.
+func TestBuildStageAtZeroRange(t *testing.T) {
+	a := &Anim{build: []buildClip{
+		{min: 0, max: 0, ranged: true},
+		{min: 0, max: 100, ranged: true},
+	}}
+	if got := a.buildStageAt(0); got != 0 {
+		t.Fatalf("в начале этап %d, хотели prebuild 0", got)
+	}
+	if got := a.buildStageAt(1); got != 1 {
+		t.Fatalf("на 1%% этап %d, хотели основной 1", got)
+	}
+}
+
+// TestBuildStageAtPrefersBuildOverOverlay — наложенный зацикленный слой
+// (idle-оверлей монолита 12..66 %) не вытесняет клип стройки 0..66 %.
+func TestBuildStageAtPrefersBuildOverOverlay(t *testing.T) {
+	a := &Anim{build: []buildClip{
+		{min: 12, max: 66, ranged: true, loop: true},
+		{min: 0, max: 66, ranged: true},
+	}}
+	if got := a.buildStageAt(30); got != 1 {
+		t.Fatalf("играет этап %d, хотели клип стройки 1", got)
 	}
 }
 

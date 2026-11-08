@@ -49,6 +49,20 @@ func TestProgressSpanMerge(t *testing.T) {
 	}
 }
 
+// TestProgressSpanRootIsNotStage — корневой диапазон 0..100 существует только
+// как граница наследования: audio_build и vis_master, висящие на действии без
+// условий, не должны становиться этапами 0..100.
+func TestProgressSpanRootIsNotStage(t *testing.T) {
+	root := progressSpan{max: 100, maxSet: true}
+	if root.has() {
+		t.Fatalf("корневой span стал этапом: %+v", root)
+	}
+	child := root.merge(progressSpan{min: 12, max: 66, minSet: true, maxSet: true, set: true})
+	if !child.has() || child.min != 12 || child.max != 66 {
+		t.Fatalf("наследование сломало этап: %+v", child)
+	}
+}
+
 // TestLooksLikeBuild — этапами считаются только стройка и фаза появления.
 func TestLooksLikeBuild(t *testing.T) {
 	if !looksLikeBuild(`races\necron\structures\building_start\build_start`) {

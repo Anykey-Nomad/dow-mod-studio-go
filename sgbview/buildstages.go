@@ -37,14 +37,22 @@ type BuildStage struct {
 type progressSpan struct {
 	min, max       float64
 	minSet, maxSet bool
+	// set — условие действительно задало диапазон: корневой span только
+	// держит верхнюю границу по умолчанию, и этапом его считать нельзя.
+	// Иначе audio_build и vis_master, висящие на действии без условий,
+	// получали бы 0..100 и налезали на настоящие этапы.
+	set bool
 }
 
-func (s progressSpan) has() bool { return s.minSet || s.maxSet }
+func (s progressSpan) has() bool { return s.set }
 
 // merge наследует незаданные границы: дочерний этап уточняет диапазон
 // родительского, а не заменяет его целиком.
 func (s progressSpan) merge(other progressSpan) progressSpan {
 	out := s
+	if other.set {
+		out.set = true
+	}
 	if other.minSet {
 		out.min, out.minSet = other.min, true
 	}
@@ -213,11 +221,14 @@ func progressSpanOf(name string, conditions map[string]whe.FxCondition, clauses 
 			span.minSet = true
 		}
 	}
-	if matched && !span.maxSet {
-		// Верх не задан в conditions (stage_N_min без max) — стройка упирается
-		// в 100 %, дальше этап не меняется.
-		span.max = 100
-		span.maxSet = true
+	if matched {
+		span.set = true
+		if !span.maxSet {
+			// Верх не задан в conditions (stage_N_min без max) — стройка
+			// упирается в 100 %, дальше этап не меняется.
+			span.max = 100
+			span.maxSet = true
+		}
 	}
 	return span
 }
