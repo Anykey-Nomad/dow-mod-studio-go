@@ -113,6 +113,9 @@ type Scene struct {
 	// Pass — карта проходимости DATAIMAP (nil, если в сценарии её нет):
 	// по ней строится путь приказов движения.
 	Pass *PassMap
+	// Footfall — карта грунта DATATTYP (байт на ячейку): по ней шаги и пыль
+	// под ногами звучат и выглядят по-разному на разной земле.
+	Footfall *PassMap
 	// Terrain — рельеф (меш в мировых координатах, Z вверх).
 	Terrain *Mesh
 	// Water — плоскость воды (может быть nil).
@@ -254,6 +257,21 @@ func BuildWith(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []SlotBu
 			CellY:   cell,
 			OriginX: centerX - float64(m.Pass.W)*cell*0.5,
 			OriginY: centerY - float64(m.Pass.H)*cell*0.5,
+		}
+	}
+
+	// Грунт той же геометрией, что и проходимость: сетка покрывает карту
+	// целиком, а ячейка равна ячейке рельефа.
+	if m.Terrain.W >= 2 && m.Terrain.H >= 2 && g.CellSize > 0 {
+		cell := float64(g.CellSize)
+		centerX := (float64(g.XMin()) + float64(g.XMax())) * 0.5
+		centerY := (float64(g.ZMin()) + float64(g.ZMax())) * 0.5
+		scene.Footfall = &PassMap{
+			W: m.Terrain.W, H: m.Terrain.H, Data: m.Terrain.Data,
+			CellX:   cell,
+			CellY:   cell,
+			OriginX: centerX - float64(m.Terrain.W)*cell*0.5,
+			OriginY: centerY - float64(m.Terrain.H)*cell*0.5,
 		}
 	}
 

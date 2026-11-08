@@ -42,6 +42,18 @@ func (p *PassMap) Passable(x, y float64) bool {
 	return p.PassableCell(cx, cy)
 }
 
+// At — значение ячейки в мировой точке и признак попадания в сетку.
+func (p *PassMap) At(x, y float64) (byte, bool) {
+	if p == nil || p.CellX <= 0 || p.CellY <= 0 {
+		return 0, false
+	}
+	cx, cy := p.Cell(x, y)
+	if cx < 0 || cy < 0 || cx >= p.W || cy >= p.H {
+		return 0, false
+	}
+	return p.Data[cy*p.W+cx], true
+}
+
 // Cell — мировая точка → индекс ячейки (может выйти за сетку).
 func (p *PassMap) Cell(x, y float64) (int, int) {
 	return int(math.Floor((x - p.OriginX) / p.CellX)),

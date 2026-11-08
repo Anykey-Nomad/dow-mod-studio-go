@@ -62,6 +62,49 @@ func (a *Anim) DeathFX() []FXEvent {
 	return fxDeathEvents(a.doc)
 }
 
+// FootfallFX отдаёт эффекты пыли из-под ног: события, в имени или пути
+// эффекта которых есть footfall/footstep. Игра пишет их не только в клип
+// движения — у части моделей они лежат в таймлайнах покоя и шага, — поэтому
+// перебираются все таймлайны, а повторы одного эффекта и маркера
+// схлопываются, как у смерти: пыль нужна один раз на шаг.
+func (a *Anim) FootfallFX() []FXEvent {
+	if a == nil || a.doc == nil {
+		return nil
+	}
+	var out []FXEvent
+	seen := map[string]int{}
+	for _, timeline := range a.doc.Timelines() {
+		for _, event := range fxEventsOfTimeline(a.doc, timeline) {
+			if !isFootfallFX(event) {
+				continue
+			}
+			key := strings.ToLower(event.Effect) + "|" + strings.ToLower(event.Marker)
+			if at, ok := seen[key]; ok {
+				if event.Time < out[at].Time {
+					out[at].Time = event.Time
+				}
+				continue
+			}
+			seen[key] = len(out)
+			out = append(out, event)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Time < out[j].Time })
+	return out
+}
+
+// isFootfallFX — событие про удар ноги о землю: имя события или путь
+// эффекта говорят о шаге.
+func isFootfallFX(event FXEvent) bool {
+	for _, value := range []string{event.Name, event.Effect} {
+		lower := strings.ToLower(value)
+		if strings.Contains(lower, "footfall") || strings.Contains(lower, "footstep") {
+			return true
+		}
+	}
+	return false
+}
+
 // fxEventsForClips собирает эффекты таймлайнов, которые ведут перечисленные
 // клипы. События без пути эффекта (звук, декаль, след) пропускаются: их
 // играет не эта подсистема.

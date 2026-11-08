@@ -30,6 +30,26 @@ func TestFXDeathName(t *testing.T) {
 	}
 }
 
+// TestIsFootfallFX — шагом считается событие, в имени или пути эффекта
+// которого есть footfall/footstep.
+func TestIsFootfallFX(t *testing.T) {
+	cases := []struct {
+		event FXEvent
+		want  bool
+	}{
+		{FXEvent{Name: "sound_footfalls", Effect: "races\\necron\\footfalls"}, true},
+		{FXEvent{Name: "footstep_dust", Effect: "races\\necron\\dust"}, true},
+		{FXEvent{Name: "terrain_waist_still_move", Effect: "races\\necron\\footfall_fx"}, true},
+		{FXEvent{Name: "fire_muzzle", Effect: "necron\\weapon\\fire"}, false},
+		{FXEvent{}, false},
+	}
+	for _, c := range cases {
+		if got := isFootfallFX(c.event); got != c.want {
+			t.Fatalf("isFootfallFX(%+v) = %v, ожидалось %v", c.event, got, c.want)
+		}
+	}
+}
+
 // TestFXEventTime — «на входе» (-1) и «на выходе» (огромное float) файла
 // становятся нулём, а обычное время остаётся собой.
 func TestFXEventTime(t *testing.T) {
