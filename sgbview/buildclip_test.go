@@ -146,12 +146,18 @@ func TestNecronPlasmaGeneratorBuildStages(t *testing.T) {
 	}
 
 	clips := buildStageClips(tree, whmPath, model, doc)
+	// build_2 (451 кадр) ведёт прогресс; постановочные build_1 (37) и build_4
+	// (151) играют один раз и замирают на последнем кадре.
+	wantScrub := map[string]bool{"build_1": false, "build_2": true, "build_4": false}
 	for _, clip := range clips {
 		if clip.clip == nil {
 			t.Fatal("этап без клипа")
 		}
 		if clip.loop {
 			t.Errorf("клип %q зациклен, хотели hold end", clip.clip.Name)
+		}
+		if want, ok := wantScrub[clip.clip.Name]; ok && clip.scrub != want {
+			t.Errorf("клип %q: scrub=%v, хотели %v", clip.clip.Name, clip.scrub, want)
 		}
 	}
 }
