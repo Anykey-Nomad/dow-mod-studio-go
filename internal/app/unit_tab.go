@@ -690,6 +690,8 @@ func HandleUnitTabInput(ui *uiState, gtx layout.Context) {
 	// inside the Events handler, which returns early for other sections.
 	HandleUnitMeshToggles(ui, gtx)
 	HandleUnitEventsInput(ui, gtx)
+	HandleUnitWeaponTreeInput(ui, gtx)
+	HandleUnitVoiceInput(ui, gtx)
 	HandleClassicOEWheInput(ui, gtx)
 	HandleClassicOEClauseConditionInput(ui, gtx)
 }
@@ -736,6 +738,14 @@ func LayoutUnitBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 			layout.Rigid(FixedPanel(ui, rightW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitRightColumn(ui, gtx) })),
 		)
 	}
+	// The hover tip is collected while the columns are laid out, so the frame
+	// starts empty; a moved pointer drops the previous tip before the rows
+	// have a chance to set it again.
+	if ui.HoverTipMoved {
+		ui.HoverTipText = ""
+		ui.HoverTipMoved = false
+	}
+	ui.HoverTipPending = ""
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(columns),
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
@@ -743,6 +753,13 @@ func LayoutUnitBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 				return layout.Dimensions{}
 			}
 			return LayoutUnitMeshMatDialog(ui, gtx)
+		}),
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions { return LayoutUnitPointerTrack(ui, gtx) }),
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			if ui.HoverTipPending != "" {
+				ui.HoverTipText = ui.HoverTipPending
+			}
+			return LayoutUnitHoverTip(ui, gtx)
 		}),
 	)
 }

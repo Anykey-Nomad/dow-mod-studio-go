@@ -14,6 +14,43 @@ import (
 // lowercase data instead of the declared Data — contributed nothing to the
 // tree, so the file tree and the unit list showed only the required mod. This
 // is that whole case as a fixture, including where a save lands.
+// FindMaterialByName remembers its walk, so a file added to or taken out of the
+// tree afterwards has to be looked up again: a texture saved under a new name
+// would stay invisible to the ground lookup, and a deleted one would keep
+// resolving to a file that is no longer in the mod.
+func TestFindMaterialByNameForgetsAddedAndRemovedTextures(t *testing.T) {
+	app := t.TempDir()
+	if err := os.WriteFile(filepath.Join(app, "CACHE.module"), []byte("[global]\nModFolder=CacheMod\nDataFolder.1=Data\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	textureDir := filepath.Join(app, "CacheMod", "Data", "art", "texture_share")
+	if err := os.MkdirAll(textureDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tree, err := BuildModTree(filepath.Join(app, "CACHE.module"), "English")
+	if err != nil {
+		t.Fatalf("BuildModTree: %v", err)
+	}
+	defer tree.Close()
+
+	const virtualPath = `Data\art\texture_share\cache_probe.rsh`
+	if got := tree.FindMaterialByName("cache_probe.rsh"); got != nil {
+		t.Fatalf("cache_probe.rsh resolved from %+v before it was written", got)
+	}
+	if _, err := tree.WriteOverlayFile(virtualPath, []byte("texture")); err != nil {
+		t.Fatalf("WriteOverlayFile: %v", err)
+	}
+	if got := tree.FindMaterialByName("cache_probe.rsh"); got == nil {
+		t.Fatal("a texture saved into the mod was not found: the lookup kept its earlier miss")
+	}
+	if !tree.RemoveFile(virtualPath) {
+		t.Fatal("RemoveFile reported the saved texture was not in the tree")
+	}
+	if got := tree.FindMaterialByName("cache_probe.rsh"); got != nil {
+		t.Fatalf("a removed texture still resolves from %+v", got)
+	}
+}
+
 func TestModFolderAndDataFolderSpelledDifferentlyOnDisk(t *testing.T) {
 	app := t.TempDir()
 	const (

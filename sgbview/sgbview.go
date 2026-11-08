@@ -13,6 +13,7 @@ package sgbview
 import (
 	"fmt"
 	"image"
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -38,12 +39,24 @@ type Vertex struct {
 	Pos    [3]float32
 	Normal [3]float32
 	UV     [2]float32
+	// Bones, Weights — привязка вершины к скелету (до 4 костей). Нужна
+	// для GPU-скиннинга: у статичных объектов веса нулевые, у анимируемых
+	// — из модели, сдвинутые на базу костей объекта.
+	Bones   [4]int32
+	Weights [4]float32
 }
 
 // Mesh — геометрия: вершины и индексы треугольников.
 type Mesh struct {
 	// Name — имя группы (у объектов — «object-N»).
 	Name string
+	// Part — имя меша модели, из которой пришла эта группа («guard_banner»):
+	// по нему рендерер включает и выключает отдельные части — флаги рас на
+	// стратегических точках.
+	Part string
+	// Hidden — часть скрыта с самого начала: так загружаются флаги всех
+	// рас, а рисуется только флаг захватившей.
+	Hidden bool
 	// Material — имя материала, по которому ищется текстура.
 	Material string
 	// Vertices, Indices — вершины и индексы треугольников.
@@ -73,6 +86,18 @@ type Object struct {
 	Name string
 	// Parts — группы геометрии: у каждой своя текстура.
 	Parts []Part
+	// Selected — данные выделения (DATASEUI из .whe), пересчитанные в
+	// мировые координаты; nil, если .whe нет или в нём нет DATASEUI.
+	Selected *SelectedUI
+	// StartingSlot — номер игрока (1..8), чью стартовую позицию объект
+	// занимает: 0 — объект поставлен самим сценарием.
+	StartingSlot int
+	// Dead — «труп» на старте (лорд некронов, томб-спайдер): такой
+	// объект нельзя выделить и им нельзя управлять.
+	Dead bool
+	// Anim — анимация объекта (idle и клипы состояний); nil — статика:
+	// окружение без костей, трупы и модели с запечённой позой.
+	Anim *Anim
 }
 
 // Scene — собранная сцена сценария.
@@ -85,6 +110,9 @@ type Scene struct {
 	GroundMin, GroundMax [2]float32
 	// CenterHeight — высота рельефа в центре карты (в метрах).
 	CenterHeight float32
+	// Pass — карта проходимости DATAIMAP (nil, если в сценарии её нет):
+	// по ней строится путь приказов движения.
+	Pass *PassMap
 	// Terrain — рельеф (меш в мировых координатах, Z вверх).
 	Terrain *Mesh
 	// Water — плоскость воды (может быть nil).
@@ -147,11 +175,12 @@ func Load(tree *modtree.ModTree, sgbPath string) (*Scene, error) {
 }
 
 // LoadWith читает сценарий и собирает сцену, ставя на стартовые позиции
-// игроков их стартовые постройки.
+// игроков их стартовые постройки и бойцов.
 //
-// Слот игрока указывает builds: по номеру слота сценарий знает, где стоит
-// его начальная позиция, а постройка — что там должно появиться.
-func LoadWith(tree *modtree.ModTree, sgbPath string, limits Limits, builds []SlotBuild) (*Scene, error) {
+// Слот игрока указывает builds и units: по номеру слота сценарий знает,
+// где стоит его начальная позиция, а постройка и чертёж бойца — что там
+// должно появиться.
+func LoadWith(tree *modtree.ModTree, sgbPath string, limits Limits, builds []SlotBuild, units ...SlotUnit) (*Scene, error) {
 	if tree == nil {
 		return nil, fmt.Errorf("sgbview: нет дерева модуля")
 	}
@@ -163,7 +192,7 @@ func LoadWith(tree *modtree.ModTree, sgbPath string, limits Limits, builds []Slo
 	if err != nil {
 		return nil, fmt.Errorf("sgbview: разбор %s: %w", sgbPath, err)
 	}
-	return BuildWith(tree, m, limits, builds)
+	return BuildWith(tree, m, limits, builds, units...)
 }
 
 // LoadLimited читает сценарий из дерева модуля и собирает сцену с
@@ -179,8 +208,8 @@ func Build(tree *modtree.ModTree, m *sgb.Map, limits Limits) (*Scene, error) {
 }
 
 // BuildWith собирает сцену и ставит на стартовые позиции игроков их
-// стартовые постройки.
-func BuildWith(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []SlotBuild) (*Scene, error) {
+// стартовые постройки и бойцов.
+func BuildWith(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []SlotBuild, units ...SlotUnit) (*Scene, error) {
 	if m == nil {
 		return nil, fmt.Errorf("sgbview: карта пуста")
 	}
@@ -207,6 +236,27 @@ func BuildWith(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []SlotBu
 		scene.CenterHeight = float32(h)
 	}
 
+	// --- Карта проходимости ---
+	// Ячейка проходимости совпадает по размеру с ячейкой рельефа, а сетка
+	// покрывает играбельную область, отцентрованную по миру. Так определено
+	// по карте: DATAIMAP 128×128 при рельефе в 256 ячеек по 2 м —
+	// играбельные 256×256 м внутри рельефа 512×512 м. Стартовые позиции
+	// и точки захвата лежат только внутри этой области (проверено по
+	// сценарию), а тёмные руины на миникарте совпадают с непроходимыми
+	// ячейками именно при таком выравнивании (проверено по яркости).
+	if m.Pass.W >= 2 && m.Pass.H >= 2 && g.CellSize > 0 {
+		cell := float64(g.CellSize)
+		centerX := (float64(g.XMin()) + float64(g.XMax())) * 0.5
+		centerY := (float64(g.ZMin()) + float64(g.ZMax())) * 0.5
+		scene.Pass = &PassMap{
+			W: m.Pass.W, H: m.Pass.H, Data: m.Pass.Data,
+			CellX:   cell,
+			CellY:   cell,
+			OriginX: centerX - float64(m.Pass.W)*cell*0.5,
+			OriginY: centerY - float64(m.Pass.H)*cell*0.5,
+		}
+	}
+
 	// --- Рельеф и вода ---
 	terrain := m.TerrainModel(limits.MaxGrid)
 	if terrain != nil && len(terrain.Meshes) > 0 {
@@ -229,7 +279,7 @@ func BuildWith(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []SlotBu
 	}
 
 	// --- Объекты ---
-	objects, skipped, dropped, err := buildObjects(tree, m, limits, builds)
+	objects, skipped, dropped, err := buildObjects(tree, m, limits, builds, units...)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +334,7 @@ type cachedModel struct {
 // Третьим значением возвращается число объектов, до которых сцена не
 // дошла: лимиты на число объектов и вершин. Их не выкидывают молча —
 // вызывающий код должен сказать пользователю, что часть карты не показана.
-func buildObjects(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []SlotBuild) ([]Object, []Skipped, int, error) {
+func buildObjects(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []SlotBuild, units ...SlotUnit) ([]Object, []Skipped, int, error) {
 	if tree == nil || m == nil {
 		return nil, nil, 0, nil
 	}
@@ -298,6 +348,18 @@ func buildObjects(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []Slo
 	var skipped []Skipped
 	vertices := 0
 	dropped := 0
+	// DATASEUI читается один раз на модель: он одинаков для всех объектов
+	// одного blueprint'а, а поворот у каждого свой — пересчёт идёт ниже,
+	// уже с placement'ом конкретного объекта.
+	selectedRaw := map[string]*whe.FxSelectedUI{}
+	selectedSeen := map[string]bool{}
+	loadSelected := func(path string) *whe.FxSelectedUI {
+		if !selectedSeen[path] {
+			selectedSeen[path] = true
+			selectedRaw[path] = selectedUI(tree, path)
+		}
+		return selectedRaw[path]
+	}
 	for _, e := range m.Entities {
 		if len(objects) >= limits.MaxObjects || vertices >= limits.MaxVertices {
 			dropped++
@@ -321,29 +383,36 @@ func buildObjects(tree *modtree.ModTree, m *sgb.Map, limits Limits, builds []Slo
 		// Раскладываем модель в мир по месту объекта. Видимые меши отбираются
 		// заранее, по исходным именам: AppendEntity переименовывает меши в имя
 		// объекта, и фильтр visible по ним после копирования не сработал бы.
-		src := visibleModel(entry.model, entry.visible)
+		// Точки захвата грузятся со всеми флагами рас: в покое виден только
+		// остов, а флаг захватчика включается по ходу игры.
+		src, hidden := captureSource(entry.model, entry.visible)
 		world := &whm.Model{Name: fmt.Sprintf("object-%d", e.ID)}
-		sgb.AppendEntity(world, src, e.PlacementOf(), world.Name)
-		parts := make([]Part, 0, len(world.Meshes))
-		for _, wm := range world.Meshes {
-			mesh := meshFrom(world.Name, materialName(wm), world, wm, nil)
-			if mesh == nil {
-				continue
-			}
-			parts = append(parts, Part{Mesh: mesh})
-			vertices += len(mesh.Vertices)
-		}
+		placement := e.PlacementOf()
+		anim := newAnim(tree, entry.path, entry.model, placement)
+		appendObjectModel(world, src, placement, anim)
+		parts, count := partsFromWorld(src, world, hidden)
+		vertices += count
 		if len(parts) == 0 {
 			skipped = append(skipped, Skipped{Name: e.Name, Reason: "у модели нет геометрии"})
 			continue
 		}
-		objects = append(objects, Object{Name: e.Name, Parts: parts})
+		objects = append(objects, Object{
+			Name:     e.Name,
+			Parts:    parts,
+			Selected: selectedUIWorld(loadSelected(entry.path), placement),
+			Anim:     anim,
+		})
 	}
 
 	// --- Стартовые постройки игроков ---
 	buildObjects2, buildSkipped := placeSlotBuildings(tree, m, limits, builds, extraPaths)
 	objects = append(objects, buildObjects2...)
 	skipped = append(skipped, buildSkipped...)
+
+	// --- Стартовые бойцы игроков: вокруг их построек ---
+	unitObjects, unitSkipped := placeSlotUnits(tree, m, limits, units, objects, extraPaths)
+	objects = append(objects, unitObjects...)
+	skipped = append(skipped, unitSkipped...)
 
 	if len(objects) == 0 {
 		return nil, skipped, dropped, nil
@@ -395,6 +464,7 @@ func placeSlotBuildings(tree *modtree.ModTree, m *sgb.Map, limits Limits,
 			skipped = append(skipped, Skipped{Name: b.Blueprint, Reason: reason})
 			continue
 		}
+		fx := selectedUI(tree, path)
 		for _, wm := range model.Meshes {
 			if mat := materialName(wm); mat != "" {
 				extraPaths[mat] = path
@@ -410,7 +480,8 @@ func placeSlotBuildings(tree *modtree.ModTree, m *sgb.Map, limits Limits,
 				ScaleX:  1, ScaleY: 1, ScaleZ: 1,
 			}
 			src := visibleModel(model, visible)
-			sgb.AppendEntity(world, src, placement, world.Name)
+			anim := newAnim(tree, path, model, placement)
+			appendObjectModel(world, src, placement, anim)
 			parts := make([]Part, 0, len(world.Meshes))
 			for _, wm := range world.Meshes {
 				mesh := meshFrom(world.Name, materialName(wm), world, wm, nil)
@@ -423,10 +494,438 @@ func placeSlotBuildings(tree *modtree.ModTree, m *sgb.Map, limits Limits,
 				skipped = append(skipped, Skipped{Name: b.Blueprint, Reason: "у модели нет геометрии"})
 				continue
 			}
-			objects = append(objects, Object{Name: b.Blueprint, Parts: parts})
+			objects = append(objects, Object{
+				Name:     b.Blueprint,
+				Parts:    parts,
+				Selected: selectedUIWorld(fx, placement),
+				Anim:     anim,
+				// Принадлежность известна уже по слоту: не нужно
+				// угадывать её по близости к маркеру.
+				StartingSlot: b.Slot,
+			})
 		}
 	}
 	return objects, skipped
+}
+
+// placeSlotUnits расставляет стартовых бойцов игроков вокруг их построек.
+//
+// Точка появления — стартовая позиция игрока плюс смещение отряда из
+// чертежа расы (starting_squad_offset_NN). Смещение, попавшее внутрь
+// постройки, отодвигается наружу: боец всегда стоит вне стен здания, а
+// высота берётся с рельефа в точке появления. Если смещения нет (в чертеже
+// расы его не нашли), боец встаёт по кругу вокруг постройки.
+//
+// Бойцы с флагом Dead — «трупы» (лорд некронов, томб-спайдер): они лежат
+// на карте, но их нельзя выделить и ими нельзя управлять.
+//
+// Пути моделей кладутся в extraPaths, как и у построек: по ним ищутся
+// текстуры бойцов.
+func placeSlotUnits(tree *modtree.ModTree, m *sgb.Map, limits Limits,
+	units []SlotUnit, placed []Object, extraPaths map[string]string) ([]Object, []Skipped) {
+	if tree == nil || m == nil || len(units) == 0 {
+		return nil, nil
+	}
+
+	// Стартовая точка и радиус постройки по слотам: радиус меряется по
+	// уже поставленным объектам игрока, чтобы не пускать бойцов внутрь.
+	startAt := map[int]StartingPosition{}
+	for _, s := range playersOf(m) {
+		if len(s.Positions) > 0 {
+			startAt[s.Owner] = s.Positions[0]
+		}
+	}
+	hqRadius := map[int]float64{}
+	for _, object := range placed {
+		if object.StartingSlot == 0 {
+			continue
+		}
+		start, ok := startAt[object.StartingSlot]
+		if !ok {
+			continue
+		}
+		for _, part := range object.Parts {
+			if part.Mesh == nil {
+				continue
+			}
+			for _, v := range part.Mesh.Vertices {
+				// Мировые координаты: X — то же, что у движка,
+				// Y плоскости равен Z движка.
+				dx := float64(v.Pos[0]) - float64(start.X)
+				dy := float64(v.Pos[1]) - float64(start.Z)
+				if d := math.Hypot(dx, dy); d > hqRadius[object.StartingSlot] {
+					hqRadius[object.StartingSlot] = d
+				}
+			}
+		}
+	}
+
+	type unitModel struct {
+		model   *whm.Model
+		path    string
+		visible map[string]bool
+		reason  string
+	}
+	byBlueprint := map[string]unitModel{}
+	// Трупы: запечённая поза смерти по чертежу — несколько мёртвых бойцов
+	// одной модели делят одну копию.
+	corpseOf := map[string]*whm.Model{}
+	placedOf := map[int]int{} // сколько бойцов слота уже поставлено
+	var objects []Object
+	var skipped []Skipped
+
+	for _, u := range units {
+		if u.Slot < 1 || u.Slot > MaxPlayers || strings.TrimSpace(u.Blueprint) == "" {
+			continue
+		}
+		if len(placed)+len(objects) >= limits.MaxObjects {
+			break
+		}
+		start, ok := startAt[u.Slot]
+		if !ok {
+			skipped = append(skipped, Skipped{
+				Name:   u.Blueprint,
+				Reason: fmt.Sprintf("у игрока %d нет стартовой позиции", u.Slot),
+			})
+			continue
+		}
+		entry, seen := byBlueprint[u.Blueprint]
+		if !seen {
+			model, path, visible, reason := loadBlueprintModel(tree, u.Blueprint)
+			entry = unitModel{model: model, path: path, visible: visible, reason: reason}
+			byBlueprint[u.Blueprint] = entry
+		}
+		if entry.model == nil {
+			reason := entry.reason
+			if reason == "" {
+				reason = "модель не загрузилась"
+			}
+			skipped = append(skipped, Skipped{Name: u.Blueprint, Reason: reason})
+			continue
+		}
+
+		// Трупы (Dead) лежат на земле: в модель запекается поза смерти,
+		// по ней же считается, как глубоко тело касается рельефа.
+		model := entry.model
+		if u.Dead {
+			model = corpseModel(tree, u.Blueprint, entry.path, entry.model, corpseOf)
+		}
+
+		// Точка появления в координатах движка: X, Z — земля, Y — высота.
+		gx, gz := float64(start.X), float64(start.Z)
+		px, pz := gx+float64(u.Offset[0]), gz+float64(u.Offset[2])
+		if !u.HasOffset {
+			// Смещения нет — боец встаёт по кругу вокруг постройки.
+			angle := float64(placedOf[u.Slot]) * 2.39996322972865332 // угол золотого сечения
+			px = gx + math.Cos(angle)*(hqRadius[u.Slot]+6)
+			pz = gz + math.Sin(angle)*(hqRadius[u.Slot]+6)
+		}
+		placedOf[u.Slot]++
+
+		// Держим бойца вне стен постройки.
+		clear := hqRadius[u.Slot] + groundRadius(model) + 1.5
+		dx, dz := px-gx, pz-gz
+		dist := math.Hypot(dx, dz)
+		if dist < clear {
+			if dist < 1e-6 {
+				dx, dz, dist = 1, 0, 1
+			}
+			px, pz = gx+dx/dist*clear, gz+dz/dist*clear
+		}
+
+		// Высота — рельеф в точке появления (плюс смещение по высоте).
+		height := float64(start.Y)
+		if h, ok := terrainHeightAt(m, px, pz); ok {
+			height = h + float64(u.Offset[1])
+		}
+		// Низ модели должен лежать на рельефе: у живого бойца пивот выше
+		// ступней (без поправки он стоит по пояс в земле), а поза смерти
+		// может висеть над точкой появления или уходить в неё ниже —
+		// поправка одна и та же.
+		height -= modelMinZ(model)
+		placement := sgb.Placement{
+			X: px, Y: pz, Z: height,
+			Heading: math.Atan2(pz-gz, px-gx),
+			ScaleX:  1, ScaleY: 1, ScaleZ: 1,
+		}
+
+		fx := selectedUI(tree, entry.path)
+		for _, wm := range entry.model.Meshes {
+			if mat := materialName(wm); mat != "" {
+				extraPaths[mat] = entry.path
+			}
+		}
+		world := &whm.Model{Name: fmt.Sprintf("starting-unit-%d-%d", u.Slot, len(objects))}
+		src := visibleModel(model, entry.visible)
+		// Трупы остаются статичными: их поза смерти запечена в вершины.
+		var anim *Anim
+		if !u.Dead {
+			anim = newAnim(tree, entry.path, entry.model, placement)
+		}
+		appendObjectModel(world, src, placement, anim)
+		parts := make([]Part, 0, len(world.Meshes))
+		for _, wm := range world.Meshes {
+			mesh := meshFrom(world.Name, materialName(wm), world, wm, nil)
+			if mesh == nil {
+				continue
+			}
+			parts = append(parts, Part{Mesh: mesh})
+		}
+		if len(parts) == 0 {
+			skipped = append(skipped, Skipped{Name: u.Blueprint, Reason: "у модели нет геометрии"})
+			continue
+		}
+		objects = append(objects, Object{
+			Name:         u.Blueprint,
+			Parts:        parts,
+			Selected:     selectedUIWorld(fx, placement),
+			StartingSlot: u.Slot,
+			Dead:         u.Dead,
+			Anim:         anim,
+		})
+	}
+	return objects, skipped
+}
+
+// corpseModel — модель трупа: поза смерти, запечённая в вершины. Если
+// пригодной позы нет (нет графа действий и нет смертных клипов), модель
+// возвращается как есть (покой скелета) — поведение прежнее, ничего не
+// ломается.
+func corpseModel(tree *modtree.ModTree, key, whmPath string, base *whm.Model, cache map[string]*whm.Model) *whm.Model {
+	if cached, ok := cache[key]; ok {
+		return cached
+	}
+	out := base
+	if clip := corpseClip(tree, whmPath, base); clip != nil {
+		out = bakePose(base, base.PoseAt(clip, 1))
+	}
+	cache[key] = out
+	return out
+}
+
+// corpseClip — клип позы смерти, в которой движок показывает труп.
+//
+// Первичный источник — граф действий .whe рядом с моделью: состояния
+// «straight_to_death_pose» и «straight_to_death_pose_load» («сразу в позу
+// смерти» — начальное состояние трупа на старте) и «die» цепляют мотионы,
+// а каждый мотион ведёт на клип. Пригодность позы проверяется по
+// геометрии: она должна быть ниже покоя (лёжа, а не стоя) и не уходить
+// глубоко под землю. Если графа нет или ни одна поза не прошла проверку,
+// те же правила применяются к клипам с именами, похожими на смерть
+// (die*, death*, kill*).
+//
+// Среди пригодных берётся самая низкая: лежащее тело вытянуто вдоль земли.
+func corpseClip(tree *modtree.ModTree, whmPath string, m *whm.Model) *whm.Animation {
+	rest, ok := poseHeight(m, m.RestPose())
+	if !ok {
+		return nil
+	}
+	pick := func(names []string) *whm.Animation {
+		var best *whm.Animation
+		bestSpan := 0.0
+		for _, name := range names {
+			an := m.Animation(strings.TrimSpace(name))
+			if an == nil {
+				continue
+			}
+			span, ok := corpseSpan(m, m.PoseAt(an, 1), rest)
+			if !ok {
+				continue
+			}
+			if best == nil || span < bestSpan {
+				best, bestSpan = an, span
+			}
+		}
+		return best
+	}
+	if doc, err := modelWHE(tree, whmPath); err == nil {
+		// Прямой переход в позу смерти — начальное состояние трупа на
+		// старте, и само «умирание»: ветки про смерть, без «встать».
+		names := wheActionClips(doc, nil, "straight_to_death_pose", "straight_to_death_pose_load")
+		names = append(names, wheActionClips(doc, deathClipName, "die")...)
+		if found := pick(names); found != nil {
+			return found
+		}
+	}
+	var byName []string
+	for i := range m.Animations {
+		if deathClipName(strings.ToLower(m.Animations[i].Name)) {
+			byName = append(byName, m.Animations[i].Name)
+		}
+	}
+	return pick(byName)
+}
+
+// corpseSpan — размах позы по высоте, если поза годится для трупа: ниже
+// покоя (значит лежит) и не ушедшая глубоко под землю (тело лежит на
+// земле, а не в ней).
+func corpseSpan(m *whm.Model, pose whm.Pose, rest float64) (float64, bool) {
+	span, ok := poseHeight(m, pose)
+	if !ok || span >= rest {
+		return 0, false
+	}
+	var minZ float64
+	for i := range m.Vertices {
+		p, _ := whm.SkinnedVertex(m, pose, &m.Vertices[i])
+		if i == 0 || p.Z < minZ {
+			minZ = p.Z
+		}
+	}
+	if minZ < -0.6 {
+		return 0, false
+	}
+	return span, true
+}
+
+// wheActionClips — имена клипов, к которым ведут действия .whe (move →
+// run_1, die → die_normal и т.п.).
+//
+// Действие описывает состояние игры: его мотион совпадает по имени с клипом
+// или с таймлайном, который указывает на клипы. Обход идёт по всем веткам —
+// какая именно сработает, решает игра. Видимость (vis_*) — не поза, а набор
+// показываемых мешей, в расчёт она не идёт. filter (nil — принимать всё;
+// имя приходит в нижнем регистре) отсекает ненужные ветки — например,
+// «встать» при поиске позы трупа.
+func wheActionClips(doc *whe.Document, filter func(name string) bool, actions ...string) []string {
+	if doc == nil {
+		return nil
+	}
+	timelines := make(map[string]whe.FxTimeline, 8)
+	for _, tl := range doc.Timelines() {
+		timelines[strings.ToLower(strings.TrimSpace(tl.Name))] = tl
+	}
+	all := doc.Actions()
+	var out []string
+	seen := map[string]bool{}
+
+	var addMotion func(name string, depth int)
+	addMotion = func(name string, depth int) {
+		name = strings.TrimSpace(name)
+		lower := strings.ToLower(name)
+		if name == "" || depth > 6 || isVisName(lower) || seen["m:"+lower] {
+			return
+		}
+		if filter != nil && !filter(lower) {
+			return
+		}
+		seen["m:"+lower] = true
+		tl, ok := timelines[lower]
+		if !ok {
+			// Таймлайна нет — само имя может быть именем клипа.
+			out = append(out, name)
+			return
+		}
+		for _, clip := range tl.Animations {
+			clip = strings.TrimSpace(clip)
+			if clip != "" && !isVisName(strings.ToLower(clip)) {
+				out = append(out, clip)
+			}
+		}
+		for _, next := range tl.Motions {
+			addMotion(next, depth+1)
+		}
+	}
+
+	var addAction func(name string, depth int)
+	addAction = func(name string, depth int) {
+		key := "a:" + strings.ToLower(strings.TrimSpace(name))
+		if depth > 6 || seen[key] {
+			return
+		}
+		seen[key] = true
+		for _, a := range all {
+			if !strings.EqualFold(strings.TrimSpace(a.Name), strings.TrimSpace(name)) {
+				continue
+			}
+			for _, mo := range a.Motions {
+				addMotion(mo.Name, depth)
+			}
+			for _, sub := range a.Subactions {
+				if isVisName(strings.ToLower(sub.Name)) {
+					continue
+				}
+				if filter != nil && !filter(strings.ToLower(sub.Name)) {
+					continue
+				}
+				addAction(sub.Name, depth+1)
+			}
+			break
+		}
+	}
+
+	for _, name := range actions {
+		addAction(name, 0)
+	}
+	return out
+}
+
+// isVisName — состояние, мотион или клип видимости (vis_*): это набор
+// показываемых мешей, а не поза.
+func isVisName(name string) bool {
+	return strings.HasPrefix(name, "vis")
+}
+
+// deathClipName — подходит ли имя клипа под позу трупа: смерть и падение
+// без подъёма. «Вставания» (die_get_back_up, getup, revive) пропускаются —
+// их финал это снова стойка.
+func deathClipName(name string) bool {
+	for _, rise := range []string{"get_back_up", "getup", "get_up", "revive"} {
+		if strings.Contains(name, rise) {
+			return false
+		}
+	}
+	for _, death := range []string{"death_pose", "straight_to_death_pose", "die_normal", "die_thrown_pose", "die", "death", "kill"} {
+		if strings.Contains(name, death) {
+			return true
+		}
+	}
+	return false
+}
+
+// poseHeight — размах позы по высоте: от самой низкой до самой высокой
+// вершины модели в этой позе.
+func poseHeight(m *whm.Model, pose whm.Pose) (float64, bool) {
+	if len(m.Vertices) == 0 {
+		return 0, false
+	}
+	var minZ, maxZ float64
+	for i := range m.Vertices {
+		p, _ := whm.SkinnedVertex(m, pose, &m.Vertices[i])
+		if i == 0 || p.Z < minZ {
+			minZ = p.Z
+		}
+		if i == 0 || p.Z > maxZ {
+			maxZ = p.Z
+		}
+	}
+	return maxZ - minZ, true
+}
+
+// modelMinZ — самая низкая точка модели по высоте: поправка, чтобы труп
+// лежал на рельефе, а не висел над ним и не был вполовину в земле.
+func modelMinZ(model *whm.Model) float64 {
+	var minZ float64
+	for i, v := range model.Vertices {
+		if i == 0 || float64(v.Pos[2]) < minZ {
+			minZ = float64(v.Pos[2])
+		}
+	}
+	return minZ
+}
+
+// groundRadius — дальняя точка модели от её центра в плоскости земли:
+// радиус «футпринта» объекта для расстановки вокруг постройки.
+func groundRadius(model *whm.Model) float64 {
+	if model == nil {
+		return 0
+	}
+	var max float64
+	for _, v := range model.Vertices {
+		if d := math.Hypot(float64(v.Pos[0]), float64(v.Pos[1])); d > max {
+			max = d
+		}
+	}
+	return max
 }
 
 // cachePaths собирает пути моделей кэша: по ним ищутся текстуры, лежащие
@@ -481,9 +980,11 @@ func meshFrom(name, material string, model *whm.Model, wm whm.Mesh, visible map[
 			remap[idx] = pos
 			v := model.Vertices[idx]
 			mesh.Vertices = append(mesh.Vertices, Vertex{
-				Pos:    v.Pos,
-				Normal: v.Normal,
-				UV:     v.UV,
+				Pos:     v.Pos,
+				Normal:  v.Normal,
+				UV:      v.UV,
+				Bones:   v.Bones,
+				Weights: v.Weights,
 			})
 		}
 		mesh.Indices = append(mesh.Indices, uint32(pos))
@@ -492,6 +993,74 @@ func meshFrom(name, material string, model *whm.Model, wm whm.Mesh, visible map[
 		return nil
 	}
 	return mesh
+}
+
+// captureSource — источник геометрии объекта-точки захвата: все меши модели,
+// включая флаги рас, которые в покое скрыты. Без этого флаг захватчика
+// показать нечем: отфильтрованный меш уже не вернуть.
+//
+// Второе значение — имена скрытых в покое мешей; nil у обычных объектов.
+func captureSource(model *whm.Model, visible map[string]bool) (*whm.Model, map[string]bool) {
+	if model == nil || !capturePointModel(model) {
+		return visibleModel(model, visible), nil
+	}
+	// Модель без клипа покоя: состояние берём из клипов несобранной
+	// точки, иначе в мир попали бы сразу все флаги всех рас.
+	if visible == nil {
+		visible, _ = model.VisibleIn([]string{"uncaptured_idle", "uncaptured_open", "ol_uncaptured_idle", "ol_uncaptured_open"})
+	}
+	if visible == nil {
+		return model, nil
+	}
+	hidden := make(map[string]bool, len(model.Meshes))
+	for _, wm := range model.Meshes {
+		if !visible[strings.ToLower(wm.Name)] {
+			hidden[strings.ToLower(wm.Name)] = true
+		}
+	}
+	return model, hidden
+}
+
+// capturePointModel — модель стратегической точки, цели или реликта: у неё
+// есть клип подъёма флага (у реликта он с приставкой ol_).
+func capturePointModel(model *whm.Model) bool {
+	if model == nil {
+		return false
+	}
+	return model.Animation("captured_raise") != nil || model.Animation("ol_captured_raise") != nil
+}
+
+// partsFromWorld раскладывает меши мира по частям объекта, подписывая их
+// именами исходных мешей модели: по имени часть включают и выключают
+// (флаги точек захвата). src и world собраны друг из друга, поэтому меши
+// идут в одном порядке; второе значение — сколько вершин в частях.
+func partsFromWorld(src, world *whm.Model, hidden map[string]bool) ([]Part, int) {
+	names := make([]string, 0, len(world.Meshes))
+	if src != nil {
+		for i := range src.Meshes {
+			if len(src.Meshes[i].Indices) == 0 {
+				continue
+			}
+			names = append(names, src.Meshes[i].Name)
+		}
+	}
+	parts := make([]Part, 0, len(world.Meshes))
+	vertices := 0
+	for i, wm := range world.Meshes {
+		mesh := meshFrom(world.Name, materialName(wm), world, wm, nil)
+		if mesh == nil {
+			continue
+		}
+		if i < len(names) {
+			mesh.Part = names[i]
+			if hidden != nil {
+				mesh.Hidden = hidden[strings.ToLower(names[i])]
+			}
+		}
+		parts = append(parts, Part{Mesh: mesh})
+		vertices += len(mesh.Vertices)
+	}
+	return parts, vertices
 }
 
 // visibleModel возвращает копию модели, оставляющую только меши, видимые в
@@ -607,7 +1176,7 @@ func loadBlueprintModel(tree *modtree.ModTree, blueprint string) (*whm.Model, st
 	// достроены». Показать постройку как есть — значит запечь в вершины позу
 	// успокоения, иначе монолит выглядит готовым до аддонов. Остальные
 	// постройки не трогаем: их покой скелета и есть база.
-	if strings.EqualFold(filepath.Base(whmPath), "Necron_Monolith.whm") {
+	if poseBakedModel(whmPath) {
 		if clip := buildSettleClip(parsed); clip != nil {
 			parsed = bakePose(parsed, parsed.PoseAt(clip, 1))
 		}

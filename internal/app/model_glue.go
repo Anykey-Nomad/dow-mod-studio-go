@@ -258,6 +258,14 @@ func ModelControlClicks(ui *uiState, gtx layout.Context, t *fileTab) {
 		log.Printf("3D preview: textures %s", onOff(v.Textured))
 		Invalidate(v)
 	}
+	if t.ModelAnimRemove.Clicked(gtx) {
+		// The press is drained even while the confirmation is up, so a
+		// click that lands beside the card cannot queue a second arm for
+		// the frame after it closes.
+		if !ui.AnimRemoveDialog {
+			ArmAnimRemoval(ui, t)
+		}
+	}
 }
 
 // layoutModelViewer draws the canvas plus the playback controls.
@@ -320,24 +328,6 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 	if FxStartSoundLoad(ui, v) {
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
 	}
-	fxDrawn := false
-	if v.ShowFX || v.FxAttrIndex >= 0 || (v.ShowFXAxes && len(v.FxEffects) == 0) {
-		if FxStartLoad(ui, v) {
-			gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
-		}
-		if v.ShowFX {
-			// The hardware frame draws this frame's particles itself, so the
-			// software picture is only built for the path that paints one.
-			fxDrawn = FxAdvance(v, gtx.Now, w, h, Options(v, w, h), ModelGpuUnavailable(ui, v) != "")
-		} else if len(v.FxEffects) > 0 {
-			FxOrigins(v)
-		}
-		if fxDrawn {
-			v.Redraw = true
-			gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(16 * time.Millisecond)})
-		}
-	}
-
 	now := gtx.Now
 	if t.Kind == "sgb" && t.SgbView3D && len(v.AnimatedEntities) > 0 {
 		if v.SgbAnimLast.IsZero() {
@@ -374,6 +364,23 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 		}
 		v.PoseValid = false
 		v.Redraw = true
+	}
+	// FX and rendering must see the same playhead and cached pose.
+	fxDrawn := false
+	if v.ShowFX || v.FxAttrIndex >= 0 || (v.ShowFXAxes && len(v.FxEffects) == 0) {
+		if FxStartLoad(ui, v) {
+			gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
+		}
+		if v.ShowFX {
+			// The hardware renderer draws particles without a software overlay.
+			fxDrawn = FxAdvance(v, now, w, h, Options(v, w, h), ModelGpuUnavailable(ui, v) != "")
+			if fxDrawn {
+				v.Redraw = true
+				gtx.Execute(op.InvalidateCmd{At: now.Add(16 * time.Millisecond)})
+			}
+		} else if len(v.FxEffects) > 0 {
+			FxOrigins(v)
+		}
 	}
 	if v.Redraw {
 		v.Redraw = false
@@ -536,6 +543,14 @@ func ModelCanvas(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions 
 			if e.Buttons.Contain(pointer.ButtonSecondary) {
 				if t.Kind == "sgb" && t.SgbView3D {
 					t.SgbSelecting = false
+				}
+				// A right press on the strip copies the moment under it into
+				// the frame/time clipboard rather than taking the camera:
+				// that is what a right-click in a time or frame field pastes
+				// back. The rest of the canvas pans as it always did.
+				if scrubHit(v.ScrubRect, e.Position) {
+					ScrubCopyMoment(ui, v, e.Position.X)
+					continue
 				}
 				v.Panning = true
 				v.Dragging = false

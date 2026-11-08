@@ -21,6 +21,9 @@ import (
 	"dow-mod-studio/internal/wav"
 	"dow-mod-studio/internal/whe"
 	"dow-mod-studio/internal/whm"
+	"gioui.org/io/input"
+	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/widget"
 	"github.com/fogleman/fauxgl"
 )
@@ -362,6 +365,120 @@ func TestFxAdvanceBuildsTheSoftwarePictureOnlyForTheSoftwarePath(t *testing.T) {
 	}
 	if v.FxScene == nil {
 		t.Error("no hardware FX scene after the fallback took over")
+	}
+}
+
+func TestFxAdvanceUsesCurrentAnimatedMarker(t *testing.T) {
+	m := &WhmModel{Model: whm.Model{
+		Bones:   []whm.Bone{{Name: "root", Parent: -1, Quat: [4]float32{0, 0, 0, 1}}},
+		Markers: []whm.Marker{{Name: "marker", Parent: "root", Matrix: [9]float32{1, 0, 0, 0, 1, 0, 0, 0, 1}}},
+	}}
+	anim := &WhmAnimation{Name: "move", NumFrames: 20, Duration: 1, Bones: []whm.Track{{Bone: 0, PosKey: []whm.Key3{{Time: 0}, {Time: 1, V: [3]float32{2, 0, 0}}}}}}
+	v := &modelViewer{Model: m, Anim: anim, Playing: true, ShowFX: true, FxScale: 1,
+		FxEffects: []fxOverlayEffect{{Marker: 0, Sim: &fx.FxSim{Anchored: []fx.Visual{{Lifetime: 1, Radius: []fx.FxKey{{V: 0.3}}}}}}}}
+	opts := render.RenderOptions{Width: 64, Height: 64, Fov: 45, Distance: 6}
+	now := time.Unix(1, 0)
+	for _, at := range []float32{0.25, 0.75} {
+		v.Time = at
+		v.PoseValid = false
+		if !FxAdvance(v, now, 64, 64, opts, false) || v.FxScene == nil || len(v.FxScene.Groups) != 1 {
+			t.Fatal("expected one visible FX group")
+		}
+		want, ok := m.MarkerWorld(0, Pose(v), true)
+		if !ok {
+			t.Fatal("marker missing")
+		}
+		got := v.FxScene.Groups[0].Origin
+		if math.Abs(got[0]-want.X) > 1e-6 || math.Abs(got[1]-want.Y) > 1e-6 || math.Abs(got[2]-want.Z) > 1e-6 {
+			t.Fatalf("FX origin at %v = %v, want current marker %v", at, got, want)
+		}
+		now = now.Add(time.Second / 60)
+	}
+}
+
+type fxFrameCapture struct {
+	pose  whm.Pose
+	scene *fxGpuScene
+}
+
+func (c *fxFrameCapture) Render(_ *whm.Model, pose WhmPose, opts render.RenderOptions, _ map[string]render.WhmMaterial, _ func(string) ([]byte, bool)) (render.Frame, error) {
+	c.pose, c.scene = pose, opts.FX
+	return &fxFrameStub{}, nil
+}
+func (*fxFrameCapture) Forget(*whm.Model)          {}
+func (*fxFrameCapture) GeometryChanged(*whm.Model) {}
+func (*fxFrameCapture) Release()                   {}
+
+type fxFrameStub struct{}
+
+func (*fxFrameStub) Paint(layout.Context, image.Rectangle) {}
+func (*fxFrameStub) Overlay(gtx layout.Context, rect image.Rectangle, draw func(layout.Context)) {
+	draw(gtx)
+}
+func (*fxFrameStub) Release() {}
+
+func TestModelCanvasUsesSameAnimatedPoseForFXAndRender(t *testing.T) {
+	m := &WhmModel{Model: whm.Model{
+		Bones:   []whm.Bone{{Name: "root", Parent: -1, Quat: [4]float32{0, 0, 0, 1}}},
+		Markers: []whm.Marker{{Name: "marker", Parent: "root", Matrix: [9]float32{1, 0, 0, 0, 1, 0, 0, 0, 1}}},
+	}}
+	anim := &WhmAnimation{Name: "move", NumFrames: 20, Duration: 1, Bones: []whm.Track{{Bone: 0, PosKey: []whm.Key3{{Time: 0}, {Time: 1, V: [3]float32{2, 0, 0}}}}}}
+	now := time.Unix(100, 0)
+	v := &modelViewer{Model: m, Anim: anim, Playing: true, ShowFX: true, FxScale: 1, AnimPlaybackDuration: 1,
+		LastFrame: now.Add(-250 * time.Millisecond), MarkerIndex: -1, BoneIndex: -1, FxAttrIndex: -1,
+		FxEffects: []fxOverlayEffect{{Marker: 0, Sim: &fx.FxSim{Anchored: []fx.Visual{{Lifetime: 1, Radius: []fx.FxKey{{V: 0.3}}}}}}}}
+	capture := &fxFrameCapture{}
+	ui := &uiState{ModelGpuTried: true, ModelGpu: capture}
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{Ops: &ops, Source: router.Source(), Constraints: layout.Exact(image.Pt(64, 64)), Now: now}
+	ModelCanvas(ui, gtx, &fileTab{Model: v})
+	if v.Time != 0.25 || capture.scene == nil || len(capture.scene.Groups) != 1 {
+		t.Fatalf("time=%v, FX scene=%v, want advanced frame with one FX group", v.Time, capture.scene)
+	}
+	want, ok := m.MarkerWorld(0, capture.pose, true)
+	if !ok {
+		t.Fatal("marker missing from rendered pose")
+	}
+	got := capture.scene.Groups[0].Origin
+	if math.Abs(got[0]-want.X) > 1e-6 || math.Abs(got[1]-want.Y) > 1e-6 || math.Abs(got[2]-want.Z) > 1e-6 {
+		t.Fatalf("rendered FX origin=%v, marker in rendered pose=%v", got, want)
+	}
+}
+
+// BenchmarkFXAnimatedFrame models a busy animated preview without a GPU, so
+// CPU-side pose, marker, simulation and scene preparation can be profiled.
+func BenchmarkFXAnimatedFrame(b *testing.B) {
+	m := &WhmModel{}
+	anim := &WhmAnimation{Name: "idle", NumFrames: 60, Duration: 1}
+	for i := 0; i < 64; i++ {
+		name := fmt.Sprintf("bone-%d", i)
+		m.Bones = append(m.Bones, whm.Bone{Name: name, Parent: i - 1, Quat: [4]float32{0, 0, 0, 1}})
+		m.Markers = append(m.Markers, whm.Marker{Name: name, Parent: name, Matrix: [9]float32{1, 0, 0, 0, 1, 0, 0, 0, 1}})
+		anim.Bones = append(anim.Bones, whm.Track{Bone: i, PosKey: []whm.Key3{{Time: 0}, {Time: 1, V: [3]float32{0.01, 0, 0}}}})
+	}
+	v := &modelViewer{Model: m, Anim: anim, Playing: true, ShowFX: true, FxScale: 1}
+	visual := fx.Visual{Lifetime: 1, Radius: []fx.FxKey{{V: 0.3}}, SelfLit: true}
+	for i := 0; i < 96; i++ {
+		clip := "other"
+		if i < 24 {
+			clip = "idle"
+		}
+		v.FxEffects = append(v.FxEffects, fxOverlayEffect{Marker: i % len(m.Markers), Timed: true, Animations: []string{clip}, Sim: &fx.FxSim{Anchored: []fx.Visual{visual, visual, visual, visual, visual, visual, visual, visual}}})
+	}
+	opts := render.RenderOptions{Width: 640, Height: 480, Fov: 45, Distance: 6}
+	now := time.Unix(1, 0)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		now = now.Add(time.Second / 60)
+		v.Time += 1.0 / 6000
+		if v.Time >= 1 {
+			v.Time = 0
+		}
+		v.PoseValid = false
+		FxAdvance(v, now, 640, 480, opts, false)
+		Pose(v)
 	}
 }
 

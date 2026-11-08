@@ -1,7 +1,9 @@
 package whe
 
 import (
+	"bytes"
 	"dow-mod-studio/internal/chunky"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"strings"
@@ -163,6 +165,61 @@ func fxMotionTypeName(t int32) string {
 	default:
 		return fmt.Sprintf("unknown (%d)", t)
 	}
+}
+
+// MotionTypeName is how a motion type reads in the Events panel — the same
+// words the read-only row used, so the editable chip says what the frame did.
+func MotionTypeName(t int32) string { return fxMotionTypeName(t) }
+
+// NextMotionType is the type a press on the Type chip moves to, cycling the
+// three the engine defines. An unknown number starts the cycle again rather
+// than jumping somewhere arbitrary, which is how a damaged type gets repaired.
+func NextMotionType(t int32) int32 {
+	switch t {
+	case 0:
+		return 1
+	case 1:
+		return 2
+	default:
+		return 0
+	}
+}
+
+// MarshalBinary writes the tail back in the layout parseMtonTail reads: motion
+// type, the delay and inset pairs, the transition, the two flags, then the
+// has-modifier byte and the modifier name. A tail that drives no modifier
+// stores a zero byte and no string, which is what the game writes for one.
+func (t FxMotionTail) MarshalBinary() []byte {
+	var b bytes.Buffer
+	writeI32 := func(v int32) { _ = binary.Write(&b, binary.LittleEndian, v) }
+	writeF32 := func(v float32) { _ = binary.Write(&b, binary.LittleEndian, v) }
+	writeI32(t.Type)
+	for _, v := range []float32{
+		t.StartDelay[0], t.StartDelay[1],
+		t.LoopDelay[0], t.LoopDelay[1],
+		t.TransitionOut,
+		t.Inset[0], t.Inset[1],
+		t.ExitDelay[0], t.ExitDelay[1],
+	} {
+		writeF32(v)
+	}
+	flag := func(v bool) byte {
+		if v {
+			return 1
+		}
+		return 0
+	}
+	b.WriteByte(flag(t.IgnoreExitDelay))
+	b.WriteByte(flag(t.IgnoreTransitions))
+	modifier := strings.TrimSpace(t.Modifier)
+	if modifier == "" {
+		b.WriteByte(0)
+		return b.Bytes()
+	}
+	b.WriteByte(1)
+	writeI32(int32(len(modifier)))
+	b.WriteString(modifier)
+	return b.Bytes()
 }
 
 // fxDelayPairLabel is one of the tail's float pairs as typed numbers: the

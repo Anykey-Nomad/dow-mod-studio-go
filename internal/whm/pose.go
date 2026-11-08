@@ -66,8 +66,9 @@ func (m *Model) PoseAtAnimations(anims []*Animation, t float32) Pose {
 }
 
 // PoseAtAnimationTimes combines clips sampled at their own normalized times.
-// Tracks for different bones compose into one pose; if clips key the same bone,
-// the later clip takes precedence.
+// Each bone is posed by the clip that owns it: the most specific clip that
+// actually moves it. If two clips are equally specific about a bone, the later
+// clip takes precedence.
 func (m *Model) PoseAtAnimationTimes(anims []*Animation, times []float32) Pose {
 	if m == nil {
 		return Pose{}
@@ -79,24 +80,52 @@ func (m *Model) PoseAtAnimationTimes(anims []*Animation, times []float32) Pose {
 	for i, bone := range m.Bones {
 		locals[i] = boneMatrix(bone.Pos, bone.Quat)
 	}
-	for clipIndex, anim := range anims {
+	// Every clip of a model keys the whole skeleton, the ones that repeat a
+	// bone's rest transform included. Letting the last clip win outright — the
+	// plain blend this used to be — means a body idle (which moves all 33 bones)
+	// erases the idle of every weapon, and each weapon's idle (one moving bone
+	// over 32 still ones) erases the body: one clip on screen instead of the
+	// unit moving as a whole. So a clip owns the bones it moves away from rest,
+	// and the narrowest such clip owns the bone, which puts the whole-body clip
+	// underneath the weapon clips and the aim layers above it.
+	masks := make([][]bool, len(anims))
+	broadness := make([]int, len(anims))
+	for i, anim := range anims {
 		if anim == nil {
 			continue
 		}
-		clipTime := float32(0)
-		if clipIndex < len(times) {
-			clipTime = clampFloat32(times[clipIndex], 0, 1)
+		masks[i] = anim.movedBones(m)
+		for _, moved := range masks[i] {
+			if moved {
+				broadness[i]++
+			}
 		}
-		for _, track := range anim.Bones {
-			if track.Bone < 0 || track.Bone >= len(m.Bones) {
+	}
+	for boneIndex, bone := range m.Bones {
+		owner := -1
+		for clipIndex, anim := range anims {
+			if anim == nil || boneIndex >= len(masks[clipIndex]) || !masks[clipIndex][boneIndex] {
 				continue
 			}
-			bone := m.Bones[track.Bone]
-			locals[track.Bone] = boneMatrix(
-				sampleVec3(track.PosKey, clipTime, bone.Pos),
-				sampleQuat(track.RotKey, clipTime, bone.Quat),
-			)
+			if owner < 0 || broadness[clipIndex] <= broadness[owner] {
+				owner = clipIndex
+			}
 		}
+		if owner < 0 {
+			continue
+		}
+		track := anims[owner].trackFor(boneIndex)
+		if track == nil {
+			continue
+		}
+		clipTime := float32(0)
+		if owner < len(times) {
+			clipTime = clampFloat32(times[owner], 0, 1)
+		}
+		locals[boneIndex] = boneMatrix(
+			sampleVec3(track.PosKey, clipTime, bone.Pos),
+			sampleQuat(track.RotKey, clipTime, bone.Quat),
+		)
 	}
 	bind := m.accumulate(nil)
 	pose := Pose{Bones: m.accumulate(locals), BindInv: make([]fauxgl.Matrix, len(m.Bones))}
@@ -104,6 +133,81 @@ func (m *Model) PoseAtAnimationTimes(anims []*Animation, times []float32) Pose {
 		pose.BindInv[i] = safeInverse(bind[i])
 	}
 	return pose
+}
+
+// movedBones reports, per skeleton bone, whether this clip poses it: a track
+// whose keys leave the bone's rest transform. Keys sit in the same parent
+// relative frame as the rest transform, so a clip that repeats the rest pose
+// reads as still and contributes nothing to a combined pose.
+func (a *Animation) movedBones(m *Model) []bool {
+	if a == nil || m == nil {
+		return nil
+	}
+	moved := make([]bool, len(m.Bones))
+	for _, track := range a.Bones {
+		if track.Bone < 0 || track.Bone >= len(m.Bones) {
+			continue
+		}
+		if trackMovesBone(track, m.Bones[track.Bone]) {
+			moved[track.Bone] = true
+		}
+	}
+	return moved
+}
+
+// MovedBones reports, per skeleton bone, whether the clip poses it away from the
+// rest pose: the mask the combined pose uses to decide ownership, and what a
+// caller needs to tell whether two clips fight over the same part.
+func (m *Model) MovedBones(a *Animation) []bool {
+	return a.movedBones(m)
+}
+
+// trackMovesBone compares a track's keys against the bone's rest transform.
+// Rotations compare by the angle between them, so a quaternion stored with the
+// opposite sign — the same rotation — still reads as still.
+func trackMovesBone(track Track, bone Bone) bool {
+	for _, key := range track.PosKey {
+		if math.Abs(float64(key.V[0]-bone.Pos[0])) > 1e-4 ||
+			math.Abs(float64(key.V[1]-bone.Pos[1])) > 1e-4 ||
+			math.Abs(float64(key.V[2]-bone.Pos[2])) > 1e-4 {
+			return true
+		}
+	}
+	for _, key := range track.RotKey {
+		if quatDistance(key.V, bone.Quat) > 1e-5 {
+			return true
+		}
+	}
+	return false
+}
+
+// quatDistance is how far two rotations are apart, independent of the sign of
+// the stored quaternion: 0 for the same rotation, 1 for a half turn apart.
+func quatDistance(a, b [4]float32) float64 {
+	dot := float64(a[0])*float64(b[0]) + float64(a[1])*float64(b[1]) +
+		float64(a[2])*float64(b[2]) + float64(a[3])*float64(b[3])
+	la := math.Sqrt(float64(a[0])*float64(a[0]) + float64(a[1])*float64(a[1]) +
+		float64(a[2])*float64(a[2]) + float64(a[3])*float64(a[3]))
+	lb := math.Sqrt(float64(b[0])*float64(b[0]) + float64(b[1])*float64(b[1]) +
+		float64(b[2])*float64(b[2]) + float64(b[3])*float64(b[3]))
+	if la < 1e-9 || lb < 1e-9 {
+		return 1
+	}
+	if d := math.Abs(dot / (la * lb)); d < 1 {
+		return 1 - d
+	}
+	return 0
+}
+
+// trackFor returns the clip's track for one bone, or nil when the clip carries
+// no track for it.
+func (a *Animation) trackFor(bone int) *Track {
+	for i := range a.Bones {
+		if a.Bones[i].Bone == bone {
+			return &a.Bones[i]
+		}
+	}
+	return nil
 }
 
 // PoseAtWithFrame evaluates animation relative to a placement's world matrix.

@@ -492,6 +492,11 @@ func SgbBlueprintIdleAnimationName(rf *rgd.RgdFile) string {
 
 const SgbEnvironmentRoot = `Data\attrib\ebps\environment`
 
+// SgbRacesRoot holds the blueprints every race plays with — structures, units,
+// relics — which a scenario places as map objects just like the environment
+// props, so the object panel browses it alongside them.
+const SgbRacesRoot = `Data\attrib\ebps\races`
+
 type SgbEnvironmentEntry struct {
 	Folder   *modtree.TreeFolder
 	File     *modtree.TreeFile
@@ -552,8 +557,13 @@ func EnsureSgbObjectTree(ui *uistate.State, tab *uistate.Tab) {
 	if tab.SgbObjectClicks == nil {
 		tab.SgbObjectClicks = make(map[string]*widget.Clickable)
 	}
-	if tab.SgbObjectRoot == nil && ui.ModTree != nil {
-		tab.SgbObjectRoot = ui.ModTree.FindFolder(SgbEnvironmentRoot)
+	if ui.ModTree != nil {
+		if tab.SgbObjectRoot == nil {
+			tab.SgbObjectRoot = ui.ModTree.FindFolder(SgbEnvironmentRoot)
+		}
+		if tab.SgbObjectRaceRoot == nil {
+			tab.SgbObjectRaceRoot = ui.ModTree.FindFolder(SgbRacesRoot)
+		}
 	}
 }
 
@@ -870,7 +880,10 @@ func AppendSgbPlacement(ui *uistate.State, tab *uistate.Tab, request SgbPlacemen
 		ui.StatusText = fmt.Sprintf("Object placement failed: invalid player slot %d", request.Owner)
 		return
 	}
-	entity := sgb.Entity{ID: id, BP: bp, Owner: request.Owner, Name: Blueprint, X: x, Y: y, Z: z}
+	entity := sgb.Entity{ID: id, BP: bp, Owner: request.Owner, Name: Blueprint, X: x, Y: y, Z: z,
+		// A race object is placed as a squad of one, the way the reference
+		// editor writes it; the save turns this name into the squad record.
+		Squad: SgbPlacedSquadName(ui, ui.ModTree, Blueprint)}
 	if !SgbSceneAppendEntity(viewer.ModelData(tab.Model), src, entity.PlacementOf(), entity.ID) {
 		ui.StatusText = "Object placement failed: model has no renderable meshes"
 		return
@@ -899,4 +912,52 @@ func AppendSgbPlacement(ui *uistate.State, tab *uistate.Tab, request SgbPlacemen
 	})
 	viewer.Invalidate(tab.Model)
 	ui.StatusText = fmt.Sprintf("Placed %s at %.1f, %.1f, %.1f", filepath.Base(request.Blueprint), entity.X, entity.Z, entity.Y)
+}
+
+// SgbPlacedSquadName is the squad a placed race object becomes in the scenario.
+// The object itself is only an entity: the reference editor wraps it in a squad
+// of one and registers that squad with the player, and the game spawns nothing
+// otherwise. The squad is read out of the object's own data, which the Objects
+// window already parses — its background scan records which unit every sbps
+// loadout fields — so the index is asked first, and the naming the game uses
+// (the unit's own name under sbps, in the same race) is the fallback for a unit
+// the scan has not reached yet. An environment object, and a unit no squad
+// fields, both answer "".
+func SgbPlacedSquadName(ui *uistate.State, tree *modtree.ModTree, blueprint string) string {
+	if tree == nil {
+		return ""
+	}
+	path := CanonicalSgbBlueprintPath(blueprint)
+	rel := strings.TrimPrefix(path, "data:")
+	if !strings.Contains(strings.ToLower(rel), `\ebps\`) {
+		return ""
+	}
+	if ui != nil && len(ui.UnitSquads) > 0 {
+		for _, key := range []string{strings.ToLower(`Data` + rel), strings.ToLower(path)} {
+			if refs := ui.UnitSquads[key]; len(refs) > 0 && refs[0].Name != "" {
+				return refs[0].Name
+			}
+		}
+	}
+	parts := strings.Split(strings.Trim(rel, `\`), `\`)
+	if len(parts) == 0 {
+		return ""
+	}
+	race := ""
+	for i := 0; i+1 < len(parts); i++ {
+		if strings.EqualFold(parts[i], "races") {
+			race = parts[i+1]
+			break
+		}
+	}
+	if race == "" {
+		return ""
+	}
+	base := strings.TrimSuffix(parts[len(parts)-1], filepath.Ext(parts[len(parts)-1]))
+	for _, name := range []string{base + "_squad", base} {
+		if tree.FindFile(fmt.Sprintf(`Data\attrib\sbps\races\%s\%s.rgd`, race, name)) != nil {
+			return name
+		}
+	}
+	return ""
 }

@@ -4,8 +4,11 @@ import (
 	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/whe"
+	"dow-mod-studio/internal/whm"
 	"fmt"
+	"gioui.org/io/event"
 	"gioui.org/io/key"
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
@@ -13,6 +16,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"image"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,6 +28,123 @@ import (
 // covered by controls that do not drive it. The model load is kicked off
 // here the same way the Viewport section kicks it off, so opening the section
 // on a unit that has not been previewed yet still ends with a model on screen.
+// The Classic OE columns are dragged, so a narrow window can give the panel
+// column the room a long name needs while the preview keeps enough to show a
+// model in. These are the floors a drag and a small window are held to.
+const (
+	classicOEMinColumnDp  = 120
+	classicOEMinPreviewDp = 200
+)
+
+// classicOEColumnWidths holds the two dragged widths inside those floors and
+// hands back the row's three widths. The preview takes what is left, so the
+// two columns cannot both grow into it.
+func classicOEColumnWidths(ui *uiState, gtx layout.Context, total int) (panel, preview, side int) {
+	if ui.ClassicOEPanelWidth <= 0 {
+		ui.ClassicOEPanelWidth = gtx.Dp(unit.Dp(classicOEPanelDp))
+	}
+	if ui.ClassicOESideWidth <= 0 {
+		ui.ClassicOESideWidth = gtx.Dp(unit.Dp(unitViewportSideDp))
+	}
+	splitter := 2 * gtx.Dp(unit.Dp(panelSplitterWidthDp))
+	minColumn := gtx.Dp(unit.Dp(classicOEMinColumnDp))
+	minPreview := gtx.Dp(unit.Dp(classicOEMinPreviewDp))
+	// A window too narrow for the floors is left to overflow rather than to
+	// collapse a column: a negative width would panic in the clip that frames
+	// the column, and a column of nothing cannot be dragged back.
+	room := total - splitter - minPreview
+	panel = ui.ClassicOEPanelWidth
+	if panel < minColumn {
+		panel = minColumn
+	}
+	if maxPanel := room - minColumn; maxPanel > minColumn && panel > maxPanel {
+		panel = maxPanel
+	}
+	side = ui.ClassicOESideWidth
+	if side < minColumn {
+		side = minColumn
+	}
+	if maxSide := room - panel; maxSide > minColumn && side > maxSide {
+		side = maxSide
+	}
+	ui.ClassicOEPanelWidth, ui.ClassicOESideWidth = panel, side
+	preview = total - panel - side - splitter
+	if preview < minPreview {
+		preview = minPreview
+	}
+	return panel, preview, side
+}
+
+// LayoutClassicOESplitter is the grab bar between two of those columns.
+// Between frames the pointer is local to where the bar was drawn, so a drag
+// keeps that rendered origin beside the widths it is dragging: using the new
+// origin with old local coordinates makes a slow drag oscillate.
+func LayoutClassicOESplitter(ui *uiState, gtx layout.Context, index, total int) layout.Dimensions {
+	w := gtx.Dp(unit.Dp(panelSplitterWidthDp))
+	gtx.Constraints.Min = image.Pt(w, gtx.Constraints.Max.Y)
+	gtx.Constraints.Max = image.Pt(w, gtx.Constraints.Max.Y)
+	sz := image.Pt(w, gtx.Constraints.Max.Y)
+	if index < 0 || index >= len(ui.ClassicOESplitters) {
+		return layout.Dimensions{Size: sz}
+	}
+	s := &ui.ClassicOESplitters[index]
+	origin := s.LayoutOrigin
+	rect := clip.Rect{Max: sz}.Push(gtx.Ops)
+	event.Op(gtx.Ops, &s.Tag)
+	pointer.CursorColResize.Add(gtx.Ops)
+	for {
+		ev, ok := gtx.Event(pointer.Filter{Target: &s.Tag, Kinds: pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel | pointer.Enter | pointer.Leave})
+		if !ok {
+			break
+		}
+		e, ok := ev.(pointer.Event)
+		if !ok {
+			continue
+		}
+		switch e.Kind {
+		case pointer.Enter:
+			s.Hover = true
+		case pointer.Leave:
+			if !s.Dragging {
+				s.Hover = false
+			}
+		case pointer.Press:
+			s.Dragging = true
+			s.Hover = true
+			s.StartPointerX = float32(origin) + e.Position.X
+			s.StartLeft = ui.ClassicOEPanelWidth
+			s.StartRight = ui.ClassicOESideWidth
+		case pointer.Drag:
+			if !s.Dragging {
+				break
+			}
+			delta := int(float32(origin) + e.Position.X - s.StartPointerX)
+			if index == 0 {
+				ui.ClassicOEPanelWidth = s.StartLeft + delta
+			} else {
+				ui.ClassicOESideWidth = s.StartRight - delta
+			}
+		case pointer.Release, pointer.Cancel:
+			s.Dragging = false
+		}
+	}
+	if index == 0 {
+		s.LayoutOrigin = ui.ClassicOEPanelWidth
+	} else {
+		s.LayoutOrigin = total - ui.ClassicOESideWidth - w
+	}
+	col := uikit.CBorder
+	if s.Hover || s.Dragging {
+		col = uikit.CSelectBd
+	}
+	fill := clip.Rect{Max: sz}.Push(gtx.Ops)
+	paint.ColorOp{Color: col}.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+	fill.Pop()
+	rect.Pop()
+	return layout.Dimensions{Size: sz}
+}
+
 func LayoutClassicOEArea(ui *uiState, gtx layout.Context) layout.Dimensions {
 	EnsureUnitModel(ui, gtx)
 	// The .whe behind the condition, event and modifier panels: the Events
@@ -35,15 +156,14 @@ func LayoutClassicOEArea(ui *uiState, gtx layout.Context) layout.Dimensions {
 	EnsureClassicOEClicks(ui)
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-			panelW := gtx.Dp(unit.Dp(classicOEPanelDp))
-			sideW := gtx.Dp(unit.Dp(unitViewportSideDp))
-			gap := gtx.Dp(unit.Dp(unitColGapDp))
+			total := gtx.Constraints.Max.X
+			panelW, _, sideW := classicOEColumnWidths(ui, gtx, total)
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 					layout.Rigid(FixedPanel(ui, panelW, func(gtx layout.Context) layout.Dimensions { return LayoutClassicOELeftPanel(ui, gtx) })),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutClassicOESplitter(ui, gtx, 0, total) }),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return LayoutClassicOEPreview(ui, gtx) }),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(gap)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return LayoutClassicOESplitter(ui, gtx, 1, total) }),
 					layout.Rigid(FixedPanel(ui, sideW, func(gtx layout.Context) layout.Dimensions { return LayoutUnitModelSide(ui, gtx) })),
 				)
 			}),
@@ -68,6 +188,22 @@ func LayoutClassicOELeftPanel(ui *uiState, gtx layout.Context) layout.Dimensions
 				return LayoutUnitColumnHeader(ui, gtx, "Object Editor")
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
+			// The Object Editor opens a pair: the model as .sgm and the
+			// object as .ebp. A mod ships the game's .whm and .whe instead,
+			// so both exports sit here together, beside Save .whe.
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(2), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return uikit.SmallButton(ui, gtx, &ui.ClassicOEEbpSave, "Save .ebp")
+						}),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return uikit.SmallButton(ui, gtx, &ui.ClassicOESgmSave, "Save .sgm")
+						}),
+					)
+				})
+			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return PanelWithScroll(ui, gtx, &ui.ClassicOEScroll, func(gtx layout.Context) layout.Dimensions { return LayoutClassicOEHeaderList(ui, gtx) })
 			}),
@@ -186,6 +322,7 @@ func LayoutClassicOEFolderBody(ui *uiState, gtx layout.Context, folder int, v *m
 			ui.ClassicOEMotionClicks = make([]widget.Clickable, len(timelines))
 		}
 		children := make([]layout.FlexChild, 0, len(timelines))
+		whmClips := unitWhmClipSet(ui)
 		for i := range timelines {
 			t := timelines[i]
 			c := &ui.ClassicOEMotionClicks[i]
@@ -200,20 +337,50 @@ func LayoutClassicOEFolderBody(ui *uiState, gtx layout.Context, folder int, v *m
 					ClassicOETreeActivate(ui, classicOETreeRow{Name: t.Name})
 				}
 			}
+			// A motion whose blend entries name clips the model does
+			// not carry is marked the way the Events list marks its
+			// timeline, and the note says which ones.
+			missing := unitAnimMissingList(whmClips, t.Animations)
 			note := classicOEUseNote(len(t.Events), "event", "events")
+			tint := uikit.CText
+			if len(missing) > 0 {
+				note += "  ·  not in .whm: " + strings.Join(missing, ", ")
+				tint = uikit.CProblem
+			}
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return UnitViewportRow(ui, gtx, c, false, t.Name, note)
+				dims := UnitViewportRowTinted(ui, gtx, c, false, t.Name, note, tint)
+				// A right press copies the motion's name into the
+				// shared clipboard for a name field to paste.
+				uikit.RowNameText(ui, gtx, uikit.RowKey("oe-motion", i), uikit.NameSpaceMotion, t.Name, dims.Size)
+				return dims
 			}))
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	case classicOEFolderActions:
+		// The folder's own new-action button: the same record the Events
+		// tab's button creates, and this section goes straight on to the
+		// condition editor for it, since an empty action needs its choices
+		// added there.
+		if ui.ClassicOENewAct.Clicked(gtx) {
+			if name, idx, ok := NewUnitAction(ui); ok {
+				OpenClassicOEEventDialog(ui, classicOEDialogAction, name, idx)
+			}
+		}
+		children := make([]layout.FlexChild, 0, len(actions)+1)
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Left: unit.Dp(8), Top: unit.Dp(2), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return SmallButton(ui, gtx, &ui.ClassicOENewAct, "New action")
+			})
+		}))
 		if len(actions) == 0 {
-			return LayoutClassicOEHint(ui, gtx, docMsg, "This .whe defines no actions.")
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return LayoutClassicOEHint(ui, gtx, docMsg, "This .whe defines no actions.")
+			}))
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 		}
 		if len(ui.ClassicOEActionClicks) != len(actions) {
 			ui.ClassicOEActionClicks = make([]widget.Clickable, len(actions))
 		}
-		children := make([]layout.FlexChild, 0, len(actions))
 		for i := range actions {
 			a := actions[i]
 			c := &ui.ClassicOEActionClicks[i]
@@ -235,7 +402,11 @@ func LayoutClassicOEFolderBody(ui *uiState, gtx layout.Context, folder int, v *m
 				// own command picture where the name says what the action
 				// is, blank space where it does not — so the names stay
 				// in one line either way, as the unit list does.
-				return UnitViewportRowIcon(ui, gtx, c, false, a.Name, note, ActionIcon(ui, a.Name), true)
+				dims := UnitViewportRowIcon(ui, gtx, c, false, a.Name, note, ActionIcon(ui, a.Name), true, uikit.CText)
+				// A right press copies the action's name into the
+				// shared clipboard for a name field to paste.
+				uikit.RowNameText(ui, gtx, uikit.RowKey("oe-action", i), uikit.NameSpaceAction, a.Name, dims.Size)
+				return dims
 			}))
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -304,6 +475,9 @@ func LayoutClassicOETreeRow(ui *uiState, gtx layout.Context, row classicOETreeRo
 	}
 
 	hover := jump.Hovered() || (expand != nil && expand.Hovered())
+	// A branch or leaf name is cut to the column's width; hovering says the
+	// whole of it, which is the only way to tell two long action names apart.
+	uikit.HoverTip(ui, hover, row.Name)
 	content := func(gtx layout.Context) layout.Dimensions {
 		// Pinned like the folder bar: the hover background has to span
 		// the whole row, not the name's width.
@@ -395,7 +569,15 @@ func LayoutClassicOETreeRow(ui *uiState, gtx layout.Context, row classicOETreeRo
 			}),
 		)
 	}
-	return content(gtx)
+	dims := content(gtx)
+	// A right press copies the node's name: a branch is an action, a leaf
+	// a motion — the split the double-click already uses.
+	space := uikit.NameSpaceMotion
+	if row.Key != "" {
+		space = uikit.NameSpaceAction
+	}
+	uikit.RowNameText(ui, gtx, "oe-tree:"+jumpKey, space, row.Name, dims.Size)
+	return dims
 }
 
 // classicOETreeRowOpensDialog reads a press on an Action Tree row for a
@@ -699,6 +881,12 @@ func HandleClassicOEWheInput(ui *uiState, gtx layout.Context) {
 	if CurrentUnitSection(ui).Label != unitSectionClassicOE {
 		return
 	}
+	if ui.ClassicOEEbpSave.Clicked(gtx) {
+		SaveClassicOEEbp(ui)
+	}
+	if ui.ClassicOESgmSave.Clicked(gtx) {
+		SaveClassicOESgm(ui)
+	}
 	if ui.UnitEvtDoc == nil {
 		return
 	}
@@ -784,4 +972,89 @@ func SaveClassicOEWhe(ui *uiState) {
 	}
 	ui.StatusText = line
 	MarkStateDirty(ui)
+}
+
+// SaveClassicOEEbp exports the object in the Object Editor's own .ebp format
+// beside the .whe it was read from. The two files hold the same object — FX,
+// events, clauses, conditions, modifiers, motions, actions and the selection
+// UI: the .whe is what the game loads, the .ebp is what the official Object
+// Editor opens, so a model worked on here can go into that editor without a
+// conversion step in between.
+func SaveClassicOEEbp(ui *uiState) {
+	if ui.UnitEvtDoc == nil {
+		ui.StatusText = "Save failed: no object is loaded"
+		return
+	}
+	if ui.UnitEvtPath == "" {
+		ui.StatusText = "Save failed: no object path to export"
+		return
+	}
+	if ui.ModTree == nil {
+		ui.StatusText = "Save failed: no mod loaded"
+		return
+	}
+	data, err := ui.UnitEvtDoc.MarshalEBP()
+	if err != nil {
+		ui.StatusText = "Save failed: " + err.Error()
+		return
+	}
+	path := strings.TrimSuffix(ui.UnitEvtPath, filepath.Ext(ui.UnitEvtPath)) + ".ebp"
+	disk, err := ui.ModTree.WriteOverlayFile(path, data)
+	if err != nil {
+		ui.StatusText = "Save failed: " + err.Error()
+		return
+	}
+	ui.StatusText = fmt.Sprintf("Saved EBP %s → %s (%d bytes)", filepath.Base(path), disk, len(data))
+}
+
+// SaveClassicOESgm exports the unit's model in the Object Editor's own .sgm
+// container, beside the .whm it was read from. The .whm is what the game
+// loads; the .sgm is that same model in the container the editor opens, and
+// the editor opens nothing else — which is why a mod of .whm files alone shows
+// no model to edit in it.
+func SaveClassicOESgm(ui *uiState) {
+	if ui.ModTree == nil {
+		ui.StatusText = "Save failed: no mod loaded"
+		return
+	}
+	if ui.UnitModelPath == "" {
+		ui.StatusText = "Save failed: this unit has no model"
+		return
+	}
+	if !strings.EqualFold(filepath.Ext(ui.UnitModelPath), ".whm") {
+		ui.StatusText = "Save — " + filepath.Base(ui.UnitModelPath) + " is already an Object Editor .sgm"
+		return
+	}
+	path := strings.TrimSuffix(ui.UnitModelPath, filepath.Ext(ui.UnitModelPath)) + ".sgm"
+	// Resolve the destination first, so a mod folder that cannot take the file
+	// fails before any work and leaves nothing half written behind.
+	if _, err := ui.ModTree.OverlayPath(path); err != nil {
+		ui.StatusText = "Save failed: " + err.Error()
+		return
+	}
+	data, err := ui.ModTree.ReadFile(ui.UnitModelPath)
+	if err != nil {
+		ui.StatusText = "Save failed: " + err.Error()
+		return
+	}
+	sgm, info, err := whm.ConvertToSgm(data)
+	if err != nil {
+		ui.StatusText = "Save failed: " + err.Error()
+		return
+	}
+	disk, err := ui.ModTree.WriteOverlayFile(path, sgm)
+	if err != nil {
+		ui.StatusText = "Save failed: " + err.Error()
+		return
+	}
+	if info != nil {
+		ui.StatusText = fmt.Sprintf("Saved SGM %s → %s (%d bytes, %d meshes, %d bones, %d anims)", filepath.Base(path), disk, len(sgm), info.Meshes, info.Bones, info.Animations)
+	} else {
+		ui.StatusText = fmt.Sprintf("Saved SGM %s → %s (%d bytes)", filepath.Base(path), disk, len(sgm))
+	}
+	// The new .sgm belongs in the tree beside the .whm it came from, so the
+	// pair the Object Editor wants is visible where the model already was.
+	if err := RefreshModTreePreservingUI(ui); err != nil {
+		LogInfo("classic oe: tree refresh after %s failed: %v", filepath.Base(path), err)
+	}
 }

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -334,8 +335,77 @@ func TestSgbGpuSelectionBoundsAreOnlyBuiltForSelectedEntities(t *testing.T) {
 			t.Fatalf("unexpected GPU outline line: %+v", line)
 		}
 	}
+	// As elsewhere in the selection code, membership of the map identifies
+	// an entity even when its stored boolean is false.
+	lines = render.PrepareSgbSelectionBounds(model, map[int]bool{4: true, 9: false}, meshes, engine.ViewMatrix(camera), camera, whm.Pose{}, false)
+	if len(lines) != 8 {
+		t.Fatalf("two selected entities generated %d GPU outline edges, want 8", len(lines))
+	}
 	if lines := render.PrepareSgbSelectionBounds(model, map[int]bool{}, meshes, engine.ViewMatrix(camera), camera, whm.Pose{}, false); len(lines) != 0 {
 		t.Fatalf("no selection generated %d GPU outline edges", len(lines))
+	}
+}
+
+func TestSgbGpuSelectionBoundsMatchAnimatedProjection(t *testing.T) {
+	model := &whm.Model{
+		Vertices: []whm.Vertex{
+			{Pos: [3]float32{-0.5, -0.5, 0}, Bones: [4]int32{0, -1, -1, -1}, Weights: [4]float32{1}},
+			{Pos: [3]float32{0.5, -0.5, 0}, Bones: [4]int32{0, -1, -1, -1}, Weights: [4]float32{1}},
+			{Pos: [3]float32{0, 0.5, 0}, Bones: [4]int32{0, -1, -1, -1}, Weights: [4]float32{1}},
+		},
+		Meshes: []whm.Mesh{{Name: "entity", Indices: []uint32{0, 1, 2, 99}}},
+	}
+	transform := fauxgl.Identity()
+	transform.X03 = 0.2
+	pose := whm.Pose{Bones: []fauxgl.Matrix{transform}, BindInv: []fauxgl.Matrix{fauxgl.Identity()}}
+	camera := engine.Camera{Width: 120, Height: 120, Pitch: math.Pi / 2, Distance: 6, Fov: 45}
+	view := engine.ViewMatrix(camera)
+	meshes := map[string]int{"entity": 4}
+	box := render.SgbEntityProjectedBounds(model, meshes, view, camera.Width, camera.Height, pose, true)[4].Inset(-3)
+	nearest := math.Inf(1)
+	for i := range model.Vertices {
+		p, _ := whm.SkinnedVertex(model, pose, &model.Vertices[i])
+		v := view.MulPositionW(p)
+		if v.W > 1e-6 && v.Z/v.W >= 0 && v.Z/v.W < nearest {
+			nearest = v.Z / v.W
+		}
+	}
+	lines := render.PrepareSgbSelectionBounds(model, map[int]bool{4: true}, meshes, view, camera, pose, true)
+	if len(lines) != 4 {
+		t.Fatalf("got %d outline edges, want 4", len(lines))
+	}
+	corners := [...]image.Point{box.Min, {X: box.Max.X, Y: box.Min.Y}, box.Max, {X: box.Min.X, Y: box.Max.Y}}
+	for i, line := range lines {
+		p := view.MulPositionW(line.From)
+		x := (p.X/p.W*0.5 + 0.5) * float64(camera.Width)
+		y := (1 - (p.Y/p.W*0.5 + 0.5)) * float64(camera.Height)
+		if math.Abs(x-float64(corners[i].X)) > 1e-6 || math.Abs(y-float64(corners[i].Y)) > 1e-6 || math.Abs(p.Z/p.W-math.Max(0, nearest-0.001)) > 1e-6 {
+			t.Fatalf("edge %d projects to (%v, %v, %v), want (%d, %d, %v)", i, x, y, p.Z/p.W, corners[i].X, corners[i].Y, math.Max(0, nearest-0.001))
+		}
+	}
+}
+
+func BenchmarkSgbGpuSelectionBounds(b *testing.B) {
+	const entities, verticesPerEntity = 200, 300
+	model := &whm.Model{}
+	meshes := make(map[string]int, entities)
+	for id := 0; id < entities; id++ {
+		name := fmt.Sprintf("entity-%d", id)
+		meshes[name] = id
+		mesh := whm.Mesh{Name: name}
+		for i := 0; i < verticesPerEntity; i++ {
+			mesh.Indices = append(mesh.Indices, uint32(len(model.Vertices)))
+			model.Vertices = append(model.Vertices, whm.Vertex{Pos: [3]float32{float32(i%10) / 20, float32(i%7) / 20, 0}})
+		}
+		model.Meshes = append(model.Meshes, mesh)
+	}
+	selected := map[int]bool{0: true, 1: true, 2: true, 3: true, 4: true}
+	camera := engine.Camera{Width: 120, Height: 120, Pitch: math.Pi / 2, Distance: 6, Fov: 45}
+	view := engine.ViewMatrix(camera)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		render.PrepareSgbSelectionBounds(model, selected, meshes, view, camera, whm.Pose{}, false)
 	}
 }
 

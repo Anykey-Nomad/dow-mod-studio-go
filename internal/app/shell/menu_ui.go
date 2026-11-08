@@ -220,6 +220,13 @@ func LayoutSettingsDialog(ui *UiState, gtx layout.Context) layout.Dimensions {
 									layout.Flexed(1, FlexGap()),
 									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
+											// The panic button sits at the opposite end from
+											// OK/Cancel so a stray press near the confirm pair
+											// cannot trigger it.
+											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+												return DialogButton(ui, gtx, &ui.SettingsPanicBtn, "Trigger panic", false)
+											}),
+											layout.Flexed(1, FlexGap()),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												return DialogButton(ui, gtx, &ui.SettingsCancel, "Cancel", false)
 											}),
@@ -380,6 +387,75 @@ func LayoutFileDeleteDialog(ui *UiState, gtx layout.Context) layout.Dimensions {
 											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 												return DialogButton(ui, gtx, &ui.FileDeleteConfirm, "Delete", true)
+											}),
+										)
+									}),
+								)
+							})
+						}),
+					)
+				})
+			})
+		}),
+	)
+}
+
+// LayoutAnimRemoveDialog is the confirmation an animation removal asks for.
+// It is model work rather than shell work, but it stands in the same dialog
+// stack as the file deletion it sits beside: the same dim, the same card, the
+// same Cancel/Delete pair, so a destructive confirmation looks the same no
+// matter which panel raised it.
+func LayoutAnimRemoveDialog(ui *UiState, gtx layout.Context) layout.Dimensions {
+	return layout.Stack{}.Layout(gtx,
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			st := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
+			paint.ColorOp{Color: Rgba(0, 0, 0, 110)}.Add(gtx.Ops)
+			paint.PaintOp{}.Add(gtx.Ops)
+			st.Pop()
+			return layout.Dimensions{Size: gtx.Constraints.Max}
+		}),
+		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+			return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				cardW := gtx.Dp(unit.Dp(400))
+				cardH := gtx.Dp(unit.Dp(164))
+				gtx.Constraints.Min = image.Pt(cardW, cardH)
+				gtx.Constraints.Max = image.Pt(cardW, cardH)
+				return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Stack{}.Layout(gtx,
+						layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+							Rrect(gtx, uikit.CPanelBg, gtx.Constraints.Max, gtx.Dp(4))
+							return layout.Dimensions{Size: gtx.Constraints.Max}
+						}),
+						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+							return layout.Inset{Top: unit.Dp(18), Bottom: unit.Dp(16), Left: unit.Dp(20), Right: unit.Dp(20)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										l := material.Label(ui.Th, unit.Sp(14), "Remove Animation")
+										l.Font.Weight = font.Medium
+										l.Color = uikit.CText
+										return l.Layout(gtx)
+									}),
+									layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										l := material.Label(ui.Th, unit.Sp(11), fmt.Sprintf("Remove animation %q from the .whm?", ui.AnimRemoveName))
+										l.Color = uikit.CText
+										return l.Layout(gtx)
+									}),
+									layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										l := material.Label(ui.Th, unit.Sp(10), "The file is rewritten immediately — the clip cannot be restored from here.")
+										l.Color = uikit.CTextDim
+										return l.Layout(gtx)
+									}),
+									layout.Flexed(1, FlexGap()),
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
+											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+												return DialogButton(ui, gtx, &ui.AnimRemoveCancel, "Cancel", false)
+											}),
+											layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+											layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+												return DialogButton(ui, gtx, &ui.AnimRemoveConfirm, "Remove", true)
 											}),
 										)
 									}),

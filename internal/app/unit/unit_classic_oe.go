@@ -102,6 +102,7 @@ func LayoutClassicOEHeaderRow(ui *uistate.State, gtx layout.Context, index int) 
 	} else if c.Hovered() {
 		bg = uikit.CMenuHover
 	}
+	uikit.HoverTip(ui, c.Hovered(), ClassicOEHeaders[index].Label)
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			h := gtx.Dp(unit.Dp(22))
@@ -158,26 +159,38 @@ func ClassicOEListDoc(ui *uistate.State) (*whe.Document, string) {
 // colour and a dim note beside it, without the hover treatment of a list whose
 // rows are pressed — nothing here is clickable yet, and a row that lights up
 // under the pointer would promise otherwise.
-func ClassicOEStaticRow(ui *uistate.State, gtx layout.Context, name, note string) layout.Dimensions {
-	return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Label(ui.Th, unit.Sp(10), UnitViewportRowText(name))
-				l.Color = uikit.CText
-				l.MaxLines = 1
-				return l.Layout(gtx)
-			}),
-			layout.Flexed(1, uikit.RowGap()),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if note == "" {
-					return layout.Dimensions{}
-				}
-				l := material.Label(ui.Th, unit.Sp(9), note)
-				l.Color = uikit.CTextDim
-				l.MaxLines = 1
-				return l.Layout(gtx)
-			}),
-		)
+func ClassicOEStaticRow(ui *uistate.State, gtx layout.Context, c *widget.Clickable, name, note string) layout.Dimensions {
+	body := func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					l := material.Label(ui.Th, unit.Sp(10), UnitViewportRowText(name))
+					l.Color = uikit.CText
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				}),
+				layout.Flexed(1, uikit.RowGap()),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if note == "" {
+						return layout.Dimensions{}
+					}
+					l := material.Label(ui.Th, unit.Sp(9), note)
+					l.Color = uikit.CTextDim
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				}),
+			)
+		})
+	}
+	if c == nil {
+		return body(gtx)
+	}
+	// The row is read rather than pressed, but it still needs a hover target:
+	// its name is cut to fit the column, and hovering is what shows the rest.
+	uikit.HoverTip(ui, c.Hovered(), name)
+	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min.X = gtx.Constraints.Max.X
+		return body(gtx)
 	})
 }
 
@@ -263,6 +276,7 @@ func LayoutClassicOEFolderRow(ui *uistate.State, gtx layout.Context, folder int,
 	} else if c.Hovered() {
 		bg = uikit.CMenuHover
 	}
+	uikit.HoverTip(ui, c.Hovered(), label)
 	return layout.Inset{Top: unit.Dp(1), Bottom: unit.Dp(1), Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			h := gtx.Dp(unit.Dp(21))
@@ -613,15 +627,19 @@ func LayoutClassicOEEventList(ui *uistate.State, gtx layout.Context) layout.Dime
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	if len(ui.ClassicOEEventClicks) != len(names) {
+		ui.ClassicOEEventClicks = make([]widget.Clickable, len(names))
+	}
 	var rows []layout.FlexChild
-	for _, name := range names {
-		name := name
+	for i, name := range names {
+		i, name := i, name
 		note := ClassicOEUseNote(len(events[name].Entries), "entry", "entries")
 		if fx, ok := events[name].First("fx"); ok {
 			note = ClassicOENote(fx)
 		}
+		c := &ui.ClassicOEEventClicks[i]
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ClassicOEStaticRow(ui, gtx, name, note)
+			return ClassicOEStaticRow(ui, gtx, c, name, note)
 		}))
 	}
 	return ClassicOERows(gtx, rows)
@@ -698,6 +716,7 @@ func ClassicOEModifierRow(ui *uistate.State, gtx layout.Context, i int, m whe.Fx
 	} else if c.Hovered() {
 		bg = uikit.CMenuHover
 	}
+	uikit.HoverTip(ui, c.Hovered(), m.Name)
 	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(22))
 		sz := image.Pt(gtx.Constraints.Max.X, h)
@@ -738,12 +757,16 @@ func ClassicOENamedCountRows(ui *uistate.State, gtx layout.Context, counts map[s
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	if len(ui.ClassicOECountClicks) != len(names) {
+		ui.ClassicOECountClicks = make([]widget.Clickable, len(names))
+	}
 	var rows []layout.FlexChild
-	for _, name := range names {
-		name := name
+	for i, name := range names {
+		i, name := i, name
 		note := ClassicOEUseNote(counts[name], one, many)
+		c := &ui.ClassicOECountClicks[i]
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ClassicOEStaticRow(ui, gtx, name, note)
+			return ClassicOEStaticRow(ui, gtx, c, name, note)
 		}))
 	}
 	return ClassicOERows(gtx, rows)
@@ -873,6 +896,7 @@ func ClassicOEClauseRow(ui *uistate.State, gtx layout.Context, index int, clause
 	} else if click.Hovered() {
 		bg = uikit.CMenuHover
 	}
+	uikit.HoverTip(ui, click.Hovered(), clause.Name)
 	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(22))
 		sz := image.Pt(gtx.Constraints.Max.X, h)
@@ -944,6 +968,7 @@ func ClassicOEConditionRow(ui *uistate.State, gtx layout.Context, index int, con
 	} else if click.Hovered() {
 		bg = uikit.CMenuHover
 	}
+	uikit.HoverTip(ui, click.Hovered(), condition.Name)
 	note := fmt.Sprintf("%d clauses", len(condition.ClauseNames))
 	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(22))
@@ -1015,6 +1040,13 @@ func LayoutClassicOEConditionEditor(ui *uistate.State, gtx layout.Context) layou
 		msg := ui.ClassicOEConditionError
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return ClassicOEHint(gtx, ui.Th, msg) }))
 	}
+	// The four buttons take more than the column's 200dp, and a horizontal
+	// Flex whose children overflow reports the height it was offered back as
+	// its own — the measure pass offers 1<<20, so PanelScrollView reads the
+	// whole column as elastic content, falls back to measuring it at the
+	// viewport, and concludes there is nothing to scroll: the scrollbar and
+	// the wheel both vanish with this panel open. Two lines keep each row
+	// inside the column.
 	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -1024,15 +1056,20 @@ func LayoutClassicOEConditionEditor(ui *uistate.State, gtx layout.Context) layou
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return uikit.SmallButtonDisabled(ui, gtx, &ui.ClassicOEConditionRemove, "Remove last", len(ui.ClassicOEConditionEditors) == 0)
 			}),
-			layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return uikit.SmallButton(ui, gtx, &ui.ClassicOEConditionApply, "Apply")
-			}),
-			layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return uikit.SmallButton(ui, gtx, &ui.ClassicOEWheSave, "Save .whe")
-			}),
 		)
+	}))
+	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Top: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return uikit.SmallButton(ui, gtx, &ui.ClassicOEConditionApply, "Apply")
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return uikit.SmallButton(ui, gtx, &ui.ClassicOEWheSave, "Save .whe")
+				}),
+			)
+		})
 	}))
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }

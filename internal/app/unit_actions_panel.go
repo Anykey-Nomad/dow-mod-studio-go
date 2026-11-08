@@ -13,6 +13,107 @@ import (
 	"strings"
 )
 
+// newUnitAction gives the loaded .whe an action of its own: an empty one —
+// no choices yet — under the first name the file does not already carry, so
+// the editor has a record to add choices and motions to rather than asking
+// for a clipboard first. Save .whe writes it into the mod; the action's own
+// name field renames it off the placeholder.
+//
+// The new action becomes the picked one, and the returned name and index
+// point at it for a caller that goes straight on to edit it.
+func NewUnitAction(ui *uiState) (string, int, bool) {
+	doc := ui.UnitEvtDoc
+	if doc == nil {
+		ui.StatusText = "No .whe is loaded — select a unit whose model has one first"
+		return "", -1, false
+	}
+	taken := make(map[string]bool)
+	for _, a := range doc.Actions() {
+		taken[strings.ToLower(strings.TrimSpace(a.Name))] = true
+	}
+	name := "new_action"
+	for i := 2; taken[strings.ToLower(name)]; i++ {
+		name = fmt.Sprintf("new_action_%d", i)
+	}
+	if err := doc.AddAction(whe.FxAction{Name: name}); err != nil {
+		ui.StatusText = "New action failed: " + err.Error()
+		return "", -1, false
+	}
+	idx := actionIndexByName(doc, name)
+	ui.UnitEvtDirty = true
+	ui.UnitActCondBound = ""
+	ui.UnitEvtActionSel = idx
+	ReloadUnitModelFx(ui)
+	ui.StatusText = fmt.Sprintf("Added action %s — Save .whe to write it in; rename it in the action's name field", name)
+	return name, idx, true
+}
+
+// usedByNames is the refusal's list of who still holds a name: the first few
+// and then a count, so a file where twenty-five actions name one timeline
+// still fits on the status line.
+func usedByNames(names []string) string {
+	const show = 3
+	if len(names) <= show {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(names[:show], ", "), len(names)-show)
+}
+
+// removeUnitAction takes the picked action out of DATAACTS. An action another
+// action still calls is refused before anything is dropped: a link left
+// pointing at nothing is a break the file cannot report, so the reader is
+// told which actions hold the name and takes those links out first.
+//
+// Save .whe writes the removal into the mod, like every other edit here.
+func RemoveSelectedUnitAction(ui *uiState) {
+	doc := ui.UnitEvtDoc
+	if doc == nil {
+		ui.UnitActErr = "No .whe is loaded."
+		ui.StatusText = ui.UnitActErr
+		return
+	}
+	acts := doc.Actions()
+	if ui.UnitEvtActionSel < 0 || ui.UnitEvtActionSel >= len(acts) {
+		ui.UnitActErr = "Select an action to remove."
+		ui.StatusText = ui.UnitActErr
+		return
+	}
+	name := acts[ui.UnitEvtActionSel].Name
+	var used []string
+	for _, other := range acts {
+		if strings.EqualFold(strings.TrimSpace(other.Name), name) {
+			continue
+		}
+		for _, ln := range other.Subactions {
+			if strings.EqualFold(strings.TrimSpace(ln.Name), name) {
+				used = append(used, other.Name)
+				break
+			}
+		}
+	}
+	if len(used) > 0 {
+		ui.UnitActErr = fmt.Sprintf("%s is called by %s — take those links out first", name, usedByNames(used))
+		ui.StatusText = ui.UnitActErr
+		return
+	}
+	if err := doc.RemoveAction(name); err != nil {
+		ui.UnitActErr = err.Error()
+		ui.StatusText = ui.UnitActErr
+		return
+	}
+	ui.UnitActErr = ""
+	ui.UnitEvtDirty = true
+	ui.UnitActCondBound = ""
+	// The list re-reads itself next frame, and the pick stays inside it, so
+	// the panel describes whatever record took the removed one's place — or
+	// nothing at all when it was the last one.
+	if left := len(doc.Actions()); ui.UnitEvtActionSel >= left {
+		ui.UnitEvtActionSel = left - 1
+	}
+	ReloadUnitModelFx(ui)
+	ui.StatusText = fmt.Sprintf("Removed action %s — save to write it into the mod", name)
+}
+
 // pasteUnitAction writes the copied action, its timelines and its sub-actions
 // into this unit's .whe. The timelines go in first — created when this file has
 // never had them, merged into the ones it has — so the action's motions resolve
@@ -120,6 +221,17 @@ func UnitActConditionsInput(ui *uiState, gtx layout.Context) {
 	if ui.UnitActRename.Clicked(gtx) {
 		RenameSelectedUnitAction(ui)
 	}
+	// The list button beside a choice line's motion-or-action field raises
+	// the model's animations for that line; the pick fills the field, and
+	// Apply or Enter commits it like anything typed there.
+	for i := range ui.UnitActAnimPickClicks {
+		if i >= len(ui.UnitActNameEds) || !ui.UnitActAnimPickClicks[i].Clicked(gtx) {
+			continue
+		}
+		ui.UnitActSel = i
+		OpenEvtPickerAt(ui, evtPickAnimInAction, i)
+		break
+	}
 	for i := range ui.UnitActGuardClicks {
 		if i >= len(ui.UnitActCondStaged) || !ui.UnitActGuardClicks[i].Clicked(gtx) {
 			continue
@@ -139,6 +251,11 @@ func UnitActConditionsInput(ui *uiState, gtx layout.Context) {
 	}
 	for i := range ui.UnitActNameEds {
 		UnitActUpdateEditor(ui, gtx, &ui.UnitActNameEds[i], i)
+		// A right press pastes a copied motion-or-action name here:
+		// the fields are marked and their area registered where they
+		// are drawn — only the read was missing, so the press did
+		// nothing at all.
+		uikit.PasteClipField(ui, gtx, &ui.UnitActNameEds[i])
 	}
 	// Whichever field holds the caret is the selected choice: the move, add
 	// and delete buttons of the footer act on it.
@@ -427,7 +544,7 @@ func UnitEvtActionPanelBody(ui *uiState, gtx layout.Context) []layout.FlexChild 
 					gtx.Constraints.Min.Y = gtx.Dp(20)
 					gtx.Constraints.Max.Y = gtx.Dp(22)
 					b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
-					return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					dims := b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							w := material.Editor(ui.Th, &ui.UnitActNameEd, act.Name)
 							w.TextSize = unit.Sp(10)
@@ -435,6 +552,11 @@ func UnitEvtActionPanelBody(ui *uiState, gtx layout.Context) []layout.FlexChild 
 							return w.Layout(gtx)
 						})
 					})
+					// The whole box is the paste target: a copied action
+					// name replaces this action's own.
+					uikit.MarkClipPasteName(ui, &ui.UnitActNameEd, uikit.NameSpaceAction)
+					uikit.LayoutClipPaste(ui, gtx, &ui.UnitActNameEd, dims.Size)
+					return dims
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {

@@ -329,8 +329,15 @@ func decodeRtx(data []byte) (image.Image, []image.Image, error) {
 	if err := validateImageSize(w, h); err != nil {
 		return nil, nil, err
 	}
-	// The two uncompressed formats carry a TGA stream, header and all.
+	// The two uncompressed formats carry either bare 32-bit pixels — the
+	// remaster's UI panels (map_separated/taskbar_separated and the resource
+	// icons) store exactly w*h*4 bytes — or a TGA stream, header and all.
+	// The payload length tells them apart: a TGA never ends up that exact.
 	if format == 0 || format == 2 {
+		if len(pixels.Payload) == w*h*4 {
+			img := decodeRawBGRA(pixels.Payload, w, h)
+			return img, []image.Image{img}, nil
+		}
 		img, err := DecodeTGA(pixels.Payload)
 		if err != nil {
 			return nil, nil, err
@@ -388,6 +395,29 @@ func decodeRtx(data []byte) (image.Image, []image.Image, error) {
 		return nil, nil, fmt.Errorf("rtx holds no mip level")
 	}
 	return mips[0], mips, nil
+}
+
+// decodeRawBGRA reads the bare 32-bit pixels of a .rtx: the remaster writes
+// them as B,G,R,A (the Direct3D order) with the rows bottom-up, the way a TGA
+// stores them. The .tga twins of the same art settle both choices — their
+// per-channel difference against the raw payload is about half of what RGBA
+// gives, and reading the rows the other way round turns the panel upright.
+func decodeRawBGRA(data []byte, w, h int) image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	stride := w * 4
+	for y := 0; y < h; y++ {
+		src := data[(h-1-y)*stride:]
+		dst := img.Pix[y*stride:]
+		for x := 0; x < w; x++ {
+			s := src[x*4:]
+			p := dst[x*4 : x*4+4]
+			p[0] = s[2]
+			p[1] = s[1]
+			p[2] = s[0]
+			p[3] = s[3]
+		}
+	}
+	return img
 }
 
 func decodeDDSMipmaps(data []byte) (image.Image, []image.Image, error) {
@@ -622,12 +652,18 @@ func decodeDXT(data []byte, w, h int, explicitAlpha, dxt5Alpha bool) (image.Imag
 					colourAt, alphaAt = 0, 8
 				}
 			}
-			c0, c1 := unpack565(binary.LittleEndian.Uint16(block[colourAt:])), unpack565(binary.LittleEndian.Uint16(block[colourAt+2:]))
+			c0v := binary.LittleEndian.Uint16(block[colourAt:])
+			c1v := binary.LittleEndian.Uint16(block[colourAt+2:])
+			c0, c1 := unpack565(c0v), unpack565(c1v)
+			// The three-colour mode is chosen by the packed 16-bit values, not
+			// by the unpacked channels: a block whose c0 is numerically larger
+			// can still carry a smaller red channel, and comparing channels
+			// alone sent whole opaque blocks down the cutout path. Index 1 is
+			// always c1 itself; only indices 2 and 3 are the interpolants.
 			colors := [4]color.NRGBA{c0, c1, color.NRGBA{}, color.NRGBA{}}
-			if c0.R > c1.R || c0.G > c1.G || c0.B > c1.B {
-				for i := 1; i < 3; i++ {
-					colors[i] = color.NRGBA{R: uint8((2*int(c0.R) + int(c1.R)) / 3), G: uint8((2*int(c0.G) + int(c1.G)) / 3), B: uint8((2*int(c0.B) + int(c1.B)) / 3), A: 255}
-				}
+			if c0v > c1v {
+				colors[2] = color.NRGBA{R: uint8((2*int(c0.R) + int(c1.R)) / 3), G: uint8((2*int(c0.G) + int(c1.G)) / 3), B: uint8((2*int(c0.B) + int(c1.B)) / 3), A: 255}
+				colors[3] = color.NRGBA{R: uint8((int(c0.R) + 2*int(c1.R)) / 3), G: uint8((int(c0.G) + 2*int(c1.G)) / 3), B: uint8((int(c0.B) + 2*int(c1.B)) / 3), A: 255}
 			} else {
 				colors[2] = color.NRGBA{R: uint8((int(c0.R) + int(c1.R)) / 2), G: uint8((int(c0.G) + int(c1.G)) / 2), B: uint8((int(c0.B) + int(c1.B)) / 2), A: 255}
 				colors[3] = color.NRGBA{A: 0}

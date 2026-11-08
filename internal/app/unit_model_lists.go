@@ -10,6 +10,7 @@ import (
 	"gioui.org/widget/material"
 	"github.com/fogleman/fauxgl"
 	"image"
+	"image/color"
 	"time"
 )
 
@@ -41,7 +42,11 @@ func UnitAnimListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, cli
 		}
 		right := fmt.Sprintf("%d frames", a.NumFrames)
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return UnitViewportRow(ui, gtx, c, v.AnimIndex == i, a.Name, right)
+			dims := UnitViewportRow(ui, gtx, c, v.AnimIndex == i, a.Name, right)
+			// A right press on the row copies the clip's name into the
+			// shared clipboard for an animation name field to paste.
+			uikit.RowNameText(ui, gtx, uikit.RowKey("anim", i), uikit.NameSpaceAnimation, a.Name, dims.Size)
+			return dims
 		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -154,12 +159,17 @@ func UnitMarkerListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, c
 			}
 			v.Redraw = true
 		}
+		uikit.CopyRowName(ui, gtx, uikit.RowKey("marker", i), uikit.NameSpaceMarker, mk.Name)
 		note := mk.Parent
 		if note == "" {
 			note = "no bone"
 		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return UnitViewportRow(ui, gtx, c, v.MarkerIndex == i, mk.Name, note)
+			dims := UnitViewportRow(ui, gtx, c, v.MarkerIndex == i, mk.Name, note)
+			// The row's right-press area, for the copy read above: the
+			// filter only catches presses of a registered tag.
+			uikit.LayoutRowNameCopy(ui, gtx, uikit.RowKey("marker", i), dims.Size)
+			return dims
 		}))
 	}
 	return layout.Inset{Top: unit.Dp(4)}.Layout(gtx,
@@ -200,6 +210,9 @@ func UnitBoneListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, cli
 			}
 			v.Redraw = true
 		}
+		// A right press copies the bone's name into the shared clipboard for
+		// skeleton fields to paste.
+		uikit.CopyRowName(ui, gtx, uikit.RowKey("bn", i), uikit.NameSpaceBone, bone.Name)
 		note := "root"
 		if bone.Parent >= 0 && bone.Parent < len(bones) && bones[bone.Parent].Name != "" {
 			note = bones[bone.Parent].Name
@@ -211,7 +224,10 @@ func UnitBoneListWithClicks(ui *uiState, gtx layout.Context, v *modelViewer, cli
 			name = fmt.Sprintf("bone %d", i)
 		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return UnitViewportRow(ui, gtx, c, v.BoneIndex == i, name, note)
+			dims := UnitViewportRow(ui, gtx, c, v.BoneIndex == i, name, note)
+			// The row's right-press area, for the copy read above.
+			uikit.LayoutRowNameCopy(ui, gtx, uikit.RowKey("bn", i), dims.Size)
+			return dims
 		}))
 	}
 	if v.BoneIndex >= 0 && v.BoneIndex < len(bones) {
@@ -558,7 +574,14 @@ func PickFrameKeyOnTimeline(ui *uiState, v *modelViewer) {
 // unitViewportRow is one selectable line of the camera panel: the name, and a
 // dimmer note on the right that says what it is.
 func UnitViewportRow(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, name, note string) layout.Dimensions {
-	return UnitViewportRowIcon(ui, gtx, c, selected, name, note, nil, false)
+	return UnitViewportRowIcon(ui, gtx, c, selected, name, note, nil, false, uikit.CText)
+}
+
+// unitViewportRowTinted is unitViewportRow with the name drawn in tint rather
+// than the default text colour — the Classic OE's motion rows use it to mark a
+// motion whose blend entries name clips the unit's model does not carry.
+func UnitViewportRowTinted(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, name, note string, tint color.NRGBA) layout.Dimensions {
+	return UnitViewportRowIcon(ui, gtx, c, selected, name, note, nil, false, tint)
 }
 
 // unitViewportRowIcon is unitViewportRow with an optional icon column before
@@ -566,7 +589,7 @@ func UnitViewportRow(ui *uiState, gtx layout.Context, c *widget.Clickable, selec
 // Actions folder — reserves the column whether or not a row's icon was found
 // (iconCol), so its names stay in one line; a list whose icons come and go
 // passes iconCol false and shows them as they come.
-func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, name, note string, icon image.Image, iconCol bool) layout.Dimensions {
+func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, selected bool, name, note string, icon image.Image, iconCol bool, nameColor color.NRGBA) layout.Dimensions {
 	bg := uikit.CPanelBg
 	switch {
 	case selected:
@@ -574,6 +597,9 @@ func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, s
 	case c.Hovered():
 		bg = uikit.CMenuHover
 	}
+	// Hovering a row says the name the column had to cut: clip and action
+	// names are long, and the panel they are listed in is narrow.
+	uikit.HoverTip(ui, c.Hovered(), name)
 	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp - 4))
 		sz := image.Pt(gtx.Constraints.Max.X, h)
@@ -599,7 +625,7 @@ func UnitViewportRowIcon(ui *uiState, gtx layout.Context, c *widget.Clickable, s
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(name))
-							l.Color = uikit.CText
+							l.Color = nameColor
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),

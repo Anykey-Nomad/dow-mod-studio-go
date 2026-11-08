@@ -392,10 +392,25 @@ func LayoutListWithScrollbar(ui *UiState, gtx layout.Context, state *PanelScroll
 		state.Viewport = gtx.Constraints.Max.Y
 		state.ContentHeight = list.Position.Length
 		state.HasBar = state.ContentHeight > state.Viewport
+		// The rows are laid out in device pixels (gtx.Dp), while Position.Offset
+		// is pixels too but rowHeight is in whatever units the caller counts in:
+		// most pass dp, a few already pass pixels, and the file tree passes 22
+		// for 19dp rows. On a display scaled away from 100% the thumb's mirror
+		// of the list therefore lagged behind the rows and stopped short of the
+		// end of its own track with the list already at its last row. The list
+		// itself knows the pixel step: it is the laid-out content height over
+		// the number of rows.
+		rowPx := rowHeight
+		if count > 0 && state.ContentHeight > 0 {
+			rowPx = state.ContentHeight / count
+		}
+		if rowPx < 1 {
+			rowPx = 1
+		}
 		if state.HasBar {
 			state.Offset = ClampInt(state.Offset, 0, state.ContentHeight-state.Viewport)
 			// List owns wheel scrolling; mirror its position for the thumb.
-			state.Offset = list.Position.First*rowHeight + list.Position.Offset
+			state.Offset = list.Position.First*rowPx + list.Position.Offset
 			state.Offset = ClampInt(state.Offset, 0, editors.MaxInt(0, state.ContentHeight-state.Viewport))
 		} else {
 			state.Offset = 0
@@ -431,10 +446,21 @@ func LayoutListWithScrollbar(ui *UiState, gtx layout.Context, state *PanelScroll
 					if state.Dragging {
 						thumb := PanelScrollThumbSize(state, gtx.Constraints.Max.Y)
 						track := gtx.Constraints.Max.Y - thumb
-						if track > 0 {
-							delta := e.Position.Y - state.StartY
-							items := int(delta / float32(editors.MaxInt(1, rowHeight)))
-							list.ScrollBy(float32(items))
+						total := editors.MaxInt(0, state.ContentHeight-state.Viewport)
+						if track > 0 && total > 0 {
+							// The thumb's travel maps onto the whole scrollable
+							// range: a drag of the thumb's own length takes the
+							// list from its first row to its last. Scrolling by
+							// rows instead charged one row per row-height of
+							// pointer travel, so a drag of the whole track moved
+							// the list only a fraction of the way — the end of a
+							// long list was out of reach of the scrollbar.
+							delta := float64(e.Position.Y - state.StartY)
+							target := ClampInt(state.StartOffset+int(delta*float64(total)/float64(track)+.5), 0, total)
+							steps := float32(target-state.Offset) / float32(editors.MaxInt(1, rowPx))
+							if steps != 0 {
+								list.ScrollBy(steps)
+							}
 						}
 					}
 				case pointer.Release, pointer.Cancel:

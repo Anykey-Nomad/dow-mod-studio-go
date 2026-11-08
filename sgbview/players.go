@@ -40,6 +40,25 @@ type SlotBuild struct {
 	Blueprint string
 }
 
+// SlotUnit — стартовый боец игрока: появляется на карте в начале игры
+// рядом с его стартовой позицией (обычно это строитель; у некронов — ещё
+// «трупы» лорда и томб-спайдеров).
+type SlotUnit struct {
+	// Slot — номер игрока (1..8).
+	Slot int
+	// Blueprint — путь к чертежу бойца:
+	// "Data/attrib/ebps/races/necrons/troops/necron_lord.rgd".
+	Blueprint string
+	// Offset — смещение от стартовой позиции в координатах движка:
+	// x и z — плоскость земли, y — высота (starting_squad_offset_NN).
+	Offset [3]float32
+	// HasOffset — смещение было в чертеже расы; без него боец встаёт
+	// по кругу вокруг постройки.
+	HasOffset bool
+	// Dead — появляется мёртвым: его нельзя выделить и им нельзя управлять.
+	Dead bool
+}
+
 // PlayerSlot — слот игрока сценария.
 type PlayerSlot struct {
 	// Owner — номер слота: от 1 до 8. Ноль — нейтральный объект.

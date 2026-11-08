@@ -816,6 +816,7 @@ func EnsureUnitActConditions(ui *uistate.State) {
 		ui.UnitActNameEds = nil
 		ui.UnitActCondStaged = nil
 		ui.UnitActGuardClicks = nil
+		ui.UnitActAnimPickClicks = nil
 		ui.UnitActCondBound = ""
 		return
 	}
@@ -825,15 +826,17 @@ func EnsureUnitActConditions(ui *uistate.State) {
 		ui.UnitActNameEds = nil
 		ui.UnitActCondStaged = nil
 		ui.UnitActGuardClicks = nil
+		ui.UnitActAnimPickClicks = nil
 		ui.UnitActCondBound = ""
 		return
 	}
 	links := UnitActLinks(*a)
-	if len(ui.UnitActCondEds) != len(links) || len(ui.UnitActGuardClicks) != len(links) || len(ui.UnitActNameEds) != len(links) {
+	if len(ui.UnitActCondEds) != len(links) || len(ui.UnitActGuardClicks) != len(links) || len(ui.UnitActNameEds) != len(links) || len(ui.UnitActAnimPickClicks) != len(links) {
 		ui.UnitActCondEds = make([]widget.Editor, len(links))
 		ui.UnitActNameEds = make([]widget.Editor, len(links))
 		ui.UnitActCondStaged = make([]int32, len(links))
 		ui.UnitActGuardClicks = make([]widget.Clickable, len(links))
+		ui.UnitActAnimPickClicks = make([]widget.Clickable, len(links))
 		ui.UnitActCondBound = ""
 	}
 	bound := strconv.Itoa(ui.UnitEvtActionSel) + "|" + a.Name
@@ -850,11 +853,27 @@ func EnsureUnitActConditions(ui *uistate.State) {
 	if ui.UnitActSel >= len(links) {
 		ui.UnitActSel = 0
 	}
+	// The choice fields take copied names on right-click before their first
+	// layout: link i points at a motion (typed by that space) or at another
+	// action (typed by that one), and whichever it is decides what pastes.
+	for i := range links {
+		uikit.MarkClipPasteName(ui, &ui.UnitActNameEds[i], ActLinkNameSpaces(links[i])...)
+	}
 	for i, ln := range links {
 		ui.UnitActCondStaged[i] = ln.Compare
 		ui.UnitActCondEds[i].SetText(ln.Condition)
 		ui.UnitActNameEds[i].SetText(ln.Name)
 	}
+}
+
+// ActLinkNameSpaces is the copy spaces a choice line's name field pastes:
+// motions link to timelines, so a motion name; anything else links to another
+// action, so an action name. A right press on the row above names which.
+func ActLinkNameSpaces(ln whe.FxActionLink) []string {
+	if ln.Compare == whe.FxCompareNone {
+		return []string{uikit.NameSpaceMotion}
+	}
+	return []string{uikit.NameSpaceAction}
 }
 
 // applyUnitActConditions writes the condition fields and their guards into
@@ -1302,6 +1321,14 @@ func LayoutUnitActConditionRow(ui *uistate.State, gtx layout.Context, i int, ln 
 			layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
 				return UnitActFieldEditor(ui, gtx, &ui.UnitActNameEds[i], "motion or action")
 			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				// The list button beside the field raises the model's
+				// animations for this line; the pick fills the field.
+				if i < 0 || i >= len(ui.UnitActAnimPickClicks) {
+					return layout.Dimensions{}
+				}
+				return uikit.SmallButton(ui, gtx, &ui.UnitActAnimPickClicks[i], "\u25be")
+			}),
 		)
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
 	}
@@ -1362,7 +1389,7 @@ func UnitActFieldEditor(ui *uistate.State, gtx layout.Context, ed *widget.Editor
 	gtx.Constraints.Min.Y = gtx.Dp(36)
 	gtx.Constraints.Max.Y = gtx.Dp(40)
 	b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
-	return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	dims := b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			w := material.Editor(ui.Th, ed, hint)
 			w.TextSize = unit.Sp(10)
@@ -1370,6 +1397,10 @@ func UnitActFieldEditor(ui *uistate.State, gtx layout.Context, ed *widget.Editor
 			return w.Layout(gtx)
 		})
 	})
+	// A field typed for the clipboard (the motion-or-action choice line) also
+	// registers the area its right-click paste is read from.
+	uikit.LayoutClipPaste(ui, gtx, ed, dims.Size)
+	return dims
 }
 
 // unitActGuardChip is the operator of one choice line, sized from its own
@@ -1529,6 +1560,11 @@ const (
 	EvtPickFX
 	EvtPickSound
 	EvtPickMarker
+	// EvtPickAnim chooses a clip of the model for the timeline's add
+	// field; EvtPickAnimInAction does the same for one choice line of an
+	// action, which the pick writes into by the row it was opened from.
+	EvtPickAnim
+	EvtPickAnimInAction
 )
 
 // EvtPickerMaxHits caps the rows the picker draws, so a folder of hundreds of
@@ -1542,12 +1578,21 @@ func OpenEvtPicker(ui *uistate.State, t EvtPickTarget) {
 	p := &ui.EvtPick
 	p.Open = true
 	p.Target = t
+	p.Row = -1
 	p.All = EvtPickerItems(ui, t)
 	p.Ed.SingleLine = true
 	p.Ed.Submit = true
 	p.Ed.SetText("")
 	p.Filter = ""
 	RefreshEvtPickerHits(ui)
+}
+
+// openEvtPickerAt opens the same list for a field that belongs to one row of
+// a list — a choice line of an action — so the pick lands on that row rather
+// than on a field of the form.
+func OpenEvtPickerAt(ui *uistate.State, t EvtPickTarget, row int) {
+	OpenEvtPicker(ui, t)
+	ui.EvtPick.Row = row
 }
 
 // evtPickerItems lists the values a target can take, sorted and without
@@ -1567,6 +1612,10 @@ func EvtPickerItems(ui *uistate.State, t EvtPickTarget) []string {
 				out = append(out, m.Name)
 			}
 		}
+	case EvtPickAnim, EvtPickAnimInAction:
+		// The clips the model on show carries — what a blend entry and a
+		// choice line may name.
+		out = UnitModelAnimNames(ui)
 	case EvtPickFX:
 		out = EvtTreeFolderFiles(ui.ModTree, `\art\fx\`, []string{".lua"}, true)
 	case EvtPickSound:
@@ -1674,6 +1723,14 @@ func ApplyEvtPick(ui *uistate.State, t EvtPickTarget, value string) {
 		ui.UnitEvtSndEd.SetText(value)
 	case EvtPickMarker:
 		ui.UnitEvtMarkerEd.SetText(value)
+	case EvtPickAnim:
+		// The timeline's add field takes the name; the caller commits it
+		// the way Enter in that field does.
+		ui.UnitAnimAddEd.SetText(value)
+	case EvtPickAnimInAction:
+		if row := ui.EvtPick.Row; row >= 0 && row < len(ui.UnitActNameEds) {
+			ui.UnitActNameEds[row].SetText(value)
+		}
 	}
 }
 
@@ -1688,6 +1745,8 @@ func EvtPickerTitle(t EvtPickTarget) string {
 		return "Choose a sound"
 	case EvtPickMarker:
 		return "Choose a model marker"
+	case EvtPickAnim, EvtPickAnimInAction:
+		return "Choose an animation"
 	}
 	return "Choose"
 }

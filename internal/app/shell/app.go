@@ -57,13 +57,13 @@ func Init() {
 		Menus = []MenuDef{
 			{Name: "File", Items: []string{"New Mod...", "Open Module...", "Close", "—", "Settings", "—", "Associate .module files", "Remove .module association", "—", "Recent Modules", "View Recycle Bin", "Empty Recycle Bin", "Exit"}},
 			{Name: "Mod", Items: []string{"Save", "Export File", "—", "Pack SGA...", "Extract SGA...", "—", "Burn Mod", "Module Settings..."}},
-			{Name: "Help", Items: []string{"About DoW Mod Studio", "Documentation", "—", "Open log folder", "Check for Updates"}},
+			{Name: "Help", Items: []string{"About DoW Mod Studio", "Documentation", "—", "Open log folder", "Copy last log to clipboard", "Check for Updates"}},
 		}
 	} else {
 		Menus = []MenuDef{
 			{Name: "File", Items: []string{"New Mod...", "Open Module...", "Close", "—", "Settings", "—", "Recent Modules", "View Recycle Bin", "Empty Recycle Bin", "Exit"}},
 			{Name: "Mod", Items: []string{"Save", "Export File", "—", "Pack SGA...", "Extract SGA...", "—", "Burn Mod", "Module Settings..."}},
-			{Name: "Help", Items: []string{"About DoW Mod Studio", "Documentation", "—", "Open log folder", "Check for Updates"}},
+			{Name: "Help", Items: []string{"About DoW Mod Studio", "Documentation", "—", "Open log folder", "Copy last log to clipboard", "Check for Updates"}},
 		}
 	}
 }
@@ -94,7 +94,7 @@ type RgdVisible = uistate.RgdVisible
 var NewPointerTag = uikit.NewPointerTag
 
 func NewUI(th *material.Theme) *UiState {
-	s := &UiState{Th: th, MenuOpen: -1, TabSel: 0, DarkTheme: true, GpuAPI: render.DefaultGPUAPI, KeyboardArea: "files", ImageCache: make(map[string]editors.ImageCacheEntry), ModRefreshCh: make(chan fileops.ModCatalogRefreshResult, 1), ModFileWatchSignal: make(chan struct{}, 1), StateDirty: true, LeftTreePointerTag: NewPointerTag("left-tree"), TabBarPointerTag: NewPointerTag("tab-bar"), Locale: editors.LocaleDefault}
+	s := &UiState{Th: th, MenuOpen: -1, UnitClipCur: -1, TabSel: 0, DarkTheme: true, GpuAPI: render.DefaultGPUAPI, KeyboardArea: "files", ImageCache: make(map[string]editors.ImageCacheEntry), ModRefreshCh: make(chan fileops.ModCatalogRefreshResult, 1), ModFileWatchSignal: make(chan struct{}, 1), StateDirty: true, LeftTreePointerTag: NewPointerTag("left-tree"), TabBarPointerTag: NewPointerTag("tab-bar"), Locale: editors.LocaleDefault}
 	ApplyMaterialTheme(th, true)
 	s.MenuClicks = make([]widget.Clickable, len(Menus))
 	s.MenuItemClicks = make([][]widget.Clickable, len(Menus))

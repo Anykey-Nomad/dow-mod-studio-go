@@ -190,6 +190,146 @@ func TestMarshalBinaryRoundTripsEntityOwners(t *testing.T) {
 	}
 }
 
+// A squad still naming a deleted entity makes the engine reject the whole map
+// ("Invalid squad entity id"), so saving has to drop it from both the squad
+// list and the player group that owns it.
+func TestMarshalBinaryDropsSquadsWhoseEntitiesAreGone(t *testing.T) {
+	squadDef := func(id, entity int) *chunky.Chunk {
+		return &chunky.Chunk{TypeID: "FOLDSQDD", Version: 2000, Children: []*chunky.Chunk{
+			{TypeID: "DATASQDI", Version: 2000, Payload: append(chunky.I32(int32(id)), chunky.I32(0)...)},
+			{TypeID: "DATASQDE", Version: 2000, Payload: marshalIDList([]int{entity})},
+		}}
+	}
+	entityChunk := func(id int) *chunky.Chunk {
+		chunk := newEntityChunk()
+		find(chunk, "DATAENTI").Payload = marshalEntity(Entity{ID: id, BP: 0}, nil)
+		return chunk
+	}
+	root := &chunky.Chunk{TypeID: "FOLDSCEN", Version: 1, Children: []*chunky.Chunk{
+		{TypeID: "FOLDSMEG", Version: 2002, Children: []*chunky.Chunk{
+			{TypeID: "DATAEBPT", Version: 2000, Payload: mustMarshalBlueprints(t, []string{"object.rgd"})},
+			{TypeID: "FOLDENTL", Version: 2000, Children: []*chunky.Chunk{entityChunk(1), entityChunk(2)}},
+			{TypeID: "FOLDSQDL", Version: 2000, Children: []*chunky.Chunk{squadDef(50000, 1), squadDef(50001, 2)}},
+			{TypeID: "FOLDPLLS", Version: 2000, Children: []*chunky.Chunk{
+				{TypeID: "FOLDPLYR", Version: 2001, Children: []*chunky.Chunk{
+					{TypeID: "DATAINFO", Version: 2000, Payload: append(chunky.I32(1000), chunky.I32(0)...)},
+					{TypeID: "DATAEGRP", Version: 2000, Name: "Entity Group\x00", Payload: marshalIDList([]int{1, 2})},
+					{TypeID: "DATASGRP", Version: 2000, Name: "Squad Group\x00", Payload: marshalIDList([]int{50000, 50001})},
+				}},
+			}},
+		}},
+	}}
+	m, err := Parse(append(chunky.Preamble(), chunky.Serialize(root)...))
+	if err != nil {
+		t.Fatalf("Parse fixture: %v", err)
+	}
+	m.Entities = m.Entities[:1]
+	data, err := m.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary: %v", err)
+	}
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse marshaled data: %v", err)
+	}
+	squads := find(got.sourceRoot, "FOLDSQDL")
+	if squads == nil || len(squads.Children) != 1 {
+		t.Fatalf("squad list after deleting entity 2 = %+v, want only squad 50000", squads)
+	}
+	if info := find(squads.Children[0], "DATASQDI"); info == nil || le32(info.Payload, 0) != 50000 {
+		t.Fatalf("surviving squad id = %v, want 50000", info)
+	}
+	player := find(got.sourceRoot, "FOLDPLYR")
+	group := find(player, "DATASGRP")
+	if want := marshalIDList([]int{50000}); group == nil || string(group.Payload) != string(want) {
+		t.Fatalf("player squad group = %v, want %v", group, want)
+	}
+}
+
+// A race object placed in a scenario is a squad of one entity in the reference
+// editor, not a bare entity. A save has to write the squad as well — the squad
+// blueprint table names it, the squad definition names the entity, and the
+// player's squad group names the squad — or the game sees a unit blueprint with
+// nothing fielding it.
+func TestMarshalBinaryCreatesSquadForPlacedObject(t *testing.T) {
+	squadTable := func(names ...string) []byte {
+		payload := chunky.I32(int32(len(names)))
+		for _, name := range names {
+			payload = append(payload, chunky.I32(int32(len(name)))...)
+			payload = append(payload, name...)
+		}
+		return payload
+	}
+	entityChunk := func(id int) *chunky.Chunk {
+		chunk := newEntityChunk()
+		find(chunk, "DATAENTI").Payload = marshalEntity(Entity{ID: id, BP: 0}, nil)
+		return chunk
+	}
+	root := &chunky.Chunk{TypeID: "FOLDSCEN", Version: 1, Children: []*chunky.Chunk{
+		{TypeID: "FOLDSMEG", Version: 2002, Children: []*chunky.Chunk{
+			{TypeID: "DATASBPT", Version: 2000, Payload: squadTable("existing_squad")},
+			{TypeID: "DATAEBPT", Version: 2000, Payload: mustMarshalBlueprints(t, []string{"object.rgd"})},
+			{TypeID: "FOLDENTL", Version: 2000, Children: []*chunky.Chunk{entityChunk(1), entityChunk(2)}},
+			{TypeID: "FOLDSQDL", Version: 2000, Children: []*chunky.Chunk{
+				{TypeID: "FOLDSQDD", Version: 2000, Children: []*chunky.Chunk{
+					{TypeID: "DATASQDI", Version: 2000, Payload: append(chunky.I32(50000), chunky.I32(0)...)},
+					{TypeID: "DATASQDE", Version: 2000, Payload: marshalIDList([]int{1})},
+				}},
+			}},
+			{TypeID: "FOLDPLLS", Version: 2000, Children: []*chunky.Chunk{
+				{TypeID: "FOLDPLYR", Version: 2001, Children: []*chunky.Chunk{
+					{TypeID: "DATAINFO", Version: 2000, Payload: append(chunky.I32(1000), chunky.I32(0)...)},
+					{TypeID: "DATAEGRP", Version: 2000, Name: "Entity Group\x00", Payload: marshalIDList([]int{1})},
+					{TypeID: "DATASGRP", Version: 2000, Name: "Squad Group\x00", Payload: marshalIDList([]int{50000})},
+				}},
+			}},
+		}},
+	}}
+	m, err := Parse(append(chunky.Preamble(), chunky.Serialize(root)...))
+	if err != nil {
+		t.Fatalf("Parse fixture: %v", err)
+	}
+	// The editor's edit: the object is placed for player 1, with the squad
+	// blueprint the Objects window read from the sbps files.
+	m.Entities = append(m.Entities[:1], Entity{ID: 3, BP: 0, Owner: 1, X: 4, Y: 5, Z: 6, Squad: "object_squad"})
+	data, err := m.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary: %v", err)
+	}
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse marshaled data: %v", err)
+	}
+	squads := find(got.sourceRoot, "FOLDSQDL")
+	if squads == nil || len(squads.Children) != 2 {
+		t.Fatalf("squad list after placing the object = %+v, want the existing squad and a new one", squads)
+	}
+	var placed *chunky.Chunk
+	for _, def := range squads.Children {
+		if info := find(def, "DATASQDI"); info != nil && le32(info.Payload, 0) == 50001 {
+			placed = def
+		}
+	}
+	if placed == nil {
+		t.Fatal("no squad was created for the placed object")
+	}
+	if info := find(placed, "DATASQDI"); le32(info.Payload, 4) != 1 {
+		t.Fatalf("new squad blueprint index = %d, want 1 (the added DATASBPT entry)", le32(info.Payload, 4))
+	}
+	list := find(placed, "DATASQDE")
+	if want := marshalIDList([]int{3}); list == nil || string(list.Payload) != string(want) {
+		t.Fatalf("new squad entities = %v, want %v (the placed object)", list, want)
+	}
+	names := decodeStringTable(find(got.sourceRoot, "DATASBPT").Payload)
+	if len(names) != 2 || names[0] != "existing_squad" || names[1] != "object_squad" {
+		t.Fatalf("squad blueprint table after placing = %v, want the existing entry and object_squad", names)
+	}
+	group := find(find(got.sourceRoot, "FOLDPLYR"), "DATASGRP")
+	if want := marshalIDList([]int{50000, 50001}); group == nil || string(group.Payload) != string(want) {
+		t.Fatalf("player squad group = %v, want %v", group, want)
+	}
+}
+
 func mustMarshalBlueprints(t *testing.T, blueprints []string) []byte {
 	t.Helper()
 	payload, err := marshalBlueprints(blueprints)

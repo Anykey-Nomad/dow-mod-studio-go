@@ -5,8 +5,8 @@ package render
 import (
 	engine "dow-mod-studio/internal/3d_engine"
 	"dow-mod-studio/internal/raster"
-	"dow-mod-studio/internal/whm"
 	"dow-mod-studio/internal/sgb"
+	"dow-mod-studio/internal/whm"
 	_ "embed"
 
 	"encoding/binary"
@@ -359,6 +359,14 @@ func (r *modelGpuVkRenderer) GeometryChanged(model *whm.Model) {
 func (r *modelGpuVkRenderer) Release() {
 	if r == nil {
 		return
+	}
+	// The frame last submitted may still be drawing from these buffers and
+	// images: a tab or a module closed during playback frees exactly what
+	// that frame reads. Wait for that submission before letting go.
+	if r.vk != nil {
+		if err := r.vk.WaitForPreviousFrame(); err != nil {
+			log.Printf("3D preview: wait before releasing the model renderer: %v", err)
+		}
 	}
 	for _, m := range r.meshes {
 		m.release()
@@ -825,6 +833,14 @@ func (r *modelGpuVkRenderer) renderTarget(size image.Point) (*modelGpuVkTarget, 
 		// seeing in the log. The Vulkan texture stays alive until Gio
 		// lets go of its copy.
 		log.Printf("3D preview: render target %dx%d -> %dx%d", r.offscreen.size.X, r.offscreen.size.Y, size.X, size.Y)
+		// A frame that already painted the old target may still be on the
+		// GPU, and this is the moment a resize happens: releasing the images
+		// under a submission in flight is what the backend's wait exists for.
+		// A failure is logged rather than returned: it must not turn a resize
+		// into a permanently broken hardware path.
+		if err := r.vk.WaitForPreviousFrame(); err != nil {
+			log.Printf("3D preview: wait before resizing the render target: %v", err)
+		}
 		r.offscreen.color.Release()
 		r.offscreen.depth.Release()
 	}

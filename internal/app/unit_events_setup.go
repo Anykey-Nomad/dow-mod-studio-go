@@ -46,6 +46,7 @@ func EnsureUnitEvents(ui *uiState) {
 	ui.UnitEvtSelAnchor = 0
 	ui.UnitEvtBound = ""
 	ui.UnitEvtEntryBound = ""
+	ui.UnitTailBound = ""
 	ui.UnitActCondBound = ""
 	ui.UnitEvtPath = unitEventsWhePath(ui.ModTree, CurrentUnitDetails(ui))
 	if ui.UnitEvtPath == "" {
@@ -208,7 +209,7 @@ func UnitEvtFieldFocused(ui *uiState, gtx layout.Context) bool {
 			return true
 		}
 	}
-	for _, ed := range []*widget.Editor{&ui.UnitEvtNameEd, &ui.UnitEvtTimeEd, &ui.UnitEvtFxEd, &ui.UnitEvtSndEd, &ui.UnitEvtMarkerEd, &ui.UnitEvtShiftEd} {
+	for _, ed := range []*widget.Editor{&ui.UnitEvtNameEd, &ui.UnitEvtTimeEd, &ui.UnitEvtFxEd, &ui.UnitEvtSndEd, &ui.UnitEvtMarkerEd, &ui.UnitEvtShiftEd, &ui.UnitEvtTlFilter, &ui.UnitActFilter} {
 		if ed.Focused(gtx) {
 			return true
 		}

@@ -32,6 +32,7 @@ import (
 func HandleEvtPickerInput(ui *uiState, gtx layout.Context) {
 	p := &ui.EvtPick
 	submitted := false
+	target := p.Target
 	for {
 		ev, ok := p.Ed.Update(gtx)
 		if !ok {
@@ -49,19 +50,30 @@ func HandleEvtPickerInput(ui *uiState, gtx layout.Context) {
 		p.Open = false
 		return
 	}
-	if p.Target == evtPickSound && p.Browse.Clicked(gtx) {
+	if target == evtPickSound && p.Browse.Clicked(gtx) {
 		p.Open = false
 		OpenSoundFilePicker(ui)
 		return
 	}
 	for i := range p.Clicks {
 		if p.Clicks[i].Clicked(gtx) && i < len(p.Hits) {
-			ApplyEvtPick(ui, p.Target, p.Hits[i])
+			ApplyEvtPick(ui, target, p.Hits[i])
+			commitEvtPick(ui, target)
 			return
 		}
 	}
 	if p.UseTyped.Clicked(gtx) || submitted {
-		ApplyEvtPick(ui, p.Target, p.Filter)
+		ApplyEvtPick(ui, target, p.Filter)
+		commitEvtPick(ui, target)
+	}
+}
+
+// commitEvtPick finishes a pick whose field is an add control rather than a
+// value to be edited: the animation the timeline's list chose is appended to
+// the blend list the way Enter in the add field appends it.
+func commitEvtPick(ui *uiState, target evtPickTarget) {
+	if target == evtPickAnim {
+		AddUnitTimelineAnimation(ui)
 	}
 }
 

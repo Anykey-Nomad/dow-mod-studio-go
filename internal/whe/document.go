@@ -216,6 +216,34 @@ func (d *Document) findTimeline(name string) *chunky.Chunk {
 	return nil
 }
 
+// SetTimelineTail writes the motion tail of one timeline — its type, its
+// delays, its transitions and the modifier it drives — back into its DATAMTON
+// payload. The clip list, the motion links and the events keep the bytes they
+// came from: only the tail is rebuilt, so an edit to how a motion plays cannot
+// disturb what it plays. A payload that stops at its events carries no tail and
+// is refused rather than given one, since a motion with no tail has nothing for
+// the game to read as looping or as a modifier.
+func (d *Document) SetTimelineTail(name string, tail FxMotionTail) error {
+	if d == nil {
+		return fmt.Errorf("no .whe document is loaded")
+	}
+	chunk := d.findTimeline(name)
+	if chunk == nil {
+		return fmt.Errorf("timeline %q was not found", name)
+	}
+	m, err := ParseMton(chunk.Name, chunk.Payload)
+	if err != nil {
+		return err
+	}
+	if len(m.trailing) == 0 {
+		return fmt.Errorf("timeline %q carries no motion tail", name)
+	}
+	tail.Present = true
+	m.trailing = tail.MarshalBinary()
+	chunk.Payload = m.MarshalBinary()
+	return nil
+}
+
 func (d *Document) Events() map[string]FxEvent {
 	out := map[string]FxEvent{}
 	d.walk(func(c *chunky.Chunk) {
@@ -521,6 +549,54 @@ func (d *Document) AddTimeline(name string, payload []byte) error {
 		Payload: append([]byte(nil), payload...),
 	})
 	return nil
+}
+
+// RemoveTimeline drops one DATAMTON timeline from the motion folder — the
+// reverse of AddTimeline. A name the file does not carry is refused rather
+// than taken as a no-op, so a double press cannot take a second timeline out.
+//
+// Whether an action still names the timeline is the editor's call to refuse
+// first: a motion left pointing at nothing is the kind of break the file
+// cannot report, so the document only takes out what it is asked to.
+func (d *Document) RemoveTimeline(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("timeline name is required")
+	}
+	folder := d.motionFolder()
+	if folder == nil {
+		return fmt.Errorf(".whe has no FOLDMTRE motion folder")
+	}
+	for i, c := range folder.Children {
+		if c.TypeID != "DATAMTON" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(strings.TrimRight(c.Name, "\x00")), name) {
+			folder.Children = append(folder.Children[:i], folder.Children[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("timeline %q was not found in this .whe", name)
+}
+
+// NewTimelinePayload is the DATAMTON payload of a timeline this file does not
+// have yet: the animations given and nothing else — no random picks, no
+// events — wearing the playback behaviour of one of the file's own timelines.
+// A DATAMTON written from scratch carries no motion tail at all, and a
+// timeline without one has no looping or transition behaviour for the game to
+// read, so the tail is copied from an existing entry rather than left out.
+func (d *Document) NewTimelinePayload(animations []string) []byte {
+	m := &Mton{Animations: append([]string(nil), animations...)}
+	for _, c := range d.timelineChunks() {
+		src, err := ParseMton(c.Name, c.Payload)
+		if err != nil {
+			continue
+		}
+		m.loop = src.loop
+		m.trailing = append([]byte(nil), src.trailing...)
+		break
+	}
+	return m.MarshalBinary()
 }
 
 // AddTimelineAnimation appends a clip to a timeline's blend list when it is

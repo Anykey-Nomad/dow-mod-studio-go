@@ -38,6 +38,15 @@ type rgdVisible = uistate.RgdVisible
 // rgdEditorClickState keeps the moved signatures identical to the ones app uses.
 type rgdEditorClickState = uistate.RgdEditorClickState
 
+// HoverTip records name as the full text of the row under the pointer. A row
+// whose column had to cut its name short calls it while hovered, and the
+// object window draws what it collected once, just above the pointer.
+func HoverTip(ui *uiState, hovered bool, name string) {
+	if hovered && name != "" {
+		ui.HoverTipPending = name
+	}
+}
+
 func TableRow2(ui *uiState, gtx layout.Context, a, b string, alt bool) layout.Dimensions {
 	return TableRow2WithTooltip(ui, gtx, a, b, alt, "")
 }
@@ -124,6 +133,12 @@ func SmallButtonDisabled(ui *uiState, gtx layout.Context, btn *widget.Clickable,
 	} else if hover {
 		bg = CSaveHover
 	}
+	// The size the caller asked for. A button given a cell of a row — a
+	// Flexed child — is handed a minimum, and paints to it: its background
+	// is the whole cell rather than a strip around the label, which is what
+	// makes every button of a row the same size instead of a border drawn
+	// around a label of its own length.
+	cell := gtx.Constraints.Min
 	if disabled {
 		gtx = gtx.Disabled()
 	}
@@ -134,6 +149,12 @@ func SmallButtonDisabled(ui *uiState, gtx layout.Context, btn *widget.Clickable,
 					sz := gtx.Constraints.Min
 					if sz.X == 0 || sz.Y == 0 {
 						sz = gtx.Constraints.Max
+					}
+					if sz.X < cell.X {
+						sz.X = cell.X
+					}
+					if sz.Y < cell.Y {
+						sz.Y = cell.Y
 					}
 					if sz.X > gtx.Constraints.Max.X {
 						sz.X = gtx.Constraints.Max.X
@@ -336,6 +357,13 @@ func PanelScrollView(ui *uiState, gtx layout.Context, state *panelScrollState, c
 	// scrollbar appears, and whatever is at the bottom of it is quietly
 	// squeezed off screen instead. Giving the measure an unbounded height
 	// and reading the answer back is what the scrollbar is for.
+	//
+	// That measure lays its content out for real, state and all, so a widget
+	// that scrolls itself must not be put inside this panel: a layout.List
+	// laid out against the huge viewport rewrites its Position while fitting
+	// every row into it, and the frame after a scroll it is back at the top.
+	// Panels whose body is such a list use PanelFrame instead and let the
+	// list own the scrollbar.
 	macro := op.Record(gtx.Ops)
 	measureGTX := gtx.Disabled()
 	measureGTX.Constraints.Min.Y = 0

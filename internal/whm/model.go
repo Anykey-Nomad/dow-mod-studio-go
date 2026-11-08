@@ -515,22 +515,50 @@ func (m *Model) parseMeshData(data []byte, vertexBase int, sgm bool) (*whmMeshGe
 	}
 
 	// Locate the material list; the vertex block is followed by an optional
-	// reserved dword. See convertMeshData for why the search is needed.
+	// reserved dword. See convertMeshData for why the search is needed. The
+	// reserved dwords — after the UV array and after each material's vertex
+	// range — belong to the .whm record alone: an .sgm payload has neither, so
+	// probing for one would step four bytes past every material and never find
+	// the list in a mesh that has any.
+	reserved := !sgm
 	materialStart := -1
-	if MeshMaterialSection(data, vertexStart+verts*stride+4, true, false) > 0 {
+	if MeshMaterialSection(data, vertexStart+verts*stride+4, reserved, false) > 0 {
 		materialStart = vertexStart + verts*stride + 4
-	} else if MeshMaterialSection(data, vertexStart+verts*stride, true, false) > 0 {
+	} else if MeshMaterialSection(data, vertexStart+verts*stride, reserved, false) > 0 {
 		materialStart = vertexStart + verts*stride
 	} else {
 		for off := vertexStart + 4; off+8 < len(data); off += 2 {
-			if MeshMaterialSection(data, off, true, true) > 0 {
+			if MeshMaterialSection(data, off, reserved, true) > 0 {
 				materialStart = off
 				break
 			}
 		}
 	}
 	if materialStart < 0 {
-		return nil, fmt.Errorf("cannot locate the material section after %d vertices (size id %d)", verts, sizeID)
+		// Облегчённый меш без материалов: счётчик секции равен нулю — так
+		// ведёт себя, например, вспомогательный меш bone_medallion01 у
+		// сервитора (одна вершина, ни одного треугольника). Пустой список
+		// материалов у вызывающего кода уже принят: меш просто идёт без
+		// текстуры.
+		for _, off := range []int{vertexStart + verts*stride + 4, vertexStart + verts*stride} {
+			if off >= 0 && off+4 <= len(data) && binary.LittleEndian.Uint32(data[off:]) == 0 {
+				materialStart = off
+				break
+			}
+		}
+	}
+	if materialStart < 0 {
+		// Диагностика: ближайшая секция материалов после блока вершин
+		// без строгой проверки — чтобы понять, куда именно ушёл разбор.
+		nearest := -1
+		for off := vertexStart; off+8 < len(data); off++ {
+			if MeshMaterialSection(data, off, reserved, false) > 0 {
+				nearest = off
+				break
+			}
+		}
+		return nil, fmt.Errorf("cannot locate the material section after %d vertices (size id %d; vertexStart=%d stride=%d skinned=%v expected=%d next=%d)",
+			verts, sizeID, vertexStart, stride, skinned, vertexStart+verts*stride, nearest)
 	}
 
 	r.Off = materialStart

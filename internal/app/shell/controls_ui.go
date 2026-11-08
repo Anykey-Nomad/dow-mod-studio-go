@@ -175,6 +175,10 @@ func ToggleButton(ui *UiState, gtx layout.Context, btn *widget.Clickable, label 
 			bg = uikit.CSelectBg
 		}
 	}
+	// The size the caller asked for: a button given a cell of a row paints to
+	// the whole cell, so a row of them reads as a row of equal buttons rather
+	// than as borders around labels of differing length.
+	cell := gtx.Constraints.Min
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return widget.Border{Color: uikit.CSaveBd, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Stack{}.Layout(gtx,
@@ -182,6 +186,12 @@ func ToggleButton(ui *UiState, gtx layout.Context, btn *widget.Clickable, label 
 					sz := gtx.Constraints.Min
 					if sz.X == 0 || sz.Y == 0 {
 						sz = gtx.Constraints.Max
+					}
+					if sz.X < cell.X {
+						sz.X = cell.X
+					}
+					if sz.Y < cell.Y {
+						sz.Y = cell.Y
 					}
 					if sz.X > gtx.Constraints.Max.X {
 						sz.X = gtx.Constraints.Max.X

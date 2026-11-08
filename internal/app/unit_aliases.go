@@ -167,6 +167,8 @@ var ApplyClassicOEModifier = unit.ApplyClassicOEModifier
 
 const unitSectionEvents = unit.UnitSectionEvents
 
+const unitSectionVoices = unit.UnitSectionVoices
+
 var unitEventsWhePath = unit.UnitEventsWhePath
 
 var timelineMatchesClip = unit.TimelineMatchesClip
@@ -319,11 +321,17 @@ const evtPickSound = unit.EvtPickSound
 
 const evtPickMarker = unit.EvtPickMarker
 
+const evtPickAnim = unit.EvtPickAnim
+
+const evtPickAnimInAction = unit.EvtPickAnimInAction
+
 const evtPickerMaxHits = unit.EvtPickerMaxHits
 
 type evtPicker = unit.EvtPicker
 
 var OpenEvtPicker = unit.OpenEvtPicker
+
+var OpenEvtPickerAt = unit.OpenEvtPickerAt
 
 var EvtPickerItems = unit.EvtPickerItems
 
@@ -558,8 +566,6 @@ var UnitModelTransportButtons = unit.UnitModelTransportButtons
 const unitFrameLabelDp = unit.UnitFrameLabelDp
 
 var UnitModelFrameLabel = unit.UnitModelFrameLabel
-
-var UnitModelViewButtons = unit.UnitModelViewButtons
 
 var UnitModelFileLabel = unit.UnitModelFileLabel
 

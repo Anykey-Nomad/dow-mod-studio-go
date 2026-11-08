@@ -129,6 +129,10 @@ type Entity struct {
 	Name    string // resolved from Blueprints through BP
 	X, Y, Z float32
 	Heading float32
+	// Squad is the squad blueprint the object is placed as, when it is one:
+	// the Objects window reads it from the sbps files, and a save writes the
+	// squad record the scenario needs for a race object.
+	Squad string
 }
 
 // Map is the part of a scenario the viewer draws.
@@ -590,10 +594,12 @@ func (m *Map) MarshalBinary() ([]byte, error) {
 		entityChildren = append(entityChildren, chunk)
 		saved[id] = true
 	}
+	var added []Entity
 	for _, entity := range m.Entities {
 		if saved[entity.ID] {
 			continue
 		}
+		added = append(added, entity)
 		chunk := newEntityChunk()
 		find(chunk, "DATAENTI").Payload = marshalEntity(entity, nil)
 		entityChildren = append(entityChildren, chunk)
@@ -601,7 +607,9 @@ func (m *Map) MarshalBinary() ([]byte, error) {
 		saved[entity.ID] = true
 	}
 	entl.Children = entityChildren
-	if err := updatePlayerLists(meg, m.Entities); err != nil {
+	alive := pruneSquads(meg, m.Entities)
+	created := addSquads(meg, added, alive)
+	if err := updatePlayerLists(meg, m.Entities, alive, created); err != nil {
 		return nil, err
 	}
 	meg.Version = 2002
@@ -734,7 +742,177 @@ func (m *Map) ownerFromLists(entityID int) int {
 	return 0
 }
 
-func updatePlayerLists(meg *chunky.Chunk, entities []Entity) error {
+// pruneSquads drops squad definitions whose entities are no longer in the
+// scenario and returns the squad IDs that remain. The engine refuses a whole
+// map with "Invalid squad entity id" when a squad names an entity that is not
+// in the entity list, so deleting an object must not leave such a reference
+// behind. A squad keeps only the entities that survived and is dropped once
+// none of them are left.
+func pruneSquads(meg *chunky.Chunk, entities []Entity) map[uint32]bool {
+	alive := make(map[uint32]bool)
+	if meg == nil {
+		return alive
+	}
+	squads := meg.Child("FOLDSQDL")
+	if squads == nil {
+		return alive
+	}
+	exists := make(map[int]bool, len(entities))
+	for _, entity := range entities {
+		exists[entity.ID] = true
+	}
+	kept := make([]*chunky.Chunk, 0, len(squads.Children))
+	for _, def := range squads.Children {
+		if def == nil || def.TypeID != "FOLDSQDD" {
+			kept = append(kept, def)
+			continue
+		}
+		info, list := def.Child("DATASQDI"), def.Child("DATASQDE")
+		if info == nil || len(info.Payload) < 4 || list == nil || len(list.Payload) < 4 {
+			// A squad record this editor does not understand is not its to
+			// rewrite; leave it for the game's own loader to judge.
+			kept = append(kept, def)
+			continue
+		}
+		remaining := make([]int, 0, 4)
+		for _, id := range readIDList(list.Payload) {
+			if exists[id] {
+				remaining = append(remaining, id)
+			}
+		}
+		if len(remaining) == 0 {
+			continue
+		}
+		list.Payload = marshalIDList(remaining)
+		alive[le32(info.Payload, 0)] = true
+		kept = append(kept, def)
+	}
+	squads.Children = kept
+	return alive
+}
+
+// readIDList decodes a count then that many u32 IDs, the shape shared by
+// DATAEGRP, DATASGRP and DATASQDE.
+func readIDList(p []byte) []int {
+	if len(p) < 4 {
+		return nil
+	}
+	count := int(le32(p, 0))
+	if count < 0 || count > (len(p)-4)/4 {
+		return nil
+	}
+	ids := make([]int, 0, count)
+	for i := 0; i < count; i++ {
+		ids = append(ids, int(le32(p[4+4*i:], 0)))
+	}
+	return ids
+}
+
+// addSquads writes the squad record a placed race object needs, and returns the
+// new squad IDs per player. The reference editor places such an object as a
+// squad of one entity rather than as a bare entity: the squad blueprint names
+// the object in DATASBPT, the squad definition names the entity, and the
+// player's squad group names the squad, and the game reads the object through
+// all three. An object placed without a squad blueprint (an environment prop)
+// is left as it is.
+func addSquads(meg *chunky.Chunk, added []Entity, alive map[uint32]bool) map[int][]int {
+	created := make(map[int][]int)
+	if meg == nil || len(added) == 0 {
+		return created
+	}
+	squads := meg.Child("FOLDSQDL")
+	member := make(map[int]bool)
+	next := 50000
+	if squads != nil {
+		for _, def := range squads.Children {
+			if def == nil || def.TypeID != "FOLDSQDD" {
+				continue
+			}
+			info, list := def.Child("DATASQDI"), def.Child("DATASQDE")
+			if info == nil || len(info.Payload) < 4 || list == nil {
+				continue
+			}
+			if id := int(le32(info.Payload, 0)); id >= next {
+				next = id + 1
+			}
+			for _, id := range readIDList(list.Payload) {
+				member[id] = true
+			}
+		}
+	}
+	names, bpt := squadBlueprints(meg)
+	for _, entity := range added {
+		if entity.Squad == "" || member[entity.ID] {
+			continue
+		}
+		index := -1
+		for i, name := range names {
+			if strings.EqualFold(name, entity.Squad) {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			names = append(names, entity.Squad)
+			index = len(names) - 1
+			writeSquadBlueprints(bpt, names)
+		}
+		if squads == nil {
+			squads = &chunky.Chunk{TypeID: "FOLDSQDL", Version: 2000}
+			meg.Children = append(meg.Children, squads)
+		}
+		id := next
+		next++
+		squads.Children = append(squads.Children, &chunky.Chunk{TypeID: "FOLDSQDD", Version: 2000, Children: []*chunky.Chunk{
+			{TypeID: "DATASQDI", Version: 2000, Payload: append(chunky.I32(int32(id)), chunky.I32(int32(index))...)},
+			{TypeID: "DATASQDE", Version: 2000, Payload: marshalIDList([]int{entity.ID})},
+		}})
+		member[entity.ID] = true
+		alive[uint32(id)] = true
+		created[entity.Owner] = append(created[entity.Owner], id)
+	}
+	return created
+}
+
+// squadBlueprints decodes DATASBPT, creating the chunk when the scenario has
+// none yet, so a squad can be registered in a map that never had one.
+func squadBlueprints(meg *chunky.Chunk) ([]string, *chunky.Chunk) {
+	bpt := meg.Child("DATASBPT")
+	if bpt == nil {
+		bpt = &chunky.Chunk{TypeID: "DATASBPT", Version: 2000}
+		meg.Children = append(meg.Children, bpt)
+	}
+	return decodeStringTable(bpt.Payload), bpt
+}
+
+// decodeStringTable reads the count and length-prefixed strings shape that
+// DATASBPT and DATAEBPT share.
+func decodeStringTable(p []byte) []string {
+	var out []string
+	count := int(le32(p, 0))
+	off := 4
+	for i := 0; i < count && off+4 <= len(p); i++ {
+		length := int(le32(p, off))
+		off += 4
+		if length < 0 || off+length > len(p) {
+			break
+		}
+		out = append(out, string(p[off:off+length]))
+		off += length
+	}
+	return out
+}
+
+func writeSquadBlueprints(bpt *chunky.Chunk, names []string) {
+	payload := chunky.I32(int32(len(names)))
+	for _, name := range names {
+		payload = append(payload, chunky.I32(int32(len(name)))...)
+		payload = append(payload, name...)
+	}
+	bpt.Payload = payload
+}
+
+func updatePlayerLists(meg *chunky.Chunk, entities []Entity, squads map[uint32]bool, created map[int][]int) error {
 	if meg == nil {
 		return fmt.Errorf("scenario has no FOLDSMEG chunk")
 	}
@@ -768,7 +946,7 @@ func updatePlayerLists(meg *chunky.Chunk, entities []Entity) error {
 			continue
 		}
 		originalLists[owner] = original
-		players = append(players, marshalPlayerList(original, owner, byOwner[owner]))
+		players = append(players, marshalPlayerList(original, owner, byOwner[owner], squads, created[owner]))
 		used[owner] = true
 	}
 	for owner := 1; owner <= 8; owner++ {
@@ -776,17 +954,17 @@ func updatePlayerLists(meg *chunky.Chunk, entities []Entity) error {
 			continue
 		}
 		if original := originalLists[owner]; original != nil {
-			players = append(players, marshalPlayerList(original, owner, byOwner[owner]))
+			players = append(players, marshalPlayerList(original, owner, byOwner[owner], squads, created[owner]))
 			continue
 		}
 		playerID, _ := playerIDForOwner(owner)
-		players = append(players, newPlayerList(playerID, byOwner[owner]))
+		players = append(players, newPlayerList(playerID, byOwner[owner], created[owner]))
 	}
 	plls.Children = players
 	return nil
 }
 
-func marshalPlayerList(original *chunky.Chunk, owner int, ids []int) *chunky.Chunk {
+func marshalPlayerList(original *chunky.Chunk, owner int, ids []int, squads map[uint32]bool, created []int) *chunky.Chunk {
 	player := chunky.Clone(original)
 	info := player.Child("DATAINFO")
 	playerID, _ := playerIDForOwner(owner)
@@ -800,17 +978,43 @@ func marshalPlayerList(original *chunky.Chunk, owner int, ids []int) *chunky.Chu
 		player.Children = append(player.Children, entities)
 	}
 	entities.Payload = marshalIDList(ids)
-	if squads := player.Child("DATASGRP"); squads == nil {
-		player.Children = append(player.Children, &chunky.Chunk{TypeID: "DATASGRP", Version: 2000, Name: "Squad Group\x00", Payload: chunky.I32(0)})
+	squadList := player.Child("DATASGRP")
+	if squadList == nil {
+		squadList = &chunky.Chunk{TypeID: "DATASGRP", Version: 2000, Name: "Squad Group\x00", Payload: chunky.I32(0)}
+		player.Children = append(player.Children, squadList)
+	} else if len(squadList.Payload) >= 4 {
+		// The player's squad list names the squads the loader will validate
+		// against the entity list, so a squad that pruneSquads dropped has to
+		// leave the group too.
+		count := int(le32(squadList.Payload, 0))
+		kept := make([]int, 0, count+len(created))
+		for i := 0; i < count && 4+4*i+4 <= len(squadList.Payload); i++ {
+			id := le32(squadList.Payload[4+4*i:], 0)
+			if squads[id] {
+				kept = append(kept, int(id))
+			}
+		}
+		// A created squad can take the ID of one that was just dropped, so the
+		// group is de-duplicated rather than concatenated.
+		seen := make(map[int]bool, len(kept)+len(created))
+		unique := make([]int, 0, len(kept)+len(created))
+		for _, id := range append(kept, created...) {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			unique = append(unique, id)
+		}
+		squadList.Payload = marshalIDList(unique)
 	}
 	return player
 }
 
-func newPlayerList(playerID int, ids []int) *chunky.Chunk {
+func newPlayerList(playerID int, ids []int, created []int) *chunky.Chunk {
 	return &chunky.Chunk{TypeID: "FOLDPLYR", Version: 2001, Children: []*chunky.Chunk{
 		{TypeID: "DATAINFO", Version: 2000, Payload: append(chunky.I32(int32(playerID)), chunky.I32(0)...)},
 		{TypeID: "DATAEGRP", Version: 2000, Name: "Entity Group\x00", Payload: marshalIDList(ids)},
-		{TypeID: "DATASGRP", Version: 2000, Name: "Squad Group\x00", Payload: chunky.I32(0)},
+		{TypeID: "DATASGRP", Version: 2000, Name: "Squad Group\x00", Payload: marshalIDList(created)},
 	}}
 }
 

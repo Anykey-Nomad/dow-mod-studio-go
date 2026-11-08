@@ -81,6 +81,12 @@ var UnitSections = []UnitSection{
 		Hint:        "The model's .whe timelines, with the FX and sounds they fire.",
 	},
 	{
+		Label:       UnitSectionVoices,
+		MiddleTitle: "Voiced actions",
+		RightTitle:  "Replies",
+		Hint:        "The replies this unit is voiced with, and the takes the mod carries for each action.",
+	},
+	{
 		Label:       "Viewport",
 		MiddleTitle: "Viewport",
 		RightTitle:  "Model",
@@ -110,9 +116,11 @@ func UnitSectionNamed(label string) int {
 
 // Geometry of the columns. The left column is sized to read as a menu rather
 // than a list, the middle takes a third of the space, and the right column
-// takes whatever is left.
+// takes whatever is left. The left one was 132dp, which left the classic
+// editor's panel column and the preview sharing a window that was mostly
+// sections list; it is two thirds of that now, and the section names still fit.
 const (
-	UnitLeftColumnDp    = 132
+	UnitLeftColumnDp    = 86
 	UnitColHeaderHeight = 26
 	UnitColGapDp        = 8
 	UnitColMinWidthDp   = 140

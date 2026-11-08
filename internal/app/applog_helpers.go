@@ -43,6 +43,7 @@ func tuneCollector()      { applog.TuneCollector() }
 func logDir() string { return applog.LogDir() }
 
 func openLogFolder() error                  { return applog.OpenLogFolder() }
+func lastLogFilePath() string               { return applog.LastLogFilePath() }
 func openRecycleFolder() error              { return applog.OpenRecycleFolder() }
 func openFileWithDefaultApp(p string) error { return applog.OpenFileWithDefaultApp(p) }
 

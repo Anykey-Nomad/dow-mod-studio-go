@@ -509,6 +509,213 @@ func TestEventsSectionSavesEditedWheIntoModOverlay(t *testing.T) {
 	}
 }
 
+// TestANewActionLandsInTheLoadedWhe covers the New action button of the
+// Events section: it gives the file an action under a name no other action
+// answers to, marks the document as changed, and picks the new record so the
+// conditions panel beside the list is about it. A second press has to find
+// another name — two actions of one name are refused by the document.
+//
+// The action lands with no choices: an empty record is what the condition
+// editor's add tools are built to start from, and a button that had to carry
+// a first choice with it could not answer a .whe that has no timeline to name.
+func TestANewActionLandsInTheLoadedWhe(t *testing.T) {
+	const w, h = 1400, 800
+	ui := eventsSectionUI(t, w, h)
+	var ops op.Ops
+	gtx := testutil.NewLayoutContext(&ops, w, h)
+	doc := ui.UnitEvtDoc
+	before := len(doc.Actions())
+	ui.UnitEvtDirty = false
+
+	ui.UnitEvtNewAct.Click()
+	HandleUnitEventsInput(ui, gtx)
+	acts := doc.Actions()
+	if len(acts) != before+1 {
+		t.Fatalf("the file carries %d actions after New action, want %d", len(acts), before+1)
+	}
+	sel := ui.UnitEvtActionSel
+	if sel != len(acts)-1 {
+		t.Errorf("the new action is not the picked one: selection %d of %d", sel, len(acts))
+	}
+	first := acts[sel].Name
+	if !ui.UnitEvtDirty {
+		t.Error("a new action does not mark the document as changed")
+	}
+	if !ui.UnitEvtFocusAction {
+		t.Error("the section stayed on the timeline instead of moving onto the action it just created")
+	}
+	if n := len(acts[sel].Motions) + len(acts[sel].Subactions); n != 0 {
+		t.Errorf("a brand-new action carries %d choices, want none", n)
+	}
+
+	// The second one has to land under another name: the first press used
+	// the placeholder, and a file that already carries it takes the next.
+	ui.UnitEvtNewAct.Click()
+	HandleUnitEventsInput(ui, gtx)
+	acts = doc.Actions()
+	if len(acts) != before+2 {
+		t.Fatalf("the file carries %d actions after the second New action, want %d", len(acts), before+2)
+	}
+	if second := acts[len(acts)-1].Name; strings.EqualFold(second, first) {
+		t.Errorf("the second new action is called %q again, want another name", second)
+	}
+}
+
+// TestANewTimelineLandsAndIsPicked covers the new-timeline row of the middle
+// column: a name the file does not carry becomes a timeline the panel picks
+// straight away — its animation list is the next thing to fill — the field
+// empties for the next one, and the document is marked as changed. A name
+// that is empty or already in the file is refused with the reason, and the
+// typed name stays in the field to be corrected rather than being thrown
+// away with the attempt.
+func TestANewTimelineLandsAndIsPicked(t *testing.T) {
+	const w, h = 1400, 800
+	ui := eventsSectionUI(t, w, h)
+	doc := ui.UnitEvtDoc
+	before := len(doc.Timelines())
+	ui.UnitEvtDirty = false
+
+	ui.UnitEvtNewTlEd.SetText("  brand_new_timeline  ")
+	NewUnitTimeline(ui)
+	if ui.UnitEvtFormErr != "" {
+		t.Fatalf("NewUnitTimeline: %s", ui.UnitEvtFormErr)
+	}
+	if got := len(doc.Timelines()); got != before+1 {
+		t.Fatalf("the file carries %d timelines after New timeline, want %d", got, before+1)
+	}
+	if ui.UnitEvtTimeline != "brand_new_timeline" {
+		t.Errorf("the picked timeline is %q, want the one just created", ui.UnitEvtTimeline)
+	}
+	if sel := SelectedUnitEventTimeline(ui); sel == nil {
+		t.Fatal("the new timeline is not on show in the panel")
+	} else if len(sel.Animations) != 0 {
+		t.Errorf("a brand-new timeline arrives with %d animations, want none to fill", len(sel.Animations))
+	}
+	if got := ui.UnitEvtNewTlEd.Text(); got != "" {
+		t.Errorf("the name field still holds %q after the timeline was created", got)
+	}
+	if !ui.UnitEvtDirty {
+		t.Error("a new timeline does not mark the document as changed")
+	}
+
+	// An empty name has no timeline to become, and the refusal keeps what
+	// was typed so it can be corrected.
+	ui.UnitEvtNewTlEd.SetText("   ")
+	NewUnitTimeline(ui)
+	if ui.UnitEvtFormErr == "" {
+		t.Error("a timeline was created without a name")
+	}
+	if got := len(doc.Timelines()); got != before+1 {
+		t.Errorf("the file carries %d timelines after the refused attempt, want %d", got, before+1)
+	}
+
+	// A name the file already carries is refused rather than replaced: two
+	// timelines of one name are two motions that cannot be told apart.
+	ui.UnitEvtNewTlEd.SetText("filter_tl_01")
+	NewUnitTimeline(ui)
+	if ui.UnitEvtFormErr == "" {
+		t.Error("a timeline was created under a name the file already carries")
+	}
+	if got := len(doc.Timelines()); got != before+1 {
+		t.Errorf("the file carries %d timelines after the refused attempt, want %d", got, before+1)
+	}
+	if got := ui.UnitEvtNewTlEd.Text(); got != "filter_tl_01" {
+		t.Errorf("the refused name was cleared from the field: %q", got)
+	}
+}
+
+// TestARemovedTimelineIsRefusedWhileAnActionNamesIt covers the Remove timeline
+// button both ways: a timeline one of the file's actions names in a motion is
+// refused before anything is dropped, with the actions that hold it named, and
+// one nothing points at comes out with the panel moving on to a neighbour
+// rather than being left on a name that is gone.
+func TestARemovedTimelineIsRefusedWhileAnActionNamesIt(t *testing.T) {
+	const w, h = 1400, 800
+	ui := eventsSectionUI(t, w, h)
+	doc := ui.UnitEvtDoc
+	before := len(doc.Timelines())
+
+	// Every action of this fixture drives filter_tl_00 with its motion.
+	SelectUnitEventTimeline(ui, "filter_tl_00")
+	RemoveSelectedUnitTimeline(ui)
+	if ui.UnitEvtFormErr == "" {
+		t.Fatal("a timeline the actions name in their motions was removed")
+	}
+	if !strings.Contains(ui.UnitEvtFormErr, "filter_act_") {
+		t.Errorf("the refusal does not name the actions holding the timeline: %s", ui.UnitEvtFormErr)
+	}
+	if got := len(doc.Timelines()); got != before {
+		t.Errorf("the file changed under a refusal: %d timelines, want %d", got, before)
+	}
+
+	// Nothing names the last of them: it comes out, and the pick moves on.
+	SelectUnitEventTimeline(ui, "filter_tl_59")
+	RemoveSelectedUnitTimeline(ui)
+	if ui.UnitEvtFormErr != "" {
+		t.Fatalf("RemoveSelectedUnitTimeline: %s", ui.UnitEvtFormErr)
+	}
+	if got := len(doc.Timelines()); got != before-1 {
+		t.Errorf("the file carries %d timelines after the removal, want %d", got, before-1)
+	}
+	if ui.UnitEvtTimeline == "filter_tl_59" {
+		t.Error("the panel is still pointed at the timeline that was removed")
+	}
+	if SelectedUnitEventTimeline(ui) == nil {
+		t.Error("no timeline is picked after the removal, though the file still has them")
+	}
+	if !ui.UnitEvtDirty {
+		t.Error("a removed timeline does not mark the document as changed")
+	}
+	if _, ok := doc.TimelinePayload("filter_tl_59"); ok {
+		t.Error("the removed timeline is still in the document")
+	}
+}
+
+// TestARemovedActionIsRefusedWhileAnotherCallsIt covers the Remove action
+// button both ways: an action another action calls in a sub-action link is
+// refused with the caller named — a link left pointing at nothing is a break
+// the file cannot report — and the caller itself, being called by nobody,
+// comes out with the pick staying inside the shorter list.
+func TestARemovedActionIsRefusedWhileAnotherCallsIt(t *testing.T) {
+	const w, h = 1400, 800
+	ui := eventsSectionUI(t, w, h)
+	doc := ui.UnitEvtDoc
+	if err := doc.AddAction(whe.FxAction{
+		Name:       "caller_act",
+		Subactions: []whe.FxActionLink{{Name: "filter_act_03", Compare: whe.FxCompareNone}},
+	}); err != nil {
+		t.Fatalf("AddAction: %v", err)
+	}
+	before := len(doc.Actions())
+
+	ui.UnitEvtActionSel = actionIndexByName(doc, "filter_act_03")
+	RemoveSelectedUnitAction(ui)
+	if ui.UnitActErr == "" {
+		t.Fatal("an action another action calls was removed")
+	}
+	if !strings.Contains(ui.UnitActErr, "caller_act") {
+		t.Errorf("the refusal does not name the caller: %s", ui.UnitActErr)
+	}
+	if got := len(doc.Actions()); got != before {
+		t.Errorf("the file changed under a refusal: %d actions, want %d", got, before)
+	}
+
+	ui.UnitEvtActionSel = actionIndexByName(doc, "caller_act")
+	RemoveSelectedUnitAction(ui)
+	if ui.UnitActErr != "" {
+		t.Fatalf("RemoveSelectedUnitAction: %s", ui.UnitActErr)
+	}
+	if got := len(doc.Actions()); got != before-1 {
+		t.Errorf("the file carries %d actions after the removal, want %d", got, before-1)
+	}
+	if left := len(doc.Actions()); ui.UnitEvtActionSel < 0 || ui.UnitEvtActionSel >= left {
+		t.Errorf("the pick sits at %d of %d actions after the removal", ui.UnitEvtActionSel, left)
+	}
+	if !ui.UnitEvtDirty {
+		t.Error("a removed action does not mark the document as changed")
+	}
+}
+
 // TestTheEventsSectionLayoutsItsColumns lays the section out headlessly with a
 // .whe behind it, the way a reader meets it: the timeline rows have to be
 // clickable, the event rows have to be drawn, and a frame must not panic over

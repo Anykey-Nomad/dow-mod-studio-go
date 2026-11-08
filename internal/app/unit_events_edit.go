@@ -1,6 +1,7 @@
 package app
 
 import (
+	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/whe"
 	"fmt"
 	"gioui.org/io/key"
@@ -41,9 +42,18 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 	if ui.UnitEvtDoc == nil {
 		return
 	}
+	// The two list filters take the caret on a press and a copied name of
+	// their own list's space on a right press; the lists below them are
+	// narrowed by what they hold as it is typed.
+	UnitEvtUpdateFilter(ui, gtx, &ui.UnitEvtTlFilter, uikit.NameSpaceMotion)
+	UnitEvtUpdateFilter(ui, gtx, &ui.UnitActFilter, uikit.NameSpaceAction)
+	UnitEvtUpdateNewTlName(ui, gtx)
 	// Fill the form from the selected row whenever the selection moves, so
 	// re-firing an existing effect is a time edit rather than a retyping.
 	SyncUnitEventForm(ui)
+	// The motion tail's two editable parts — the type chip and the modifier
+	// field — are filled from the selected timeline by the same rule.
+	UnitTailInput(ui, gtx)
 	timelines := ui.UnitEvtDoc.Timelines()
 	tl := SelectedUnitEventTimeline(ui)
 	events := 0
@@ -52,7 +62,14 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 	}
 	EnsureUnitEventClicks(ui, len(timelines), events)
 	for i := range ui.UnitEvtTlClicks {
-		if i < len(timelines) && ui.UnitEvtTlClicks[i].Clicked(gtx) {
+		if i >= len(timelines) {
+			continue
+		}
+		// A right press on a row copies the timeline's name — a motion by
+		// another heading — into the shared clipboard, where a name field
+		// of matching type pastes it back.
+		uikit.CopyRowName(ui, gtx, uikit.RowKey("evt-tl", i), uikit.NameSpaceMotion, timelines[i].Name)
+		if ui.UnitEvtTlClicks[i].Clicked(gtx) {
 			ui.UnitEvtFocusAction = false
 			SelectUnitEventTimeline(ui, timelines[i].Name)
 			tl = SelectedUnitEventTimeline(ui)
@@ -69,7 +86,12 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 	acts := ui.UnitEvtDoc.Actions()
 	EnsureUnitEvtActionClicks(ui, len(acts))
 	for i := range ui.UnitEvtActionClicks {
-		if i < len(acts) && ui.UnitEvtActionClicks[i].Clicked(gtx) {
+		if i >= len(acts) {
+			continue
+		}
+		// A right press copies the action's name into the shared clipboard.
+		uikit.CopyRowName(ui, gtx, uikit.RowKey("evt-act", i), uikit.NameSpaceAction, acts[i].Name)
+		if ui.UnitEvtActionClicks[i].Clicked(gtx) {
 			UnitEvtBlurFields(ui, gtx)
 			// The panel leaves the timeline behind completely, and a sound
 			// it was auditioning belongs to that timeline.
@@ -88,8 +110,19 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 	if ui.UnitEvtFocusAction {
 		UnitActConditionsInput(ui, gtx)
 	}
+	// The action's own name field takes a copied action name on right-click:
+	// renaming one unit's action to match another's is the common move.
+	uikit.MarkClipPasteName(ui, &ui.UnitActNameEd, uikit.NameSpaceAction)
+	uikit.PasteClipField(ui, gtx, &ui.UnitActNameEd)
 	for i := range ui.UnitEvtClicks {
-		if i >= events || !ui.UnitEvtClicks[i].Clicked(gtx) {
+		if i >= events {
+			continue
+		}
+		// A right press copies the event's name into the shared clipboard.
+		if tl != nil {
+			uikit.CopyRowName(ui, gtx, uikit.RowKey("evt-ev", i), uikit.NameSpaceEvent, tl.Events[i].Name)
+		}
+		if !ui.UnitEvtClicks[i].Clicked(gtx) {
 			continue
 		}
 		// A row click is a selection, and it lets go of any field being typed
@@ -163,9 +196,39 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 	// from the selected timeline. They are only laid out for a selected
 	// timeline, so with none (or while an action is shown) no press can land.
 	if tl != nil {
+		// The add field under the list: an animation name typed or
+		// pasted from a copied row, committed by the button or Enter.
+		uikit.MarkClipPasteName(ui, &ui.UnitAnimAddEd, uikit.NameSpaceAnimation)
+		uikit.PasteClipField(ui, gtx, &ui.UnitAnimAddEd)
+		ui.UnitAnimAddEd.SingleLine = true
+		ui.UnitAnimAddEd.Submit = true
+		animAddSubmit := false
+		for {
+			ev, ok := ui.UnitAnimAddEd.Update(gtx)
+			if !ok {
+				break
+			}
+			if _, submit := ev.(widget.SubmitEvent); submit {
+				animAddSubmit = true
+			}
+		}
+		if animAddSubmit || ui.UnitAnimAddClick.Clicked(gtx) {
+			AddUnitTimelineAnimation(ui)
+		}
+		// The list button beside the field raises the model's clips instead:
+		// a picked name is committed the way Enter in the field commits it.
+		if ui.UnitAnimChoose.Clicked(gtx) {
+			OpenEvtPicker(ui, evtPickAnim)
+		}
 		EnsureUnitEventAnimClicks(ui, len(tl.Animations))
 		for i := range ui.UnitEvtAnimClicks {
-			if i < len(tl.Animations) && ui.UnitEvtAnimClicks[i].Clicked(gtx) {
+			if i >= len(tl.Animations) {
+				continue
+			}
+			// A right press copies the blend entry's animation name into
+			// the shared clipboard.
+			uikit.CopyRowName(ui, gtx, uikit.RowKey("evt-anim", i), uikit.NameSpaceAnimation, tl.Animations[i])
+			if ui.UnitEvtAnimClicks[i].Clicked(gtx) {
 				RemoveUnitTimelineAnimation(ui, i)
 				return
 			}
@@ -195,12 +258,37 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 		PasteUnitAction(ui)
 		return
 	}
+	if ui.UnitEvtNewAct.Clicked(gtx) {
+		if _, _, ok := NewUnitAction(ui); ok {
+			// The panel moves onto actions the way a press on an action row
+			// moves it, so the new record's own name field and condition
+			// tools are what is on screen for finishing it.
+			UnitEvtBlurFields(ui, gtx)
+			if !ui.UnitEvtFocusAction {
+				ui.EvtPlayer.StopAll()
+			}
+			ui.UnitEvtFocusAction = true
+		}
+		return
+	}
 	if ui.UnitEvtCopy.Clicked(gtx) {
 		CopySelectedUnitEvents(ui)
 		return
 	}
 	if ui.UnitEvtCopyTl.Clicked(gtx) {
 		CopySelectedUnitTimeline(ui)
+		return
+	}
+	if ui.UnitEvtNewTl.Clicked(gtx) {
+		NewUnitTimeline(ui)
+		return
+	}
+	if ui.UnitEvtRemoveTl.Clicked(gtx) {
+		RemoveSelectedUnitTimeline(ui)
+		return
+	}
+	if ui.UnitEvtRemoveAct.Clicked(gtx) {
+		RemoveSelectedUnitAction(ui)
 		return
 	}
 	if ui.UnitEvtPaste.Clicked(gtx) {
@@ -256,6 +344,21 @@ func HandleUnitEventsInput(ui *uiState, gtx layout.Context) {
 func UnitEvtUpdateEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, pick evtPickTarget, batchTime bool) {
 	ed.SingleLine = true
 	ed.Submit = true
+	// The moment is the field typed for the frame/time clipboard — batchTime
+	// is set for it alone — so a right-click there pastes the moment copied
+	// off the timebar, in seconds.
+	if batchTime {
+		uikit.MarkClipPaste(ui, ed, uikit.ClipPasteTime)
+	}
+	// The event name field takes a copied event name on right-click.
+	if pick == evtPickName {
+		uikit.MarkClipPasteName(ui, ed, uikit.NameSpaceEvent)
+	}
+	// The marker field takes a copied marker name the same way.
+	if pick == evtPickMarker {
+		uikit.MarkClipPasteName(ui, ed, uikit.NameSpaceMarker)
+	}
+	uikit.PasteClipField(ui, gtx, ed)
 	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
 		// A field with a list opens its picker instead of taking the caret: the
 		// picker's own filter takes the typing.
@@ -277,6 +380,24 @@ func UnitEvtUpdateEditor(ui *uiState, gtx layout.Context, ed *widget.Editor, pic
 				ApplySelectedEventFormSingle(ui)
 			}
 			ed.Blur(gtx)
+		}
+	}
+}
+
+// unitEvtUpdateFilter owns one list filter: a press takes the caret, typing
+// narrows the list as it goes, and a right press pastes a copied name of the
+// list's own space. Nothing is submitted — the rows are read every frame from
+// what the field holds.
+func UnitEvtUpdateFilter(ui *uiState, gtx layout.Context, ed *widget.Editor, space string) {
+	ed.SingleLine = true
+	uikit.MarkClipPasteName(ui, ed, space)
+	uikit.PasteClipField(ui, gtx, ed)
+	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
+		gtx.Execute(key.FocusCmd{Tag: ed})
+	}
+	for {
+		if _, ok := ed.Update(gtx); !ok {
+			break
 		}
 	}
 }
@@ -455,6 +576,128 @@ func RemoveSelectedUnitEvent(ui *uiState) {
 	ui.StatusText = fmt.Sprintf("Removed %d event(s) from %s — save to write it into the mod", removed, ui.UnitEvtTimeline)
 }
 
+// unitEvtUpdateNewTlName owns the new-timeline name field: a press takes the
+// caret, a right press pastes a copied timeline name into it, and Enter
+// creates the timeline the way the button beside it does.
+func UnitEvtUpdateNewTlName(ui *uiState, gtx layout.Context) {
+	ed := &ui.UnitEvtNewTlEd
+	ed.SingleLine = true
+	ed.Submit = true
+	uikit.MarkClipPasteName(ui, ed, uikit.NameSpaceMotion)
+	uikit.PasteClipField(ui, gtx, ed)
+	if RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx) {
+		gtx.Execute(key.FocusCmd{Tag: ed})
+	}
+	for {
+		ev, ok := ed.Update(gtx)
+		if !ok {
+			break
+		}
+		if _, submit := ev.(widget.SubmitEvent); submit {
+			NewUnitTimeline(ui)
+			ed.Blur(gtx)
+		}
+	}
+}
+
+// newUnitTimeline creates the timeline the name field asks for: an empty
+// DATAMTON under that name, wearing the playback behaviour of one of this
+// file's own timelines, and picks it so the list of its animations is the
+// next thing on show to fill. Nothing renames a timeline, so the name is
+// typed here rather than generated the way an action's placeholder is.
+//
+// The change lands in memory like every other edit here; Save .whe writes it.
+func NewUnitTimeline(ui *uiState) {
+	doc := ui.UnitEvtDoc
+	if doc == nil {
+		ui.UnitEvtFormErr = "No .whe is loaded."
+		ui.StatusText = "No .whe is loaded — select a unit whose model has one first"
+		return
+	}
+	name := strings.TrimSpace(ui.UnitEvtNewTlEd.Text())
+	if name == "" {
+		ui.UnitEvtFormErr = "Type a name for the new timeline."
+		return
+	}
+	if err := doc.AddTimeline(name, doc.NewTimelinePayload(nil)); err != nil {
+		ui.UnitEvtFormErr = err.Error()
+		return
+	}
+	ui.UnitEvtFormErr = ""
+	ui.LastFormAction = "add"
+	ui.UnitEvtDirty = true
+	ui.UnitEvtNewTlEd.SetText("")
+	// The new timeline is the one the panel shows: its animation list is the
+	// next thing to fill, and the field under it takes the clip.
+	ui.UnitEvtFocusAction = false
+	SelectUnitEventTimeline(ui, name)
+	ReloadUnitModelFx(ui)
+	ui.StatusText = fmt.Sprintf("Added timeline %s — save to write it into the mod", name)
+}
+
+// removeUnitTimeline takes the picked timeline out of the file. An action
+// still naming it in a motion is refused before anything is dropped: a motion
+// left pointing at nothing is a break the file cannot report, so the reader
+// is told which actions hold the name and takes those links out first.
+//
+// The panel moves on to a neighbour rather than to nothing, so the list keeps
+// a picked row after the one under it is gone.
+func RemoveSelectedUnitTimeline(ui *uiState) {
+	doc := ui.UnitEvtDoc
+	tl := SelectedUnitEventTimeline(ui)
+	if doc == nil || tl == nil {
+		ui.UnitEvtFormErr = "Select a timeline to remove."
+		ui.StatusText = ui.UnitEvtFormErr
+		return
+	}
+	var used []string
+	for _, a := range doc.Actions() {
+		for _, ln := range a.Motions {
+			if strings.EqualFold(strings.TrimSpace(ln.Name), tl.Name) {
+				used = append(used, a.Name)
+				break
+			}
+		}
+	}
+	if len(used) > 0 {
+		ui.UnitEvtFormErr = fmt.Sprintf("%s is named by %s — take it out of those actions first", tl.Name, usedByNames(used))
+		ui.StatusText = ui.UnitEvtFormErr
+		return
+	}
+	// Where it sits decides what is picked after it: the one that takes its
+	// place, or the last one left when it was the last.
+	index := 0
+	for i, other := range doc.Timelines() {
+		if strings.EqualFold(strings.TrimSpace(other.Name), tl.Name) {
+			index = i
+			break
+		}
+	}
+	if err := doc.RemoveTimeline(tl.Name); err != nil {
+		ui.UnitEvtFormErr = err.Error()
+		ui.StatusText = ui.UnitEvtFormErr
+		return
+	}
+	ui.UnitEvtFormErr = ""
+	ui.LastFormAction = "remove"
+	ui.UnitEvtDirty = true
+	remaining := doc.Timelines()
+	if len(remaining) == 0 {
+		ui.UnitEvtTimeline = ""
+		ui.UnitEvtSel = 0
+		ui.UnitEvtSelSet = map[int]bool{}
+		ui.UnitEvtSelAnchor = 0
+		ui.UnitEvtBound = ""
+	} else {
+		if index >= len(remaining) {
+			index = len(remaining) - 1
+		}
+		SelectUnitEventTimeline(ui, remaining[index].Name)
+	}
+	ReloadUnitModelFx(ui)
+	ui.StatusText = fmt.Sprintf("Removed timeline %s — save to write it into the mod", tl.Name)
+}
+
 // removeUnitTimelineAnimation drops one entry from the selected timeline's
 // animation blend list. It edits the in-memory document only — Save .whe
 // writes it into the mod, matching how every other timeline edit behaves.
@@ -481,6 +724,44 @@ func RemoveUnitTimelineAnimation(ui *uiState, index int) {
 	ui.LastFormAction = "remove"
 	ReloadUnitModelFx(ui)
 	ui.StatusText = fmt.Sprintf("Removed an animation from %s — save to write it into the mod", ui.UnitEvtTimeline)
+}
+
+// addUnitTimelineAnimation appends the add field's name to the selected
+// motion's blend list — the inverse of the Remove beside each row. The change
+// lands in memory like every other edit here; Save .whe writes it into the
+// mod. A name the blend already carries is refused by the document, so a
+// double Add cannot quietly duplicate an entry.
+func AddUnitTimelineAnimation(ui *uiState) {
+	doc := ui.UnitEvtDoc
+	tl := SelectedUnitEventTimeline(ui)
+	if doc == nil || tl == nil {
+		ui.UnitEvtFormErr = "Select a timeline to add an animation to."
+		ui.LastFormAction = ""
+		return
+	}
+	name := strings.TrimSpace(ui.UnitAnimAddEd.Text())
+	if name == "" {
+		ui.UnitEvtFormErr = "Type an animation name to add."
+		ui.LastFormAction = ""
+		return
+	}
+	added, err := doc.AddTimelineAnimation(ui.UnitEvtTimeline, name)
+	if err != nil {
+		ui.UnitEvtFormErr = err.Error()
+		ui.LastFormAction = ""
+		return
+	}
+	if !added {
+		ui.UnitEvtFormErr = fmt.Sprintf("This motion already blends %s.", name)
+		ui.LastFormAction = ""
+		return
+	}
+	ui.UnitEvtFormErr = ""
+	ui.UnitEvtDirty = true
+	ui.LastFormAction = "add"
+	ui.UnitAnimAddEd.SetText("")
+	ReloadUnitModelFx(ui)
+	ui.StatusText = fmt.Sprintf("Added animation %s to %s — save to write it into the mod", name, ui.UnitEvtTimeline)
 }
 
 // pasteTimelineClip writes a copied timeline into doc under its own name: it is

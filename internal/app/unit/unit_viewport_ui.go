@@ -119,20 +119,6 @@ func UnitModelFrameLabel(ui *uistate.State, gtx layout.Context, v *viewer.ModelV
 	return d
 }
 
-// unitModelViewButtons is the viewport's reset row. WHM tabs reuse it as well.
-func UnitModelViewButtons(ui *uistate.State, gtx layout.Context, t *uistate.Tab, showListToggle bool) layout.Dimensions {
-	gtx = viewer.ModelRowHeight(gtx)
-	return layout.Inset{Top: unit.Dp(2), Left: unit.Dp(6), Right: unit.Dp(6), Bottom: unit.Dp(4)}.Layout(gtx,
-		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return uikit.SmallButton(ui, gtx, &t.ModelReset, "Reset view")
-				}),
-				layout.Flexed(1, uikit.RowGap()),
-			)
-		})
-}
-
 // unitModelFileLabel is the model file the viewport is showing.
 func UnitModelFileLabel(ui *uistate.State) string {
 	return filepath.Base(ui.UnitModelPath)
@@ -217,7 +203,7 @@ func UnitBoneKeyField(ui *uistate.State, gtx layout.Context, axis string, ed *wi
 			gtx.Constraints.Min = image.Pt(gtx.Dp(56), gtx.Dp(20))
 			gtx.Constraints.Max = image.Pt(gtx.Dp(56), gtx.Dp(22))
 			b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
-			return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			dims := b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					w := material.Editor(ui.Th, ed, "")
 					w.TextSize = unit.Sp(10)
@@ -225,6 +211,10 @@ func UnitBoneKeyField(ui *uistate.State, gtx layout.Context, axis string, ed *wi
 					return w.Layout(gtx)
 				})
 			})
+			// A field typed for the frame/time clipboard (the frame count) also
+			// registers the area its right-click paste is read from.
+			uikit.LayoutClipPaste(ui, gtx, ed, dims.Size)
+			return dims
 		}),
 	)
 }
@@ -697,8 +687,92 @@ func SelectObjectAction(v *viewer.ModelViewer, tree *modtree.ModTree, modelPath,
 		return false
 	}
 	seed := rand.Int63()
-	clipNames := doc.ActionAnimationNamesWithSeed(actionName, seed)
-	if len(clipNames) == 0 && strings.EqualFold(strings.TrimSpace(actionName), "idle") {
+	seen := make(map[string]bool)
+	take := func(names []string) []*uistate.WhmAnimation {
+		var out []*uistate.WhmAnimation
+		for _, name := range names {
+			key := strings.ToLower(strings.TrimSpace(name))
+			if key == "" || seen[key] {
+				continue
+			}
+			animation, source := sgb.ResolveLinkedAnimation(tree, modelPath, &v.Model.Model, name)
+			if animation == nil || source == nil {
+				continue
+			}
+			if source != &v.Model.Model {
+				animation = sgb.BindAnimationToModel(&v.Model.Model, animation)
+			}
+			if animation == nil {
+				continue
+			}
+			seen[key] = true
+			out = append(out, animation)
+		}
+		return out
+	}
+
+	primary := take(resolveActionClips(doc, actionName, seed))
+	// An action animates only the parts it has a motion for, and the rest of the
+	// unit keeps standing: a moving monolith carries its body while each gun,
+	// which has no move motion of its own, goes on idling. The standing clips are
+	// therefore fillers, and a filler that fights the action over a bone is left
+	// out — half a limb following one pose and half the other is what tears a
+	// part apart. A firing Basilisk is the other way round: its fire clip carries
+	// the whole crew, so no filler survives there, which is what the data says.
+	var clips []*uistate.WhmAnimation
+	if !standingStateName(actionName) && !deathStateName(actionName) {
+		occupied := make([]bool, len(v.Model.Model.Bones))
+		for _, animation := range primary {
+			for bone, moved := range v.Model.Model.MovedBones(animation) {
+				if moved {
+					occupied[bone] = true
+				}
+			}
+		}
+		for _, animation := range take(resolveActionClips(doc, "idle", seed)) {
+			conflict := false
+			for bone, moved := range v.Model.Model.MovedBones(animation) {
+				if moved && bone < len(occupied) && occupied[bone] {
+					conflict = true
+					break
+				}
+			}
+			if conflict {
+				continue
+			}
+			clips = append(clips, animation)
+		}
+	}
+	clips = append(clips, primary...)
+	if len(clips) == 0 {
+		return false
+	}
+	viewer.SelectAnimations(v, clips, true)
+	v.Playing = true
+	return true
+}
+
+// resolveActionClips resolves one name to the clips a preview should play for
+// it. A unit's standing state often lives in default rather than in an action
+// named idle — the monolith keeps the body idle and every gun idle there — so an
+// empty answer from one name is asked of the other, and the pristine state's
+// idle/stand clips answer last. Aim and tracking clips are left out unless the
+// action is one of those states itself.
+func resolveActionClips(doc *whe.Document, actionName string, seed int64) []string {
+	action := strings.TrimSpace(actionName)
+	clipNames := doc.ActionAnimationNamesWithSeed(action, seed)
+	if len(clipNames) == 0 {
+		for _, fallback := range []string{"default", "idle"} {
+			if strings.EqualFold(action, fallback) {
+				continue
+			}
+			if names := doc.ActionAnimationNamesWithSeed(fallback, seed); len(names) > 0 {
+				clipNames = names
+				break
+			}
+		}
+	}
+	if len(clipNames) == 0 && strings.EqualFold(action, "idle") {
 		for _, name := range doc.RestClipNamesWithSeed(seed) {
 			lower := strings.ToLower(strings.TrimSpace(name))
 			if strings.HasPrefix(lower, "idle") || strings.HasPrefix(lower, "stand") {
@@ -706,31 +780,48 @@ func SelectObjectAction(v *viewer.ModelViewer, tree *modtree.ModTree, modelPath,
 			}
 		}
 	}
-	var clips []*uistate.WhmAnimation
-	seen := make(map[string]bool)
+	if !aimStateAction(action) {
+		clipNames = withoutAimStateClips(clipNames)
+	}
+	return clipNames
+}
+
+// standingStateName reports whether the action is a unit's standing state,
+// which already animates every part it keeps running and so needs no fillers.
+func standingStateName(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	return lower == "default" || strings.HasPrefix(lower, "idle") || strings.HasPrefix(lower, "stand")
+}
+
+// deathStateName reports whether the action is a death state: a dying unit does
+// not keep its guns idling.
+func deathStateName(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	return strings.Contains(lower, "die") || strings.Contains(lower, "death")
+}
+
+// aimStateAction reports whether the requested action is itself a weapon
+// steering state — the one case where its aim and tracking clips belong on
+// screen.
+func aimStateAction(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	return strings.HasPrefix(lower, "aim") || strings.HasPrefix(lower, "track")
+}
+
+// withoutAimStateClips drops weapon steering clips from a standing state's
+// clips. A unit's default action calls aim_master unconditionally, because the
+// engine picks one aim_horiz_/aim_vert_ pose per target; played together in a
+// preview those poses fight over the same turret pivots and turn every gun in
+// all directions at once. A standing unit plays its idle clips, so they stay.
+func withoutAimStateClips(clipNames []string) []string {
+	kept := clipNames[:0]
 	for _, name := range clipNames {
-		key := strings.ToLower(strings.TrimSpace(name))
-		if key == "" || seen[key] {
+		if aimStateAction(name) {
 			continue
 		}
-		seen[key] = true
-		animation, source := sgb.ResolveLinkedAnimation(tree, modelPath, &v.Model.Model, name)
-		if animation == nil || source == nil {
-			continue
-		}
-		if source != &v.Model.Model {
-			animation = sgb.BindAnimationToModel(&v.Model.Model, animation)
-		}
-		if animation != nil {
-			clips = append(clips, animation)
-		}
+		kept = append(kept, name)
 	}
-	if len(clips) == 0 {
-		return false
-	}
-	viewer.SelectAnimations(v, clips, true)
-	v.Playing = true
-	return true
+	return kept
 }
 
 // activateUnitAction plays every clip the named action of the loaded unit

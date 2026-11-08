@@ -2,12 +2,15 @@ package app
 
 import (
 	"dow-mod-studio/internal/app/uikit"
+	"fmt"
+	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"image"
+	"strings"
 )
 
 // layoutUnitPickerStrip draws the race and unit pickers. It is a Rigid above
@@ -32,7 +35,7 @@ func LayoutUnitPickerStrip(ui *uiState, gtx layout.Context) layout.Dimensions {
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return ui.UnitListTrigger.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return UnitPickerField(ui, gtx, "Unit", unitLabel, sel != nil, ui.UnitListOpen)
+						return UnitPickerField(ui, gtx, "Unit", unitLabel, cat != nil && unitPickerAllUnits(cat) > 0, ui.UnitListOpen)
 					})
 				}),
 				// The buttons that start a new unit or a new building of the
@@ -195,22 +198,166 @@ func LayoutUnitDropdown(ui *uiState, gtx layout.Context, xOffset int) layout.Dim
 	return LayoutUnitListDropdown(ui, gtx, xOffset)
 }
 
-// layoutUnitListDropdown is the open unit list of the selected race. It hangs
-// below the strip, over the columns, and scrolls with the same list helper the
-// rest of the app uses. xOffset is where the Unit field sits.
+// unitPickerHit is one row of the unit dropdown: which race, and which unit of
+// that race, the row stands for. Rows are addressed by these rather than by
+// their own position, because a filtered list can hold units of several races
+// and picking one has to move both halves of the selection.
+type unitPickerHit struct {
+	race int
+	unit int
+}
+
+// unitPickerFilterDp is the height of the filter row the dropdown carries
+// above its rows — the field itself and the padding around it.
+const unitPickerFilterDp = 32
+
+// unitPickerUnitAt is the race's unit at an index of the list the picker
+// shows — troops before structures, the order UnitsOf builds it in — read in
+// place so a row is drawn without building that list again for every row.
+func unitPickerUnitAt(r *raceEntry, i int) (unitEntry, bool) {
+	if r == nil || i < 0 {
+		return unitEntry{}, false
+	}
+	if i < len(r.Troops) {
+		return r.Troops[i], true
+	}
+	if j := i - len(r.Troops); j < len(r.Structures) {
+		return r.Structures[j], true
+	}
+	return unitEntry{}, false
+}
+
+// unitPickerAllUnits is every unit of every race, which is what the count
+// beside the filter is out of once it is searching everywhere.
+func unitPickerAllUnits(cat *unitCatalog) int {
+	n := 0
+	for i := range cat.Races {
+		n += cat.Races[i].UnitCount()
+	}
+	return n
+}
+
+// UnitPickerHits is what the unit dropdown lists. With the filter empty it is
+// the units of the race on show in their own order, which is the list the
+// dropdown has always been. With text in it, it is every unit of every race
+// whose name, file name or race matches — so a unit can be found without
+// knowing which race holds it, and picking one moves the race with it.
+func UnitPickerHits(ui *uiState) []unitPickerHit {
+	cat := UnitCatalogFor(ui)
+	if cat == nil {
+		return nil
+	}
+	q := strings.ToLower(strings.TrimSpace(ui.UnitPickerFilter.Text()))
+	if q == "" {
+		raceIdx := cat.ClampRaceSel(ui.UnitRaceSel)
+		if raceIdx >= len(cat.Races) {
+			return nil
+		}
+		n := cat.Races[raceIdx].UnitCount()
+		hits := make([]unitPickerHit, n)
+		for i := range hits {
+			hits[i] = unitPickerHit{race: raceIdx, unit: i}
+		}
+		return hits
+	}
+	var hits []unitPickerHit
+	for ri := range cat.Races {
+		r := &cat.Races[ri]
+		race := strings.ToLower(r.Name)
+		for i := 0; i < r.UnitCount(); i++ {
+			u, ok := unitPickerUnitAt(r, i)
+			if !ok {
+				continue
+			}
+			if strings.Contains(strings.ToLower(UnitLabel(ui, u)), q) ||
+				strings.Contains(strings.ToLower(u.Name), q) ||
+				strings.Contains(race, q) {
+				hits = append(hits, unitPickerHit{race: ri, unit: i})
+			}
+		}
+	}
+	return hits
+}
+
+// unitPickerFilterRow is the filter pinned above the dropdown's rows: the
+// field that narrows them, and how many are left of how many there are — the
+// count is what says the filter is doing anything, and what says it found
+// nothing rather than the race being empty.
+func unitPickerFilterRow(ui *uiState, gtx layout.Context, shown, total int, filtering bool) layout.Dimensions {
+	gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(unitPickerFilterDp))
+	gtx.Constraints.Max.Y = gtx.Constraints.Min.Y
+	return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(5), Bottom: unit.Dp(5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return UnitListFilterField(ui, gtx, &ui.UnitPickerFilter, "filter units")
+			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				text := fmt.Sprintf("%d units", total)
+				if filtering {
+					text = fmt.Sprintf("%d of %d", shown, total)
+				}
+				l := material.Label(ui.Th, unit.Sp(9), text)
+				l.Color = uikit.CTextDim
+				l.MaxLines = 1
+				return l.Layout(gtx)
+			}),
+		)
+	})
+}
+
+// unitPickerUpdateFilter owns the filter's own input: a press takes the caret,
+// typing narrows the rows as it goes, a right press pastes a copied name, and a
+// filter that just changed starts the list again at the top — the rows it
+// keeps are not the rows the old offset was measured against. It reports
+// whether the press landed on the field, so its caller can consume it rather
+// than let the click catcher underneath read it as a click outside the list.
+func unitPickerUpdateFilter(ui *uiState, gtx layout.Context) bool {
+	ed := &ui.UnitPickerFilter
+	ed.SingleLine = true
+	uikit.MarkClipPasteAny(ui, ed)
+	pasted := uikit.PasteClipField(ui, gtx, ed)
+	clicked := RgdEnsureEditorClick(ui, ed).Click.Clicked(gtx)
+	if clicked {
+		gtx.Execute(key.FocusCmd{Tag: ed})
+	}
+	for {
+		if _, ok := ed.Update(gtx); !ok {
+			break
+		}
+	}
+	if text := ed.Text(); text != ui.UnitPickerLastFilter {
+		ui.UnitList.Position = layout.Position{}
+		ui.UnitListScroll.Offset = 0
+		ui.UnitPickerLastFilter = text
+	}
+	return clicked || pasted
+}
+
+// layoutUnitListDropdown is the open unit list: the filter and, below it, the
+// units it keeps — the race on show, or every race once there is a filter.
+// It hangs below the strip, over the columns, and scrolls with the same list
+// helper the rest of the app uses. xOffset is where the Unit field sits.
 func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout.Dimensions {
+	cat := UnitCatalogFor(ui)
 	race := CurrentRace(ui)
-	if race == nil {
+	if cat == nil || race == nil {
 		return layout.Dimensions{}
 	}
-	units := race.UnitsOf()
-	if len(units) == 0 {
-		return layout.Dimensions{}
+	hits := UnitPickerHits(ui)
+	filtering := strings.TrimSpace(ui.UnitPickerFilter.Text()) != ""
+	total := race.UnitCount()
+	if filtering {
+		total = unitPickerAllUnits(cat)
 	}
-	EnsureUnitDropdownClicks(ui, len(units))
+	EnsureUnitDropdownClicks(ui, len(hits))
 	rowH := gtx.Dp(unit.Dp(unitRowHeightDp))
+	// The filter sits above the rows and is part of the box's own height, so
+	// the rows lose the room it takes rather than the list being pushed past
+	// the columns it hangs over.
+	filterH := gtx.Dp(unit.Dp(unitPickerFilterDp))
 	listH := rowH * unitListVisibleRows
-	if maxH := gtx.Constraints.Max.Y; listH > maxH && maxH > 0 {
+	if maxH := gtx.Constraints.Max.Y - filterH; listH > maxH && maxH > 0 {
 		listH = maxH
 	}
 	if listH < rowH*3 {
@@ -228,7 +375,7 @@ func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 	}
 	off := op.Offset(image.Pt(xOffset, 0)).Push(gtx.Ops)
 	defer off.Pop()
-	gtx.Constraints.Min = image.Pt(width, listH)
+	gtx.Constraints.Min = image.Pt(width, filterH+listH)
 	gtx.Constraints.Max = gtx.Constraints.Min
 	return widget.Border{Color: uikit.CBorder, Width: unit.Dp(1), CornerRadius: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Stack{}.Layout(gtx,
@@ -237,12 +384,36 @@ func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 				return layout.Dimensions{Size: gtx.Constraints.Max}
 			}),
 			layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-				return LayoutListWithScrollbar(ui, gtx, &ui.UnitListScroll, &ui.UnitList, rowH, len(units), func(gtx layout.Context, index int) layout.Dimensions {
-					if index < 0 || index >= len(units) {
+				// The filter is pinned at the top of the box and only the rows
+				// below it scroll: a filter that scrolled away with its rows
+				// could not be reached once the list had moved.
+				unitPickerFilterRow(ui, gtx, len(hits), total, filtering)
+				lg := gtx
+				lg.Constraints.Min = image.Pt(width, listH)
+				lg.Constraints.Max = lg.Constraints.Min
+				listOff := op.Offset(image.Pt(0, filterH)).Push(gtx.Ops)
+				dims := LayoutListWithScrollbar(ui, lg, &ui.UnitListScroll, &ui.UnitList, rowH, len(hits), func(gtx layout.Context, index int) layout.Dimensions {
+					if index < 0 || index >= len(hits) {
 						return layout.Dimensions{}
 					}
-					u := units[index]
-					sel := index == race.ClampUnitSel(ui.UnitSel)
+					hit := hits[index]
+					if hit.race < 0 || hit.race >= len(cat.Races) {
+						return layout.Dimensions{}
+					}
+					rowRace := &cat.Races[hit.race]
+					u, ok := unitPickerUnitAt(rowRace, hit.unit)
+					if !ok {
+						return layout.Dimensions{}
+					}
+					sel := hit.race == cat.ClampRaceSel(ui.UnitRaceSel) && hit.unit == rowRace.ClampUnitSel(ui.UnitSel)
+					// What the last column reads: the kind the file sits in
+					// for the race on show, and the race itself for a row a
+					// search found in another one — the kind would not say
+					// which race that was.
+					endLabel := u.Kind.Label
+					if hit.race != cat.ClampRaceSel(ui.UnitRaceSel) {
+						endLabel = rowRace.Name
+					}
 					return ui.UnitClicks[index].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						// The row's height is rowH, not gtx.Constraints.Min.Y:
 						// inside a layout.List the element is handed its own
@@ -296,7 +467,7 @@ func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 										}),
 										layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-											l := material.Label(ui.Th, unit.Sp(10), u.Kind.Label)
+											l := material.Label(ui.Th, unit.Sp(10), endLabel)
 											l.Color = uikit.CTextDim
 											l.MaxLines = 1
 											return l.Layout(gtx)
@@ -307,6 +478,8 @@ func LayoutUnitListDropdown(ui *uiState, gtx layout.Context, xOffset int) layout
 						)
 					})
 				})
+				listOff.Pop()
+				return layout.Dimensions{Size: image.Pt(width, filterH+dims.Size.Y)}
 			}),
 		)
 	})

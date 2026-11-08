@@ -110,6 +110,85 @@ func SaveUnitModelWhm(ui *uiState) {
 	log.Printf("saved whm bone keys %q -> %q (%d bytes)", ui.UnitModelPath, disk, len(patched))
 }
 
+// armAnimRemoval opens the confirmation card for the clip the viewer is on.
+// The name and the path are captured here rather than at Confirm time: the
+// card is up over the panel, and a dialog that re-read the viewer when it
+// closed could quote one clip and remove another.
+func ArmAnimRemoval(ui *uiState, t *fileTab) {
+	if t == nil || t.Model == nil || t.Model.Model == nil {
+		ui.StatusText = "Remove: no model is loaded"
+		return
+	}
+	v := t.Model
+	if v.AnimIndex < 0 || v.AnimIndex >= len(v.Model.Animations) {
+		ui.StatusText = "Remove: this model carries no animation to remove"
+		return
+	}
+	if ui.ModTree == nil || t.Path == "" {
+		ui.StatusText = "Remove: no module is loaded"
+		return
+	}
+	ui.AnimRemoveDialog = true
+	ui.AnimRemoveTab = t
+	ui.AnimRemoveName = v.Model.Animations[v.AnimIndex].Name
+	ui.AnimRemovePath = t.Path
+}
+
+// removeAnimFromWhm takes the named clip out of the tab's .whm: the file is
+// spliced and written to the overlay first, and only then is the model on
+// show brought in line with what the file now says. The write is immediate,
+// the way the mesh-material save writes — unlike the bone-key strip, there is
+// no deferred "Save WHM" state to carry a removal in.
+//
+// Any key edits still pending belonged to a clip that no longer exists in the
+// file, so the dirty state is dropped with it: carrying it over would let Save
+// WHM run PatchAnimClip against whichever clip takes the removed one's index.
+func RemoveAnimFromWhm(ui *uiState, t *fileTab, path, name string) {
+	if t == nil || t.Model == nil || t.Model.Model == nil {
+		ui.StatusText = "Remove failed: no model is loaded"
+		return
+	}
+	v := t.Model
+	if v.AnimIndex < 0 || v.AnimIndex >= len(v.Model.Animations) {
+		ui.StatusText = "Remove failed: no animation is on show"
+		return
+	}
+	if ui.ModTree == nil || path == "" {
+		ui.StatusText = "Remove failed: no module is loaded"
+		return
+	}
+	idx := v.AnimIndex
+	data, err := ui.ModTree.ReadFile(path)
+	if err != nil {
+		ui.StatusText = fmt.Sprintf("Remove failed: read %v", err)
+		LogInfo("whm: remove animation: read %q failed: %v", path, err)
+		return
+	}
+	patched, err := whm.RemoveAnimation(data, &v.Model.Model, idx)
+	if err != nil {
+		ui.StatusText = "Remove failed: " + err.Error()
+		LogInfo("whm: remove animation %q from %q failed: %v", name, path, err)
+		return
+	}
+	disk, err := ui.ModTree.WriteOverlayFile(path, patched)
+	if err != nil {
+		ui.StatusText = "Remove failed: " + err.Error()
+		LogInfo("whm: remove animation %q: overlay write failed: %v", name, err)
+		return
+	}
+	// The file is written; the model on show follows it. SelectAnim wraps
+	// to the first clip when the removed one was last, and empties the
+	// viewer when it was the only one.
+	v.Model.Animations = append(v.Model.Animations[:idx], v.Model.Animations[idx+1:]...)
+	SelectAnim(v, idx)
+	ui.UnitModelWhmDirty = false
+	ui.UnitBoneKeyBound = ""
+	ui.UnitBoneKeyErr = ""
+	ui.StatusText = fmt.Sprintf("Removed animation %q → %s (%d bytes)", name, filepath.Base(disk), len(patched))
+	LogInfo("whm: removed animation %q from %s (%d bytes)", name, path, len(patched))
+	MarkStateDirty(ui)
+}
+
 // addBoneKeyAtPlayhead is what the "+ pos" and "+ rot" buttons do: the picked
 // bone gets a key of that kind on the frame the playhead is on, holding the
 // pose the viewport is showing — the same value "Set ... from pose" would

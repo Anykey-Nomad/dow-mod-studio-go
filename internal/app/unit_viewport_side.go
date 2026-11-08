@@ -231,6 +231,11 @@ func UnitModelTransport(ui *uiState, gtx layout.Context, t *fileTab) layout.Dime
 	// into. Its clicks and its Enter are drained here, before the row is laid
 	// out, the way every other button in the app is.
 	framesSetClicked := ui.UnitAnimFramesSetClick.Clicked(gtx)
+	// The frame count is the field typed for the frame/time clipboard's
+	// frame half: a right-click pastes the frame number copied off the
+	// timebar, ready for Set.
+	uikit.MarkClipPaste(ui, &ui.UnitAnimFramesEd, uikit.ClipPasteFrame)
+	uikit.PasteClipField(ui, gtx, &ui.UnitAnimFramesEd)
 	framesSubmit := false
 	for {
 		ev, ok := ui.UnitAnimFramesEd.Update(gtx)
@@ -266,20 +271,87 @@ func UnitModelTransport(ui *uiState, gtx layout.Context, t *fileTab) layout.Dime
 	return dims
 }
 
-// unitModelToggles holds what is left of the preview's controls in this
-// column: how the view is framed, and the axes the effects are drawn against.
-// The effects switch and the ground plane are playback switches and live in
-// the playback row under the canvas — see unitModelPlaybackToggles.
+// unitModelToggles is the row under the list tabs: how the view is framed,
+// the axes the effects are drawn against, and the clip removal. The effects
+// switch and the ground plane are playback switches and live in the playback
+// row under the canvas — see unitModelPlaybackToggles.
 func UnitModelToggles(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	ModelControlClicks(ui, gtx, t)
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return UnitModelViewButtons(ui, gtx, t, false)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return UnitModelFXRow(ui, gtx, t)
-		}),
-	)
+	v := t.Model
+	return unitSideButtons(gtx, func(gtx layout.Context) layout.Dimensions {
+		return unitSideButtonRow(gtx,
+			func(gtx layout.Context) layout.Dimensions {
+				return SmallButton(ui, gtx, &t.ModelReset, "Reset view")
+			},
+			func(gtx layout.Context) layout.Dimensions {
+				return FxAxesButton(ui, gtx, v)
+			},
+			// Remove takes the clip the viewer is on out of the .whm,
+			// behind a confirmation — the one button on this panel that
+			// changes the file rather than the view.
+			func(gtx layout.Context) layout.Dimensions {
+				noAnim := v == nil || v.Model == nil || len(v.Model.Animations) == 0
+				return SmallButtonDisabled(ui, gtx, &t.ModelAnimRemove, "Remove", noAnim)
+			},
+		)
+	})
+}
+
+// unitSideButtonCells is how many buttons fit across this panel. It is three
+// hundred dp wide: at five to a row "Animations" wrapped over two lines, and
+// three to a row leaves every cell wide enough for the widest label —
+// "Reset view" — to sit on one line.
+const unitSideButtonCells = 3
+
+// unitSideButtonGapDp is the space between the cells of a row.
+const unitSideButtonGapDp = 6
+
+// unitSideRowGapDp is the space between one row of the grid and the next. It
+// is the padding unitSideButtons puts around a whole block of them — 4dp
+// above and 4dp below — so the two rows of the tabs stand as far apart as the
+// tabs stand from the row of view buttons underneath, which is a block of its
+// own rather than a third row of the same one.
+const unitSideRowGapDp = 8
+
+// unitSideButtons is the panel's padding around a row of its buttons, the same
+// for every row of the grid.
+func unitSideButtons(gtx layout.Context, w layout.Widget) layout.Dimensions {
+	return layout.Inset{Left: unit.Dp(6), Right: unit.Dp(6), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, w)
+}
+
+// unitSideButtonRow is one row of the grid: the same number of cells however
+// many buttons are on it, each taking an equal share of the panel and any cell
+// a short row does not use left empty. That is what keeps a row of two
+// buttons the same width as a row of three.
+func unitSideButtonRow(gtx layout.Context, buttons ...layout.Widget) layout.Dimensions {
+	children := make([]layout.FlexChild, 0, unitSideButtonCells*2-1)
+	for i := 0; i < unitSideButtonCells; i++ {
+		if i > 0 {
+			children = append(children, layout.Rigid(layout.Spacer{Width: unit.Dp(unitSideButtonGapDp)}.Layout))
+		}
+		var button layout.Widget = uikit.RowGap()
+		if i < len(buttons) {
+			button = buttons[i]
+		}
+		children = append(children, layout.Flexed(1, button))
+	}
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
+}
+
+// unitSideButtonGrid is several of those rows stacked: the tabs go over two
+// rows of three, and the row of view buttons is one of them.
+func unitSideButtonGrid(gtx layout.Context, rows ...[]layout.Widget) layout.Dimensions {
+	children := make([]layout.FlexChild, 0, len(rows)*2-1)
+	for i, row := range rows {
+		if i > 0 {
+			children = append(children, layout.Rigid(layout.Spacer{Height: unit.Dp(unitSideRowGapDp)}.Layout))
+		}
+		row := row
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return unitSideButtonRow(gtx, row...)
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
 // unitModelPlaybackToggles are the two switches that change what the canvas is
@@ -301,18 +373,6 @@ func UnitModelPlaybackToggles(ui *uiState, gtx layout.Context, t *fileTab) layou
 	)
 }
 
-// unitModelFXRow is the axes switch: where in the world the effects being
-// shown stand. The switch that turns the effects on is a playback switch and
-// sits in the playback row under the canvas.
-func UnitModelFXRow(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
-	v := t.Model
-	gtx = modelRowHeight(gtx)
-	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return FxAxesButton(ui, gtx, v) }),
-		layout.Flexed(1, rowGap()),
-	)
-}
-
 func UnitModelListTabs(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	HandleUnitModelListTabClicks(ui, gtx, t)
 	labels := []string{"Animations", "Markers", "Bones", "FX", "Meshes"}
@@ -323,7 +383,26 @@ func UnitModelListTabs(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimen
 	if ui.UnitMeshListMode {
 		selected = 4
 	}
-	return ModelListTabButtons(ui, gtx, labels, ui.UnitListTabClicks[:], selected)
+	// Three tabs to a row, so the second row of two shares the cells of the
+	// first and the row of buttons below them starts at the same places.
+	var rows [][]layout.Widget
+	for start := 0; start < len(labels); start += unitSideButtonCells {
+		end := start + unitSideButtonCells
+		if end > len(labels) {
+			end = len(labels)
+		}
+		row := make([]layout.Widget, 0, end-start)
+		for i := start; i < end; i++ {
+			i, label := i, labels[i]
+			row = append(row, func(gtx layout.Context) layout.Dimensions {
+				return ToggleButton(ui, gtx, &ui.UnitListTabClicks[i], label, selected == i, uikit.CSelectBg)
+			})
+		}
+		rows = append(rows, row)
+	}
+	return unitSideButtons(gtx, func(gtx layout.Context) layout.Dimensions {
+		return unitSideButtonGrid(gtx, rows...)
+	})
 }
 
 func HandleUnitModelListTabClicks(ui *uiState, gtx layout.Context, t *fileTab) {

@@ -170,6 +170,11 @@ func (t *ModTree) FindMaterialByName(fileName string) *TreeFile {
 		return nil
 	}
 	want := strings.ToLower(fileName)
+	t.byNameMu.Lock()
+	defer t.byNameMu.Unlock()
+	if file, ok := t.materialCache[want]; ok {
+		return file
+	}
 	var best *TreeFile
 	bestTexture := false
 	var walk func(*TreeFolder, bool)
@@ -189,6 +194,10 @@ func (t *ModTree) FindMaterialByName(fileName string) *TreeFile {
 		}
 	}
 	walk(t.Root, false)
+	if t.materialCache == nil {
+		t.materialCache = make(map[string]*TreeFile)
+	}
+	t.materialCache[want] = best
 	return best
 }
 
@@ -1073,6 +1082,10 @@ func (t *ModTree) upsertOverlayFile(virtualPath, diskPath string) {
 		cur.Files = append(cur.Files, f)
 		cur.FileByLower[lower] = f
 	}
+	// A new or overridden file may change which material wins by name.
+	t.byNameMu.Lock()
+	delete(t.materialCache, lower)
+	t.byNameMu.Unlock()
 	// keep folder's files sorted for stable view
 	sort.Slice(cur.Files, func(a, b int) bool {
 		la := strings.ToLower(cur.Files[a].Name)
@@ -1127,6 +1140,7 @@ func (t *ModTree) RemoveFile(virtualPath string) bool {
 	// the index at this moment.
 	t.byNameMu.Lock()
 	delete(t.byName, lower)
+	delete(t.materialCache, lower)
 	t.byNameMu.Unlock()
 	return true
 }

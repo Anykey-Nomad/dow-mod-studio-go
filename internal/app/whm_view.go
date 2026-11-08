@@ -6,14 +6,17 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"dow-mod-studio/internal/modtree"
 	"dow-mod-studio/internal/raster"
+	"dow-mod-studio/internal/sga"
 	"dow-mod-studio/internal/whm"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 )
@@ -155,58 +158,128 @@ func OpenWhm(ui *uiState, virtualPath string) {
 		ui.StatusText = fmt.Sprintf("Opened %s", filepath.Base(virtualPath))
 		return
 	}
-	t := &fileTab{Path: virtualPath, Kind: "whm"}
-	// A virtual path comes from the open mod's tree; an absolute one is a
-	// file the OS handed the studio through a file association.
-	data, err := ReadTabFile(ui, virtualPath)
-	if err != nil {
-		t.WhmError = err.Error()
-	} else {
-		t.WhmBytes = len(data)
-		// One sniff decides the container flavour: the Object Editor's .sgm
-		// and the game's .whm carry the same model, split differently.
-		t.WhmIsSgm = whm.IsSgm(data)
-		var info *whm.ModelInfo
-		var ierr error
-		if t.WhmIsSgm {
-			info, ierr = whm.InspectSgm(data)
-		} else {
-			info, ierr = whm.Inspect(data)
-		}
-		if ierr != nil {
-			t.WhmError = ierr.Error()
-		} else {
-			t.WhmInfo = info
-		}
-		// The 3D preview is a bonus: a model the converter cannot handle is
-		// still worth looking at, so a parse failure only hides the canvas.
-		parseStart := time.Now()
-		var model *WhmModel
-		var perr error
-		if t.WhmIsSgm {
-			model, perr = ParseSgmModel(data)
-		} else {
-			model, perr = ParseWhmModel(data)
-		}
-		if perr != nil {
-			log.Printf("3D preview: parse %s failed after %v: %v", filepath.Base(virtualPath), time.Since(parseStart), perr)
-		} else {
-			ground := loadWhmGroundImage(ui.ModTree)
-			t.Model = newObjectModelViewer(model, virtualPath, ground)
-			t.Model.SideControls = true
-			log.Printf("3D preview: parsed %s in %v: %d verts, %d meshes, %d bones, %d anims",
-				filepath.Base(virtualPath), time.Since(parseStart),
-				len(model.Vertices), len(model.Meshes), len(model.Bones), len(model.Animations))
-		}
-	}
+	t := &fileTab{Path: virtualPath, Kind: "whm", WhmLoading: true, WhmLoadCh: make(chan uistate.WhmLoadResult, 1)}
 	ui.OpenTabs = append(ui.OpenTabs, t)
 	ui.TabSel = len(ui.OpenTabs)
 	EnsureTabClicks(ui)
-	if t.WhmError != "" {
-		ui.StatusText = "Open " + filepath.Base(virtualPath) + " failed: " + t.WhmError
-	} else {
-		ui.StatusText = "Opened " + filepath.Base(virtualPath)
+	ui.StatusText = "Loading " + filepath.Base(virtualPath) + "…"
+
+	// Snapshot file locations on the UI thread. Workers open their own SGA
+	// handles so closing or switching a module cannot close a handle in use.
+	modelSource := whmLoadSource{diskPath: virtualPath}
+	if ui.ModTree != nil && !filepath.IsAbs(virtualPath) {
+		modelSource = whmSourceFor(ui.ModTree.FindFile(virtualPath))
 	}
+	var groundSource whmLoadSource
+	if ui.ModTree != nil {
+		ground := ui.ModTree.FindFile(whmGroundTexture)
+		if ground == nil {
+			ground = ui.ModTree.FindMaterialByName(filepath.Base(whmGroundTexture))
+		}
+		groundSource = whmSourceFor(ground)
+	}
+	ch := t.WhmLoadCh
+	go func() {
+		result := uistate.WhmLoadResult{}
+		data, err := modelSource.read()
+		if err != nil {
+			result.Err = err
+			ch <- result
+			return
+		}
+		result.Bytes = len(data)
+		result.IsSgm = whm.IsSgm(data)
+		if result.IsSgm {
+			result.Info, result.Err = whm.InspectSgm(data)
+		} else {
+			result.Info, result.Err = whm.Inspect(data)
+		}
+		start := time.Now()
+		var model *WhmModel
+		var parseErr error
+		if result.IsSgm {
+			model, parseErr = ParseSgmModel(data)
+		} else {
+			model, parseErr = ParseWhmModel(data)
+		}
+		if parseErr != nil {
+			log.Printf("3D preview: parse %s failed after %v: %v", filepath.Base(virtualPath), time.Since(start), parseErr)
+		} else {
+			var ground image.Image
+			if raw, err := groundSource.read(); err == nil {
+				ground, _, _ = raster.DecodeImageData(raw, strings.TrimPrefix(filepath.Ext(whmGroundTexture), "."))
+			}
+			result.Viewer = newObjectModelViewer(model, virtualPath, ground)
+			result.Viewer.SideControls = true
+			log.Printf("3D preview: parsed %s in %v: %d verts, %d meshes, %d bones, %d anims", filepath.Base(virtualPath), time.Since(start), len(model.Vertices), len(model.Meshes), len(model.Bones), len(model.Animations))
+		}
+		ch <- result
+	}()
+}
+
+// whmLoadSource is an immutable location, independent of a mod tree's lifetime.
+type whmLoadSource struct {
+	diskPath    string
+	archivePath string
+	fileID      int
+}
+
+func whmSourceFor(file *modtree.TreeFile) whmLoadSource {
+	if file == nil || file.Source == nil {
+		return whmLoadSource{}
+	}
+	if file.Source.IsSGA {
+		return whmLoadSource{archivePath: file.Source.ArchivePath, fileID: file.SGAFileID}
+	}
+	return whmLoadSource{diskPath: file.DiskPath}
+}
+
+func (s whmLoadSource) read() ([]byte, error) {
+	if s.archivePath != "" {
+		archive, err := sga.OpenSGA(s.archivePath)
+		if err != nil {
+			return nil, err
+		}
+		defer archive.Close()
+		return archive.ReadFile(s.fileID)
+	}
+	if s.diskPath == "" {
+		return nil, fmt.Errorf("file not found")
+	}
+	return os.ReadFile(s.diskPath)
+}
+
+// PollWhmLoads applies worker results only to tabs that are still open. It
+// reports whether a load is still in flight: a result for a tab that is not
+// visible would otherwise wait for an unrelated input event, because only the
+// loading view asks for another frame.
+func PollWhmLoads(ui *uiState) bool {
+	pending := false
+	for _, t := range ui.OpenTabs {
+		if t.WhmLoadCh == nil {
+			continue
+		}
+		select {
+		case result := <-t.WhmLoadCh:
+			t.WhmLoadCh = nil
+			t.WhmLoading = false
+			t.WhmInfo, t.WhmBytes, t.WhmIsSgm = result.Info, result.Bytes, result.IsSgm
+			if result.Err != nil {
+				t.WhmError = result.Err.Error()
+			}
+			t.Model = result.Viewer
+			if ActiveTab(ui) == t {
+				if result.Err != nil {
+					ui.StatusText = "Open " + filepath.Base(t.Path) + " failed: " + result.Err.Error()
+				} else {
+					ui.StatusText = "Opened " + filepath.Base(t.Path)
+				}
+			}
+		default:
+			pending = true
+		}
+	}
+	return pending
 }
 
 // whmTargetSGM maps a .whm virtual path onto the .sgm that will be produced
@@ -220,7 +293,7 @@ func whmTargetSGM(virtualPath string) string {
 // path against the mod's writable ModFolder/Data, so a model coming from a
 // parent mod or from an SGA archive still lands in this mod.
 func ConvertWhmToSgmFile(ui *uiState, t *fileTab) {
-	if t == nil || t.Kind != "whm" || t.WhmConverting || t.WhmError != "" {
+	if t == nil || t.Kind != "whm" || t.WhmLoading || t.WhmConverting || t.WhmError != "" {
 		return
 	}
 	if t.WhmIsSgm {
@@ -278,6 +351,10 @@ func ConvertWhmToSgmFile(ui *uiState, t *fileTab) {
 func LayoutWhmViewer(ui *uiState, gtx layout.Context, t *fileTab) layout.Dimensions {
 	if t == nil {
 		return layout.Dimensions{}
+	}
+	if t.WhmLoading {
+		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(100 * time.Millisecond)})
+		return centeredPanelLabel(gtx, ui.Th, "Loading model…", unit.Sp(11), uikit.CTextDim)
 	}
 	if t.WhmError != "" {
 		if t.Model != nil {

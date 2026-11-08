@@ -153,21 +153,37 @@ func MarshalActs(acts []FxAction) []byte {
 		putI32(len(s))
 		b.WriteString(s)
 	}
-	putLinks := func(links []FxActionLink) {
-		putI32(len(links))
-		for _, ln := range links {
-			putStr(ln.Name)
-			putI32(int(ln.Compare))
-			if ln.HasCondition() {
-				putStr(ln.Condition)
-			}
-		}
-	}
 	putI32(len(acts))
 	for _, a := range acts {
 		putStr(a.Name)
-		putLinks(a.Motions)
-		putLinks(a.Subactions)
+		b.Write(marshalActLinks(a.Motions))
+		b.Write(marshalActLinks(a.Subactions))
+	}
+	return b.Bytes()
+}
+
+// marshalActLinks writes one link list of an action: a count, then each
+// link's name, compare type and — for the guarded kinds only — its condition
+// name. It is the unit both the .whe payload and the .ebp's per-action chunk
+// are built from, so the two files cannot disagree about where a name ends.
+func marshalActLinks(links []FxActionLink) []byte {
+	var b bytes.Buffer
+	putI32 := func(v int) {
+		var t [4]byte
+		binary.LittleEndian.PutUint32(t[:], uint32(v))
+		b.Write(t[:])
+	}
+	putStr := func(s string) {
+		putI32(len(s))
+		b.WriteString(s)
+	}
+	putI32(len(links))
+	for _, ln := range links {
+		putStr(ln.Name)
+		putI32(int(ln.Compare))
+		if ln.HasCondition() {
+			putStr(ln.Condition)
+		}
 	}
 	return b.Bytes()
 }
@@ -207,6 +223,35 @@ func (d *Document) AddAction(a FxAction) error {
 	copied.Name = name
 	chunk.Payload = MarshalActs(append(acts, copied))
 	return nil
+}
+
+// RemoveAction drops one action from the file's DATAACTS section — the reverse
+// of AddAction. A name the file does not carry is refused rather than taken as
+// a no-op, so a double press cannot quietly take a second record out.
+//
+// Whether some other action still calls the one being removed is the editor's
+// call to refuse first: a link left pointing at nothing is the kind of break
+// the file cannot report, so the document only takes out what it is asked to.
+func (d *Document) RemoveAction(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("an action needs a name")
+	}
+	chunk := d.actionsChunk()
+	if chunk == nil {
+		return fmt.Errorf(".whe has no DATAACTS section")
+	}
+	acts, err := parseActs(chunk.Payload)
+	if err != nil {
+		return err
+	}
+	for i, have := range acts {
+		if strings.EqualFold(strings.TrimSpace(have.Name), name) {
+			chunk.Payload = MarshalActs(append(acts[:i], acts[i+1:]...))
+			return nil
+		}
+	}
+	return fmt.Errorf("action %q was not found in this .whe", name)
 }
 
 // RenameAction renames one action of the DATAACTS section and follows the name

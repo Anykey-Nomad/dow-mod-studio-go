@@ -352,9 +352,15 @@ func blendPixel(dst *image.NRGBA, x, y int, r, g, b, a float64) {
 	dst.Pix[o+3] = 0xFF
 }
 
-// --- Текстуры объектов (.rsh / .rtx / .dds / .tga) ---
+// --- Текстуры объектов (.tga / .rsh / .rtx / .dds) ---
 
-var materialTextureExtensions = []string{".rsh", ".rtx", ".dds", ".tga"}
+// materialTextureExtensions — расширения, которые перебираются для материала
+// без явного расширения, в порядке предпочтения. TGA идёт первым, потому что
+// там, где он лежит рядом, это исходник в большем разрешении (у того же
+// strategic_point_flag есть .tga). Чёрный шум, из-за которого порядок когда-то
+// завели, оказался багом DXT-декодера в internal/raster: в четырёхцветном
+// блоке индекс 3 оставался чёрным. Баг исправлен.
+var materialTextureExtensions = []string{".tga", ".rsh", ".rtx", ".dds"}
 
 // resolveObjectTextures разрешает и декодирует текстуры для всех частей объектов.
 func resolveObjectTextures(tree *modtree.ModTree, objects []Object, modelPaths map[string]string) {
@@ -518,7 +524,14 @@ func materialCandidatePaths(name string) []string {
 	}
 	ext := strings.ToLower(filepath.Ext(name))
 	if ext != "" {
-		return []string{name}
+		// Явное расширение не отменяет предпочтение TGA: если рядом лежит
+		// одноимённый .tga, его пробуем первым, затем — файл как указан.
+		switch ext {
+		case ".rsh", ".rtx", ".dds":
+			return []string{strings.TrimSuffix(name, filepath.Ext(name)) + ".tga", name}
+		default:
+			return []string{name}
+		}
 	}
 	out := make([]string, 0, len(materialTextureExtensions))
 	for _, suffix := range materialTextureExtensions {

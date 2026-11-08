@@ -813,7 +813,7 @@ func TestEverySectionHasBothColumns(t *testing.T) {
 	routed := map[string]bool{
 		"Unit info": true, "Weapons": true, "Abilities": true, "Squads": true,
 		"Links": true, "Frozen": true, "Problems": true, "Viewport": true,
-		"Classic OE": true,
+		"Classic OE": true, "Voices": true,
 	}
 	placeholder := map[string]bool{}
 	for _, s := range unitSections {

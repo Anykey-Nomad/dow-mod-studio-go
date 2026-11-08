@@ -4,6 +4,7 @@ import (
 	"dow-mod-studio/internal/app/render"
 	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/app/uistate"
+	"dow-mod-studio/internal/cliphist"
 	"dow-mod-studio/internal/whe"
 	"fmt"
 	"gioui.org/f32"
@@ -694,3 +695,67 @@ func ModelGizmoOverlay(ui *uistate.State, gtx layout.Context, t *uistate.Tab) la
 }
 
 const GizmoMargin = 10.0
+
+// ScrubMomentAt is the moment the strip reports at x: the frame it lands on
+// and the time into the clip, snapping onto the playhead within a few pixels
+// of it — the same reading the tooltip over the cursor gives, so a copy takes
+// exactly what was on show. The geometry is read back from the strip's own
+// recorded rectangle: at input time the canvas that sized it is not to hand.
+func ScrubMomentAt(v *ModelViewer, x float32) (frame int, secs float64) {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 || v.ScrubRect.Empty() {
+		return 0, 0
+	}
+	n := v.Anim.NumFrames
+	hit := float32(int(ScrubLabelHeight))
+	left := float32(v.ScrubRect.Min.X) + hit
+	width := float32(v.ScrubRect.Dx()) - 2*hit
+	if width <= 0 {
+		return 0, 0
+	}
+	clipSecs := AnimClipSeconds(v.Anim)
+	frac := float64((x - left) / width)
+	if frac < 0 {
+		frac = 0
+	}
+	if frac > 1 {
+		frac = 1
+	}
+	frame = ScrubBarAt(x, left, width, n)
+	if frame < 0 {
+		frame = 0
+	}
+	secs = frac * clipSecs
+	cur := int(math.Round(float64(v.Time) * float64(n)))
+	cur = uikit.MinInt(uikit.MaxInt(cur, 0), n-1)
+	playheadX := left + FrameX(cur, n, width)
+	if AbsF32(x-playheadX) <= scrubPlayheadSnapPx {
+		frame, secs = cur, float64(v.Time)*clipSecs
+	}
+	return frame, secs
+}
+
+// ScrubCopyMoment puts the moment under x on the strip into the shared
+// clipboard as a frame/time entry, from where a right-click in a time or
+// frame field pastes it back — the seconds into a time field, the frame
+// number into a frame field.
+func ScrubCopyMoment(ui *uistate.State, v *ModelViewer, x float32) {
+	if v == nil || v.Anim == nil || v.Anim.NumFrames < 1 {
+		return
+	}
+	frame, secs := ScrubMomentAt(v, x)
+	// Whole milliseconds: the readout shows two decimals, and a copy of
+	// 0.4666666666666667 pastes as noise.
+	secs = math.Round(secs*1000) / 1000
+	moment := &cliphist.FrameTimeClip{Anim: v.Anim.Name, Frame: frame + 1, Time: secs}
+	ui.UnitClips.Push(cliphist.ClipEntry{
+		Kind:      cliphist.ClipFrameTime,
+		Label:     fmt.Sprintf("%s · %.3g s · frame %d", moment.Anim, moment.Time, moment.Frame),
+		At:        time.Now(),
+		FrameTime: moment,
+	})
+	// The cursor of the history is left where it is: the entries the events
+	// panel steps through are its own kind, and a paste of this entry finds
+	// it as the newest of its kind regardless.
+	ui.StatusText = fmt.Sprintf("Copied %.3g s · frame %d — right-click a time or frame field to paste",
+		moment.Time, moment.Frame)
+}

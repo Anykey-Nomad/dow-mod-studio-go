@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -138,6 +139,18 @@ func InitLogger() {
 	exe, _ := os.Executable()
 	log.Printf("=== DoW Mod Studio started pid=%d exe=%q cwd=%q log=%q ===", pid, exe, cwd, path)
 	log.Printf("args: %q", os.Args)
+	// The runtime prints unhandled panics and fatal errors itself, from any
+	// goroutine, and it writes to stderr — which on machines launched without
+	// a console goes nowhere, leaving the crashes that only happen on some
+	// configurations with no trace at all. Point that crash output at this
+	// same log file as well, and ask for every goroutine's traceback so a
+	// concurrent cause is visible too.
+	debug.SetTraceback("all")
+	if err := debug.SetCrashOutput(f, debug.CrashOptions{}); err != nil {
+		log.Printf("crash output: SetCrashOutput: %v", err)
+	} else {
+		log.Printf("crash output (unhandled panics/fatal errors) -> %q", path)
+	}
 	go CleanupOldLogs(dir)
 }
 
@@ -167,12 +180,29 @@ func HandlePanic() {
 			// try to init so we have a file
 			InitLogger()
 		}
+		stack := debug.Stack()
 		log.Printf("PANIC: %v", r)
-		log.Printf("stack:\n%s", debug.Stack())
-		fmt.Fprintf(os.Stderr, "PANIC: %v\n%s\n", r, debug.Stack())
+		log.Printf("stack:\n%s", stack)
+		// The panicking goroutine's own trace is the first dump; the states of
+		// the other goroutines often explain what led to it.
+		log.Printf("all goroutines:\n%s", AllGoroutinesStack())
+		fmt.Fprintf(os.Stderr, "PANIC: %v\n%s\n", r, stack)
 		FlushLogger()
 		CloseLogger()
 		os.Exit(2)
+	}
+}
+
+// AllGoroutinesStack returns the stacks of every goroutine, growing the
+// buffer until the whole dump fits.
+func AllGoroutinesStack() []byte {
+	buf := make([]byte, 64<<10)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			return buf[:n]
+		}
+		buf = make([]byte, len(buf)<<1)
 	}
 }
 
@@ -348,6 +378,35 @@ func HasSuffixFold(s, suf string) bool {
 		return false
 	}
 	return strings.EqualFold(s[len(s)-len(suf):], suf)
+}
+
+// LastLogFilePath returns the newest log file other than the current
+// session's own — the log the previous run left behind, which is what a
+// report of that run needs — or "" when there is none.
+func LastLogFilePath() string {
+	dir := LogDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	bestPath, bestMod := "", time.Time{}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".log" {
+			continue
+		}
+		p := filepath.Join(dir, e.Name())
+		if p == LogFilePath {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if bestPath == "" || info.ModTime().After(bestMod) {
+			bestPath, bestMod = p, info.ModTime()
+		}
+	}
+	return bestPath
 }
 
 func CleanupOldLogs(dir string) {

@@ -25,6 +25,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -34,9 +35,11 @@ func Run() {
 		os.Exit(runMarkerDebugCLI(os.Args[2:], os.Stdout, os.Stderr))
 	}
 
+	// Registered first: if logger setup itself panics, HandlePanic still
+	// runs and creates the log file it needs.
+	defer handlePanic()
 	initLogger()
 	defer closeLogger()
-	defer handlePanic()
 
 	// Before anything is loaded: the collector's pacing is set once, and a
 	// reader who wants Go's own can still say so in the environment.
@@ -97,7 +100,13 @@ func Run() {
 		w := new(app.Window)
 		w.Option(app.Title("Corsix's Mod Studio 0.5.5  \u2014  DoW Mod Studio Go (Gio)"), app.Size(unit.Dp(1280), unit.Dp(760)))
 		if err := run(w); err != nil {
+			// A returned error carries no panic trace, so dump every
+			// goroutine here: this is the last moment the app still has
+			// state worth seeing in the log.
 			log.Printf("run error: %v", err)
+			buf := make([]byte, 64*1024)
+			n := runtime.Stack(buf, true)
+			log.Printf("stacks at run error:\n%s", buf[:n])
 		}
 		exitLogged(0)
 	}()
@@ -164,6 +173,11 @@ func run(w *app.Window) error {
 			MaybeSaveState(ui)
 			PollModCatalog(ui)
 			PollImageDecodes(ui)
+			if PollWhmLoads(ui) {
+				// The result may land while another tab is showing, and nothing
+				// else would ask for a frame in that case.
+				gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(100 * time.Millisecond)})
+			}
 			PollModelJobs(ui)
 			PollUnitModel(ui)
 			HandleInput(ui, gtx)
@@ -171,6 +185,19 @@ func run(w *app.Window) error {
 			e.Frame(gtx.Ops)
 		}
 	}
+}
+
+// triggerSettingsPanic panics deliberately, from a nested call so the stack
+// dump in the log has real frames to show. The run goroutine's
+// defer handlePanic() catches it, writes the message and every goroutine's
+// trace into the log and exits — which is exactly what the Settings button
+// exists to test on a machine where a real crash happened.
+func triggerSettingsPanic() {
+	triggerSettingsPanicFrame()
+}
+
+func triggerSettingsPanicFrame() {
+	panic("test panic triggered from the Settings dialog")
 }
 
 func Layout(ui *uiState, gtx layout.Context) layout.Dimensions {
@@ -274,6 +301,12 @@ func Layout(ui *uiState, gtx layout.Context) layout.Dimensions {
 			return LayoutFileDeleteDialog(ui, gtx)
 		}),
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+			if !ui.AnimRemoveDialog {
+				return layout.Dimensions{}
+			}
+			return LayoutAnimRemoveDialog(ui, gtx)
+		}),
+		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			if !ui.ClearRecycleDialog {
 				return layout.Dimensions{}
 			}
@@ -372,7 +405,14 @@ func LayoutMiddlePanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 	}
 	// RGD or Module view
 	if tab != nil && tab.Kind == "rgd" {
-		return PanelWithScroll(ui, gtx, &ui.MiddleScroll, func(gtx layout.Context) layout.Dimensions {
+		// The tree is a layout.List with a scrollbar of its own, so the panel
+		// must not also wrap it in a scrolling frame. PanelWithScroll measures
+		// its content with an unbounded height first, and a layout.List laid
+		// out against that viewport rewrites its Position while laying every
+		// row out: with the tree scrolled past its first row the next frame's
+		// measure put it back at row zero. One wheel notch moved the list and
+		// the following frame snapped it to the top.
+		return uikit.PanelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return MiddleHeader(ui, gtx) }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
@@ -514,7 +554,11 @@ func LayoutRightPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 		})
 	}
 	if tab != nil && tab.Kind == "rgd" {
-		return PanelWithScroll(ui, gtx, &ui.RightScroll, func(gtx layout.Context) layout.Dimensions {
+		// Same as the middle tree: the children list scrolls itself and owns
+		// the scrollbar, and the properties above it stay pinned. Measuring
+		// the panel with an unbounded height reset that list's Position every
+		// frame, which is what made the right panel jump back to the top.
+		return uikit.PanelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return sectionHeader(gtx, ui.Th, "Properties") }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return PropertiesTable(ui, gtx, tab) }),
@@ -914,6 +958,36 @@ func HandleInput(ui *uiState, gtx layout.Context) {
 		}
 		return
 	}
+	if ui.AnimRemoveDialog {
+		if ui.AnimRemoveConfirm.Clicked(gtx) {
+			t, path, name := ui.AnimRemoveTab, ui.AnimRemovePath, ui.AnimRemoveName
+			ui.AnimRemoveDialog = false
+			ui.AnimRemoveTab = nil
+			ui.AnimRemovePath = ""
+			ui.AnimRemoveName = ""
+			RemoveAnimFromWhm(ui, t, path, name)
+		} else if ui.AnimRemoveCancel.Clicked(gtx) {
+			ui.AnimRemoveDialog = false
+			ui.AnimRemoveTab = nil
+			ui.StatusText = "Animation removal cancelled"
+		} else {
+			// The file dialog beside this one is leaveable from the
+			// keyboard, so this one is too.
+			for {
+				ev, ok := gtx.Event(key.Filter{Name: key.NameEscape})
+				if !ok {
+					break
+				}
+				if e, ok := ev.(key.Event); ok && e.State == key.Press {
+					ui.AnimRemoveDialog = false
+					ui.AnimRemoveTab = nil
+					ui.StatusText = "Animation removal cancelled"
+					break
+				}
+			}
+		}
+		return
+	}
 	if ui.ClearRecycleDialog {
 		if ui.ClearRecycleConfirm.Clicked(gtx) {
 			ui.ClearRecycleDialog = false
@@ -977,6 +1051,12 @@ func HandleInput(ui *uiState, gtx layout.Context) {
 			ui.TextEditorFormats = parseTextFormats(ui.SettingsFormatOriginal)
 			applyMaterialTheme(ui.Th, ui.DarkTheme)
 			ui.SettingsDialog = false
+		}
+		if ui.SettingsPanicBtn.Clicked(gtx) {
+			// Deliberate: the run goroutine's defer handlePanic() catches this
+			// below, writes the message and both stack dumps into the log and
+			// exits, so the crash-logging path can be tested on any machine.
+			triggerSettingsPanic()
 		}
 		return
 	}
@@ -1182,6 +1262,20 @@ func HandleInput(ui *uiState, gtx layout.Context) {
 							} else {
 								ui.StatusText = fmt.Sprintf("Opened log folder: %s", logDir())
 							}
+						case "Copy last log to clipboard":
+							// The file itself, not its text: on Windows that is an
+							// HDROP, so pasting into Explorer or a messenger carries
+							// the log as a file.
+							path := lastLogFilePath()
+							if path == "" {
+								ui.StatusText = "Copy last log: no earlier log file — this is the first session"
+								break
+							}
+							if err := copyFileToClipboard(gtx, path); err != nil {
+								ui.StatusText = fmt.Sprintf("Copy last log failed: %v", err)
+								break
+							}
+							ui.StatusText = fmt.Sprintf("Copied log file to clipboard: %s", filepath.Base(path))
 						default:
 							ui.StatusText = fmt.Sprintf("Menu: %s → %s", menus[ui.MenuOpen].Name, label)
 						}

@@ -324,6 +324,8 @@ var MovePickedBoneKeyToX = viewer.MovePickedBoneKeyToX
 
 var ScrubSeek = viewer.ScrubSeek
 
+var ScrubCopyMoment = viewer.ScrubCopyMoment
+
 var SeekFrame = viewer.SeekFrame
 
 var scrubBarAt = viewer.ScrubBarAt

@@ -24,6 +24,8 @@ func LayoutUnitMiddleColumnBody(ui *uiState, gtx layout.Context) layout.Dimensio
 		return LayoutClassicOEArea(ui, gtx)
 	case unitSectionEvents:
 		return LayoutUnitEventTimelines(ui, gtx)
+	case unitSectionVoices:
+		return LayoutUnitVoiceCategories(ui, gtx)
 	case "Unit info":
 		return LayoutUnitInfoList(ui, gtx)
 	case "Weapons":
@@ -170,29 +172,10 @@ func LayoutUnitInfoIconHeader(ui *uiState, gtx layout.Context) layout.Dimensions
 	})
 }
 
-// layoutUnitWeaponList is the "Weapons" column. The rows are the hardpoints that
-// actually hold a weapon, and selecting one is what the right column describes.
+// LayoutUnitWeaponList is the "Weapons" column: the unit's weapons as a tree,
+// each opening onto the damage it does against every armour type.
 func LayoutUnitWeaponList(ui *uiState, gtx layout.Context) layout.Dimensions {
-	d := CurrentUnitDetails(ui)
-	if d == nil || d.Error != "" || len(d.Weapons) == 0 {
-		return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions { return UnitEmptyState(ui, gtx) })
-	}
-	// One selectable row per weapon slot, so the right column can describe a
-	// single weapon rather than a whole hardpoint.
-	rows := unitWeaponRows(d)
-	EnsureUnitRowClicks(ui, len(rows))
-	return UnitSectionFrame(ui, gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Inset{Top: unit.Dp(6), Left: unit.Dp(6), Right: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			var children []layout.FlexChild
-			for i := range rows {
-				i := i
-				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return LayoutUnitSelectableRow(ui, gtx, i, len(rows), rows[i].Hardpoint, rows[i].Name, "not found", !rows[i].Found)
-				}))
-			}
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
-		})
-	})
+	return LayoutUnitWeaponTree(ui, gtx)
 }
 
 // layoutUnitAbilityList is the "Abilities" column.
@@ -298,20 +281,7 @@ func LayoutUnitRightColumnBody(ui *uiState, gtx layout.Context) layout.Dimension
 	case "Unit info":
 		return LayoutUnitFieldPanel(ui, gtx, sec)
 	case "Weapons":
-		d := CurrentUnitDetails(ui)
-		rows = unitWeaponRows(d)
-		if len(rows) > 0 {
-			idx := clampInt(ui.UnitSelRow, 0, len(rows)-1)
-			if w := unitWeaponAt(d, idx); w != nil {
-				// The weapon's own file is the detail worth showing; the
-				// slot's scalars are only a fallback for a reference that
-				// does not resolve.
-				fields = w.RgdFields
-				if len(fields) == 0 {
-					fields = w.Fields
-				}
-			}
-		}
+		return LayoutUnitWeaponDetail(ui, gtx)
 	case "Abilities":
 		d := CurrentUnitDetails(ui)
 		rows = unitAbilityRows(d)
@@ -319,6 +289,8 @@ func LayoutUnitRightColumnBody(ui *uiState, gtx layout.Context) layout.Dimension
 		return LayoutUnitSquadRightColumn(ui, gtx, sec)
 	case unitSectionEvents:
 		return LayoutUnitEventPanel(ui, gtx)
+	case unitSectionVoices:
+		return LayoutUnitVoicePanel(ui, gtx)
 	case unitSectionViewport:
 		return LayoutUnitModelSide(ui, gtx)
 	case unitSectionClassicOE:
@@ -415,6 +387,12 @@ func LayoutUnitRightColumnBody(ui *uiState, gtx layout.Context) layout.Dimension
 // row clicked — that would shut the list on the frame after it opened, which
 // is what made it flash and vanish.
 func HandleUnitPickerInput(ui *uiState, gtx layout.Context) {
+	// The filter's caret is only wanted while its list is on screen: an editor
+	// left focused after the list went away would go on swallowing whatever is
+	// typed next, and the next search would open on those characters.
+	if !UnitPickerOpen(ui) && ui.UnitPickerFilter.Focused(gtx) {
+		ui.UnitPickerFilter.Blur(gtx)
+	}
 	// The triggers toggle their own list and put the other one away, so
 	// clicking Race while the unit list is open swaps them rather than
 	// stacking two lists over the columns.
@@ -443,24 +421,43 @@ func HandleUnitPickerInput(ui *uiState, gtx layout.Context) {
 	// reason: the dialog and the lists are all one strip.
 	HandleFreezeInput(ui, gtx)
 	if ui.UnitListOpen {
-		race := CurrentRace(ui)
-		if race == nil {
+		// The filter belongs to the list: it takes the caret, pastes a copied
+		// name and narrows the rows the clicks below are read from. A press
+		// that landed on it is consumed here, so the catch-all underneath
+		// does not read it as a click outside the list and shut it.
+		if unitPickerUpdateFilter(ui, gtx) {
+			return
+		}
+		cat := UnitCatalogFor(ui)
+		if cat == nil {
 			ui.UnitListOpen = false
 			return
 		}
-		units := race.UnitsOf()
-		EnsureUnitDropdownClicks(ui, len(units))
-		for i := range units {
-			if i < len(ui.UnitClicks) && ui.UnitClicks[i].Clicked(gtx) {
-				ui.UnitSel = i
-				ui.UnitListOpen = false
-				ui.UnitSelRow = 0
-				ui.StatusText = "Unit: " + UnitLabel(ui, units[i])
-				// The pickers are part of the saved session, so that the
-				// Object window comes back on the unit it was left on.
-				MarkStateDirty(ui)
+		hits := UnitPickerHits(ui)
+		EnsureUnitDropdownClicks(ui, len(hits))
+		for i := range hits {
+			if i >= len(ui.UnitClicks) || !ui.UnitClicks[i].Clicked(gtx) {
+				continue
+			}
+			hit := hits[i]
+			if hit.race < 0 || hit.race >= len(cat.Races) {
 				return
 			}
+			u, ok := unitPickerUnitAt(&cat.Races[hit.race], hit.unit)
+			if !ok {
+				return
+			}
+			// A hit may belong to another race: the search that found it
+			// looked everywhere, so both halves of the selection move.
+			ui.UnitRaceSel = hit.race
+			ui.UnitSel = hit.unit
+			ui.UnitListOpen = false
+			ui.UnitSelRow = 0
+			ui.StatusText = "Unit: " + UnitLabel(ui, u)
+			// The pickers are part of the saved session, so that the
+			// Object window comes back on the unit it was left on.
+			MarkStateDirty(ui)
+			return
 		}
 	}
 	if ui.UnitRaceOpen {

@@ -113,6 +113,10 @@ func InspectSgm(data []byte) (*ModelInfo, error) {
 			info.Materials++
 		case "FOLDTXTR":
 			info.Textures++
+		case "FOLDSTXT":
+			info.Materials++
+		case "FOLDSHDR":
+			info.Textures++
 		case "FOLDANIM":
 			if c.Child("FOLDDATA") != nil {
 				info.Animations++
@@ -163,13 +167,15 @@ func sgmMeshCounts(data []byte) (meshes, verts, mats int) {
 		return 1, verts, 0
 	}
 	matStart := -1
-	if base+4 <= len(data) && MeshMaterialSection(data, base+4, true, false) > 0 {
+	// An .sgm mesh record carries no reserved dword after the UV array or after
+	// a material's vertex range, so the list is probed in that shorter layout.
+	if base+4 <= len(data) && MeshMaterialSection(data, base+4, false, false) > 0 {
 		matStart = base + 4
-	} else if MeshMaterialSection(data, base, true, false) > 0 {
+	} else if MeshMaterialSection(data, base, false, false) > 0 {
 		matStart = base
 	} else {
 		for off := vertexStart + 4; off+8 < len(data); off += 2 {
-			if MeshMaterialSection(data, off, true, true) > 0 {
+			if MeshMaterialSection(data, off, false, true) > 0 {
 				matStart = off
 				break
 			}

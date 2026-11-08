@@ -130,6 +130,82 @@ func whmAnimDataSplice(data []byte, animIndex int) (animDataLocate, error) {
 	return loc, fmt.Errorf("animation %d not found in the file", animIndex)
 }
 
+// RemoveAnimation takes one animation clip out of a .whm and returns the whole
+// file without it. The clip is the FOLDANIM chunk the parser read as animation
+// animIndex — the same walk PatchAnimClip takes, so the index the panel shows
+// is the index the file is found by. The chunk leaves whole — header, name and
+// body — and the FOLDRSGM body size above it moves down by the length that
+// leaves with it. No chunk header carries an absolute offset (the fourth field
+// is the name's length), so every other byte of the file stays exactly where
+// it was and reads the same afterwards.
+//
+// The chunk found by the index has to carry the name the editor's animation
+// carries: a model and a file that disagree must not be written over each
+// other, and refusing is the only safe answer to that.
+func RemoveAnimation(data []byte, model *Model, animIndex int) ([]byte, error) {
+	if model == nil || animIndex < 0 || animIndex >= len(model.Animations) {
+		return nil, fmt.Errorf("animation %d of %d does not exist", animIndex, len(model.Animations))
+	}
+	if len(data) < chunky.PreambleSize || !bytes.HasPrefix(data, chunky.Magic) {
+		return nil, fmt.Errorf("not a Relic Chunky model file")
+	}
+	spans := chunky.SpansIn(data, chunky.PreambleSize, len(data))
+	root := -1
+	for i := range spans {
+		if spans[i].TypeID == "FOLDRSGM" {
+			root = i
+			break
+		}
+	}
+	if root < 0 {
+		return nil, fmt.Errorf("FOLDRSGM chunk not found")
+	}
+	want := model.Animations[animIndex].Name
+	n := 0
+	for _, fold := range chunky.SpansIn(data, spans[root].BodyStart, spans[root].BodyEnd) {
+		if fold.TypeID != "FOLDANIM" {
+			continue
+		}
+		if n == animIndex {
+			if got := spanChunkName(data, fold); got != want {
+				return nil, fmt.Errorf("the file's animation %d is %q and the editor's is %q — refusing to remove another clip",
+					animIndex, got, want)
+			}
+			delta := fold.BodyEnd - fold.HeaderAt
+			if delta <= 0 || delta >= len(data) {
+				return nil, fmt.Errorf("internal: the clip's span of %d bytes is not inside the file", delta)
+			}
+			at := spans[root].HeaderAt
+			if at+chunky.HeaderSize > fold.HeaderAt {
+				return nil, fmt.Errorf("internal: the FOLDRSGM header at %d overlaps the chunk it holds", at)
+			}
+			size := int32(binary.LittleEndian.Uint32(data[at+12 : at+16]))
+			if size < int32(delta) {
+				return nil, fmt.Errorf("internal: FOLDRSGM holds %d bytes, smaller than the %d removed", size, delta)
+			}
+			out := make([]byte, 0, len(data)-delta)
+			out = append(out, data[:fold.HeaderAt]...)
+			out = append(out, data[fold.BodyEnd:]...)
+			binary.LittleEndian.PutUint32(out[at+12:at+16], uint32(size-int32(delta)))
+			return out, nil
+		}
+		n++
+	}
+	return nil, fmt.Errorf("animation %d not found in the file", animIndex)
+}
+
+// spanChunkName reads a chunk's own name out of its header and name field.
+// SpansIn has already checked the name lies inside the chunk's body range, so
+// the offsets here are inside the file by construction.
+func spanChunkName(data []byte, s chunky.Span) string {
+	nameLen := int(int32(binary.LittleEndian.Uint32(data[s.HeaderAt+16 : s.HeaderAt+20])))
+	name := data[s.HeaderAt+chunky.HeaderSize : s.HeaderAt+chunky.HeaderSize+nameLen]
+	if len(name) > 0 && name[len(name)-1] == 0 {
+		name = name[:len(name)-1]
+	}
+	return string(name)
+}
+
 // rebuildAnimBoneKeyPayload re-emits the bone section of one DATADATA payload
 // from the editor's animation and keeps the rest of the payload as it was.
 // The walk mirrors parseAnimationData, so the clip's header, the mesh and

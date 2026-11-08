@@ -106,6 +106,17 @@ func ConvertToSgm(data []byte) ([]byte, *ModelInfo, error) {
 		case "FOLDTXTR":
 			info.Textures++
 			out.Children = append(out.Children, chunky.Clone(c))
+		case "FOLDSTXT":
+			// Materials as this flavour stores them: the folder is one
+			// material, named for its texture path, where other models put
+			// a DATASSHR at the root of FOLDRSGM.
+			info.Materials++
+			out.Children = append(out.Children, chunky.Clone(c))
+		case "FOLDSHDR":
+			// One texture header per .rsh the model draws with; the chunk
+			// is the same in both containers.
+			info.Textures++
+			out.Children = append(out.Children, chunky.Clone(c))
 		case "FOLDMSGR":
 			meshes, err := convertWhmMeshGroup(c, info)
 			if err != nil {

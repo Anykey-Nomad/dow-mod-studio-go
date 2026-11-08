@@ -28,7 +28,41 @@ const (
 	// clipActions is one action of a .whe's DATAACTS section: the chain of
 	// motions it plays and the other actions it calls.
 	ClipActions
+	// ClipFrameTime is a moment read off the timebar: the time into the clip
+	// and the frame it lands on. A right press on the strip copies it, a
+	// right press in a time or frame field pastes it.
+	ClipFrameTime
+	// ClipName is a copied name — a motion, an action, an animation or an
+	// event. The space it belongs to decides which fields take it: a name
+	// pastes only into a field of a matching type.
+	ClipName
 )
+
+// The spaces a NameClip belongs to: which list the name was copied from is
+// what decides where it may be pasted.
+const (
+	NameSpaceMotion    = "motion"
+	NameSpaceAction    = "action"
+	NameSpaceAnimation = "animation"
+	NameSpaceEvent     = "event"
+	// The spaces pasted into the fields a name does not already own: marker
+	// and bone names come off the model's lists, sounds off the Events form.
+	NameSpaceMarker = "marker"
+	NameSpaceBone   = "bone"
+	NameSpaceSound  = "sound"
+	// The rest of a .whe: a timeline's own name, the sound paths its events	// carry and the FX paths its definitions name.
+	NameSpaceTimeline  = "timeline"
+	NameSpaceSoundPath = "sound-path"
+	NameSpaceFXPath    = "fx-path"
+)
+
+// AllNameSpaces is every space a NameClip may belong to — the history view
+// and a paste-anywhere field read it to know what a name entry means.
+func AllNameSpaces() []string {
+	return []string{NameSpaceMotion, NameSpaceAction, NameSpaceAnimation,
+		NameSpaceEvent, NameSpaceMarker, NameSpaceBone, NameSpaceSound,
+		NameSpaceTimeline, NameSpaceSoundPath, NameSpaceFXPath}
+}
 
 // String is the tag shown beside an entry in the history.
 func (k ClipKind) String() string {
@@ -41,6 +75,10 @@ func (k ClipKind) String() string {
 		return "Import keys"
 	case ClipActions:
 		return "Actions"
+	case ClipFrameTime:
+		return "Time/frame"
+	case ClipName:
+		return "Name"
 	}
 	return "Unknown"
 }
@@ -62,6 +100,12 @@ type ClipEntry struct {
 	Events  *WheEventClip
 	Keys    *BoneKeyClip
 	Actions *WheActionClip
+
+	// FrameTime is the payload of a ClipFrameTime entry; only that kind sets it.
+	FrameTime *FrameTimeClip
+
+	// Name is the payload of a ClipName entry; only that kind sets it.
+	Name *NameClip
 }
 
 // fits reports whether the entry may be pasted into a field that takes the
@@ -183,4 +227,37 @@ type WheActionClip struct {
 	Action    whe.FxAction
 	Timelines []WheEventClip
 	Subacts   []whe.FxAction
+}
+
+// FrameTimeClip is a frame/time pair: a moment in a clip, read off the
+// timebar as both the seconds into the clip and the frame it lands on.
+type FrameTimeClip struct {
+	Anim  string  // clip the moment was read from
+	Frame int     // frame number, counted from 1 the way the strip labels them
+	Time  float64 // seconds into the clip
+}
+
+// NameClip is a copied name of one of the named lists: the space says which
+// list it came from — motion, action, animation or event — and the field it
+// is pasted into must take that space.
+type NameClip struct {
+	Space string
+	Name  string
+}
+
+// LatestName returns the newest name entry belonging to one of the given
+// spaces, with its index in the history. It reports false when none fits.
+func (h *ClipHistory) LatestName(spaces []string) (ClipEntry, int, bool) {
+	for i := len(h.Entries) - 1; i >= 0; i-- {
+		e := h.Entries[i]
+		if e.Kind != ClipName || e.Name == nil {
+			continue
+		}
+		for _, s := range spaces {
+			if e.Name.Space == s {
+				return e, i, true
+			}
+		}
+	}
+	return ClipEntry{}, -1, false
 }

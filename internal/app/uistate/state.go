@@ -163,7 +163,10 @@ type State struct {
 	SettingsThemeClick     widget.Clickable
 	SettingsOk             widget.Clickable
 	SettingsCancel         widget.Clickable
-	DarkTheme              bool
+	// SettingsPanicBtn deliberately panics, to exercise the crash logging
+	// (recover + crash output file) on the machine it is pressed on.
+	SettingsPanicBtn widget.Clickable
+	DarkTheme        bool
 
 	// File association rows of the Settings dialog: one button per assocTypes
 	// format, sized when the dialog opens. assocOn caches what the registry
@@ -195,6 +198,16 @@ type State struct {
 	ClearRecycleConfirm widget.Clickable
 	ClearRecycleCancel  widget.Clickable
 
+	// AnimRemoveDialog asks before an animation is taken out of the .whm of
+	// AnimRemoveTab: the clip cannot be put back from the status bar, so the
+	// card quotes the name and the path captured when Remove was pressed.
+	AnimRemoveDialog  bool
+	AnimRemoveTab     *Tab
+	AnimRemoveName    string
+	AnimRemovePath    string
+	AnimRemoveConfirm widget.Clickable
+	AnimRemoveCancel  widget.Clickable
+
 	// window ref for title update (set in run)
 	Win *app.Window
 
@@ -202,6 +215,17 @@ type State struct {
 	RgdTooltipTags  map[string]event.Tag
 	RgdTooltipText  string
 	RgdEditorClicks map[*widget.Editor]*RgdEditorClickState
+
+	// ClipPasteFields registers the fields that take a frame/time paste on a
+	// right-click, keyed by their editor: which value goes in is the field's
+	// type, and the tag is the pointer area the press is read from — the
+	// layout of the field registers it where the field is drawn.
+	ClipPasteFields map[*widget.Editor]*ClipPasteField
+
+	// RowNameTags holds the pointer area of each row that copies its name on
+	// a right-press, keyed by list and row so layout and input name the same
+	// row across frames.
+	RowNameTags map[string]event.Tag
 
 	// ── file search (top-right of the menu bar) ──
 	// The field lives in the menu bar, but the results drop down as a panel
@@ -294,6 +318,11 @@ type State struct {
 	// change only with the .whe, never with expansion.
 	ClassicOEMotionClicks []widget.Clickable
 	ClassicOEActionClicks []widget.Clickable
+	// The rows of the two lists that are read rather than pressed — the
+	// Event List and the Condition List — still need a hover target for the
+	// full name their column had to cut, hence one click target each.
+	ClassicOEEventClicks []widget.Clickable
+	ClassicOECountClicks []widget.Clickable
 
 	// The four folders of the Anims / Motions / Actions tree — which are
 	// open, and the expand toggles of the action tree's nodes. The toggles
@@ -307,6 +336,27 @@ type State struct {
 	ClassicOEFolderClicks [ClassicOEFolderCount]widget.Clickable
 	ClassicOEExpandClicks map[string]*widget.Clickable
 	ClassicOEExpandOpen   map[string]bool
+
+	// The two column splitters of the Classic OE layout and the widths they
+	// drag: the panel column on the left and the model list on the right,
+	// with the preview taking what is left. A zero width means "not dragged
+	// yet", which is where the specified widths apply.
+	ClassicOEPanelWidth int
+	ClassicOESideWidth  int
+	ClassicOESplitters  [2]PanelSplitterState
+
+	// The full name of the row under the pointer, which the object window's
+	// left column had to shorten to fit, and where the pointer is in window
+	// pixels — the tip is drawn just above it. Only the rows that set a tip
+	// are drawn anywhere that reads it, so the text is harmless elsewhere.
+	HoverTipText    string
+	HoverTipPending string
+	HoverTipX       float32
+	HoverTipY       float32
+	HoverTipMoved   bool
+	// The pass-through target that follows the pointer over the object
+	// window's body, which is where the tip's position comes from.
+	UnitPointerTag event.Tag
 	// classicOEJumpClicks is the other press target of a tree row: the
 	// marker column toggles a branch, the rest of the row plays the
 	// animation the node points at, so the two never share a click.
@@ -322,6 +372,10 @@ type State struct {
 	ClassicOEevtScroll  PanelScrollState
 	ClassicOEevtClose   widget.Clickable
 	ClassicOEevtDim     widget.Clickable
+	// ClassicOENewAct is the Actions folder's own new-action button: the
+	// same action the Events tab's button creates, raised through this
+	// section's editor dialog as soon as it lands.
+	ClassicOENewAct widget.Clickable
 	// classicOEevtCardTag is the area the editor card covers against the dim:
 	// a press on the card's own empty space is taken here so it never reaches
 	// the dim and closes the editor under the user's hand.
@@ -362,7 +416,15 @@ type State struct {
 	ClassicOEConditionRemove   widget.Clickable
 	ClassicOESelectedUICreate  widget.Clickable
 	ClassicOEWheSave           widget.Clickable
-	ClassicOEWheRevert         widget.Clickable
+	// ClassicOEEbpSave exports the loaded object in the Object Editor's own
+	// .ebp form: the same data as the .whe, which is what the game reads.
+	ClassicOEEbpSave widget.Clickable
+	// ClassicOESgmSave exports the unit's model in the Object Editor's own
+	// .sgm container: the same data as the .whm, which is what the game reads.
+	// The editor opens models from .sgm files alone, so a mod that ships only
+	// .whm files gives it nothing to open.
+	ClassicOESgmSave   widget.Clickable
+	ClassicOEWheRevert widget.Clickable
 
 	// The dialog browses the mod's own units rather than the open file, so it
 	// carries its own selection. UnitCatalog is built once per mod; the
@@ -447,6 +509,12 @@ type State struct {
 	UnitClicks     []widget.Clickable
 	UnitList       layout.List
 	UnitListScroll PanelScrollState
+	// unitPickerFilter is the unit dropdown's own filter: the rows it shows
+	// are the ones whose name, file name or race matches what it holds. It is
+	// kept between openings, so a search that found nothing is still there to
+	// edit rather than having to be typed again.
+	UnitPickerFilter     widget.Editor
+	UnitPickerLastFilter string
 	// unitRaceTrigger and unitListTrigger are the two dropdown fields.
 	UnitRaceTrigger widget.Clickable
 	UnitListTrigger widget.Clickable
@@ -684,6 +752,16 @@ type State struct {
 	UnitEvtEntryBound    string
 	UnitEvtEntryFillText []string
 	UnitEvtEntrySetClick widget.Clickable
+	// The motion tail of the selected timeline is the other half of an event
+	// edit: how the clip plays. unitTailType cycles the type the engine defines
+	// (non-looping, looping, hold end) on a press, unitTailModEd is the name of
+	// the modifier the motion drives and unitTailModSet commits it, and
+	// unitTailBound says which timeline the field was last filled from so
+	// moving the selection refills it.
+	UnitTailType         widget.Clickable
+	UnitTailModEd        widget.Editor
+	UnitTailModSet       widget.Clickable
+	UnitTailBound        string
 	UnitEvtDirty         bool
 	UnitEvtTimeline      string // selected timeline (DATAMTON) name
 	UnitEvtSel           int    // selected event row of that timeline
@@ -691,12 +769,25 @@ type State struct {
 	UnitEvtScroll        PanelScrollState
 	UnitEvtPanelScroll   PanelScrollState
 	UnitEvtActionsScroll PanelScrollState
-	UnitEvtActionSel     int // selected action of the DATAACTS list
-	UnitEvtActionClicks  []widget.Clickable
+	// unitEvtTlFilter narrows the timeline list to the names containing it,
+	// and unitActFilter does the same for the action list under it. Each
+	// takes a copied name of its own list's space on a right press, the
+	// same way the rows above them copy one.
+	UnitEvtTlFilter     widget.Editor
+	UnitActFilter       widget.Editor
+	UnitEvtActionSel    int // selected action of the DATAACTS list
+	UnitEvtActionClicks []widget.Clickable
 	// unitEvtCopyAct and unitEvtPasteAct move one action of the DATAACTS
 	// section between units, the way unitEvtCopyTl moves a whole timeline.
 	UnitEvtCopyAct  widget.Clickable
 	UnitEvtPasteAct widget.Clickable
+	// unitEvtNewAct gives the .whe an action of its own under a name the file
+	// does not carry yet, the way the pasted one lands — the first action of
+	// a file that has none comes from here rather than from a clipboard.
+	UnitEvtNewAct widget.Clickable
+	// unitEvtRemoveAct drops the picked action from DATAACTS, refused while
+	// another action still calls it.
+	UnitEvtRemoveAct widget.Clickable
 	// unitActNameEd and unitActRename rename the picked action. A copied action
 	// pastes under its own name, so renaming is how a name this .whe already
 	// uses is resolved without hand-editing the file. unitActNameBound is the
@@ -714,6 +805,20 @@ type State struct {
 	// timeline's animation list — one per Animations entry — so each blend
 	// entry can be dropped individually.
 	UnitEvtAnimClicks []widget.Clickable
+	// unitAnimAddEd is the field under the animation list that takes a new
+	// blend entry's name — typed, or pasted from a copied animation row —
+	// and unitAnimAddClick commits it: the inverse of the Remove beside
+	// each entry.
+	UnitAnimAddEd    widget.Editor
+	UnitAnimAddClick widget.Clickable
+	// unitAnimChoose is the button beside that field which raises the list
+	// of the model's clips, so a blend entry can be picked rather than
+	// typed.
+	UnitAnimChoose widget.Clickable
+	// unitActAnimPickClicks are the same list-raising button on each choice
+	// line of an action — one per line, beside its motion-or-action field,
+	// where the picked animation lands.
+	UnitActAnimPickClicks []widget.Clickable
 	// unitMeshClicks are the eye toggles of the pinned mesh list at the bottom
 	// of the Events panel — one per mesh of the unit's model — and
 	// unitMeshScroll is that list's own scroller, so a long list scrolls
@@ -742,6 +847,59 @@ type State struct {
 	// unitMeshMatCardTag is the area the card covers against the dim, the same
 	// guard the Classic OE editor card takes.
 	UnitMeshMatCardTag struct{}
+	// Voices section State: the unit's speech_directory is resolved against
+	// the mod on every frame — a folder lookup, not a read — so the section
+	// needs no cached copy and a reply added to the mod shows at once. The
+	// selected voiced action is UnitSelRow, shared with the other selectable
+	// lists because only one section is on screen at a time, and
+	// UnitVoicePlayClicks are the Play buttons of the takes in the right
+	// column, one per file in the order that column draws them.
+	UnitVoiceCatList    layout.List
+	UnitVoiceFileList   layout.List
+	UnitVoicePlayClicks []widget.Clickable
+	UnitVoiceStopClick  widget.Clickable
+	// unitVoiceFileSel is the take the convert buttons act on,
+	// unitVoiceFileClicks are the rows that select it, and the two convert
+	// clicks are one per direction.
+	UnitVoiceFileSel      int
+	UnitVoiceFileClicks   []widget.Clickable
+	UnitVoiceConvWavClick widget.Clickable
+	UnitVoiceConvFdaClick widget.Clickable
+	// The add/remove controls of both columns: a reply is added through the
+	// module's own file picker and removed through the Recycle Bin, and an
+	// action is a folder, named in the dialog below.
+	UnitVoiceAddClick        widget.Clickable
+	UnitVoiceDeleteClick     widget.Clickable
+	UnitVoiceNewActionClick  widget.Clickable
+	UnitVoiceDelActionClick  widget.Clickable
+	UnitVoiceNewActionDialog bool
+	UnitVoiceNewActionEditor widget.Editor
+	UnitVoiceNewActionStatus string
+	UnitVoiceNewActionOk     widget.Clickable
+	UnitVoiceNewActionCancel widget.Clickable
+	// The Weapons tree: which weapons are open, which row is selected across
+	// the flattened tree, the value editor of the selected armour row and the
+	// two buttons that add or remove a weapon in a hardpoint's fixed slots.
+	UnitWeaponOpen []bool
+	UnitWeaponList layout.List
+	// unitWeaponFieldList scrolls the selected weapon's own settings, which the
+	// section has always shown and which the armour tree leaves no room for.
+	UnitWeaponFieldList layout.List
+	UnitWeaponRowClicks []widget.Clickable
+	UnitWeaponSel       int
+	UnitWeaponValEditor widget.Editor
+	UnitWeaponValBound  string
+	UnitWeaponValError  string
+	UnitWeaponSaveClick widget.Clickable
+	UnitWeaponAddClick  widget.Clickable
+	UnitWeaponDelClick  widget.Clickable
+	// UnitWeaponModelKey is the unit whose model diagnostics are cached and
+	// UnitWeaponModelWarn the lines to show for it: a weapon choice switches a
+	// visibility group of the unit's model, so a mesh in that group with no
+	// material is what turns the entity into the game's placeholder once that
+	// weapon is mounted.
+	UnitWeaponModelKey  string
+	UnitWeaponModelWarn []string
 	// unitActCondEds are the condition fields of the picked action's choices —
 	// one per motion and sub-action link, in file order — with
 	// unitActCondStaged holding the guard step each is edited as and
@@ -813,7 +971,16 @@ type State struct {
 	// unitEvtCopyTl copies the whole selected timeline — its events, its clips
 	// and their definitions — rather than just the rows picked in it.
 	UnitEvtCopyTl widget.Clickable
-	UnitEvtPaste  widget.Clickable
+	// unitEvtNewTlEd is the name a new timeline is created under, and
+	// unitEvtNewTl the button that creates it. The name is typed rather than
+	// generated because nothing renames a timeline: it is the name an action's
+	// motion will later be typed with, so it has to be right the first time.
+	UnitEvtNewTlEd widget.Editor
+	UnitEvtNewTl   widget.Clickable
+	// unitEvtRemoveTl drops the picked timeline from the file, refused while
+	// an action still names it in a motion.
+	UnitEvtRemoveTl widget.Clickable
+	UnitEvtPaste    widget.Clickable
 	// unitClipCur is the history entry Paste takes when it fits the field; -1
 	// when none is chosen. unitClipPrev and unitClipNext step it through the
 	// entries that fit the events field.
@@ -925,6 +1092,8 @@ type Tab struct {
 	FdaWaveHoverFrac float32 // mouse hover frac for tooltip if needed
 
 	// whm State (when kind=="whm")
+	WhmLoading      bool
+	WhmLoadCh       chan WhmLoadResult
 	WhmInfo         *whm.ModelInfo
 	WhmError        string
 	WhmBytes        int
@@ -983,6 +1152,7 @@ type Tab struct {
 	SgbAnimatedEntities []sgb.AnimatedEntity
 
 	SgbObjectRoot             *modtree.TreeFolder
+	SgbObjectRaceRoot         *modtree.TreeFolder
 	SgbObjectExpanded         map[string]bool
 	SgbObjectClicks           map[string]*widget.Clickable
 	SgbObjectList             layout.List
@@ -1020,8 +1190,11 @@ type Tab struct {
 	ModelStepBack     widget.Clickable
 	ModelStepFwd      widget.Clickable
 	ModelReset        widget.Clickable
-	ModelSkeleton     widget.Clickable
-	ModelFX           widget.Clickable
+	// ModelAnimRemove is the side panel's Remove button: it takes the clip
+	// the viewer is on out of the .whm, behind a confirmation.
+	ModelAnimRemove widget.Clickable
+	ModelSkeleton   widget.Clickable
+	ModelFX         widget.Clickable
 	// modelSFX turns the model's own sound on and off. It is a button rather
 	// than nothing at all because a preview that starts making noise the
 	// moment a model opens is a preview nobody can look at, and one that
@@ -1339,6 +1512,15 @@ func (m *WhmModel) ModelCenter() (fauxgl.Vector, float64) {
 	return engine.ModelCenter(&m.Model)
 }
 
+// WhmLoadResult carries an independently loaded model back to the UI thread.
+type WhmLoadResult struct {
+	Info   *whm.ModelInfo
+	Viewer *Viewer
+	Bytes  int
+	IsSgm  bool
+	Err    error
+}
+
 type WhmModel struct {
 	whm.Model
 }
@@ -1367,6 +1549,9 @@ type ClipHistory = cliphist.ClipHistory
 type EvtPicker struct {
 	Open   bool
 	Target EvtPickTarget
+	// Row is the choice line of an action a pick writes into, for the
+	// target that fills one; -1 for a pick that fills a plain field.
+	Row    int
 	Ed     widget.Editor
 	Filter string
 	All    []string
@@ -1842,6 +2027,29 @@ type PanelSplitterState struct {
 type RgdEditorClickState struct {
 	Editor *widget.Editor
 	Click  widget.Clickable
+}
+
+// ClipPasteType says which half of the frame/time clipboard a field takes on
+// a right-click: nothing at all, the time in seconds, or the frame number.
+type ClipPasteType uint8
+
+const (
+	ClipPasteNone  ClipPasteType = iota
+	ClipPasteTime                // paste the moment's seconds, e.g. the Events time field
+	ClipPasteFrame               // paste the frame number, e.g. the animation's frame count
+	// ClipPasteName pastes a copied name — motion, action, animation or
+	// event — and Spaces says which of those the field takes.
+	ClipPasteName
+)
+
+// ClipPasteField is one field wired for that paste: its type decides the
+// value, its tag is the area the right press is read from.
+type ClipPasteField struct {
+	Type ClipPasteType
+	// Spaces lists the name spaces a ClipPasteName field accepts; it is
+	// empty for the other types.
+	Spaces []string
+	Tag    event.Tag
 }
 
 type RgdVisible struct {

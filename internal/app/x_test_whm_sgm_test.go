@@ -9,10 +9,83 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
+	"dow-mod-studio/internal/app/uistate"
 	"dow-mod-studio/internal/chunky"
 	"dow-mod-studio/internal/whm"
 )
+
+func TestOpenWhmLoadsInBackgroundAndAppliesResult(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "model.whm")
+	if err := os.WriteFile(path, materialPathTestWHM("material", "texture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ui := &uiState{}
+	OpenWhm(ui, path)
+	if len(ui.OpenTabs) != 1 || !ui.OpenTabs[0].WhmLoading || ui.OpenTabs[0].Model != nil {
+		t.Fatal("opening did not create a loading tab")
+	}
+	tab := ui.OpenTabs[0]
+	select {
+	case result := <-tab.WhmLoadCh:
+		tab.WhmLoadCh <- result
+	case <-time.After(10 * time.Second):
+		t.Fatal("background load did not finish")
+	}
+	PollWhmLoads(ui)
+	if tab.WhmLoading || tab.WhmError != "" || tab.Model == nil || tab.WhmInfo == nil {
+		t.Fatalf("load not applied: loading=%v error=%q model=%v info=%v", tab.WhmLoading, tab.WhmError, tab.Model != nil, tab.WhmInfo != nil)
+	}
+}
+
+func TestOpenWhmReportsBackgroundReadError(t *testing.T) {
+	ui := &uiState{}
+	OpenWhm(ui, filepath.Join(t.TempDir(), "missing.whm"))
+	tab := ui.OpenTabs[0]
+	select {
+	case result := <-tab.WhmLoadCh:
+		tab.WhmLoadCh <- result
+	case <-time.After(10 * time.Second):
+		t.Fatal("background load did not finish")
+	}
+	PollWhmLoads(ui)
+	if tab.WhmLoading || tab.WhmError == "" || tab.Model != nil {
+		t.Fatalf("missing file: loading=%v error=%q model=%v", tab.WhmLoading, tab.WhmError, tab.Model != nil)
+	}
+}
+
+// A model opened while another tab is showing still has to land: the loading
+// view is the only thing that asks for frames by itself, so polling has to say
+// a load is in flight and the shell schedules the frame.
+func TestPollWhmLoadsKeepsAskingForFramesUntilResultLands(t *testing.T) {
+	ch := make(chan uistate.WhmLoadResult, 1)
+	loading := &fileTab{Kind: "whm", Path: "hidden.whm", WhmLoading: true, WhmLoadCh: ch}
+	shown := &fileTab{Kind: "rgd", Path: "shown.rgd"}
+	ui := &uiState{OpenTabs: []*fileTab{shown, loading}, TabSel: 1}
+	if !PollWhmLoads(ui) {
+		t.Fatal("a load in flight did not ask for another frame, so a result for a hidden tab would wait for input")
+	}
+	ch <- uistate.WhmLoadResult{Viewer: &modelViewer{}}
+	if PollWhmLoads(ui) {
+		t.Fatal("polling still asked for frames after the result landed")
+	}
+	if loading.WhmLoading || loading.Model == nil {
+		t.Fatalf("result for a hidden tab was not applied: loading=%v model=%v", loading.WhmLoading, loading.Model != nil)
+	}
+}
+
+func TestClosedWhmTabDoesNotApplyLateResult(t *testing.T) {
+	ch := make(chan uistate.WhmLoadResult, 1)
+	tab := &fileTab{Kind: "whm", WhmLoading: true, WhmLoadCh: ch}
+	ui := &uiState{OpenTabs: []*fileTab{tab}, TabSel: 1}
+	CloseTabAt(ui, 0)
+	ch <- uistate.WhmLoadResult{Viewer: &modelViewer{}}
+	PollWhmLoads(ui)
+	if tab.Model != nil || len(ui.OpenTabs) != 0 {
+		t.Fatal("late result was applied to closed tab")
+	}
+}
 
 func tStr(s string) []byte {
 	b := chunky.I32(int32(len(s)))

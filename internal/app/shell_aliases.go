@@ -15,11 +15,17 @@ var applyMaterialTheme = shell.ApplyMaterialTheme
 
 type menuDef = shell.MenuDef
 
-var menus = shell.Menus
+// menus is filled in init below: a package-level variable initializer would
+// run before shell.Init() and capture shell.Menus while it is still nil,
+// leaving the menu bar drawn without its File/Mod/Help buttons.
+var menus []menuDef
 
 // The original app package ran this at load time; Init keeps the same body,
 // so app keeps the same init hook.
-func init() { shell.Init() }
+func init() {
+	shell.Init()
+	menus = shell.Menus
+}
 
 type uiState = shell.UiState
 
@@ -210,6 +216,8 @@ var LayoutAssocRows = shell.LayoutAssocRows
 var LayoutClearRecycleDialog = shell.LayoutClearRecycleDialog
 
 var LayoutFileDeleteDialog = shell.LayoutFileDeleteDialog
+
+var LayoutAnimRemoveDialog = shell.LayoutAnimRemoveDialog
 
 var DialogButton = shell.DialogButton
 

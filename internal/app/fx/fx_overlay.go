@@ -350,6 +350,24 @@ func FxOrigins(v *viewer.ModelViewer) {
 		return
 	}
 	pose := viewer.Pose(v)
+	type markerData struct {
+		world, right, up, x, y, z fauxgl.Vector
+		worldOK, basisOK, frameOK bool
+	}
+	markers := make(map[int]int, len(v.Model.Markers))
+	data := make([]markerData, 0, min(len(v.Model.Markers), len(v.FxEffects)))
+	markerFor := func(index int) markerData {
+		if at, ok := markers[index]; ok {
+			return data[at]
+		}
+		var marker markerData
+		marker.world, marker.worldOK = v.Model.MarkerWorld(index, pose, true)
+		marker.right, marker.up, marker.basisOK = v.Model.MarkerBasis(index, pose, true)
+		marker.x, marker.y, marker.z, marker.frameOK = v.Model.MarkerFrameAxes(index, pose, true)
+		markers[index] = len(data)
+		data = append(data, marker)
+		return marker
+	}
 	for i := range v.FxEffects {
 		e := &v.FxEffects[i]
 		e.TurnAxes = [3]fauxgl.Vector{FxAxisX, FxAxisY, FxAxisZ}
@@ -358,8 +376,9 @@ func FxOrigins(v *viewer.ModelViewer) {
 		// a marker on the model. ModelMarkerFrame uses the same Z-up basis as
 		// the model viewer; FX values stay local until transformed below.
 		e.Frame = FxFallbackFrame
-		if world, ok := v.Model.MarkerWorld(e.Marker, pose, true); ok {
-			e.Origin = world
+		marker := markerFor(e.Marker)
+		if marker.worldOK {
+			e.Origin = marker.world
 		}
 		e.ManualOrigin = fauxgl.Vector{}
 		e.HasManualOrigin = false
@@ -391,23 +410,23 @@ func FxOrigins(v *viewer.ModelViewer) {
 		// offsets. Without one, a free beam follows its marker's forward axis.
 		if e.Sim != nil && e.Sim.Axis.Length() > 1e-6 {
 			e.Axis = e.FxMarkerVector(e.Sim.Axis)
-		} else if axis, ok := v.Model.MarkerBeamAxis(e.Marker, pose, true); ok {
+		} else if marker.frameOK {
 			// A beam runs along the tube it plays at, which is the marker's
 			// second frame column, not the direction MarkerAxis scores the
 			// marker as facing: see MarkerBeamAxis.
-			e.Axis = axis
+			e.Axis = marker.y
 		}
 
-		if right, up, ok := v.Model.MarkerBasis(e.Marker, pose, true); ok {
-			e.Right = right
-			e.Up = up
+		if marker.basisOK {
+			e.Right = marker.right
+			e.Up = marker.up
 		}
 		if e.Sim != nil && e.Sim.NoRotate {
 			// Preserve the coordinate-system swap while discarding the marker
 			// transform: this is the identity attachment frame, not raw file XYZ.
 			e.Frame = FxFallbackFrame
-		} else if x, y, z, ok := v.Model.MarkerFrameAxes(e.Marker, pose, true); ok {
-			e.Frame = [3]fauxgl.Vector{x, y, z}
+		} else if marker.frameOK {
+			e.Frame = [3]fauxgl.Vector{marker.x, marker.y, marker.z}
 		}
 		if e.AlignToOther && e.HasOther && (e.Sim == nil || !e.Sim.NoRotate) {
 			e.Frame = FxFrameToward(e.Frame, e.Far.Sub(e.Origin))
@@ -496,6 +515,8 @@ func FxAdvance(v *viewer.ModelViewer, now time.Time, w, h int, opts render.Rende
 	// advanced before the effects are looked at, because a model may declare
 	// sounds and no visible effects at all.
 	FxSoundTick(v, anim)
+	// Refresh attachment transforms before copying active effects for this frame.
+	FxOrigins(v)
 	active := FxActiveEffects(v, anim)
 	// A clip that no timeline names draws nothing, and says so once. It used to
 	// fall back to playing every effect the model has, on the grounds that a
@@ -541,7 +562,6 @@ func FxAdvance(v *viewer.ModelViewer, now time.Time, w, h int, opts render.Rende
 	dt := now.Sub(v.FxLast).Seconds()
 	v.FxLast = now
 	effects := FxStepOnClip(v, active, anim, dt)
-	FxOrigins(v)
 	// The scale is applied to each effect's local geometry rather than to its
 	// marker origin or live simulation, so changing it keeps the effect attached
 	// to the same model point without resetting particles in flight.

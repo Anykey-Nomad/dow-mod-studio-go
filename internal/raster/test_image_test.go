@@ -248,3 +248,35 @@ func TestDecodeDXTBlockHalves(t *testing.T) {
 		t.Errorf("DXT3 block read its colour out of the alpha half: %#v", dxt3.At(0, 0))
 	}
 }
+
+// TestDecodeDXT1FourColourIndices pins the four-colour palette of a DXT1 block:
+// index 1 is c1 itself and index 3 is the one-third blend, not an empty
+// endpoint. Leaving index 3 black put a salt-and-pepper pattern over every 3D
+// texture in the game while the colour endpoints themselves decoded fine.
+func TestDecodeDXT1FourColourIndices(t *testing.T) {
+	data := make([]byte, 128+8)
+	copy(data[:4], "DDS ")
+	binary.LittleEndian.PutUint32(data[4:8], 124)
+	binary.LittleEndian.PutUint32(data[12:16], 4) // height
+	binary.LittleEndian.PutUint32(data[16:20], 4) // width
+	binary.LittleEndian.PutUint32(data[20:24], 32)
+	binary.LittleEndian.PutUint32(data[84:88], 0x31545844) // DXT1
+	binary.LittleEndian.PutUint16(data[128:130], 0xf800)   // c0: red
+	binary.LittleEndian.PutUint16(data[130:132], 0x001f)   // c1: blue
+	binary.LittleEndian.PutUint32(data[132:136], 1|2<<2|3<<4)
+	img, _, err := DecodeImageData(data, "dds")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []color.NRGBA{
+		{R: 0x00, G: 0x00, B: 0xff, A: 0xff}, // index 1: c1 itself
+		{R: 0xaa, G: 0x00, B: 0x55, A: 0xff}, // index 2: two thirds of c0
+		{R: 0x55, G: 0x00, B: 0xaa, A: 0xff}, // index 3: two thirds of c1
+		{R: 0xff, G: 0x00, B: 0x00, A: 0xff}, // index 0: c0
+	}
+	for x, expected := range want {
+		if got := img.At(x, 0); got != expected {
+			t.Errorf("pixel %d: got %#v, want %#v", x, got, expected)
+		}
+	}
+}

@@ -83,16 +83,23 @@ func ResolveModelMaterialsWithPaths(tree *modtree.ModTree, roots []string, model
 	files := map[string][]byte{}
 	paths := map[string]string{}
 	var missing []string
+	var model *whm.Model
+	if len(names) > 0 && tree != nil && modelFile != "" {
+		if data, err := tree.ReadFile(modelFile); err == nil {
+			model, _ = whm.Parse(data)
+		}
+	}
 	for _, name := range names {
-		reference := ModelMaterialReference(tree, modelFile, name)
-		data, path, ok := ReadModelMaterialWithPath(tree, roots, modelFile, name)
+		reference := modelMaterialReference(model, name)
+		lookup := name
 		if reference != "" && !strings.EqualFold(reference, name) {
 			// The display/material label is not necessarily a real path or
 			// filename (for example, "necron warrior"). Try the shared
 			// shader's diffuse reference first, then retain the label as the
 			// returned key so the draw can find it.
-			data, path, ok = ReadModelMaterialWithPath(tree, roots, modelFile, reference)
+			lookup = reference
 		}
+		data, path, ok := ReadModelMaterialWithPath(tree, roots, modelFile, lookup)
 		if !ok {
 			missing = append(missing, name)
 			continue
@@ -125,6 +132,13 @@ func ModelMaterialReference(tree *modtree.ModTree, modelFile, material string) s
 	}
 	model, err := whm.Parse(data)
 	if err != nil {
+		return ""
+	}
+	return modelMaterialReference(model, material)
+}
+
+func modelMaterialReference(model *whm.Model, material string) string {
+	if model == nil {
 		return ""
 	}
 	key := strings.ToLower(strings.TrimSpace(material))

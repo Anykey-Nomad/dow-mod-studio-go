@@ -22,12 +22,13 @@ func PrepareSgbSelectionBounds(model *whm.Model, selected map[int]bool, entityMe
 	if model == nil || len(selected) == 0 || camera.Width <= 0 || camera.Height <= 0 || math.Abs(view.Determinant()) < 1e-12 {
 		return nil
 	}
-	bounds := SgbEntityProjectedBounds(model, entityMeshes, view, camera.Width, camera.Height, pose, animated)
+	projections := sgbSelectedProjections(model, selected, entityMeshes, view, camera.Width, camera.Height, pose, animated)
 	inverse := view.Inverse()
 	halfWidth := engine.OverlayHalfWidth(engine.OverlayOptions{Camera: camera}, 1.1)
 	var lines []ModelOverlayLine
 	for id := range selected {
-		box := bounds[id]
+		projection := projections[id]
+		box := projection.bounds
 		if box.Empty() {
 			continue
 		}
@@ -36,7 +37,10 @@ func PrepareSgbSelectionBounds(model *whm.Model, selected map[int]bool, entityMe
 		// pipeline draws these strips into the Vulkan color target without a
 		// depth test, keeping the selection visible over the selected mesh.
 		box = box.Inset(-3)
-		depth := sgbEntityNearestDepth(model, entityMeshes, id, view, pose, animated)
+		depth := projection.depth
+		if !projection.hasDepth {
+			depth = 1
+		}
 		corners := [...]image.Point{box.Min, {X: box.Max.X, Y: box.Min.Y}, box.Max, {X: box.Min.X, Y: box.Max.Y}}
 		var points [4]fauxgl.Vector
 		valid := true
@@ -63,13 +67,25 @@ func PrepareSgbSelectionBounds(model *whm.Model, selected map[int]bool, entityMe
 	return lines
 }
 
-func sgbEntityNearestDepth(model *whm.Model, entityMeshes map[string]int, entityID int, view fauxgl.Matrix, pose whm.Pose, animated bool) float64 {
-	nearest := math.Inf(1)
+type sgbProjection struct {
+	bounds   image.Rectangle
+	depth    float64
+	hasDepth bool
+}
+
+// Project only selected entities, computing their bounds and nearest depth
+// together so animated vertices do not need to be skinned twice.
+func sgbSelectedProjections(model *whm.Model, selected map[int]bool, entityMeshes map[string]int, view fauxgl.Matrix, width, height int, pose whm.Pose, animated bool) map[int]sgbProjection {
+	projections := make(map[int]sgbProjection, len(selected))
 	for _, mesh := range model.Meshes {
 		id, ok := entityMeshes[mesh.Name]
-		if !ok || id != entityID || mesh.Name == sgb.WaterMeshName {
+		if !ok || mesh.Name == sgb.WaterMeshName {
 			continue
 		}
+		if _, ok := selected[id]; !ok {
+			continue
+		}
+		result := projections[id]
 		for _, index := range mesh.Indices {
 			if int(index) >= len(model.Vertices) {
 				continue
@@ -83,16 +99,22 @@ func sgbEntityNearestDepth(model *whm.Model, entityMeshes map[string]int, entity
 			if projected.W <= 1e-6 {
 				continue
 			}
+			x := (projected.X/projected.W*0.5 + 0.5) * float64(width)
+			y := (1 - (projected.Y/projected.W*0.5 + 0.5)) * float64(height)
+			point := image.Rect(int(math.Floor(x)), int(math.Floor(y)), int(math.Floor(x))+1, int(math.Floor(y))+1)
+			if result.bounds.Empty() {
+				result.bounds = point
+			} else {
+				result.bounds = result.bounds.Union(point)
+			}
 			depth := projected.Z / projected.W
-			if depth >= 0 && depth < nearest {
-				nearest = depth
+			if depth >= 0 && !math.IsInf(depth, 1) && (!result.hasDepth || depth < result.depth) {
+				result.depth, result.hasDepth = depth, true
 			}
 		}
+		projections[id] = result
 	}
-	if math.IsInf(nearest, 1) {
-		return 1
-	}
-	return nearest
+	return projections
 }
 
 // SgbEntityProjectedBounds projects all referenced vertices and combines every

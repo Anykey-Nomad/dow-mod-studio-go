@@ -4,6 +4,7 @@ import (
 	"dow-mod-studio/internal/app/uikit"
 	"dow-mod-studio/internal/whe"
 	"fmt"
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/unit"
@@ -13,6 +14,89 @@ import (
 	"strings"
 )
 
+// unitWhmClipSet is the set of clips the unit's model carries, lowered and
+// trimmed the way names are compared elsewhere in the editor, or nil when no
+// model is on screen: with no model there is no file to check names against
+// and nothing can be called missing.
+func unitWhmClipSet(ui *uiState) map[string]bool {
+	v := UnitModelViewer(ui)
+	if v == nil || v.Model == nil {
+		return nil
+	}
+	set := make(map[string]bool, len(v.Model.Animations))
+	for _, a := range v.Model.Animations {
+		set[strings.ToLower(strings.TrimSpace(a.Name))] = true
+	}
+	return set
+}
+
+// unitAnimMissingInWhm reports whether a blend entry names a clip the model
+// does not carry. An empty name is not a clip reference at all, and a nil set
+// means no model is on screen, so neither is ever marked.
+func unitAnimMissingInWhm(clips map[string]bool, name string) bool {
+	if clips == nil {
+		return false
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	return name != "" && !clips[name]
+}
+
+// unitAnimMissingList is the clip names of a timeline the model does not
+// carry, in the file's own order.
+func unitAnimMissingList(clips map[string]bool, anims []string) []string {
+	var out []string
+	for _, a := range anims {
+		if unitAnimMissingInWhm(clips, a) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// unitEvtFilterRows is the rows of a list the filter keeps: every entry whose
+// name contains its text, compared without regard to case or spacing. An empty
+// filter keeps the whole list, so the row indices handed on are always the
+// entry's own index in the file — clicks, selection and the copy key all stay
+// addressed the way they are without a filter.
+func UnitEvtFilterRows[T any](filter string, items []T, name func(T) string) []int {
+	q := strings.ToLower(strings.TrimSpace(filter))
+	rows := make([]int, 0, len(items))
+	for i := range items {
+		if q == "" || strings.Contains(strings.ToLower(name(items[i])), q) {
+			rows = append(rows, i)
+		}
+	}
+	return rows
+}
+
+// unitListFilterField is the one-line filter drawn above a list: a bordered
+// field that takes the caret on a press, takes a copied name of its list's own
+// space on a right press, and whose text the list is narrowed by.
+func UnitListFilterField(ui *uiState, gtx layout.Context, ed *widget.Editor, hint string) layout.Dimensions {
+	gtx.Constraints.Min.Y = gtx.Dp(20)
+	gtx.Constraints.Max.Y = gtx.Dp(22)
+	b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+	dims := b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			w := material.Editor(ui.Th, ed, hint)
+			w.TextSize = unit.Sp(10)
+			w.HintColor = uikit.CTextDim
+			return w.Layout(gtx)
+		})
+	})
+	// The whole box is the click target that takes the caret, in its own
+	// pass so the editor's own caret hit-testing keeps working.
+	pass := pointer.PassOp{}.Push(gtx.Ops)
+	click := RgdEnsureEditorClick(ui, ed)
+	click.Click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Dimensions{Size: dims.Size}
+	})
+	pass.Pop()
+	// A right press pastes a copied name of the list's space into it.
+	uikit.LayoutClipPaste(ui, gtx, ed, dims.Size)
+	return dims
+}
+
 // layoutUnitEventTimelines is the middle column: every DATAMTON timeline of
 // the .whe, the selected one highlighted, and which clips each drives. The
 // .whe's actions are drawn under that list — they are file-wide and their
@@ -20,6 +104,10 @@ import (
 // them rather than inside the events of whichever timeline is picked.
 func LayoutUnitEventTimelines(ui *uiState, gtx layout.Context) layout.Dimensions {
 	EnsureUnitEvents(ui)
+	// The rows are marked against the clips the unit's .whm carries, so
+	// this section loads the model the way Classic OE does — a reader who
+	// opens Events first would otherwise never see the marking.
+	EnsureUnitModel(ui, gtx)
 	sec := CurrentUnitSection(ui)
 	return panelFrame(gtx, func(gtx layout.Context) layout.Dimensions {
 		children := []layout.FlexChild{
@@ -31,18 +119,16 @@ func LayoutUnitEventTimelines(ui *uiState, gtx layout.Context) layout.Dimensions
 		}
 		if ui.UnitEvtDoc != nil {
 			acts := ui.UnitEvtDoc.Actions()
-			// The block also shows for a .whe that has no actions of its own
-			// while one is on the clipboard: a copied action is the only way to
-			// give such a unit its first one.
-			_, _, hasClip := ui.UnitClips.Pick(clipActions, ui.UnitClipCur)
-			if len(acts) > 0 || hasClip {
-				children = append(children,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return LayoutUnitEvtActions(ui, gtx, acts)
-					}),
-				)
-			}
+			// The block always shows while a file is loaded: a .whe that has
+			// never had an action still needs the button that gives it one,
+			// and hiding the block until a clipboard held one made the first
+			// action unreachable.
+			children = append(children,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return LayoutUnitEvtActions(ui, gtx, acts)
+				}),
+			)
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
@@ -58,20 +144,34 @@ func LayoutUnitEventTimelines(ui *uiState, gtx layout.Context) layout.Dimensions
 // taller than that room, so the block is measured at its natural height and
 // capped at a share of the column when it does not fit: long action lists scroll
 // inside their own region rather than squeezing the animations off the column.
+//
+// The header, the copy/paste/new row and the filter stay pinned above that region
+// the way the timeline block pins them above its own list: a filter that
+// scrolls away with its rows is a filter that cannot be reached once the list
+// has moved, and it hides the buttons with it.
 func LayoutUnitEvtActions(ui *uiState, gtx layout.Context, acts []whe.FxAction) layout.Dimensions {
 	EnsureUnitEvtActionClicks(ui, len(acts))
 	SelectedUnitEvtAction(ui, acts)
-	content := func(gtx layout.Context) layout.Dimensions {
-		children := []layout.FlexChild{
+	rows := UnitEvtFilterRows(ui.UnitActFilter.Text(), acts, func(a whe.FxAction) string { return a.Name })
+	// What stays above the scrolling rows: the header, the copy/paste/new
+	// row and the filter, laid out as one fixed block the way the timeline
+	// column lays out its own header, copy row and filter.
+	pinned := func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return sectionHeader(gtx, ui.Th, "Actions")
 				})
 			}),
 			// An action moves between units the way a timeline does: one is
-			// copied whole here and pastes into another unit's list.
+			// copied whole here and pastes into another unit's list, and a new
+			// one is created here for a file that carries none. Three buttons
+			// do not fit a narrow column, and a button drawn past the column's
+			// edge is a button that cannot be pressed, so when they do not fit
+			// the new-action button takes a line of its own.
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				inset := layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}
+				copyPaste := func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return SmallButtonDisabled(ui, gtx, &ui.UnitEvtCopyAct, "Copy action", len(acts) == 0)
@@ -82,10 +182,78 @@ func LayoutUnitEvtActions(ui *uiState, gtx layout.Context, acts []whe.FxAction) 
 							return SmallButtonDisabled(ui, gtx, &ui.UnitEvtPasteAct, "Paste action", !has)
 						}),
 					)
+				}
+				// A file with no action yet gets its first from here: an
+				// empty record under a name the file does not carry, picked
+				// so the panel below offers its choices. Remove takes the
+				// picked one back out — refused by the editor while another
+				// action still calls it.
+				newAction := func(gtx layout.Context) layout.Dimensions {
+					return SmallButton(ui, gtx, &ui.UnitEvtNewAct, "New action")
+				}
+				removeAction := func(gtx layout.Context) layout.Dimensions {
+					return SmallButtonDisabled(ui, gtx, &ui.UnitEvtRemoveAct, "Remove action", len(acts) == 0)
+				}
+				creationRow := func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(newAction),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+						layout.Rigid(removeAction),
+					)
+				}
+				both := func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(copyPaste),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+						layout.Rigid(creationRow),
+					)
+				}
+				// The three are measured in a wide, minimum-free box with input
+				// off, so the buttons report their own widths rather than the
+				// column's — a box as narrow as the column would answer with
+				// its own width and always claim to fit.
+				macro := op.Record(gtx.Ops)
+				measure := gtx.Disabled()
+				measure.Constraints.Min = image.Pt(0, 0)
+				measure.Constraints.Max = image.Pt(4096, gtx.Constraints.Max.Y)
+				wide := both(measure).Size.X
+				macro.Stop()
+				if wide <= gtx.Constraints.Max.X-gtx.Dp(unit.Dp(16)) {
+					return inset.Layout(gtx, both)
+				}
+				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return inset.Layout(gtx, copyPaste)
+					}),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return inset.Layout(gtx, creationRow)
+					}),
+				)
+			}),
+			// The filter narrows the rows the same way it narrows the timeline
+			// list above; a row it keeps keeps its index in the file, so the
+			// picked action stays picked and a press still lands on the action
+			// it names.
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return UnitListFilterField(ui, gtx, &ui.UnitActFilter, "filter actions")
 				})
 			}),
+		)
+	}
+	// Only the rows scroll, so only the rows are the scrolling content.
+	content := func(gtx layout.Context) layout.Dimensions {
+		var children []layout.FlexChild
+		if len(rows) == 0 && strings.TrimSpace(ui.UnitActFilter.Text()) != "" {
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return UnitEventsMessage(ui, gtx, "No action matches the filter.")
+			}))
+		} else if len(rows) == 0 {
+			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return UnitEventsMessage(ui, gtx, "This .whe carries no actions. New action gives it one.")
+			}))
 		}
-		for i := range acts {
+		for _, i := range rows {
 			i := i
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return LayoutUnitEvtActionRow(ui, gtx, i, acts[i])
@@ -100,22 +268,34 @@ func LayoutUnitEvtActions(ui *uiState, gtx layout.Context, acts []whe.FxAction) 
 	measureGTX := gtx.Disabled()
 	measureGTX.Constraints.Min.Y = 0
 	measureGTX.Constraints.Max.Y = panelScrollMeasureHeight
-	natural := content(measureGTX).Size.Y
+	pinnedH := pinned(measureGTX).Size.Y
+	natural := pinnedH + content(measureGTX).Size.Y
 	if natural >= panelScrollMeasureHeight {
 		measureGTX.Constraints.Max.Y = maxInt(1, gtx.Constraints.Max.Y)
-		natural = content(measureGTX).Size.Y
+		natural = pinnedH + content(measureGTX).Size.Y
 	}
 	macro.Stop()
 	height := natural
 	// Two fifths of the column is the most the block may claim, which leaves
-	// the timelines list with the majority however many actions there are.
-	if cap := gtx.Constraints.Max.Y * 2 / 5; cap > 0 && height > cap {
+	// the timelines list with the majority however many actions there are. A
+	// cap that would swallow the pinned part is no cap at all: the pinned
+	// part cannot scroll away, so the rows keep their natural height then.
+	if cap := gtx.Constraints.Max.Y * 2 / 5; cap > pinnedH && height > cap {
 		height = cap
 	}
+	viewport := height - pinnedH
+	if viewport < 0 {
+		viewport = 0
+	}
 	agtx := gtx
-	agtx.Constraints.Min.Y = height
-	agtx.Constraints.Max.Y = height
-	return PanelScrollView(ui, agtx, &ui.UnitEvtActionsScroll, content)
+	agtx.Constraints.Min.Y = viewport
+	agtx.Constraints.Max.Y = viewport
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions { return pinned(gtx) }),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return PanelScrollView(ui, agtx, &ui.UnitEvtActionsScroll, content)
+		}),
+	)
 }
 
 // layoutUnitEvtActionRow is one action of the list: its name and how many
@@ -134,7 +314,8 @@ func LayoutUnitEvtActionRow(ui *uiState, gtx layout.Context, i int, a whe.FxActi
 	case c.Hovered():
 		bg = uikit.CMenuHover
 	}
-	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	key := uikit.RowKey("evt-act", i)
+	dims := c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp - 4))
 		sz := image.Pt(gtx.Constraints.Max.X, h)
 		gtx.Constraints.Min = sz
@@ -161,6 +342,7 @@ func LayoutUnitEvtActionRow(ui *uiState, gtx layout.Context, i int, a whe.FxActi
 							l := material.Label(ui.Th, unit.Sp(9), note)
 							l.Color = uikit.CTextDim
 							l.MaxLines = 1
+
 							return l.Layout(gtx)
 						}),
 					)
@@ -168,6 +350,10 @@ func LayoutUnitEvtActionRow(ui *uiState, gtx layout.Context, i int, a whe.FxActi
 			}),
 		)
 	})
+	// The row's right-press area copies the action's name into the shared
+	// clipboard, where a name field of matching type pastes it back.
+	uikit.LayoutRowNameCopy(ui, gtx, key, dims.Size)
+	return dims
 }
 
 func LayoutUnitEventTimelineList(ui *uiState, gtx layout.Context) layout.Dimensions {
@@ -175,16 +361,17 @@ func LayoutUnitEventTimelineList(ui *uiState, gtx layout.Context) layout.Dimensi
 		return UnitEventsMessage(ui, gtx, ui.UnitEvtErr)
 	}
 	tls := ui.UnitEvtDoc.Timelines()
-	if len(tls) == 0 {
-		return UnitEventsMessage(ui, gtx, "This .whe carries no animation timelines.")
-	}
 	selected := SelectedUnitEventTimeline(ui)
 	selEvents := 0
 	if selected != nil {
 		selEvents = len(selected.Events)
 	}
 	EnsureUnitEventClicks(ui, len(tls), selEvents)
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+	rows := UnitEvtFilterRows(ui.UnitEvtTlFilter.Text(), tls, func(t whe.FxTimeline) string { return t.Name })
+	// The header stays with its two buttons and the new-timeline row even
+	// when the file carries no timeline at all — a file with none is exactly
+	// the one that has to be given the button that creates its first.
+	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			text := ui.UnitEvtPath
 			if ui.UnitEvtDirty {
@@ -198,29 +385,74 @@ func LayoutUnitEventTimelineList(ui *uiState, gtx layout.Context) layout.Dimensi
 		// A timeline is copied whole from here — its events, its clips and the
 		// definitions they name — and pastes into the timeline of the same name
 		// in any unit, which is what carries one unit's effects onto another.
+		// Remove takes the picked one back out of this file.
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return SmallButtonDisabled(ui, gtx, &ui.UnitEvtCopyTl, "Copy timeline", selected == nil)
 					}),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return SmallButtonDisabled(ui, gtx, &ui.UnitEvtRemoveTl, "Remove timeline", selected == nil)
+					}),
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 						return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(9), "copies it whole, for another unit")
 							l.Color = uikit.CTextDim
 							l.MaxLines = 1
+
 							return l.Layout(gtx)
 						})
 					}),
 				)
 			})
 		}),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return LayoutListWithScrollbar(ui, gtx, &ui.UnitEvtScroll, &ui.UnitEvtList, unitRowHeightDp-4, len(tls), func(gtx layout.Context, i int) layout.Dimensions {
-				return LayoutUnitEventTimelineRow(ui, gtx, i, tls[i])
+		// New timeline: the name is typed, so a motion can be pointed at the
+		// timeline under a name that means something, and Enter in the field
+		// creates it the way the button does.
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						return UnitListFilterField(ui, gtx, &ui.UnitEvtNewTlEd, "new timeline name")
+					}),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return SmallButton(ui, gtx, &ui.UnitEvtNewTl, "New timeline")
+					}),
+				)
 			})
 		}),
-	)
+		// The filter narrows the rows to the names containing it, so a file
+		// with a hundred motions is one substring from the one wanted.
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return UnitListFilterField(ui, gtx, &ui.UnitEvtTlFilter, "filter timelines")
+			})
+		}),
+	}
+	switch {
+	case len(tls) == 0:
+		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return UnitEventsMessage(ui, gtx, "This .whe carries no animation timelines. New timeline gives it one.")
+		}))
+	case len(rows) == 0:
+		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return UnitEventsMessage(ui, gtx, "No timeline matches the filter.")
+		}))
+	default:
+		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return LayoutListWithScrollbar(ui, gtx, &ui.UnitEvtScroll, &ui.UnitEvtList, unitRowHeightDp-4, len(rows), func(gtx layout.Context, i int) layout.Dimensions {
+				// The row keeps its index in the file: its click
+				// target, its selection and its copy key are all
+				// addressed by that index, not by its place in the
+				// filtered view.
+				return LayoutUnitEventTimelineRow(ui, gtx, rows[i], tls[rows[i]])
+			})
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
 // layoutUnitEventPanel is the right column. It carries the tools of whatever
@@ -269,14 +501,6 @@ func LayoutUnitEventPanel(ui *uiState, gtx layout.Context) layout.Dimensions {
 				}),
 			)
 		}
-		// The mesh list is pinned below both editors, so it stays on screen
-		// whether a timeline or an action is being worked on.
-		children = append(children,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return hLine(gtx, uikit.CHeaderLine, 1) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return UnitMeshVisibilitySection(ui, gtx)
-			}),
-		)
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
 }
@@ -338,6 +562,9 @@ func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 			})
 		}))
 		EnsureUnitEventAnimClicks(ui, len(tl.Animations))
+		// The model's clips, so a blend entry naming one the .whm does
+		// not carry is marked in the row that lists it.
+		animClips := unitWhmClipSet(ui)
 		if len(tl.Animations) == 0 {
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				l := material.Label(ui.Th, unit.Sp(10), "This motion blends no animations — it chains to other motions instead.")
@@ -350,10 +577,16 @@ func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 				i := i
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						dims := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 								l := material.Label(ui.Th, unit.Sp(10), tl.Animations[i])
 								l.Color = uikit.CText
+								if unitAnimMissingInWhm(animClips, tl.Animations[i]) {
+									// The model carries no clip of this
+									// name — the one thing certainly
+									// wrong with this motion.
+									l.Color = uikit.CProblem
+								}
 								l.MaxLines = 1
 								return l.Layout(gtx)
 							}),
@@ -361,10 +594,49 @@ func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 								return SmallButton(ui, gtx, &ui.UnitEvtAnimClicks[i], "Remove")
 							}),
 						)
+						// The row's right-press area copies the animation's name
+						// into the shared clipboard for a name field to paste.
+						uikit.LayoutRowNameCopy(ui, gtx, uikit.RowKey("evt-anim", i), dims.Size)
+						return dims
 					})
 				}))
 			}
 		}
+		// The add field appends to the same list: an animation name
+		// typed or pasted from a copied row, committed by the button or
+		// Enter — the inverse of the Remove beside each entry.
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						gtx.Constraints.Min.Y = gtx.Dp(20)
+						gtx.Constraints.Max.Y = gtx.Dp(22)
+						b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+						dims := b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								w := material.Editor(ui.Th, &ui.UnitAnimAddEd, "animation name")
+								w.TextSize = unit.Sp(10)
+								w.HintColor = uikit.CTextDim
+								return w.Layout(gtx)
+							})
+						})
+						// A right click pastes a copied animation name here.
+						uikit.LayoutClipPaste(ui, gtx, &ui.UnitAnimAddEd, dims.Size)
+						return dims
+					}),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						// The list button raises the model's clips to pick
+						// from, for a name that is not typed by hand.
+						return SmallButton(ui, gtx, &ui.UnitAnimChoose, "\u25be")
+					}),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return SmallButton(ui, gtx, &ui.UnitAnimAddClick, "Add")
+					}),
+				)
+			})
+		}))
 		// How the motion itself plays: the tail of the DATAMTON payload, which
 		// the game reads for looping, delays and transitions even though the
 		// events are what a reader edits most.
@@ -374,7 +646,26 @@ func UnitEventPanelBody(ui *uiState, gtx layout.Context) layout.Dimensions {
 					return sectionHeader(gtx, ui.Th, "Motion")
 				})
 			}))
+			// Type and modifier are the two of those a reader changes, so they
+			// are controls rather than rows copied out of the file: the type
+			// cycles on a press, the modifier is typed and committed. The rest
+			// keep being read-only — they are timings no one tunes by hand.
+			children = append(children,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return unitEvtTailTypeRow(ui, gtx, tl.Tail)
+					})
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return unitEvtTailModifierRow(ui, gtx)
+					})
+				}),
+			)
 			for _, row := range whe.MotionTailRows(tl.Tail) {
+				if row[0] == "Type" || row[0] == "Modifier" {
+					continue
+				}
 				row := row
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Bottom: unit.Dp(3)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -683,6 +974,7 @@ func UnitEventPanelForm(ui *uiState, gtx layout.Context) layout.Dimensions {
 			)
 		})
 	}))
+
 	note := "Saved into this mod's own .whe; the game's files are never written."
 	if ui.UnitEvtDirty {
 		note = "Unsaved changes. " + note
@@ -697,6 +989,66 @@ func UnitEventPanelForm(ui *uiState, gtx layout.Context) layout.Dimensions {
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
+}
+
+// unitEvtTailTypeRow is the motion type as a value that cycles on a press: the
+// three types the engine defines are one chip apart, and the press is the whole
+// edit — no menu for a field with three states.
+func unitEvtTailTypeRow(ui *uiState, gtx layout.Context, tail whe.FxMotionTail) layout.Dimensions {
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Max.X = gtx.Dp(112)
+			l := material.Label(ui.Th, unit.Sp(10), "Type")
+			l.Color = uikit.CTextDim
+			l.MaxLines = 1
+			return l.Layout(gtx)
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return SmallButton(ui, gtx, &ui.UnitTailType, whe.MotionTypeName(tail.Type))
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(ui.Th, unit.Sp(9), "click to cycle")
+			l.Color = uikit.CTextDim
+			l.MaxLines = 1
+			return l.Layout(gtx)
+		}),
+	)
+}
+
+// unitEvtTailModifierRow edits the modifier the motion drives. A right press
+// pastes a copied name into the field, the way the other name fields take one.
+func unitEvtTailModifierRow(ui *uiState, gtx layout.Context) layout.Dimensions {
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Max.X = gtx.Dp(112)
+			l := material.Label(ui.Th, unit.Sp(10), "Modifier")
+			l.Color = uikit.CTextDim
+			l.MaxLines = 1
+			return l.Layout(gtx)
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min.Y = gtx.Dp(20)
+			gtx.Constraints.Max.Y = gtx.Dp(22)
+			b := widget.Border{Color: uikit.CBorderLight, Width: unit.Dp(1), CornerRadius: unit.Dp(2)}
+			dims := b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Left: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					w := material.Editor(ui.Th, &ui.UnitTailModEd, "no modifier")
+					w.TextSize = unit.Sp(10)
+					w.HintColor = uikit.CTextDim
+					return w.Layout(gtx)
+				})
+			})
+			uikit.LayoutClipPaste(ui, gtx, &ui.UnitTailModEd, dims.Size)
+			return dims
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return SmallButton(ui, gtx, &ui.UnitTailModSet, "Set")
+		}),
+	)
 }
 
 // layoutUnitEventRow is one event of the timeline: when it fires, what it
@@ -715,7 +1067,8 @@ func LayoutUnitEventRow(ui *uiState, gtx layout.Context, i int, ev whe.FxTimelin
 		bg = uikit.CMenuHover
 	}
 	kind := unitEventKindTag(ev.Name, defs)
-	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	key := uikit.RowKey("evt-ev", i)
+	dims := c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(22))
 		sz := image.Pt(gtx.Constraints.Max.X, h)
 		gtx.Constraints.Min = sz
@@ -734,6 +1087,7 @@ func LayoutUnitEventRow(ui *uiState, gtx layout.Context, i int, ev whe.FxTimelin
 							l := material.Label(ui.Th, unit.Sp(9), unitEventTimeLabel(ev.Time))
 							l.Color = uikit.CTextDim
 							l.MaxLines = 1
+
 							return l.Layout(gtx)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
@@ -748,6 +1102,7 @@ func LayoutUnitEventRow(ui *uiState, gtx layout.Context, i int, ev whe.FxTimelin
 							l := material.Label(ui.Th, unit.Sp(9), kind)
 							l.Color = uikit.CTextDim
 							l.MaxLines = 1
+
 							return l.Layout(gtx)
 						}),
 					)
@@ -755,6 +1110,10 @@ func LayoutUnitEventRow(ui *uiState, gtx layout.Context, i int, ev whe.FxTimelin
 			}),
 		)
 	})
+	// The row's right-press area copies the event's name into the shared
+	// clipboard, where a name field of matching type pastes it back.
+	uikit.LayoutRowNameCopy(ui, gtx, key, dims.Size)
+	return dims
 }
 
 // layoutUnitEventTimelineRow is one selectable timeline: its name, and the
@@ -772,8 +1131,13 @@ func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.F
 	case c.Hovered():
 		bg = uikit.CMenuHover
 	}
+	// The model's clips, so a timeline blending one the .whm does not
+	// carry is marked here and in the list of its animations below.
+	whmClips := unitWhmClipSet(ui)
+	missing := unitAnimMissingList(whmClips, tl.Animations)
 	clips := strings.Join(tl.Animations, ", ")
-	return c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	key := uikit.RowKey("evt-tl", i)
+	dims := c.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(unitRowHeightDp - 4))
 		sz := image.Pt(gtx.Constraints.Max.X, h)
 		gtx.Constraints.Min = sz
@@ -791,18 +1155,30 @@ func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.F
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							l := material.Label(ui.Th, unit.Sp(10), unitViewportRowText(tl.Name))
 							l.Color = uikit.CText
+							if len(missing) > 0 {
+								// The model carries no clip this timeline
+								// blends, so the row itself is marked.
+								l.Color = uikit.CProblem
+							}
 							l.MaxLines = 1
 							return l.Layout(gtx)
 						}),
 						layout.Flexed(1, flexGap()),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							note := fmt.Sprintf("%d events", len(tl.Events))
-							if clips != "" {
+							noteColor := uikit.CTextDim
+							if len(missing) > 0 {
+								// The note names the clips the model does
+								// not carry rather than all of them.
+								note += "  ·  not in .whm: " + strings.Join(missing, ", ")
+								noteColor = uikit.CProblem
+							} else if clips != "" {
 								note += "  \u00b7  " + clips
 							}
 							l := material.Label(ui.Th, unit.Sp(9), note)
-							l.Color = uikit.CTextDim
+							l.Color = noteColor
 							l.MaxLines = 1
+
 							return l.Layout(gtx)
 						}),
 					)
@@ -810,4 +1186,8 @@ func LayoutUnitEventTimelineRow(ui *uiState, gtx layout.Context, i int, tl whe.F
 			}),
 		)
 	})
+	// The row's right-press area copies the timeline's name into the shared
+	// clipboard, where a name field of matching type pastes it back.
+	uikit.LayoutRowNameCopy(ui, gtx, key, dims.Size)
+	return dims
 }

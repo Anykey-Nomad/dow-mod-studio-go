@@ -111,6 +111,9 @@ type WeaponSlot struct {
 	// the section they sit in. This is the detailed information: damage, range,
 	// cooldown and the rest live in the weapon file, not in the unit.
 	RgdFields []UnitField
+	// file is the weapon's own .rgd as parsed, kept so the damage rows and an
+	// edit to them have the tree they came from rather than a second read.
+	File *rgd.RgdFile
 	// rgdError says why the weapon file could not be read, when it was found
 	// but would not parse.
 	RgdError string
@@ -648,7 +651,17 @@ func UnitHardpointWeapons(tree *modtree.ModTree, rf *rgd.RgdFile) []UnitWeapon {
 				continue
 			}
 			ref := w.RefString()
-			if IsEmptyWeaponRef(ref) {
+			// The slot's own table reference names its schema —
+			// tables\weapon_details — on filled and empty slots alike, so the
+			// weapon is the slot's `weapon` field, not its reference. Reading the
+			// reference listed that schema as a weapon once per slot of every
+			// hardpoint: five hundred rows for one unit, and filtering the schema
+			// out afterwards left nothing at all.
+			ref = ""
+			if we := RgdFindChild(w, "weapon"); we != nil {
+				ref = strings.TrimSpace(we.DisplayValue())
+			}
+			if IsFreeWeaponSlot(ref) {
 				continue
 			}
 			slots = append(slots, WeaponSlot{
@@ -686,6 +699,7 @@ func UnitHardpointWeapons(tree *modtree.ModTree, rf *rgd.RgdFile) []UnitWeapon {
 					continue
 				}
 				s.RgdFields = WeaponRgdFields(wrf)
+				s.File = wrf
 			}
 		}
 	}
@@ -770,6 +784,41 @@ func IsEmptyWeaponRef(ref string) bool {
 		}
 	}
 	return false
+}
+
+// TemplateWeaponRefs are the table schemas an unused slot names. A unit .rgd
+// ships a full hardpoint table — sixteen hardpoints of thirty-two slots each —
+// and every slot that holds no weapon points at tables\weapon_details.lua,
+// which is the shape of a weapon and not one. Reading those as weapons is what
+// made the Weapons list report five hundred of them for a single unit.
+var TemplateWeaponRefs = []string{
+	`tables\weapon_details`,
+	`tables\weapon_table`,
+	`tables\hardpoint_details`,
+	`tables\hardpoint_table`,
+}
+
+// IsTemplateWeaponRef reports whether a slot still names the table schema it
+// was shipped with rather than a weapon.
+func IsTemplateWeaponRef(ref string) bool {
+	r := strings.ToLower(strings.TrimSpace(ref))
+	if r == "" {
+		return false
+	}
+	for _, t := range TemplateWeaponRefs {
+		if strings.Contains(r, t) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsFreeWeaponSlot reports whether a slot holds no weapon yet: nothing, a
+// no-weapon placeholder, or the table schema it started with. It is the test
+// both the loader and adding a weapon need, because a free slot is exactly the
+// one a new weapon goes into.
+func IsFreeWeaponSlot(ref string) bool {
+	return IsEmptyWeaponRef(ref) || IsTemplateWeaponRef(ref)
 }
 
 // WeaponNameFromRef is the weapon's file name, which is how the game names it.

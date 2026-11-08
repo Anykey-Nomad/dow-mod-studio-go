@@ -191,7 +191,6 @@ func LayoutSgbObjectPanel(ui *uiState, gtx layout.Context, tab *fileTab) layout.
 			SetSelectedSgbOwner(ui, tab, owner)
 		}
 	}
-	entries := sgbEnvironmentEntries(tab.SgbObjectRoot, tab.SgbObjectExpanded)
 	return PanelWithScroll(ui, gtx, &tab.SgbObjectScroll, func(gtx layout.Context) layout.Dimensions {
 		var children []layout.FlexChild
 		children = append(children,
@@ -229,27 +228,52 @@ func LayoutSgbObjectPanel(ui *uiState, gtx layout.Context, tab *fileTab) layout.
 				return layout.Inset{Left: unit.Dp(8), Right: unit.Dp(8), Bottom: unit.Dp(5)}.Layout(gtx, button.Layout)
 			}))
 		}
-		if tab.SgbObjectRoot == nil {
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return LayoutClassicOEHint(ui, gtx, "", "Data/attrib/ebps/environment was not found in this module.")
-			}))
-		} else if len(entries) == 0 {
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return LayoutClassicOEHint(ui, gtx, "", "Expand a folder to browse environment objects.")
-			}))
-		} else {
-			for _, entry := range entries {
-				entry := entry
-				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return LayoutSgbEnvironmentRow(ui, gtx, tab, entry)
-				}))
-			}
-		}
+		// Environment props and race blueprints are two separate roots; each
+		// gets its own group of browsable folders below.
+		children = append(children, sgbObjectTreeChildren(ui, tab, tab.SgbObjectRoot,
+			"Data/attrib/ebps/environment was not found in this module.",
+			"Expand a folder to browse environment objects.")...)
+		children = append(children,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return hLine(gtx, uikit.CHeaderLine, 1)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return sectionHeader(gtx, ui.Th, "Objects — EBPS Races")
+			}),
+		)
+		children = append(children, sgbObjectTreeChildren(ui, tab, tab.SgbObjectRaceRoot,
+			"Data/attrib/ebps/races was not found in this module.",
+			"Expand a folder to browse race objects.")...)
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 	})
 }
 
-func LayoutSgbEnvironmentRow(ui *uiState, gtx layout.Context, tab *fileTab, entry sgbEnvironmentEntry) layout.Dimensions {
+// sgbObjectTreeChildren lists one blueprint root as folder rows, or the hint
+// that explains why there is nothing to list. The expansion and click maps are
+// keyed by full path, so the environment and races trees share them safely.
+func sgbObjectTreeChildren(ui *uiState, tab *fileTab, root *modtree.TreeFolder, missingHint, collapsedHint string) []layout.FlexChild {
+	if root == nil {
+		return []layout.FlexChild{layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return LayoutClassicOEHint(ui, gtx, "", missingHint)
+		})}
+	}
+	entries := sgbEnvironmentEntries(root, tab.SgbObjectExpanded)
+	if len(entries) == 0 {
+		return []layout.FlexChild{layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return LayoutClassicOEHint(ui, gtx, "", collapsedHint)
+		})}
+	}
+	children := make([]layout.FlexChild, 0, len(entries))
+	for _, entry := range entries {
+		entry := entry
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return LayoutSgbObjectRow(ui, gtx, tab, entry)
+		}))
+	}
+	return children
+}
+
+func LayoutSgbObjectRow(ui *uiState, gtx layout.Context, tab *fileTab, entry sgbEnvironmentEntry) layout.Dimensions {
 	folder := entry.Folder != nil
 	key, label := "", ""
 	if folder {

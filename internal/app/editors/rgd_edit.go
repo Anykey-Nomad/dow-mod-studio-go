@@ -513,6 +513,10 @@ func TableRowEditor(ui *uistate.State, gtx layout.Context, label string, ed *wid
 										return layout.Dimensions{Size: gtx.Constraints.Max}
 									})
 									pass.Pop()
+									// A field typed for the frame/time clipboard also registers
+									// the area its right-click paste is read from; an untyped
+									// one draws nothing extra.
+									uikit.LayoutClipPaste(ui, gtx, ed, dims.Size)
 									return dims
 								}),
 							)

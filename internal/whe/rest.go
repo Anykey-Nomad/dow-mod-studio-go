@@ -236,11 +236,27 @@ func weightedMotionIndex(motions []RandomMotion, randomFloat func() float64) int
 	return len(motions) - 1
 }
 
-// restRuns — идёт ли ссылка графа в нетронутом состоянии. Условия все ложны,
-// поэтому ветки if и else if пропускаются, а else (он срабатывает, когда ни
-// одна ветка цепочки не истинна) и безусловные ссылки — срабатывают.
+// restRuns — идёт ли ссылка графа в нетронутом состоянии. Условия построек и
+// боя (addon_1, damage_50, build_progress, move…) ложны, поэтому ветки if
+// пропускаются, а else (он срабатывает, когда ни одна ветка цепочки не
+// истинна) и безусловные ссылки — срабатывают. Истинно только «idle»: body
+// idle в default часто стоит именно ветвью «else if idle», и без неё стоячий
+// набор терял анимацию тела.
 func restRuns(link FxActionLink) bool {
-	return link.Compare != FxCompareIf && link.Compare != FxCompareElseIf
+	switch link.Compare {
+	case FxCompareIf:
+		return false
+	case FxCompareElseIf:
+		return standingCondition(link.Condition)
+	}
+	return true
+}
+
+// standingCondition — условия, которые истинны у целого, но стоящего на месте
+// юнита: он не идёт, не строится и не повреждён.
+func standingCondition(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	return lower == "idle" || lower == "stand" || lower == "standing"
 }
 
 // restKey — имя узла графа для поиска: регистр в данных встречается разный.
