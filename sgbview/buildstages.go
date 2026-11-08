@@ -24,6 +24,13 @@ type BuildStage struct {
 	HasRange bool
 	Sounds   []SoundEvent
 	Effects  []FXEvent
+	// Anims — анимации таймлайна этапа: именно они играют на пороге, а имя
+	// моушена может с ними не совпадать (у хаоса build_1_plane_drop —
+	// warp_in_1).
+	Anims []string
+	// Loop — таймлайн зациклен (тип motion 1). Стройка обычно hold end
+	// (тип 2): клип доходит до последнего кадра и стоит на нём.
+	Loop bool
 }
 
 // progressSpan — диапазон прогресса из условий .whe.
@@ -122,6 +129,8 @@ func (a *Anim) buildStageForMotion(motion string, span progressSpan) (BuildStage
 	if timeline == nil {
 		return BuildStage{}, false
 	}
+	stage.Anims = append([]string(nil), timeline.Animations...)
+	stage.Loop = timeline.Tail.Type == 1
 	stage.Sounds = fxSoundsOfTimelines(a.doc, func(tl whe.FxTimeline) bool {
 		return strings.EqualFold(tl.Name, timeline.Name)
 	}, true)

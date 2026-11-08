@@ -107,11 +107,11 @@ type Anim struct {
 	// локальны (с нуля); базу назначает рендерер при загрузке сцены —
 	// по ней палитра пишется в общий буфер и читается в шейдере.
 	boneBase int
-	// build — клипы стройки по порядку: стадии build_stage_* модели, а без
-	// них — действие build/construct из .whe. По ним раскладывается
-	// прогресс: N клипов делят путь 0..1 на N отрезков.
-	build []*whm.Animation
-	// stage — какая стадия стройки сейчас играет.
+	// build — этапы стройки из действия build .whe: клип, диапазон прогресса в
+	// процентах и как клип играет. Этап без диапазона — появление постройки
+	// (phase_in), он звучит и играет сразу после установки шаблона.
+	build []buildClip
+	// stage — какой этап стройки сейчас играет.
 	stage int
 	// pos — точка постановки объекта в мире: вокруг её вертикальной оси
 	// модель поворачивается, когда боец меняет направление.
@@ -126,6 +126,16 @@ type Anim struct {
 type clipFrame struct {
 	clip *whm.Animation
 	at   float32
+}
+
+// buildClip — этап стройки: клип, диапазон прогресса в процентах (ranged) и
+// зацикленность таймлайна. Этап без диапазона — появление постройки.
+type buildClip struct {
+	clip   *whm.Animation
+	min    float64
+	max    float64
+	ranged bool
+	loop   bool
 }
 
 // SetFacing задаёт направление взгляда в мировых радианах (0 — вдоль +X).
@@ -191,17 +201,68 @@ func newAnim(tree *modtree.ModTree, whmPath string, model *whm.Model, placement 
 		a.doc = doc
 		a.move = resolveActionClip(tree, whmPath, model, doc, "move")
 		a.capture = resolveActionClip(tree, whmPath, model, doc, "capture_strategic_point")
-		a.build = buildClips(tree, whmPath, model, doc)
+		a.build = buildStageClips(tree, whmPath, model, doc)
 		a.resolveAttackClips(tree, whmPath, model, doc)
 	}
 	return a
 }
 
-// buildClips — клипы возведения постройки по порядку: стадии build_stage_*,
-// отсортированные по номеру, а если их нет — клипы действия build/construct
-// из графа .whe. Пустой список означает, что стройку анимировать нечем и
-// постройка сразу стоит на idle.
-func buildClips(tree *modtree.ModTree, whmPath string, model *whm.Model, doc *whe.Document) []*whm.Animation {
+// buildStageClips — клипы этапов стройки: у каждого свой диапазон прогресса.
+// Этап выбирает прогресс (SetProgress), а клип идёт по своим часам (Step):
+// события таймлайна размечены в секундах от начала клипа, поэтому скрабить
+// его прогрессом нельзя — звук на тридцатой секунде разошёлся бы с кадром.
+// Пустой список означает, что стройку анимировать нечем.
+func buildStageClips(tree *modtree.ModTree, whmPath string, model *whm.Model, doc *whe.Document) []buildClip {
+	stages := (&Anim{doc: doc}).BuildStages()
+	clips := make([]buildClip, 0, len(stages))
+	for _, stage := range stages {
+		// audio_build — слой звука, а не поза: его «анимация» vis_empty
+		// только прячет меши.
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(stage.Motion)), "audio") {
+			continue
+		}
+		var clip *whm.Animation
+		for _, name := range append(append([]string{}, stage.Anims...), stage.Motion) {
+			resolved, _ := sgb.ResolveLinkedAnimation(tree, whmPath, model, name)
+			if resolved == nil {
+				continue
+			}
+			if bound := sgb.BindAnimationToModel(model, resolved); bound != nil && len(bound.Bones) > 0 {
+				clip = bound
+				break
+			}
+		}
+		if clip == nil || strings.HasPrefix(strings.ToLower(clip.Name), "vis_") {
+			continue
+		}
+		clips = append(clips, buildClip{
+			clip:   clip,
+			min:    stage.Min,
+			max:    stage.Max,
+			ranged: stage.HasRange,
+			loop:   stage.Loop,
+		})
+	}
+	if len(clips) > 0 {
+		return clips
+	}
+	// Действие build не разобралось: остаются стадии build_stage_* модели,
+	// которые делят прогресс на равные отрезки.
+	numbered := buildStageAnimations(model)
+	for i, clip := range numbered {
+		n := float64(len(numbered))
+		clips = append(clips, buildClip{
+			clip:   clip,
+			min:    100 * float64(i) / n,
+			max:    100 * float64(i+1) / n,
+			ranged: true,
+		})
+	}
+	return clips
+}
+
+// buildStageAnimations — клипы build_stage_* модели по номеру стадии.
+func buildStageAnimations(model *whm.Model) []*whm.Animation {
 	type stage struct {
 		number int
 		clip   *whm.Animation
@@ -219,26 +280,12 @@ func buildClips(tree *modtree.ModTree, whmPath string, model *whm.Model, doc *wh
 		}
 		stages = append(stages, stage{number: number, clip: animation})
 	}
-	if len(stages) > 0 {
-		sort.SliceStable(stages, func(i, j int) bool { return stages[i].number < stages[j].number })
-		clips := make([]*whm.Animation, 0, len(stages))
-		for _, entry := range stages {
-			clips = append(clips, entry.clip)
-		}
-		return clips
+	sort.SliceStable(stages, func(i, j int) bool { return stages[i].number < stages[j].number })
+	clips := make([]*whm.Animation, 0, len(stages))
+	for _, entry := range stages {
+		clips = append(clips, entry.clip)
 	}
-	for _, action := range []string{"build", "construct", "construction"} {
-		for _, name := range wheActionClips(doc, nil, action) {
-			clip, _ := sgb.ResolveLinkedAnimation(tree, whmPath, model, name)
-			if clip == nil {
-				continue
-			}
-			if bound := sgb.BindAnimationToModel(model, clip); bound != nil && len(bound.Bones) > 0 {
-				return []*whm.Animation{bound}
-			}
-		}
-	}
-	return nil
+	return clips
 }
 
 // ShotFX — эффект, который .whe запускает при выстреле. Effect — путь к
@@ -697,31 +744,66 @@ func (a *Anim) HasBuildAnimation() bool {
 	return a != nil && len(a.build) > 0
 }
 
-// SetProgress ставит клип стройки на долю готовности: 0 — начало, 1 —
-// последний кадр последней стадии. Каждый кадр прогресс приходит снаружи,
-// поэтому приостановленная стройка стоит на своём кадре, как пауза анимации.
+// SetProgress выбирает этап стройки по доле готовности и запускает его клип с
+// начала: этап играет по своим часам (Step), а прогресс только решает, какой
+// из них сейчас на сцене. Сам клип не скрабится — у таймлайнов события
+// размечены в секундах, и пропорциональное время развело бы звук с кадром
+// (у листенинг поста phase_in идёт пять секунд при двух процентах стройки).
 func (a *Anim) SetProgress(progress float64) {
 	if a == nil || len(a.build) == 0 {
 		return
 	}
-	a.state = AnimConstruct
 	if !(progress > 0) {
 		progress = 0
 	}
 	if progress > 1 {
 		progress = 1
 	}
-	// Стадии равноправны: N клипов делят путь 0..1 на N отрезков, внутри
-	// отрезка идёт время самого клипа.
-	scaled := progress * float64(len(a.build))
-	index := int(scaled)
-	if index >= len(a.build) {
-		a.stage = len(a.build) - 1
-		a.time = 1
+	wasConstruct := a.state == AnimConstruct
+	a.state = AnimConstruct
+	index := a.buildStageAt(progress * 100)
+	if wasConstruct && index == a.stage {
 		return
 	}
 	a.stage = index
-	a.time = float32(scaled - float64(index))
+	a.time = 0
+}
+
+// buildStageAt — этап, в диапазон которого попал процент готовности. Этап
+// без диапазона (phase_in) играет в самом начале, пока стройка ещё не дала
+// прогресса; если процент вышел за все диапазоны, остаётся последний
+// пройденный этап.
+func (a *Anim) buildStageAt(percent float64) int {
+	placed := -1
+	for i, stage := range a.build {
+		if !stage.ranged && placed < 0 {
+			placed = i
+		}
+	}
+	// Шаблон только поставили: играет появление (phase_in), даже если
+	// диапазон первого этапа начинается с нуля.
+	if percent <= 0 && placed >= 0 {
+		return placed
+	}
+	best := -1
+	for i, stage := range a.build {
+		if !stage.ranged {
+			continue
+		}
+		if percent >= stage.min && (percent < stage.max || stage.max >= 100) {
+			return i
+		}
+		if stage.min <= percent && (best < 0 || stage.min > a.build[best].min) {
+			best = i
+		}
+	}
+	if best >= 0 {
+		return best
+	}
+	if placed >= 0 {
+		return placed
+	}
+	return 0
 }
 
 // appendObjectModel укладывает модель в мир: анимируемый объект идёт с
@@ -859,8 +941,24 @@ func (a *Anim) Step(dt float64) {
 	if len(a.frames) > 0 {
 		return
 	}
-	// Стройку ведёт прогресс (SetProgress), а не время: клип не идёт сам.
+	// Стройка: этап выбрал прогресс, а клип этапа идёт по своим часам и
+	// остаётся на последнем кадре (hold end), пока прогресс не сменит этап.
 	if a.state == AnimConstruct {
+		clip := a.clip()
+		if clip == nil || clip.Duration <= 0 {
+			return
+		}
+		if a.stage < 0 || a.stage >= len(a.build) {
+			a.stage = 0
+		}
+		a.time += float32(dt / float64(clip.Duration))
+		if a.time >= 1 {
+			if a.build[a.stage].loop {
+				a.time -= float32(math.Floor(float64(a.time)))
+			} else {
+				a.time = 1
+			}
+		}
 		return
 	}
 	// Атака — набор клипов, и у каждого своё время: очередь пишется по
@@ -897,7 +995,7 @@ func (a *Anim) clip() *whm.Animation {
 			if a.stage < 0 || a.stage >= len(a.build) {
 				a.stage = 0
 			}
-			return a.build[a.stage]
+			return a.build[a.stage].clip
 		}
 	case AnimMove:
 		if a.move != nil {
