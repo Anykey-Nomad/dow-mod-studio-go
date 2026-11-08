@@ -90,6 +90,9 @@ type Anim struct {
 	// shotFX — эффекты выстрела из таймлайнов стрельбы: игра запускает их
 	// на каждом выстреле. Пусто — у модели стрельба без эффектов.
 	shotFX []ShotFX
+	// shotClips — клипы стрельбы: по ним сцена берёт и эффекты, и звуки
+	// выстрела из таймлайнов .whe.
+	shotClips []string
 	// doc — разобранный .whe модели: по нему сцена берёт эффекты её
 	// событий (смерть, удары) вместе со временем срабатывания.
 	doc   *whe.Document
@@ -438,8 +441,10 @@ func (a *Anim) resolveAttackClips(tree *modtree.ModTree, whmPath string, model *
 	standing := wheActionClips(doc, nil, "idle_firing", "idle_tracking", "attack", "fire")
 	moving := wheActionClips(doc, nil, "move_firing", "move_tracking", "attack", "fire")
 	// Эффекты выстрела — из тех же таймлайнов, что ведут клипы стрельбы.
+	a.shotClips = standing
 	a.shotFX = resolveShotFX(doc, standing)
 	if len(a.shotFX) == 0 {
+		a.shotClips = moving
 		a.shotFX = resolveShotFX(doc, moving)
 	}
 	melee := wheActionClips(doc, nil, "melee_attack", "melee_move", "attack")
